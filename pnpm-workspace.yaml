@@ -9,7 +9,7 @@ catalog:
   decimal.js: 10.6.0
   oxlint: 1.91.0
   oxlint-tsgolint: 7.0.2005
-  typescript: 6.0.3
+  typescript: 7.0.2
   vite: 8.3.5
   vitest: 4.1.12
   zod: 4.6.7

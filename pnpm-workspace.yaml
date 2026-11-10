@@ -4,7 +4,7 @@ packages:
 
 # Shared tool and library versions; reference them in package.json as "catalog:".
 catalog:
-  "@types/node": 24.19.2
+  "@types/node": 26.6.6
   "@vitest/coverage-v8": 4.1.12
   decimal.js: 10.6.0
   oxlint: 1.91.0

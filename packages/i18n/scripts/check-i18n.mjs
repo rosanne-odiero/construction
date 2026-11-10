@@ -1,10 +1,10 @@
 // Checks that the EN and SW catalogues have identical keys, placeholders and rich-text tags,
-// and that every ICU message compiles in both locales. Run: pnpm --filter @pm-buddy/web i18n:check
+// and that every ICU message compiles in both locales. Run: pnpm --filter @pm-buddy/i18n i18n:check
 import { readFileSync } from "node:fs";
 import { IntlMessageFormat } from "intl-messageformat";
 
 const load = (locale) =>
-  JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), "utf8"));
+  JSON.parse(readFileSync(new URL(`../src/messages/${locale}.json`, import.meta.url), "utf8"));
 
 const flatten = (obj, prefix = "") =>
   Object.entries(obj).flatMap(([key, value]) =>

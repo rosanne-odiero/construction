@@ -4,7 +4,7 @@
     "live": "API halisi · Awamu ya 1",
     "description": "Kuingia, MFA na rekodi za kampuni/miradi zenye mipaka ya kampuni. Hii ni tofauti na dashibodi za mfano.",
     "development": "Mazingira ya majaribio tu: ujumbe wa uthibitishaji, kuweka upya nenosiri na mialiko huenda Mailpit kwenye localhost:8025. Ujumbe wa simu hutumia kisanduku cha majaribio. Tumia utambulisho wa majaribio; hakuna SMS za nje au malipo halisi yanayotumwa.",
-    "limitations": "Ukaguzi wa msingi, si idhini ya uzalishaji. Passkey, ujumbe wa nje, majukumu maalumu, kufunga vifaa vya simu na idhini za kifedha zinazofungamanishwa na kitendo bado hazijatekelezwa. Mishahara, watoa huduma za malipo, bayometriki na usawazishaji bila mtandao ni kazi za awamu zijazo.",
+    "limitations": "Ukaguzi wa msingi, si idhini ya uzalishaji. Passkey, ujumbe wa nje, kufunga vifaa vya simu na idhini za kifedha zinazofungamanishwa na kitendo bado hazijatekelezwa. Mishahara, watoa huduma za malipo, bayometriki na usawazishaji bila mtandao ni kazi za awamu zijazo.",
     "links": "Rasilimali za msingi",
     "designSystem": "Mfumo wa usanifu",
     "status": "Hali ya mfumo",
@@ -91,6 +91,145 @@
       "consultant": "Mshauri",
       "supplier": "Msambazaji"
     },
+    "rolesTitle": "Majukumu na ruhusa",
+    "rolesHint": "Majukumu ya mfumo hayabadiliki. Majukumu maalumu huunganisha ruhusa za orodha, na unaweza kutoa ruhusa ulizo nazo wewe mwenyewe tu. Kila badiliko linahitaji msimbo wa MFA uliothibitishwa ndani ya dakika tano zilizopita.",
+    "loadRoles": "Pakia majukumu na ruhusa",
+    "systemRole": "Jukumu la mfumo",
+    "customRole": "Jukumu maalumu",
+    "companyWide": "Miradi yote",
+    "projectScoped": "Miradi iliyogawiwa tu",
+    "mfaRequiredBadge": "MFA inahitajika",
+    "memberCount": "{count, plural, one {mwanachama #} other {wanachama #}}",
+    "showPermissions": "Ruhusa ({count})",
+    "createRole": "Unda jukumu maalumu",
+    "editRole": "Hariri {name}",
+    "saveRole": "Hifadhi jukumu",
+    "cancelEdit": "Ghairi uhariri",
+    "deleteRole": "Futa {name}",
+    "roleName": "Jina la jukumu",
+    "tenantWide": "Linatumika kwa miradi yote ya kampuni",
+    "tenantWideHint": "La sivyo, wenye jukumu hili hufanya kazi kwenye miradi waliyogawiwa tu, ndani ya mipaka ya ugawaji huo.",
+    "permissionsLegend": "Ruhusa",
+    "notHeld": "huna ruhusa hii",
+    "needsMfa": "inahitaji MFA",
+    "changeRole": "Badilisha jukumu la mwanachama",
+    "newRole": "Jukumu jipya",
+    "changeRoleHint": "Vipindi hai vya mwanachama katika kampuni hii vitafungwa ili ruhusa mpya zitumike. Majukumu yenye ruhusa ulizo nazo tu ndiyo yanaonyeshwa.",
+    "permissionAreas": {
+      "tenancy": "Kampuni",
+      "users": "Watu",
+      "roles": "Majukumu",
+      "audit": "Ukaguzi",
+      "config": "Mipangilio",
+      "projects": "Miradi",
+      "bq": "BQ",
+      "labour": "Wafanyakazi",
+      "attendance": "Mahudhurio",
+      "payroll": "Mishahara",
+      "payments": "Malipo",
+      "procurement": "Ununuzi",
+      "stores": "Stoo",
+      "finance": "Fedha",
+      "site": "Eneo la kazi",
+      "quality": "Ubora",
+      "safety": "Afya na usalama",
+      "plant": "Mitambo na vifaa",
+      "documents": "Nyaraka",
+      "reports": "Ripoti",
+      "portal": "Malango",
+      "platform": "Jukwaa"
+    },
+    "permissionLabels": {
+      "tenancy": {
+        "manage": "Kusimamia mipangilio ya kampuni"
+      },
+      "users": {
+        "invite": "Kualika watu na kugawa miradi"
+      },
+      "roles": {
+        "manage": "Kusimamia majukumu na wanachama"
+      },
+      "audit": {
+        "view": "Kuona kumbukumbu za ukaguzi"
+      },
+      "config": {
+        "manage": "Kusimamia mipangilio",
+        "manage_statutory": "Kusimamia kanuni za kisheria"
+      },
+      "projects": {
+        "view": "Kuona miradi",
+        "create": "Kuunda miradi",
+        "manage": "Kusimamia miradi"
+      },
+      "bq": {
+        "view": "Kuona BQ",
+        "edit": "Kuhariri BQ",
+        "import": "Kuingiza BQ",
+        "approve_variation": "Kuidhinisha mabadiliko"
+      },
+      "labour": {
+        "view": "Kuona wafanyakazi",
+        "manage": "Kusimamia wafanyakazi",
+        "view_sensitive": "Kuona taarifa nyeti za wafanyakazi"
+      },
+      "attendance": {
+        "view": "Kuona mahudhurio",
+        "record": "Kurekodi mahudhurio",
+        "override": "Kusahihisha mahudhurio",
+        "review_anomalies": "Kukagua kasoro za mahudhurio"
+      },
+      "payroll": {
+        "prepare": "Kuandaa mishahara",
+        "review": "Kukagua mishahara",
+        "approve": "Kuidhinisha mishahara"
+      },
+      "payments": {
+        "view": "Kuona malipo",
+        "approve": "Kuidhinisha malipo",
+        "disburse": "Kutuma malipo",
+        "record_cash": "Kurekodi malipo ya taslimu",
+        "reverse": "Kubatilisha malipo"
+      },
+      "procurement": {
+        "requisition": "Kutuma maombi ya vifaa",
+        "approve": "Kuidhinisha ununuzi",
+        "manage_suppliers": "Kusimamia wasambazaji"
+      },
+      "stores": {
+        "manage": "Kusimamia stoo"
+      },
+      "finance": {
+        "view": "Kuona fedha",
+        "manage": "Kusimamia fedha",
+        "view_sensitive": "Kuona taarifa nyeti za kifedha"
+      },
+      "site": {
+        "diary": "Kuandika shajara ya eneo la kazi",
+        "photos": "Kupiga picha za eneo la kazi"
+      },
+      "quality": {
+        "manage": "Kusimamia ubora"
+      },
+      "safety": {
+        "manage": "Kusimamia afya na usalama"
+      },
+      "plant": {
+        "manage": "Kusimamia mitambo na vifaa"
+      },
+      "documents": {
+        "manage": "Kusimamia nyaraka"
+      },
+      "reports": {
+        "view": "Kuona ripoti"
+      },
+      "portal": {
+        "client": "Kutumia lango la mteja",
+        "supplier": "Kutumia lango la msambazaji"
+      },
+      "platform": {
+        "admin": "Usimamizi wa jukwaa"
+      }
+    },
     "notices": {
       "signedIn": "Umeingia. Kamilisha MFA ikihitajika, kisha pakia eneo lako la kazi.",
       "instructions": "Ikiwa akaunti inastahili, maelekezo yanapatikana kupitia huduma ya ujumbe ya majaribio.",
@@ -106,16 +245,20 @@
       "invitationSent": "Mwaliko umeundwa. Maelekezo yametumwa kwenye kisanduku cha majaribio.",
       "memberRemoved": "Uanachama umeondolewa na vipindi vinavyohusika vya kampuni vimebatilishwa.",
       "permissionsUpdated": "Ruhusa za mradi zimesasishwa.",
-      "sessionRevoked": "Kipindi kimebatilishwa."
+      "sessionRevoked": "Kipindi kimebatilishwa.",
+      "roleCreated": "Jukumu maalumu limeundwa.",
+      "roleUpdated": "Jukumu limesasishwa.",
+      "roleDeleted": "Jukumu limefutwa.",
+      "memberRoleChanged": "Jukumu limebadilishwa. Vipindi vya mwanachama katika kampuni hii vimefungwa."
     },
     "errors": {
       "network": "API haijafikiwa au muda wa ombi umeisha. Kagua mtandao na upakie rekodi za sasa kabla ya kurudia mabadiliko.",
       "invalidResponse": "API imerudisha jibu lisilotarajiwa. Mafanikio hayajachukuliwa. Kagua hali ya mfumo na utoe rejeleo la usaidizi.",
       "validation": "Kagua thamani ulizoingiza na miundo inayohitajika.",
       "unauthorized": "Utambulisho, msimbo, tokeni au kipindi hakijathibitishwa. Kagua ulichoweka au ingia tena. Hakuna jaribio la moja kwa moja lililofanywa.",
-      "forbidden": "Kitendo hiki hakiruhusiwi. Kagua ufikiaji wa kampuni/mradi, ingia tena ikihitajika na uthibitishe msimbo mpya wa MFA kwa vitendo vyenye mamlaka.",
+      "forbidden": "Kitendo hiki hakiruhusiwi. Kagua ruhusa za jukumu lako na ufikiaji wa mradi, ingia tena ikihitajika na uthibitishe msimbo mpya wa MFA kwa vitendo vyenye mamlaka. Huwezi kutoa ruhusa usizo nazo.",
       "notFound": "Rekodi au mwaliko haupatikani, umeisha muda au akaunti hii hairuhusiwi kuufikia.",
-      "conflict": "Ombi linakinzana na hali ya sasa. Pakia rekodi kabla ya kujaribu tena; misimbo iliyotumika na kuondoa mmiliki wa mwisho haviruhusiwi.",
+      "conflict": "Ombi linakinzana na hali ya sasa. Pakia rekodi kabla ya kujaribu tena; misimbo iliyotumika, kuondoa au kushusha mmiliki wa mwisho, majina ya majukumu yanayojirudia na kufuta majukumu yanayotumika haviruhusiwi.",
       "rateLimited": "Majaribio mengi sana. Subiri kabla ya kujaribu tena; maombi hayarudiwi kiotomatiki.",
       "unavailable": "Huduma inayohitajika haipatikani. Kagua hali ya mfumo; mafanikio hayajachukuliwa.",
       "unexpected": "Ombi limeshindwa bila kutarajiwa. Kagua hali ya mfumo na utoe rejeleo la usaidizi; mafanikio hayajachukuliwa."

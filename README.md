@@ -79,10 +79,10 @@ Before the first web browser run, install its browser: `pnpm --filter @pm-buddy/
 
 ```text
 apps/web/          Next.js + shared design system: /foundation, /status and labelled business previews
-  messages/        English and Kiswahili catalogues
   src/mocks/       Mock data (replaced by the API from D1.3 onwards)
-apps/api/          NestJS API: health, identity/MFA/sessions, tenancy/project access and audit
-packages/types/    Permission catalogue, roles, shared types
+apps/api/          NestJS API: health, identity/MFA/sessions, tenancy, roles and permissions, project access and audit
+packages/i18n/     English and Kiswahili ICU catalogues (src/messages) and the i18n:check parity script
+packages/types/    Permission catalogue, system role defaults, shared types
 packages/domain/   Pure business rules: Kenyan phones, money, age, geofences
 packages/validation/ Shared Zod request primitives and foundation response contracts
 packages/config/   Shared tsconfig presets

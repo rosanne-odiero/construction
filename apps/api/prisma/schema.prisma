@@ -99,21 +99,46 @@ model Tenant {
   projects  Project[]
   invites   Invitation[]
   audit     AuditEvent[]
+  roles     TenantRole[]
 
   @@map("tenants")
 }
 
+// A custom company role: a named bundle of catalogue permissions (ARCHITECTURE §8). System roles
+// live in code (packages/types SYSTEM_ROLE_PERMISSIONS) and are immutable.
+model TenantRole {
+  id          String       @id @default(uuid()) @db.Uuid
+  tenantId    String       @map("tenant_id") @db.Uuid
+  name        String       @db.Citext
+  permissions String[]
+  tenantWide  Boolean      @default(false) @map("tenant_wide")
+  createdBy   String       @map("created_by") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members     Membership[]
+  invitations Invitation[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, name])
+  @@map("tenant_roles")
+}
+
+// `role` is a system role key, or "custom" with custom_role_id set (a composite tenant FK).
 model Membership {
-  tenantId String              @map("tenant_id") @db.Uuid
-  userId   String              @map("user_id") @db.Uuid
-  role     String              @db.VarChar(30)
-  joinedAt DateTime            @default(now()) @map("joined_at") @db.Timestamptz
-  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projects ProjectMembership[]
+  tenantId     String              @map("tenant_id") @db.Uuid
+  userId       String              @map("user_id") @db.Uuid
+  role         String              @db.VarChar(30)
+  customRoleId String?             @map("custom_role_id") @db.Uuid
+  joinedAt     DateTime            @default(now()) @map("joined_at") @db.Timestamptz
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customRole   TenantRole?         @relation(fields: [tenantId, customRoleId], references: [tenantId, id], onDelete: Restrict)
+  projects     ProjectMembership[]
 
   @@id([tenantId, userId])
   @@index([userId])
+  @@index([tenantId, customRoleId])
   @@map("memberships")
 }
 
@@ -143,19 +168,22 @@ model ProjectMembership {
 }
 
 model Invitation {
-  id         String              @id @default(uuid()) @db.Uuid
-  tenantId   String              @map("tenant_id") @db.Uuid
-  identifier String              @db.VarChar(254)
-  role       String              @db.VarChar(30)
-  digest     String              @unique @db.VarChar(64)
-  expiresAt  DateTime            @map("expires_at") @db.Timestamptz
-  acceptedAt DateTime?           @map("accepted_at") @db.Timestamptz
-  createdBy  String              @map("created_by") @db.Uuid
-  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  projects   InvitationProject[]
+  id           String              @id @default(uuid()) @db.Uuid
+  tenantId     String              @map("tenant_id") @db.Uuid
+  identifier   String              @db.VarChar(254)
+  role         String              @db.VarChar(30)
+  customRoleId String?             @map("custom_role_id") @db.Uuid
+  digest       String              @unique @db.VarChar(64)
+  expiresAt    DateTime            @map("expires_at") @db.Timestamptz
+  acceptedAt   DateTime?           @map("accepted_at") @db.Timestamptz
+  createdBy    String              @map("created_by") @db.Uuid
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customRole   TenantRole?         @relation(fields: [tenantId, customRoleId], references: [tenantId, id], onDelete: Cascade)
+  projects     InvitationProject[]
 
   @@unique([tenantId, id])
   @@index([identifier])
+  @@index([tenantId, customRoleId])
   @@map("invitations")
 }
 

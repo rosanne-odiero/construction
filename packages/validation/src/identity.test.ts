@@ -79,7 +79,24 @@ const contracts: { name: string; schema: ZodType; value: unknown }[] = [
   {
     name: "tenants",
     schema: tenantsResponseSchema,
-    value: { tenants: [{ ...tenant, role: "owner" }] },
+    value: {
+      tenants: [
+        {
+          ...tenant,
+          role: "owner",
+          roleName: null,
+          tenantWide: true,
+          permissions: ["roles.manage", "projects.view"],
+        },
+        {
+          ...tenant,
+          role: id,
+          roleName: "Site clerk",
+          tenantWide: false,
+          permissions: ["projects.view"],
+        },
+      ],
+    },
   },
   { name: "projects", schema: projectsResponseSchema, value: { projects: [project] } },
   { name: "project", schema: projectResponseSchema, value: { project } },
@@ -87,7 +104,13 @@ const contracts: { name: string; schema: ZodType; value: unknown }[] = [
     name: "invitation",
     schema: invitationResponseSchema,
     value: {
-      invitation: { id, identifier: "builder@example.test", role: "client", expiresAt: date },
+      invitation: {
+        id,
+        identifier: "builder@example.test",
+        role: "client",
+        roleName: null,
+        expiresAt: date,
+      },
     },
   },
   {
@@ -98,6 +121,7 @@ const contracts: { name: string; schema: ZodType; value: unknown }[] = [
         {
           userId: id,
           role: "project_manager",
+          roleName: null,
           joinedAt: date,
           user: { displayName: "Builder", identifier: "builder@example.test", mfaEnabled: false },
         },

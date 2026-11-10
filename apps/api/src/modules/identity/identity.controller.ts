@@ -15,10 +15,31 @@ import {
   Res,
   UseGuards,
 } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import {
+  ApiBody,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from "@nestjs/swagger";
+import {
+  createRoleRequestSchema,
+  memberRoleRequestSchema,
+  messageResponseSchema,
+  permissionCatalogueResponseSchema,
+  roleReferenceSchema,
+  roleResponseSchema,
+  rolesResponseSchema,
+  updateRoleRequestSchema,
+} from "@pm-buddy/validation";
 import type { Request, Response } from "express";
+import { z } from "zod";
 import { AuthSecurity } from "./auth-security.service.js";
 import { AuthService } from "./auth.service.js";
+import { RolesService } from "./roles.service.js";
 import { TenancyService } from "./tenancy.service.js";
 import {
   acceptSchema,
@@ -34,6 +55,10 @@ import {
   uuidSchema,
   verifySchema,
 } from "./identity.schemas.js";
+
+const openApi = (schema: z.ZodType) =>
+  z.toJSONSchema(schema, { target: "openapi-3.0", io: "input", unrepresentable: "any" }) as object;
+const stepUpNote = "Requires roles.manage and MFA verified within the last five minutes.";
 
 @Injectable()
 export class BrowserGuard implements CanActivate {
@@ -165,6 +190,22 @@ export class AuthController {
   }
 }
 
+@ApiTags("permissions")
+@UseGuards(BrowserGuard)
+@Controller({ path: "permissions", version: "1" })
+export class PermissionsController {
+  constructor(
+    private readonly auth: AuthService,
+    private readonly roles: RolesService,
+  ) {}
+  @Get()
+  @ApiOperation({ summary: "Permission catalogue grouped by area", operationId: "listPermissions" })
+  @ApiOkResponse({ schema: openApi(permissionCatalogueResponseSchema) })
+  async catalogue(@Req() req: Request) {
+    return this.roles.catalogue(await this.auth.principal(req));
+  }
+}
+
 @ApiTags("tenants")
 @UseGuards(BrowserGuard)
 @Controller({ path: "tenants", version: "1" })
@@ -172,6 +213,7 @@ export class TenantsController {
   constructor(
     private readonly auth: AuthService,
     private readonly tenancy: TenancyService,
+    private readonly roles: RolesService,
   ) {}
   @Get()
   async list(@Req() req: Request) {
@@ -219,6 +261,90 @@ export class TenantsController {
   @Get("current/audit")
   async audit(@Req() req: Request) {
     return this.tenancy.auditLog(await this.auth.principal(req), req);
+  }
+  @Get("current/roles")
+  @ApiOperation({
+    summary: "System and custom roles of the selected company",
+    description: "Requires roles.manage or users.invite.",
+    operationId: "listRoles",
+  })
+  @ApiOkResponse({ schema: openApi(rolesResponseSchema) })
+  async listRoles(@Req() req: Request) {
+    return this.roles.list(await this.auth.principal(req), req);
+  }
+  @Post("current/roles")
+  @ApiOperation({
+    summary: "Create a custom role",
+    description: stepUpNote,
+    operationId: "createRole",
+  })
+  @ApiBody({ schema: openApi(createRoleRequestSchema) })
+  @ApiCreatedResponse({ schema: openApi(roleResponseSchema) })
+  @ApiForbiddenResponse({ description: "Missing permission, stale MFA or privilege escalation" })
+  @ApiConflictResponse({ description: "A role with this name exists" })
+  async createRole(@Body() body: unknown, @Req() req: Request) {
+    return this.roles.create(
+      await this.auth.principal(req),
+      createRoleRequestSchema.parse(body),
+      req,
+    );
+  }
+  @Patch("current/roles/:id")
+  @ApiOperation({
+    summary: "Rename or change a custom role (system roles are immutable)",
+    description: stepUpNote,
+    operationId: "updateRole",
+  })
+  @ApiBody({ schema: openApi(updateRoleRequestSchema) })
+  @ApiOkResponse({ schema: openApi(roleResponseSchema) })
+  @ApiForbiddenResponse({ description: "System role, missing permission or privilege escalation" })
+  @ApiNotFoundResponse({ description: "No such role in the selected company" })
+  @ApiConflictResponse({
+    description: "Duplicate name, or a holder lacks MFA for privileged permissions",
+  })
+  async updateRole(@Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
+    return this.roles.update(
+      await this.auth.principal(req),
+      roleReferenceSchema.parse(id),
+      updateRoleRequestSchema.parse(body),
+      req,
+    );
+  }
+  @Delete("current/roles/:id")
+  @ApiOperation({
+    summary: "Delete an unused custom role",
+    description: stepUpNote,
+    operationId: "deleteRole",
+  })
+  @ApiOkResponse({ schema: openApi(messageResponseSchema) })
+  @ApiConflictResponse({
+    description: "The role is held by members or named in pending invitations",
+  })
+  async deleteRole(@Param("id") id: string, @Req() req: Request) {
+    return this.roles.remove(await this.auth.principal(req), roleReferenceSchema.parse(id), req);
+  }
+  @Put("current/members/:userId/role")
+  @ApiOperation({
+    summary: "Change a member's role; revokes their active sessions in this company",
+    description: stepUpNote,
+    operationId: "changeMemberRole",
+  })
+  @ApiBody({ schema: openApi(memberRoleRequestSchema) })
+  @ApiOkResponse({ schema: openApi(messageResponseSchema) })
+  @ApiConflictResponse({
+    description: "Last owner, unchanged role, or the member lacks required MFA",
+  })
+  async changeMemberRole(
+    @Param("userId") userId: string,
+    @Body() body: unknown,
+    @Req() req: Request,
+  ) {
+    return this.roles.changeMemberRole(
+      await this.auth.principal(req),
+      uuidSchema.parse(userId),
+      memberRoleRequestSchema.parse(body).role,
+      req,
+    );
   }
 }
 

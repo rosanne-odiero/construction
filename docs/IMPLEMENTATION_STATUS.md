@@ -17,7 +17,7 @@
 | `/status` | Existing live API/dependency readiness |
 | `/design-system` | Shared tokens/controls, KES/Nairobi formats, explicit pending/conflict/failure/loading/offline examples; EN/SW and light/dark |
 | Web manifest | Same-origin installation metadata and icon; no service worker or sensitive-data cache; no offline business-sync claim |
-| `/foundation` | API-backed registration/verification/login/reset, TOTP enrollment/step-up/recovery, session refresh/revocation, companies/projects, invitations, membership/project access and redacted audit summaries |
+| `/foundation` | API-backed registration/verification/login/reset, TOTP enrollment/step-up/recovery, session refresh/revocation, companies/projects, invitations, membership/project access, roles and permissions (custom roles, member role changes; D1.4) and redacted audit summaries |
 | CI | Existing lint/type/test/build/API/security workflows retained; browser/a11y job added |
 
 ## Executed evidence (this session)
@@ -54,7 +54,7 @@ The canonical project permissions are `projects.view` and `projects.manage`, mat
 
 The backend contract/configuration is in [apps/api/README.md](../apps/api/README.md). The ignored local encryption-key file is permission-restricted; deployments must supply separately managed key material. `WEB_ORIGIN` must match the actual web origin exactly, including hostname and port. The live frontend is wired and separately smoke-tested end to end; this still does not waive remaining Phase 1 requirements.
 
-Explicit remaining backend requirements: passkeys, external messaging providers, custom roles, action-bound financial step-up, mobile device binding and comprehensive breached-password checking. These are not represented as working integrations. Later financial features must not use a generic MFA timestamp as action-bound approval authority.
+Explicit remaining backend requirements: passkeys, external messaging providers, action-bound financial step-up, mobile device binding and comprehensive breached-password checking. These are not represented as working integrations. Later financial features must not use a generic MFA timestamp as action-bound approval authority.
 
 ## Independent security review of the identity foundation
 
@@ -73,6 +73,10 @@ Also fixed while testing: the CSRF endpoint treated an empty cookie as an existi
 
 **Lockfile hygiene.** Re-resolving dependencies through the corporate npm proxy had turned 805 lockfile hashes back to sha1. `.pnpmfile.mjs` now keeps the existing sha512 for each unchanged `name@version` (published npm versions are immutable) and computes it, after checking the sha1, for new packages. A forced full re-resolution confirmed it: 805 entries restored, no other change.
 
+## Independent review of RBAC and custom roles
+
+A separate reviewer checked the RBAC change for escalation paths, races, MFA bypasses, tenant isolation and migration errors and found no significant issues (it also reran the API e2e suite: 50/50). One hardening note was applied: the database's privileged-MFA trigger now locks the custom role row (`FOR SHARE`), so the database guard holds on its own, without relying on the application's tenant lock. Proven with two concurrent sessions: assigning a member without MFA to a harmless role while another session adds `payroll.approve` to it, the second session waited for the first to commit and was then refused; the role was unchanged. Independently rerun on a freshly migrated test database: 26/26 turbo tasks (145 unit tests), API e2e 50/50, web browser tests 9/9.
+
 ## Decisions and unresolved risks
 
 - Modular monolith, explicit provider boundaries, and existing prototype retained.
@@ -87,8 +91,48 @@ Also fixed while testing: the CSRF endpoint treated an empty cookie as an existi
 The core of D1.2–D1.4 is merged after the review fixes above. To close Phase 1:
 
 1. D1.3 gaps: passkeys (WebAuthn), a development SMS/WhatsApp code provider behind the notification interface, and a breached-password check.
-2. D1.2 gap: move the EN/SW catalogues into a shared `packages/i18n` so the API and site app can use them.
-3. D1.4 gap: custom roles on top of the system roles.
-4. Phase 1 acceptance evidence in [ACCEPTANCE_MATRIX.md](./ACCEPTANCE_MATRIX.md), then Phase 2 (projects, sites and BQ).
+2. ~~D1.2 gap: shared `packages/i18n`~~ and ~~D1.4 gap: custom roles~~: done on `phase-1/d1-rbac-i18n` (see below), pending review.
+3. Phase 1 acceptance evidence in [ACCEPTANCE_MATRIX.md](./ACCEPTANCE_MATRIX.md), then Phase 2 (projects, sites and BQ).
 
 Follow the [Phase 1 demo](./demos/phase-1.md). A green build never stands in for production payment or biometric approval.
+
+## D1.4 permission-based RBAC and D1.2 shared i18n (branch `phase-1/d1-rbac-i18n`)
+
+**What changed**
+
+- **Permission-based RBAC.** `packages/types` now defines `SYSTEM_ROLE_PERMISSIONS` (brief §3 defaults, table in [ARCHITECTURE §8.1](./ARCHITECTURE.md#81-system-role-defaults)), company-level vs project-scoped permissions, `MFA_REQUIRED_PERMISSIONS` and the company-wide system roles (`owner`, `finance`). Role-string checks (`membership.role !== "owner"`, `rolePermissions()`, `["owner","finance"]`) were replaced by one policy, `AccessPolicy`, used by every tenancy and project endpoint (`TenantScope` runs the tenant transaction and audit).
+- **Custom roles.** Migration `20261110080000_custom_roles` adds `tenant_roles` (forced RLS, permission CHECK without `platform.admin`, reserved names, citext-unique names) and `custom_role_id` on memberships and invitations with composite `(tenant_id, custom_role_id)` foreign keys. It replaces `app.require_privileged_mfa()` with a permission-based version (`app.permissions_require_mfa`, `app.system_role_requires_mfa`) and adds `app.require_role_member_mfa()` on role permission changes. No existing rows are read or rewritten.
+- **API.** `GET /permissions`, `GET/POST /tenants/current/roles`, `PATCH/DELETE /tenants/current/roles/:id`, `PUT /tenants/current/members/:userId/role`, with shared Zod request/response schemas in `packages/validation` and OpenAPI operations. Tenant, member and invitation responses now carry the role reference (system key or custom role ID) and `roleName`; the tenant list also carries the caller's `permissions` and `tenantWide`.
+- **Web.** `/foundation` gates its sections by permission and adds **Roles and permissions**: system and custom roles with their permissions, a custom-role editor with permissions grouped by area (permissions the caller does not hold are disabled), and member role changes. EN and SW strings (988 keys in each).
+- **Shared i18n.** `packages/i18n` (`@pm-buddy/i18n`) holds `src/messages/{en,sw}.json`, exports `catalogues`, `messages(locale)`, `LOCALES`/`Locale`, `isLocale` and the `Messages` type, and owns the `i18n:check` script (still run by `turbo run i18n:check`). The web app loads messages from it; `apps/web/messages` and `apps/web/scripts/check-i18n.mjs` were removed.
+
+**Behaviour changes to note**
+
+- Effective project permissions are role ∩ assignment. The existing e2e assertion that a **client** could rename a project after being granted `projects.manage` contradicted that rule; it now expects 403, and the positive path is covered by a project manager in `test/roles.e2e-spec.ts`. The tenant-list assertion was extended to the new fields. No other existing test changed.
+- Member removal now needs `roles.manage` and the privilege-escalation guard (an actor cannot remove someone more privileged). Step-up requirements of the former owner-only endpoints are preserved, including the member list.
+- `GET /tenants` and member/invitation payloads changed shape (new required fields); the web mocks and shared contract tests were updated accordingly.
+
+**Commands run (from the repository root, this session) and actual results**
+
+| Command | Actual result |
+|---|---|
+| `git switch -c phase-1/d1-rbac-i18n main` | Branch created from clean `main` (`916449a`) |
+| `npx pnpm@12.17.0 install` | Added `@pm-buddy/i18n` workspace package; lockfile diff +28/−3 lines (importer changes only). `grep -c 'integrity: sha1-' pnpm-lock.yaml` → 0; `grep -c tarball: pnpm-lock.yaml` → 0 |
+| `npx pnpm@12.17.0 install --frozen-lockfile` | Passed; lockfile unchanged |
+| `npx pnpm@12.17.0 format:check` | Passed: "All matched files use Prettier code style!" |
+| `npx pnpm@12.17.0 turbo run lint typecheck test i18n:check build --force` | Passed: 26 successful, 0 cached. Lint 0 warnings/0 errors in every oxlint package and ESLint clean in web. Unit tests: types 12, domain 34, validation 34, i18n 3, web 10, API 52 (145). `i18n OK: 988 keys in en and sw, all ICU messages compile.` Web `next build` passed |
+| `npx pnpm@12.17.0 db:migrate` | `9 migrations found`, `No pending migrations to apply` (the new migration was applied to the development database earlier in the session; see note) |
+| `PATH=/tmp/pnpm-shim:$PATH npx pnpm@12.17.0 turbo run test:e2e --force` | Passed: 7 tasks, 0 cached. API: 3 files, **50 tests** (health 7, identity 33, roles 10) against `pmb_test` under the real `pmb_app` role. Web: **9** Playwright tests with axe (including the extended foundation flow and a Kiswahili delegated-manager roles test) |
+| `cd apps/api && npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` | "No difference detected.", exit code 0 |
+
+Note: the first development `prisma migrate deploy` of the new migration failed inside its transaction (a policy referenced `memberships.custom_role_id` before that column was added), so nothing was applied. The statements were reordered, the failed record was marked rolled back with `prisma migrate resolve --rolled-back 20261110080000_custom_roles`, and the corrected migration applied cleanly to the development database and, through the e2e global setup, to `pmb_test`. A mutation check (temporarily removing the escalation guard from role creation) made two roles e2e tests fail, then the guard was restored and all tests passed.
+
+**Roles e2e coverage (`apps/api/test/roles.e2e-spec.ts`, real `pmb_app` role):** catalogue contract and 401 when signed out; OpenAPI operations present; system roles listed with their defaults and immutable (403), `platform_admin` refused (400); custom role create/rename/change/delete with stale-MFA rejection, real TOTP step-up, case-insensitive duplicate names (409) and audit summaries; `platform.admin` refused by API (400) and database (CHECK) along with unknown permissions, empty roles and reserved names, while all 44 tenant permissions are accepted; a delegated role manager's escalation attempts (granting unheld permissions, company-wide scope, editing or deleting a stronger role, changing the owner, promoting themself, inviting as finance/owner, removing the owner) all 403 with nothing changed; company B cannot list, change, delete, assign or invite with company A's role, cannot read or write it in SQL, and composite keys reject cross-company references; the database MFA lists match the shared code for every permission and system role; a payments role needs MFA to be accepted; adding a privileged permission or the Finance role to a member without MFA is refused by the API (409) and the database; a member role change revokes only that company's sessions and is audited; role ∩ assignment and company-wide roles on projects; roles in use or in pending invitations cannot be deleted, and expired invitations are removed with the role.
+
+**Limitations and follow-ups**
+
+- Project assignments can carry only `projects.view` and `projects.manage` (the implemented project policy). When BQ, labour, attendance and payment modules land, widen `project_permissions_check` and `projectPermissionSchema` so role ∩ assignment covers them.
+- Per-assignment approval limits and action-bound financial step-up are still to come with the financial modules.
+- The Kiswahili permission names and role strings need a human language review.
+- Custom role changes apply at the holder's next request (permissions are evaluated per request); only an explicit member role change revokes sessions.
+- No GitHub CI run is claimed; nothing was committed or pushed.

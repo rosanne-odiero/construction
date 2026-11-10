@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { permissionCatalogue, type Role } from "@pm-buddy/validation";
 
 const userId = "10000000-0000-4000-8000-000000000001";
 const sessionId = "10000000-0000-4000-8000-000000000002";
@@ -7,6 +8,27 @@ const tenantId = "10000000-0000-4000-8000-000000000003";
 const projectId = "10000000-0000-4000-8000-000000000004";
 const memberId = "10000000-0000-4000-8000-000000000005";
 const timestamp = "2026-11-10T12:00:00.000Z";
+const customRoleId = "10000000-0000-4000-8000-000000000007";
+const catalogue = permissionCatalogue();
+const tenantPermissions = catalogue.areas.flatMap((area) =>
+  area.permissions.filter((entry) => entry.assignable).map((entry) => entry.key),
+);
+const systemRole = (
+  id: "owner" | "project_manager" | "client",
+  permissions: Role["permissions"],
+  extra: { memberCount?: number; assignable?: boolean } = {},
+): Role => ({
+  kind: "system",
+  id,
+  name: null,
+  permissions,
+  tenantWide: id === "owner",
+  mfaRequired: id === "owner",
+  memberCount: 1,
+  assignable: true,
+  ...extra,
+});
+const axeTags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 test("live UI uses CSRF, validates MFA and wires tenant/project permissions without demo fallbacks", async ({
   page,
@@ -17,6 +39,10 @@ test("live UI uses CSRF, validates MFA and wires tenant/project permissions with
   let projectCreated = false;
   let revoked = false;
   let assignedPermissions: unknown;
+  let createdRole: unknown;
+  let updatedRole: unknown;
+  let memberRole: unknown;
+  let customRole: Role | null = null;
   const unexpected: string[] = [];
   const account = () => ({
     user: {
@@ -78,7 +104,16 @@ test("live UI uses CSRF, validates MFA and wires tenant/project permissions with
     if (path === "/tenants")
       return json({
         tenants: companyCreated
-          ? [{ id: tenantId, name: "Synthetic contractor", role: "owner" }]
+          ? [
+              {
+                id: tenantId,
+                name: "Synthetic contractor",
+                role: "owner",
+                roleName: null,
+                tenantWide: true,
+                permissions: tenantPermissions,
+              },
+            ]
           : [],
       });
     if (path === "/projects" && method === "POST") {
@@ -106,6 +141,7 @@ test("live UI uses CSRF, validates MFA and wires tenant/project permissions with
           {
             userId,
             role: "owner",
+            roleName: null,
             joinedAt: timestamp,
             user: {
               displayName: "Synthetic Owner",
@@ -115,7 +151,8 @@ test("live UI uses CSRF, validates MFA and wires tenant/project permissions with
           },
           {
             userId: memberId,
-            role: "project_manager",
+            role: memberRole ? customRoleId : "project_manager",
+            roleName: memberRole && customRole?.kind === "custom" ? customRole.name : null,
             joinedAt: timestamp,
             user: {
               displayName: "Synthetic Manager",
@@ -124,6 +161,55 @@ test("live UI uses CSRF, validates MFA and wires tenant/project permissions with
             },
           },
         ],
+      });
+    }
+    if (path === "/permissions") return json(catalogue);
+    if (path === "/tenants/current/roles" && method === "POST") {
+      createdRole = request.postDataJSON();
+      customRole = {
+        kind: "custom",
+        id: customRoleId,
+        name: "Site clerk",
+        permissions: ["bq.view", "projects.view"],
+        tenantWide: false,
+        mfaRequired: false,
+        memberCount: 0,
+        assignable: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      return json({ role: customRole }, 201);
+    }
+    if (path === "/tenants/current/roles")
+      return json({
+        roles: [
+          systemRole("owner", tenantPermissions),
+          systemRole("project_manager", ["projects.view", "projects.manage"], {
+            memberCount: memberRole ? 0 : 1,
+          }),
+          systemRole("client", ["projects.view", "bq.view", "portal.client"], { memberCount: 0 }),
+          ...(customRole ? [customRole] : []),
+        ],
+      });
+    if (path === `/tenants/current/roles/${customRoleId}` && method === "PATCH") {
+      updatedRole = request.postDataJSON();
+      customRole = {
+        ...customRole!,
+        kind: "custom",
+        name: "Site clerk lead",
+        permissions: ["projects.view"],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      return json({ role: customRole });
+    }
+    if (path === `/tenants/current/roles/${customRoleId}` && method === "DELETE")
+      return json({ code: "conflict", traceId: "synthetic-role-in-use" }, 409);
+    if (path === `/tenants/current/members/${memberId}/role` && method === "PUT") {
+      memberRole = request.postDataJSON();
+      customRole = { ...customRole!, memberCount: 1 };
+      return json({
+        message: "Role changed and the member's active sessions in this company revoked.",
       });
     }
     if (path === `/projects/${projectId}/members/${memberId}` && method === "PUT") {
@@ -182,11 +268,51 @@ test("live UI uses CSRF, validates MFA and wires tenant/project permissions with
   await page.getByRole("button", { name: "Update project access", exact: true }).click();
   await expect(page.getByText("Project permissions updated.", { exact: true })).toBeVisible();
   expect(assignedPermissions).toEqual({ permissions: ["projects.view", "projects.manage"] });
+
+  await page.getByRole("button", { name: "Load roles and permissions", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Roles and permissions" })).toBeVisible();
+  await expect(page.getByText("System role", { exact: true }).first()).toBeVisible();
+  await page.locator("#role-name").fill("Site clerk");
+  await page.getByRole("checkbox", { name: "View projects", exact: true }).check();
+  await page.getByRole("checkbox", { name: "View the BQ", exact: true }).check();
+  await expect(page.getByRole("checkbox", { name: "Approve payments · needs MFA" })).toBeEnabled();
+  await page.getByRole("button", { name: "Save role", exact: true }).click();
+  await expect(page.getByText("Custom role created.", { exact: true })).toBeVisible();
+  expect(createdRole).toEqual({
+    name: "Site clerk",
+    permissions: ["projects.view", "bq.view"],
+    tenantWide: false,
+  });
+  await expect(page.locator("#role-name")).toHaveValue("");
+  await page.getByRole("button", { name: "Edit Site clerk", exact: true }).click();
+  await expect(page.locator("#role-name")).toHaveValue("Site clerk");
+  await expect(page.getByRole("checkbox", { name: "View the BQ", exact: true })).toBeChecked();
+  await page.locator("#role-name").fill("Site clerk lead");
+  await page.getByRole("checkbox", { name: "View the BQ", exact: true }).uncheck();
+  await page.getByRole("button", { name: "Save role", exact: true }).click();
+  await expect(page.getByText("Role updated.", { exact: true })).toBeVisible();
+  expect(updatedRole).toEqual({
+    name: "Site clerk lead",
+    permissions: ["projects.view"],
+    tenantWide: false,
+  });
+  await page.locator("#member-role-member").selectOption(memberId);
+  await page.locator("#member-role-role").selectOption(customRoleId);
+  await page.getByRole("button", { name: "Change a member's role", exact: true }).click();
+  await expect(
+    page.getByText("Role changed. The member's sessions in this company were signed out.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(memberRole).toEqual({ role: customRoleId });
+  await expect(page.getByText("(Site clerk lead)", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Delete Site clerk lead", exact: true }).click();
+  await expect(page.locator('main [role="alert"]')).toContainText("deleting roles still in use");
+  const rolesScan = await new AxeBuilder({ page }).withTags(axeTags).analyze();
+  expect(rolesScan.violations).toEqual([]);
   await page.getByRole("button", { name: "Load audit events" }).click();
   await expect(page.getByText("tenant.created", { exact: true })).toBeVisible();
-  const scan = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze();
+  const scan = await new AxeBuilder({ page }).withTags(axeTags).analyze();
   expect(scan.violations).toEqual([]);
   revoked = true;
   await page.getByRole("button", { name: "Load company members" }).click();
@@ -242,3 +368,86 @@ for (const locale of ["en", "sw"] as const) {
     await expect(page.locator("#company-name")).toHaveCount(0);
   });
 }
+
+test("roles panel works in Kiswahili and offers a delegated manager only what they hold", async ({
+  page,
+  context,
+}) => {
+  await context.addCookies([{ name: "NEXT_LOCALE", value: "sw", url: "http://127.0.0.1:3100" }]);
+  const held: Role["permissions"] = ["bq.view", "projects.view", "roles.manage", "users.invite"];
+  const unexpected: string[] = [];
+  await page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname.replace("/api/v1", "");
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/auth/me")
+      return json({
+        user: {
+          id: userId,
+          identifier: "delegate@example.invalid",
+          displayName: "Synthetic Delegate",
+          verified: true,
+          mfaEnabled: true,
+        },
+        session: { id: sessionId, tenantId, mfaVerified: true, expiresAt: timestamp },
+        mfaRequired: false,
+      });
+    if (path === "/tenants")
+      return json({
+        tenants: [
+          {
+            id: tenantId,
+            name: "Kampuni ya majaribio",
+            role: customRoleId,
+            roleName: "Msimamizi wa timu",
+            tenantWide: false,
+            permissions: held,
+          },
+        ],
+      });
+    if (path === "/projects") return json({ projects: [] });
+    if (path === "/auth/sessions") return json({ sessions: [] });
+    if (path === "/permissions") return json(catalogue);
+    if (path === "/tenants/current/roles")
+      return json({
+        roles: [
+          systemRole("owner", tenantPermissions, { assignable: false }),
+          systemRole("client", ["projects.view", "bq.view", "portal.client"], { memberCount: 0 }),
+          {
+            kind: "custom",
+            id: customRoleId,
+            name: "Msimamizi wa timu",
+            permissions: held,
+            tenantWide: false,
+            mfaRequired: true,
+            memberCount: 1,
+            assignable: true,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ],
+      });
+    unexpected.push(path);
+    return json({ code: "not-found" }, 404);
+  });
+
+  await page.goto("/foundation");
+  await expect(page.locator("html")).toHaveAttribute("lang", "sw");
+  await page.getByRole("button", { name: "Pakia kampuni, miradi na vipindi" }).click();
+  await expect(page.getByText("(Msimamizi wa timu)", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Unda mradi" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Pakia majukumu na ruhusa" }).click();
+  await expect(page.getByRole("heading", { name: "Majukumu na ruhusa" })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "Kuona miradi", exact: true })).toBeEnabled();
+  await expect(page.getByRole("checkbox", { name: "Kuidhinisha malipo" })).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "Kuidhinisha malipo" })).toHaveAccessibleName(
+    "Kuidhinisha malipo · inahitaji MFA · huna ruhusa hii",
+  );
+  await expect(
+    page.getByRole("checkbox", { name: "Linatumika kwa miradi yote ya kampuni" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "Usimamizi wa jukwaa" })).toHaveCount(0);
+  const scan = await new AxeBuilder({ page }).withTags(axeTags).analyze();
+  expect(scan.violations).toEqual([]);
+  expect(unexpected).toEqual([]);
+});

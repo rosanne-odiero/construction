@@ -36,7 +36,7 @@ Open **http://localhost:3000**. The tour page links to every screen. Use the **E
 | Real (carried into Phase 1) | Mock (replaced as features land) |
 |---|---|
 | Design tokens (royal blue on neutral, light and dark), shadcn/ui components, layout patterns | All data in `apps/web/src/mocks` |
-| EN/SW catalogues (`apps/web/messages`), locale switching, KES / `DD/MM/YYYY` / Africa/Nairobi formatting | Sign-in, MFA, passkeys, SMS |
+| EN/SW catalogues (`apps/web/messages` in D0, now `packages/i18n/src/messages`), locale switching, KES / `DD/MM/YYYY` / Africa/Nairobi formatting | Sign-in, MFA, passkeys, SMS |
 | BQ totals computed from quantity × rate, so the totals reconcile | Payroll deductions (**illustrative only**; the real engine comes in D4.1, `COMPLIANCE-REVIEW`) |
 | Phone normalisation and the under-18 registration check | M-Pesa STK and B2C behaviour, receipts and callbacks |
 | | Map tiles (OpenStreetMap, development only) |
@@ -44,7 +44,7 @@ Open **http://localhost:3000**. The tour page links to every screen. Use the **E
 ## 4. Checks run for this deliverable
 
 - `tsc --noEmit`, `eslint` and `next build`: all pass.
-- EN/SW catalogue parity (`pnpm --filter @pm-buddy/web i18n:check`): identical keys, the same placeholders, and every ICU message compiles in both languages.
+- EN/SW catalogue parity (`pnpm --filter @pm-buddy/i18n i18n:check`; `pnpm --filter @pm-buddy/web i18n:check` in D0): identical keys, the same placeholders, and every ICU message compiles in both languages.
 - All 14 routes loaded fresh in English and Kiswahili with **0 console errors or warnings**.
 - The OpenAPI outline passes Redocly lint with 0 errors.
 

@@ -43,7 +43,7 @@ flowchart LR
 - [ ] Code, tests and docs are updated, and the checks are green (CI from D1.1).
 - [ ] No secrets are committed, and `.env.example` is up to date.
 - [ ] New configuration values are documented with their source and `COMPLIANCE-REVIEW` status.
-- [ ] All new UI strings exist in **English and Kiswahili** (`pnpm --filter @pm-buddy/web i18n:check` passes). Money is shown as `KES 1,250,000`, dates as `DD/MM/YYYY`, in the `Africa/Nairobi` timezone.
+- [ ] All new UI strings exist in **English and Kiswahili** (`pnpm --filter @pm-buddy/i18n i18n:check` passes). Money is shown as `KES 1,250,000`, dates as `DD/MM/YYYY`, in the `Africa/Nairobi` timezone.
 - [ ] The UI works in light and dark mode, is keyboard accessible, and targets WCAG 2.2 AA.
 - [ ] The demo script is updated in `docs/demos/phase-N.md`.
 - [ ] Tenant isolation tests cover every new table (from D1.4).

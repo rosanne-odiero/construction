@@ -130,7 +130,7 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `auth.access_token_ttl_seconds` | platform | 600 | ARCHITECTURE §7 | SECURITY | D1.3 |
 | `auth.refresh.idle_days` / `.absolute_days` | platform/role | 14 / 30; privileged roles 7 / 14 | Proposal | SECURITY | D1.3 |
 | `auth.step_up.max_age` | platform | 300 seconds | ARCHITECTURE §7 | SECURITY | D1.3 |
-| `auth.mfa.required_roles` | platform | Owner/Director, Finance, Admin | Brief §7 | SECURITY | D1.3 |
+| `auth.mfa.required_permissions` (was `auth.mfa.required_roles`) | platform | `payroll.approve`, `payments.approve`, `payments.disburse`, `payments.reverse`, `finance.manage`, `config.manage_statutory`, `roles.manage`, `tenancy.manage`, `platform.admin`; so Owner/Director, Finance and Admin by default. A code and database constant (`MFA_REQUIRED_PERMISSIONS`, `app.permissions_require_mfa`), not runtime-configurable: it may only grow, through a migration | Brief §7; ARCHITECTURE §8 | SECURITY | D1.4 |
 | `files.max_upload_mb` / `files.allowed_types` | platform | 20 / images, PDF, XLSX | Proposal | SECURITY | D2.2 |
 | `backup.rpo_minutes` / `backup.rto_hours` | platform | 15 / 4 | Brief §8 | OPS | D9.3 |
 | `backup.retention_days` | platform | 35 | Proposal | OPS | D9.3 |

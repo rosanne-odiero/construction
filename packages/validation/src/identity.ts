@@ -1,13 +1,10 @@
-import { PERMISSIONS, SYSTEM_ROLES } from "@pm-buddy/types";
 import { z } from "zod";
+import { permissionSchema, roleReferenceSchema } from "./roles.js";
 
 const uuid = z.uuid();
 const timestamp = z.iso.datetime({ offset: true });
-
-export const tenantRoleSchema = z.enum(SYSTEM_ROLES.filter((role) => role !== "platform_admin"));
-export const projectPermissionSchema = z
-  .enum(PERMISSIONS)
-  .extract(["projects.view", "projects.manage"]);
+/** Custom role name, or null for a system role (clients localise system role keys). */
+const roleName = z.string().min(1).max(60).nullable();
 
 export const csrfResponseSchema = z.object({ csrfToken: z.string().min(1) }).strict();
 export const messageResponseSchema = z.object({ message: z.string().min(1) }).strict();
@@ -66,7 +63,15 @@ const tenant = z.object({ id: uuid, name: z.string().min(1).max(150) }).strict()
 export const tenantCreatedResponseSchema = z.object({ tenant }).strict();
 export const tenantsResponseSchema = z
   .object({
-    tenants: z.array(tenant.extend({ role: tenantRoleSchema })),
+    tenants: z.array(
+      tenant.extend({
+        role: roleReferenceSchema,
+        roleName,
+        tenantWide: z.boolean(),
+        /** The caller's role permissions in that company (project-scoped ones apply per project). */
+        permissions: z.array(permissionSchema),
+      }),
+    ),
   })
   .strict();
 
@@ -86,7 +91,8 @@ export const invitationResponseSchema = z
       .object({
         id: uuid,
         identifier: z.string().min(3).max(254),
-        role: tenantRoleSchema,
+        role: roleReferenceSchema,
+        roleName,
         expiresAt: timestamp,
       })
       .strict(),
@@ -99,7 +105,8 @@ export const membersResponseSchema = z
       z
         .object({
           userId: uuid,
-          role: tenantRoleSchema,
+          role: roleReferenceSchema,
+          roleName,
           joinedAt: timestamp,
           user: z
             .object({
@@ -136,8 +143,6 @@ export const auditEventsResponseSchema = z
   })
   .strict();
 
-export type TenantRole = z.infer<typeof tenantRoleSchema>;
-export type ProjectPermission = z.infer<typeof projectPermissionSchema>;
 export type CsrfResponse = z.infer<typeof csrfResponseSchema>;
 export type MessageResponse = z.infer<typeof messageResponseSchema>;
 export type AuthResponse = z.infer<typeof authResponseSchema>;

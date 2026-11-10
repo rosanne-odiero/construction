@@ -1,10 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   isPermission,
+  MFA_REQUIRED_PERMISSIONS,
   MFA_REQUIRED_ROLES,
+  permissionArea,
+  PERMISSION_AREAS,
   PERMISSIONS,
+  permissionsRequireMfa,
+  PROJECT_PERMISSIONS,
   problemType,
+  SYSTEM_ROLE_PERMISSIONS,
   SYSTEM_ROLES,
+  TENANT_LEVEL_PERMISSIONS,
+  TENANT_PERMISSIONS,
+  TENANT_SYSTEM_ROLES,
+  TENANT_WIDE_SYSTEM_ROLES,
+  type Permission,
 } from "./index.js";
 
 describe("permission catalogue", () => {
@@ -17,11 +28,75 @@ describe("permission catalogue", () => {
     expect(isPermission("payments.approve")).toBe(true);
     expect(isPermission("payments.steal")).toBe(false);
   });
+
+  it("groups every permission into exactly one area", () => {
+    expect(permissionArea("payments.approve")).toBe("payments");
+    expect(PERMISSION_AREAS[0]).toBe("tenancy");
+    expect(new Set(PERMISSION_AREAS).size).toBe(PERMISSION_AREAS.length);
+    for (const permission of PERMISSIONS)
+      expect(PERMISSION_AREAS).toContain(permissionArea(permission));
+  });
+
+  it("keeps platform.admin out of every tenant permission set", () => {
+    expect(TENANT_PERMISSIONS).not.toContain("platform.admin");
+    expect(TENANT_PERMISSIONS).toHaveLength(PERMISSIONS.length - 1);
+    expect(PROJECT_PERMISSIONS).not.toContain("platform.admin");
+  });
+
+  it("partitions tenant permissions into company-level and project-scoped", () => {
+    const levels = [...TENANT_LEVEL_PERMISSIONS, ...PROJECT_PERMISSIONS].sort();
+    expect(levels).toEqual([...TENANT_PERMISSIONS].sort());
+    expect(PROJECT_PERMISSIONS).toContain("projects.view");
+    expect(PROJECT_PERMISSIONS).not.toContain("roles.manage");
+  });
+
+  it("requires MFA for the brief's privileged permissions only", () => {
+    for (const permission of MFA_REQUIRED_PERMISSIONS) expect(isPermission(permission)).toBe(true);
+    expect(permissionsRequireMfa(["payments.approve"])).toBe(true);
+    expect(permissionsRequireMfa(["roles.manage", "projects.view"])).toBe(true);
+    expect(permissionsRequireMfa(["projects.view", "bq.edit", "payroll.prepare"])).toBe(false);
+    expect(permissionsRequireMfa([])).toBe(false);
+  });
 });
 
-describe("roles", () => {
-  it("requires MFA only for known system roles", () => {
-    for (const role of MFA_REQUIRED_ROLES) expect(SYSTEM_ROLES).toContain(role);
+describe("system roles", () => {
+  it("lists only catalogue permissions without duplicates", () => {
+    for (const role of SYSTEM_ROLES) {
+      const permissions = SYSTEM_ROLE_PERMISSIONS[role];
+      expect(new Set(permissions).size, role).toBe(permissions.length);
+      for (const permission of permissions) expect(isPermission(permission), role).toBe(true);
+    }
+  });
+
+  it("gives the owner every tenant permission and nobody but the platform operator platform.admin", () => {
+    expect([...SYSTEM_ROLE_PERMISSIONS.owner].sort()).toEqual([...TENANT_PERMISSIONS].sort());
+    for (const role of TENANT_SYSTEM_ROLES)
+      expect(SYSTEM_ROLE_PERMISSIONS[role], role).not.toContain("platform.admin");
+    expect(SYSTEM_ROLE_PERMISSIONS.platform_admin).toEqual(["platform.admin"]);
+    expect(TENANT_SYSTEM_ROLES).not.toContain("platform_admin");
+  });
+
+  it("limits clients and suppliers to their portal and view permissions", () => {
+    const allowed = (permission: Permission) =>
+      permission.startsWith("portal.") || permission.endsWith(".view");
+    for (const role of ["client", "supplier"] as const)
+      expect(SYSTEM_ROLE_PERMISSIONS[role].every(allowed), role).toBe(true);
+    expect(SYSTEM_ROLE_PERMISSIONS.client).toContain("portal.client");
+    expect(SYSTEM_ROLE_PERMISSIONS.client).not.toContain("portal.supplier");
+    expect(SYSTEM_ROLE_PERMISSIONS.supplier).toContain("portal.supplier");
+    expect(SYSTEM_ROLE_PERMISSIONS.supplier).not.toContain("portal.client");
+  });
+
+  it("derives the MFA-required roles from their permissions (owner, finance, platform admin)", () => {
+    expect([...MFA_REQUIRED_ROLES].sort()).toEqual(["finance", "owner", "platform_admin"]);
+    for (const role of SYSTEM_ROLES)
+      expect(MFA_REQUIRED_ROLES.includes(role), role).toBe(
+        permissionsRequireMfa(SYSTEM_ROLE_PERMISSIONS[role]),
+      );
+  });
+
+  it("makes only owner, finance and the platform operator company-wide", () => {
+    expect([...TENANT_WIDE_SYSTEM_ROLES].sort()).toEqual(["finance", "owner", "platform_admin"]);
   });
 });
 

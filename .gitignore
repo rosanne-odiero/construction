@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# turbo
+.turbo/
+
+# env (only .env.example is committed)
+.env
+.env.*
+!.env.example
+
+# logs and OS files
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+
+# test artefacts
+playwright-report/
+test-results/
+.playwright-mcp/
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea/

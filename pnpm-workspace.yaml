@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm blocks dependency build scripts by default. These packages ship prebuilt
+# platform binaries through optional dependencies, so their scripts are not needed.
+allowBuilds:
+  "@parcel/watcher": false
+  "@swc/core": false
+  sharp: false
+  unrs-resolver: false

@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+.next/
+node_modules/
+coverage/
+.playwright-mcp/
+# Hand-formatted design docs (wide tables, Mermaid); the OpenAPI outline is formatted.
+docs/**/*.md
+apps/web/next-env.d.ts

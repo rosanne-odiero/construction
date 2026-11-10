@@ -3,7 +3,7 @@
     "description": "PM-Buddy: usimamizi wa miradi ya ujenzi kwa Kenya. Mfano wa Awamu ya 0 unaobofyeka wenye data ya mfano."
   },
   "prototype": {
-    "banner": "Mfano wa Awamu ya 0: data ya mfano pekee, hakuna kinachohifadhiwa wala kutumwa.",
+    "banner": "Mfano: skrini zinaonyesha data ya mfano isipokuwa zilizo na alama “Halisi”. Hakuna kinachohifadhiwa wala kutumwa.",
     "tourLink": "Ziara ya mfano",
     "actionToast": "Mfano: kitendo hiki kimesanifiwa lakini kitakuja katika {deliverable}."
   },
@@ -43,7 +43,8 @@
       "clientPortal": "Lango la mteja",
       "siteApp": "Programu ya eneo",
       "settings": "Mipangilio",
-      "tour": "Ziara ya mfano"
+      "tour": "Ziara ya mfano",
+      "status": "Hali ya mfumo"
     },
     "phase": "Awamu {phase}"
   },
@@ -100,6 +101,7 @@
     "start": "Anza kwa kuingia",
     "skipToDashboard": "Nenda kwenye dashibodi",
     "screensTitle": "Skrini za kukagua",
+    "liveApi": "API halisi",
     "screens": {
       "signIn": {
         "title": "Kuingia na MFA",
@@ -140,6 +142,10 @@
       "site": {
         "title": "Programu ya eneo (Android)",
         "description": "Mifano ya wavuti ya programu inayofanya kazi bila mtandao: kioski cha uso, orodha ya msimamizi bila mtandao na hali ya usawazishaji."
+      },
+      "status": {
+        "title": "Hali ya mfumo (moja kwa moja)",
+        "description": "Skrini ya kwanza iliyounganishwa na API halisi: hali ya moja kwa moja ya PostgreSQL, Valkey na hifadhi ya faili, husasishwa kila sekunde 10."
       }
     },
     "reviewTitle": "Mambo ya kuangalia",
@@ -776,6 +782,63 @@
         "title": "Mipangilio",
         "description": "Kampuni, watumiaji na majukumu, MFA na vipindi, kanuni za mipangilio na kumbukumbu ya ukaguzi."
       }
+    }
+  },
+  "systemStatus": {
+    "title": "Hali ya mfumo",
+    "description": "Utayari wa moja kwa moja wa API ya PM-Buddy na huduma inazotegemea.",
+    "liveBadge": "Data halisi kutoka kwa API",
+    "autoRefresh": "Husasishwa kila sekunde {seconds}",
+    "refresh": "Sasisha",
+    "overall": {
+      "ok": "Mifumo yote inafanya kazi",
+      "degraded": "Huduma zimeathirika: moja au zaidi hazifanyi kazi",
+      "unreachable": "API haipatikani"
+    },
+    "version": "API ya PM-Buddy v{version}",
+    "commit": "commit {commit}",
+    "roundTrip": "jibu ndani ya ms {ms}",
+    "checkedAt": "Imekaguliwa {time}",
+    "checksHeading": "Huduma",
+    "checks": {
+      "api": {
+        "name": "API",
+        "description": "Huduma ya NestJS inayojibu maombi ya /api/v1."
+      },
+      "database": {
+        "name": "PostgreSQL",
+        "description": "Data ya kampuni, iliyotengwa kwa kila kampuni kwa usalama wa ngazi ya safu."
+      },
+      "redis": {
+        "name": "Valkey",
+        "description": "Foleni za kazi, vikomo vya maombi, vipindi na akiba."
+      },
+      "storage": {
+        "name": "Hifadhi ya faili",
+        "description": "Hifadhi ya faragha ya picha, nyaraka na ripoti zilizohamishwa."
+      }
+    },
+    "state": {
+      "up": "Inafanya kazi",
+      "down": "Haifanyi kazi"
+    },
+    "latency": "ms {ms}",
+    "unreachable": {
+      "network": "Seva ya wavuti haikuweza kuunganishwa na API kwenye {url}.",
+      "invalidResponse": "API kwenye {url} imejibu, lakini si kwa ripoti ya utayari.",
+      "stepsTitle": "Ili kuwasha kila kitu kwenye kompyuta yako:",
+      "stepServices": "Washa hifadhidata na zana: <code>pnpm services:up</code>",
+      "stepMigrate": "Tekeleza uhamishaji wa hifadhidata: <code>pnpm db:migrate</code>",
+      "stepDev": "Endesha programu ya wavuti na API pamoja: <code>pnpm dev</code>"
+    },
+    "devTools": {
+      "title": "Zana za wasanidi programu",
+      "description": "Zana za ndani zinazowashwa na <code>pnpm services:up</code>. Huonyeshwa wakati wa usanidi pekee.",
+      "apiDocs": "Marejeleo ya API (Swagger UI)",
+      "openapi": "Hati ya OpenAPI (JSON)",
+      "mailpit": "Mailpit: barua pepe zilizotumwa wakati wa usanidi",
+      "storageConsole": "Dashibodi ya hifadhi ya RustFS",
+      "newTab": "(inafunguka kwenye kichupo kipya)"
     }
   },
   "portal": {

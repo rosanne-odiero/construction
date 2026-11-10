@@ -1,4 +1,4 @@
-// Checks that the EN and SW catalogues have identical keys and placeholders,
+// Checks that the EN and SW catalogues have identical keys, placeholders and rich-text tags,
 // and that every ICU message compiles in both locales. Run: pnpm --filter @pm-buddy/web i18n:check
 import { readFileSync } from "node:fs";
 import { IntlMessageFormat } from "intl-messageformat";
@@ -13,6 +13,9 @@ const flatten = (obj, prefix = "") =>
 
 const placeholders = (message) =>
   [...new Set([...message.matchAll(/\{\s*([a-zA-Z0-9_]+)\s*[,}]/g)].map((m) => m[1]))].sort();
+
+const tags = (message) =>
+  [...new Set([...message.matchAll(/<([a-zA-Z][\w-]*)>/g)].map((m) => m[1]))].sort();
 
 const catalogues = { en: new Map(flatten(load("en"))), sw: new Map(flatten(load("sw"))) };
 const problems = [];
@@ -29,12 +32,18 @@ for (const [key, en] of catalogues.en) {
       `placeholder mismatch: ${key} (en: ${placeholders(en)} | sw: ${placeholders(sw)})`,
     );
   }
+  if (sw !== undefined && tags(en).join() !== tags(sw).join()) {
+    problems.push(`tag mismatch: ${key} (en: ${tags(en)} | sw: ${tags(sw)})`);
+  }
 }
 
 for (const [locale, messages] of Object.entries(catalogues)) {
   for (const [key, message] of messages) {
     try {
-      const values = Object.fromEntries(placeholders(message).map((name) => [name, 2]));
+      const values = Object.fromEntries([
+        ...placeholders(message).map((name) => [name, 2]),
+        ...tags(message).map((name) => [name, (chunks) => chunks.join("")]),
+      ]);
       new IntlMessageFormat(message, locale).format(values);
     } catch (error) {
       problems.push(`ICU error (${locale}) ${key}: ${error.message}`);

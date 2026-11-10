@@ -12,8 +12,13 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "i18n:check": "turbo run i18n:check",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "services:up": "docker compose -f infra/docker/compose.yaml up -d --wait",
+    "services:down": "docker compose -f infra/docker/compose.yaml down",
+    "db:migrate": "turbo run db:migrate --filter=@pm-buddy/api"
   },
   "devDependencies": {
     "prettier": "3.9.10",

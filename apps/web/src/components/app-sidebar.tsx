@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { HardHat, MonitorSmartphone, Settings, Smartphone, Sparkles } from "lucide-react";
+import { Activity, HardHat, MonitorSmartphone, Settings, Smartphone, Sparkles } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -121,6 +121,18 @@ export function AppSidebar() {
 
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname === "/status"}
+              tooltip={t("items.status")}
+            >
+              <Link href="/status">
+                <Activity aria-hidden />
+                <span>{t("items.status")}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild

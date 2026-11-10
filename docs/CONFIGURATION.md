@@ -131,7 +131,7 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `auth.refresh.idle_days` / `.absolute_days` | platform/role | 14 / 30; privileged roles 7 / 14 | Proposal | SECURITY | D1.3 |
 | `auth.step_up.max_age` | platform | 300 seconds | ARCHITECTURE §7 | SECURITY | D1.3 |
 | `auth.mfa.required_roles` | platform | Owner/Director, Finance, Admin | Brief §7 | SECURITY | D1.3 |
-| `files.max_upload_mb` / `files.allowed_types` | platform | 20 / images, PDF, XLSX | Proposal | SECURITY | D1.1 |
+| `files.max_upload_mb` / `files.allowed_types` | platform | 20 / images, PDF, XLSX | Proposal | SECURITY | D2.2 |
 | `backup.rpo_minutes` / `backup.rto_hours` | platform | 15 / 4 | Brief §8 | OPS | D9.3 |
 | `backup.retention_days` | platform | 35 | Proposal | OPS | D9.3 |
 
@@ -145,3 +145,24 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `maps.tile_provider` | platform | OpenStreetMap (development only) | D-10 | OPS (Q-T4) | D2.1 |
 
 > Fixed by design, not configurable: money in integer minor units, display formats `KES 1,250,000` and `DD/MM/YYYY`, and the Africa/Nairobi timezone for business dates (brief §2, §9).
+
+## 8. Process environment (deployment settings)
+
+These are not business rules: they tell each process where its dependencies are. The API validates them at start-up and refuses to start with a readable error if any is wrong (`apiEnvSchema` in `packages/validation/src/env.ts`). Outside production, `apps/api/.env` and then `apps/api/.env.example` fill any value not set in the environment, so a fresh clone runs with the local docker compose services. Secrets come from the secrets manager in deployed environments (ARCHITECTURE §10, §20).
+
+| Variable | Used by | Default / local value | Notes | Status |
+|---|---|---|---|---|
+| `NODE_ENV` | api | `development` | `production` hides health error details and stops `.env` file loading | OPS |
+| `PORT` | api | `4000` | | OPS |
+| `LOG_LEVEL` | api | `info` | pino level; `silent` in the e2e suite | OPS |
+| `APP_VERSION` / `GIT_SHA` | api | `0.0.0-dev` (local `0.1.0`) / unset | Shown by the health endpoints and `/status`; set by the release pipeline | OPS |
+| `DATABASE_URL` | api | `pmb_app` on `localhost:55432/pmb` | Runtime role: no `BYPASSRLS`, no DDL (§6.1). The e2e suite swaps the database for `pmb_test` | SECURITY |
+| `DATABASE_MIGRATION_URL` | prisma migrate | `pmb_migrator` on `localhost:55432/pmb` | Schema owner; only migrations use it | SECURITY |
+| `REDIS_URL` | api | `redis://localhost:56379` | Valkey locally (D-24) | OPS |
+| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_FORCE_PATH_STYLE` | api | `http://localhost:9000` / `us-east-1` / `pmb-local` / `true` | Any S3-compatible service (RustFS locally) | OPS |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | api | Throwaway local keys in `.env.example` | Secrets manager outside local development | SECURITY |
+| `S3_AUTO_CREATE_BUCKET` | api | `false` (`true` in `.env.example`) | Development convenience only; deployed buckets come from infrastructure code | SECURITY |
+| `API_DOCS_ENABLED` | api | `true` | Swagger UI at `/api/docs`. Decide before go-live whether production publishes it | SECURITY |
+| `HEALTH_CHECK_TIMEOUT_MS` | api | `2000` | Per dependency probe in `/api/v1/health/ready` | OPS |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_SERVICE_NAME` | api | unset / `pm-buddy-api` | Tracing starts only when the endpoint is set; needs `pnpm start`, which preloads `telemetry.js` | OPS |
+| `API_INTERNAL_URL` | web | `http://localhost:4000` | Where the web server reaches the API. Also the target of the same-origin `/api/*` rewrite, which is **fixed at build time** (D-16) | OPS |

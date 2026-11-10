@@ -24,9 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ageOn, meetsMinimumAge } from "@pm-buddy/domain";
 import { normalizeKenyanPhone } from "@/lib/format";
-import { NOW } from "@/mocks/company";
+import { TODAY } from "@/mocks/company";
 import type { TradeKey } from "@/mocks/labour";
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const trades: TradeKey[] = [
   "mason",
@@ -42,25 +45,16 @@ const trades: TradeKey[] = [
   "foreman",
 ];
 
-function ageOn(dobIso: string, onIso: string): number {
-  const dob = new Date(dobIso);
-  const on = new Date(onIso);
-  let age = on.getFullYear() - dob.getFullYear();
-  const beforeBirthday =
-    on.getMonth() < dob.getMonth() ||
-    (on.getMonth() === dob.getMonth() && on.getDate() < dob.getDate());
-  if (beforeBirthday) age -= 1;
-  return age;
-}
-
 export function RegisterWorkerDialog() {
   const t = useTranslations("labour.register");
   const tTrades = useTranslations("trades");
   const [dob, setDob] = useState("2009-03-14");
   const [phone, setPhone] = useState("0722 000 111");
 
-  const age = dob ? ageOn(dob, NOW) : null;
-  const underage = age !== null && age < 18;
+  // A date input can briefly hold partial values (e.g. a 6-digit year) while the user types.
+  const validDob = ISO_DATE.test(dob);
+  const age = validDob ? ageOn(dob, TODAY) : null;
+  const underage = validDob && !meetsMinimumAge(dob, TODAY);
   const normalised = normalizeKenyanPhone(phone);
 
   return (

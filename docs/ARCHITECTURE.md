@@ -72,8 +72,8 @@ flowchart TB
     WRK["apps/api worker mode<br/>BullMQ consumers, schedulers, outbox relay"]
     PG[("PostgreSQL<br/>RLS by tenant_id")]
     PGB["PgBouncer<br/>transaction pooling"]
-    RDS[("Redis<br/>queues, rate limits, USSD sessions, cache")]
-    OBJ[("S3-compatible object storage<br/>MinIO locally, private buckets")]
+    RDS[("Valkey (Redis-compatible)<br/>queues, rate limits, USSD sessions, cache")]
+    OBJ[("S3-compatible object storage<br/>RustFS locally, private buckets")]
     KMS["KMS or secrets manager<br/>KEKs, Daraja credentials"]
     AV["Malware scanner hook<br/>ClamAV"]
   end
@@ -157,10 +157,14 @@ pm-buddy/
 │  │     └─ mocks/          # D0 prototype data (removed as real APIs land)
 │  ├─ api/                 # NestJS modular monolith (D1.1)
 │  │  ├─ prisma/            # schema, migrations, RLS SQL, seed
+│  │  ├─ test/              # e2e suite against the compose services (pmb_test database)
 │  │  └─ src/
-│  │     ├─ main.ts         # HTTP entrypoint
+│  │     ├─ main.ts         # HTTP entrypoint (app.setup.ts holds the shared pipeline)
+│  │     ├─ telemetry.ts    # OpenTelemetry preload, active when OTEL_EXPORTER_OTLP_ENDPOINT is set
 │  │     ├─ main.worker.ts  # worker entrypoint (BullMQ, schedulers, outbox relay)
-│  │     ├─ common/         # guards, interceptors, tenant context, problem+json, idempotency
+│  │     ├─ config/         # validated environment (schema in packages/validation)
+│  │     ├─ common/         # guards, interceptors, tenant context, problem+json, idempotency, logging
+│  │     ├─ infra/          # Prisma, Valkey and object-storage clients
 │  │     └─ modules/<module>/{api,application,domain,infra}/
 │  ├─ site/                # Expo React Native site app (D3.2)
 │  └─ mock-daraja/         # Daraja simulator for dev and tests (D4.2)
@@ -171,21 +175,22 @@ pm-buddy/
 │  ├─ i18n/                # EN/SW ICU message catalogues (web, site, SMS/USSD)
 │  ├─ ui-tokens/           # design tokens shared by web and site app
 │  ├─ api-client/          # generated from OpenAPI (openapi-typescript + openapi-fetch)
-│  └─ config/              # eslint, tsconfig, prettier presets
+│  └─ config/              # shared tsconfig presets (lint rules: root .oxlintrc.json, D-25)
 ├─ infra/
-│  ├─ docker/              # docker-compose: postgres, pgbouncer, redis, minio, mailpit, clamav
+│  ├─ docker/              # docker-compose: postgres, valkey, rustfs, mailpit (pgbouncer, clamav later)
 │  └─ terraform/           # IaC modules (Phase 9, once the cloud is chosen)
 ├─ tests/
 │  ├─ e2e/                 # Playwright (web)
 │  └─ load/                # k6 scripts
 ├─ docs/                   # this documentation, demos, ADRs
-├─ .github/workflows/      # CI/CD
+├─ .github/                # CI workflows and Dependabot
+├─ .pnpmfile.mjs           # keeps pnpm-lock.yaml registry-agnostic (D-26)
 ├─ package.json            # root scripts (turbo)
 ├─ pnpm-workspace.yaml
 └─ turbo.json
 ```
 
-> **D0 note:** only the root workspace and `apps/web` (the clickable prototype) exist so far. Everything else arrives in the deliverable named in [ROADMAP](./ROADMAP.md).
+> **D1.1 note:** the workspace, `apps/web` (prototype plus the live `/status` page), `apps/api` (health module only), `packages/{types,validation,domain,config}`, `infra/docker` and `.github/` exist so far. Everything else arrives in the deliverable named in [ROADMAP](./ROADMAP.md).
 
 ---
 
@@ -579,11 +584,12 @@ Daraja callbacks are not signed, so they are protected in layers:
 ## 19. Observability
 
 - **Logs.** pino JSON with `requestId`, `tenantId`, a pseudonymous `userId` and `deviceId`. **Redaction paths** cover passwords, tokens, cookies, Daraja credentials, phone and ID numbers, and every biometric field.
-- **Traces and metrics.** OpenTelemetry SDK with HTTP, Prisma, BullMQ and Redis instrumentation, exported over OTLP to a collector. The backend is chosen with the cloud.
+- **Traces and metrics.** OpenTelemetry SDK with HTTP, Prisma, BullMQ and Redis/Valkey instrumentation, exported over OTLP to a collector. The backend is chosen with the cloud.
 - **Errors.** Sentry for web, API and site app, with PII scrubbing and release tracking.
 - **Health.**
-  - `GET /health/live` reports on the process.
-  - `GET /health/ready` checks the database, Redis, object storage and the queue backlog threshold.
+  - `GET /api/v1/health/live` reports on the process.
+  - `GET /api/v1/health/ready` checks the database, Valkey and object storage (the queue backlog threshold joins in D4.2). It answers 503 when anything is down; error details are hidden in production.
+  - The web `/status` page shows the readiness report live (D1.1).
 - **Business signals.** Payouts pending or failed, unmatched callbacks, sync backlog per device, anomaly rates, OTP send failures and queue depth all feed alerts.
 
 ---
@@ -598,7 +604,7 @@ flowchart LR
   MP["Daraja / Africa's Talking callbacks"] --> WAF2["WAF + IP allowlist"] --> APIC
   APIC --> PGM[("Managed PostgreSQL<br/>PITR, replica")]
   WRKC["worker containers"] --> PGM
-  APIC --> RED[("Managed Redis")]
+  APIC --> RED[("Managed Valkey / Redis")]
   WRKC --> RED
   APIC --> OBJS[("Object storage")]
   WRKC --> OBJS
@@ -621,7 +627,7 @@ flowchart LR
 | Level | Tooling | Scope |
 |---|---|---|
 | Unit | Vitest | `packages/domain` (payroll, statutory boundaries, EVM, valuations, conversions, anomaly rules, SMS parser) at ≥ 90 % line and branch coverage; formatters; validation |
-| Integration | Vitest + Testcontainers (PostgreSQL, Redis, MinIO) + supertest | API modules, **RLS and tenant-isolation suite**, outbox, queues |
+| Integration | Vitest + supertest against the docker compose services (PostgreSQL, Valkey, RustFS), using a separate `pmb_test` database that the suite migrates itself | API modules, **RLS and tenant-isolation suite**, outbox, queues |
 | Contract | OpenAPI response validation in tests; generated client compile check | API ↔ web and site |
 | Payments | `apps/mock-daraja` scenarios: success, failure, timeout, duplicate, out-of-order, unknown callback; nightly sandbox smoke tests | D4.x |
 | E2E | Playwright (web); **Maestro** for the site app (D-12) | Payroll → M-Pesa payout; material request → delivery → payment; BQ import → valuation |
@@ -654,10 +660,13 @@ flowchart LR
 | D-17 | **On-device 1:N face matching** on kiosks, with encrypted roster templates | Proposed | Needed for offline use. Must be covered in the DPIA. Server-side matching is the alternative when online (Q-B1). |
 | D-18 | **Cloud-agnostic** until before Phase 9 | Accepted (your decision) | Provider abstractions in §20 |
 | D-19 | Product name **PM-Buddy**; royal blue accent on a neutral base | Accepted (your decision) | |
-| D-20 | **TypeScript 5.9** pinned for now | Accepted (D0) | typescript-eslint supports TS < 6.1, so TS 7 (native compiler) waits for tooling support. Re-checked at each phase. |
+| D-20 | **TypeScript 5.9** pinned for the web app | Accepted (D0), narrowed in D1.1 | typescript-eslint supports TS < 6.1, so `apps/web` stays on 5.9 with ESLint (`eslint-config-next`). The API and shared packages moved to TS 6 (D-25). TS 7 (native compiler) waits for tooling support. Re-checked at each phase. |
 | D-21 | Next.js 16 **Cache Components off** in the D0 prototype | Accepted (D0) | The locale cookie is read on every request. Revisit in D1.2 with real data fetching. |
 | D-22 | **pnpm 12** with dependency build scripts allow-listed in `pnpm-workspace.yaml` (`allowBuilds`) | Accepted (D0) | Supply-chain hardening: no install scripts run unless approved. |
 | D-23 | shadcn/ui **radix-nova** style with Radix primitives and the `cn` helper | Accepted (D0) | Current shadcn default. Components live in `apps/web` until they move to a shared package in D1.2. |
+| D-24 | Local services: **PostgreSQL 18.6, Valkey 8.1, RustFS 1.0.4, Mailpit**; new dependencies may not use AGPL, GPL or SSPL licences | Accepted (D1.1) | Valkey (BSD-3) is Redis-compatible without Redis 8's AGPL/SSPL licensing. MinIO no longer publishes community images, so RustFS (Apache-2.0, S3-compatible) stands in; the app only uses the S3 API (§20), so any S3 service works. PostgreSQL 19 is not released yet. Dependency review in CI blocks copyleft licences that would bind the SaaS or the distributed site app. |
+| D-25 | API and shared packages use **TypeScript 6.0, oxlint (type-aware) and Vitest 4**; the web app keeps ESLint (D-20) | Accepted (D1.1) | This is what NestJS 12's CLI generates. oxlint is much faster and needs no TS-version-bound plugin. `@nestjs/core` 12 is ESM-only, so the API is ESM with `.js` import suffixes. Shared packages build to `dist/` and are marked `sideEffects: false`. |
+| D-26 | **Supply-chain controls in CI**: registry-agnostic lockfile with sha512 integrity, actions pinned by commit SHA, images pinned by digest, Dependabot with a 7-day cooldown, gitleaks, CodeQL and dependency review | Accepted (D1.1) | `.pnpmfile.mjs` strips registry-mirror tarball URLs (for example a corporate npm proxy) before the lockfile is written, so CI and contributors install from their own registry. Turborepo runs in strict env mode: runtime settings are listed in `globalPassThroughEnv`, and build inputs such as `API_INTERNAL_URL` are part of the cache key. |
 
 ---
 

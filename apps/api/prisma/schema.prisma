@@ -1,0 +1,13 @@
+// PM-Buddy database schema. Tables arrive with their deliverables (identity in D1.3, tenancy in D1.4…).
+// Row-level security policies, roles and helper functions live in SQL migrations (ARCHITECTURE §6).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}

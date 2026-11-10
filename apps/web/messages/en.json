@@ -3,7 +3,7 @@
     "description": "PM-Buddy: construction project management for Kenya. Phase 0 clickable prototype with mock data."
   },
   "prototype": {
-    "banner": "Phase 0 prototype: mock data only, nothing is saved or sent.",
+    "banner": "Prototype: screens show mock data unless marked “Live”. Nothing is saved or sent.",
     "tourLink": "Prototype tour",
     "actionToast": "Prototype: this action is designed but arrives in {deliverable}."
   },
@@ -43,7 +43,8 @@
       "clientPortal": "Client portal",
       "siteApp": "Site app",
       "settings": "Settings",
-      "tour": "Prototype tour"
+      "tour": "Prototype tour",
+      "status": "System status"
     },
     "phase": "Phase {phase}"
   },
@@ -100,6 +101,7 @@
     "start": "Start at sign-in",
     "skipToDashboard": "Go to the dashboard",
     "screensTitle": "Screens to review",
+    "liveApi": "Live API",
     "screens": {
       "signIn": {
         "title": "Sign-in and MFA",
@@ -140,6 +142,10 @@
       "site": {
         "title": "Site app (Android)",
         "description": "Web mock-ups of the offline-first site app: face kiosk, foreman’s offline muster roll and sync status."
+      },
+      "status": {
+        "title": "System status (live)",
+        "description": "The first screen wired to the real API: live health of PostgreSQL, Valkey and object storage, refreshed every 10 seconds."
       }
     },
     "reviewTitle": "What to look for",
@@ -776,6 +782,63 @@
         "title": "Settings",
         "description": "Company, users and roles, MFA and sessions, configuration rules and audit log."
       }
+    }
+  },
+  "systemStatus": {
+    "title": "System status",
+    "description": "Live readiness of the PM-Buddy API and the services it depends on.",
+    "liveBadge": "Live data from the API",
+    "autoRefresh": "Refreshes every {seconds} s",
+    "refresh": "Refresh",
+    "overall": {
+      "ok": "All systems operational",
+      "degraded": "Degraded: one or more services are down",
+      "unreachable": "The API can't be reached"
+    },
+    "version": "PM-Buddy API v{version}",
+    "commit": "commit {commit}",
+    "roundTrip": "response in {ms} ms",
+    "checkedAt": "Checked {time}",
+    "checksHeading": "Services",
+    "checks": {
+      "api": {
+        "name": "API",
+        "description": "NestJS service answering /api/v1 requests."
+      },
+      "database": {
+        "name": "PostgreSQL",
+        "description": "Company data, kept separate per company by row-level security."
+      },
+      "redis": {
+        "name": "Valkey",
+        "description": "Job queues, rate limits, sessions and caching."
+      },
+      "storage": {
+        "name": "Object storage",
+        "description": "Private bucket for photos, documents and exports."
+      }
+    },
+    "state": {
+      "up": "Operational",
+      "down": "Down"
+    },
+    "latency": "{ms} ms",
+    "unreachable": {
+      "network": "The web server couldn't connect to the API at {url}.",
+      "invalidResponse": "The API at {url} answered, but not with a readiness report.",
+      "stepsTitle": "To start everything on your computer:",
+      "stepServices": "Start the databases and tools: <code>pnpm services:up</code>",
+      "stepMigrate": "Apply the database migrations: <code>pnpm db:migrate</code>",
+      "stepDev": "Run the web app and the API together: <code>pnpm dev</code>"
+    },
+    "devTools": {
+      "title": "Developer tools",
+      "description": "Local tools started by <code>pnpm services:up</code>. Shown in development only.",
+      "apiDocs": "API reference (Swagger UI)",
+      "openapi": "OpenAPI document (JSON)",
+      "mailpit": "Mailpit: emails sent in development",
+      "storageConsole": "RustFS storage console",
+      "newTab": "(opens in a new tab)"
     }
   },
   "portal": {

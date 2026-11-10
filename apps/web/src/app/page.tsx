@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import {
+  Activity,
   ArrowRight,
   Building,
   FileSpreadsheet,
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { PrototypeBanner } from "@/components/prototype-banner";
+import { StatusBadge } from "@/components/status-badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const screens = [
@@ -30,6 +32,7 @@ const screens = [
   { key: "payroll", href: "/payroll", icon: Wallet },
   { key: "portal", href: "/portal", icon: MonitorSmartphone },
   { key: "site", href: "/site", icon: Smartphone },
+  { key: "status", href: "/status", icon: Activity, live: true },
 ] as const;
 
 const docs = [
@@ -102,6 +105,11 @@ export default async function TourPage() {
                         <span className="text-xs font-medium text-muted-foreground tabular-nums">
                           {String(index + 1).padStart(2, "0")}
                         </span>
+                        {"live" in screen ? (
+                          <StatusBadge tone="info" className="ml-auto">
+                            {t("liveApi")}
+                          </StatusBadge>
+                        ) : null}
                       </div>
                       <CardTitle className="flex items-center gap-1">
                         {t(`screens.${screen.key}.title`)}

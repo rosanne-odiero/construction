@@ -88,18 +88,8 @@ export function formatWeekdayDate(value: string | Date, locale: string): string 
   return `${weekday}, ${formatDate(value)}`;
 }
 
-/** Normalises Kenyan mobile numbers to 2547XXXXXXXX / 2541XXXXXXXX, or returns null. */
-export function normalizeKenyanPhone(input: string): string | null {
-  const digits = input.replace(/\D/g, "");
-  let candidate = digits;
-  if (digits.length === 10 && digits.startsWith("0")) candidate = `254${digits.slice(1)}`;
-  else if (digits.length === 9 && /^[71]/.test(digits)) candidate = `254${digits}`;
-  return /^254[71]\d{8}$/.test(candidate) ? candidate : null;
-}
-
-export function maskPhone(normalised: string): string {
-  return `${normalised.slice(0, 4)}•••••${normalised.slice(-3)}`;
-}
+// Canonical 2547XXXXXXXX / 2541XXXXXXXX handling is shared with the API (packages/domain).
+export { maskPhone, normalizeKenyanPhone } from "@pm-buddy/domain";
 
 export function maskId(idNumber: string): string {
   return `••••${idNumber.slice(-4)}`;

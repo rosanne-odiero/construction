@@ -26,7 +26,7 @@ services:
 
   # Redis-compatible (BSD-licensed Valkey) for queues, rate limits, sessions and cache.
   valkey:
-    image: valkey/valkey:8.1-alpine
+    image: valkey/valkey:9.1-alpine
     ports:
       - "56379:6379"
     healthcheck:

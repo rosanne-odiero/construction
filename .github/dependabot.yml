@@ -15,6 +15,17 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    # Major versions held back on purpose (ARCHITECTURE decision log); revisit at each phase.
+    ignore:
+      # Web stays on TS 5.9 for typescript-eslint (D-20); API and packages on TS 6 (D-25).
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # Types must match the Node.js runtime major in .nvmrc (24).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # eslint-config-next's import, jsx-a11y and react plugins don't support ESLint 10 yet.
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "chore(deps)"
 

@@ -1,8 +1,6 @@
-export const locales = ["en", "sw"] as const;
-export type Locale = (typeof locales)[number];
-export const defaultLocale: Locale = "en";
-export const LOCALE_COOKIE = "NEXT_LOCALE";
+import { DEFAULT_LOCALE, isLocale, LOCALES, type Locale } from "@pm-buddy/i18n";
 
-export function isLocale(value: string | undefined): value is Locale {
-  return value !== undefined && (locales as readonly string[]).includes(value);
-}
+export { isLocale, type Locale };
+export const locales = LOCALES;
+export const defaultLocale: Locale = DEFAULT_LOCALE;
+export const LOCALE_COOKIE = "NEXT_LOCALE";

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { Secret, TOTP } from "otpauth";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -11,135 +10,9 @@ import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity, digest } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
 import { RedisService } from "../src/infra/redis.service.js";
-import {
-  auditEventsResponseSchema,
-  authResponseSchema,
-  csrfResponseSchema,
-  invitationResponseSchema,
-  membersResponseSchema,
-  messageResponseSchema,
-  mfaEnrollmentResponseSchema,
-  mfaVerificationResponseSchema,
-  projectResponseSchema,
-  projectsResponseSchema,
-  sessionsResponseSchema,
-  tenantCreatedResponseSchema,
-  tenantsResponseSchema,
-  type AuthResponse as SharedAuthResponse,
-} from "@pm-buddy/validation";
-
-type AuthResponse = SharedAuthResponse & { recoveryCodes?: string[] };
-const password = "Unique construction foundation! 918";
-const origin = "http://localhost:3000";
-const notifications = new Map<string, { subject: string; text: string }[]>();
-
-function responseContract(method: string, path: string) {
-  if (path === "auth/csrf") return csrfResponseSchema;
-  if (path === "auth/mfa/enroll") return mfaEnrollmentResponseSchema;
-  if (path === "auth/mfa/verify") return mfaVerificationResponseSchema;
-  if (path === "auth/sessions" && method === "get") return sessionsResponseSchema;
-  if (
-    ["auth/login", "auth/me", "auth/refresh", "auth/mfa/step-up", "auth/mfa/recover"].includes(
-      path,
-    ) ||
-    /^tenants\/[^/]+\/select$/.test(path)
-  )
-    return authResponseSchema;
-  if (path === "tenants")
-    return method === "get" ? tenantsResponseSchema : tenantCreatedResponseSchema;
-  if (path === "tenants/current/members") return membersResponseSchema;
-  if (path === "tenants/current/audit") return auditEventsResponseSchema;
-  if (path === "tenants/current/invitations") return invitationResponseSchema;
-  if (path === "projects") return method === "get" ? projectsResponseSchema : projectResponseSchema;
-  if (/^projects\/[^/]+$/.test(path) && method === "patch") return projectResponseSchema;
-  return messageResponseSchema;
-}
-
-class Browser {
-  readonly cookies = new Map<string, string>();
-  csrf = "";
-  auth!: AuthResponse;
-  identifier = `${randomUUID()}@example.test`;
-  mfaSecret = "";
-  enrollmentCode = "";
-  constructor(private readonly app: INestApplication<App>) {}
-
-  async call(
-    method: "get" | "post" | "delete" | "patch" | "put",
-    path: string,
-    body?: object,
-    csrf = true,
-  ) {
-    const operation = request(this.app.getHttpServer())[method](`/api/v1/${path}`);
-    operation.set("Cookie", [...this.cookies].map(([key, value]) => `${key}=${value}`).join("; "));
-    operation.set("Origin", origin);
-    if (csrf) operation.set("X-CSRF-Token", this.csrf);
-    const res = body === undefined ? await operation : await operation.send(body);
-    if (res.status >= 200 && res.status < 300) {
-      expect(
-        responseContract(method, path).safeParse(res.body).success,
-        `Wire contract mismatch for ${method.toUpperCase()} ${path}: ${JSON.stringify(res.body)}`,
-      ).toBe(true);
-    }
-    const values = res.headers["set-cookie"] as unknown as string[] | undefined;
-    for (const value of values ?? []) {
-      const pair = value.split(";")[0]!;
-      const position = pair.indexOf("=");
-      this.cookies.set(pair.slice(0, position), pair.slice(position + 1));
-    }
-    return res;
-  }
-
-  async initialize() {
-    const res = await this.call("get", "auth/csrf");
-    expect(res.status).toBe(200);
-    this.csrf = (res.body as { csrfToken: string }).csrfToken;
-  }
-
-  async register() {
-    await this.initialize();
-    const res = await this.call("post", "auth/register", {
-      identifier: this.identifier,
-      password,
-      displayName: "Foundation test user",
-    });
-    expect(res.status, JSON.stringify(res.body)).toBe(201);
-    const text = notifications.get(this.identifier)?.at(-1)?.text;
-    const code = text?.match(/Verification code: (\d{6})/)?.[1];
-    expect(code).toMatch(/^\d{6}$/);
-    const verified = await this.call("post", "auth/verify", {
-      identifier: this.identifier,
-      code,
-      password,
-    });
-    expect(verified.status, JSON.stringify(verified.body)).toBe(200);
-    await this.login();
-  }
-
-  async login() {
-    const res = await this.call("post", "auth/login", { identifier: this.identifier, password });
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-    this.auth = res.body as AuthResponse;
-    return res;
-  }
-
-  code(offset = 0) {
-    return new TOTP({ secret: Secret.fromBase32(this.mfaSecret) }).generate({
-      timestamp: Date.now() + offset,
-    });
-  }
-
-  async enroll() {
-    const start = await this.call("post", "auth/mfa/enroll", {});
-    expect(start.status, JSON.stringify(start.body)).toBe(200);
-    this.mfaSecret = (start.body as { secret: string }).secret;
-    this.enrollmentCode = this.code();
-    const verified = await this.call("post", "auth/mfa/verify", { code: this.enrollmentCode });
-    expect(verified.status, JSON.stringify(verified.body)).toBe(200);
-    this.auth = verified.body as AuthResponse;
-    expect(this.auth.recoveryCodes).toHaveLength(10);
-  }
-}
+import { SYSTEM_ROLE_PERMISSIONS } from "@pm-buddy/types";
+import { membersResponseSchema, tenantsResponseSchema } from "@pm-buddy/validation";
+import { Browser, notifications, origin, password, type AuthResponse } from "./support.js";
 
 describe("Identity, tenancy and project permissions (real runtime role)", () => {
   let app: INestApplication<App>;
@@ -216,7 +89,14 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
     const tenants = await ownerA.call("get", "tenants");
     expect(tenants.status).toBe(200);
     expect(tenantsResponseSchema.parse(tenants.body).tenants).toEqual([
-      { id: tenantA, name: "Company A", role: "owner" },
+      {
+        id: tenantA,
+        name: "Company A",
+        role: "owner",
+        roleName: null,
+        tenantWide: true,
+        permissions: [...SYSTEM_ROLE_PERMISSIONS.owner],
+      },
     ]);
     const members = await ownerA.call("get", "tenants/current/members");
     expect(members.status).toBe(200);
@@ -562,9 +442,11 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
         })
       ).status,
     ).toBe(200);
+    // Effective project permissions are role ∩ assignment: a client's role has no
+    // projects.manage, so the assignment cannot widen it (the positive path is in roles.e2e-spec).
     expect(
-      (await client.call("patch", `projects/${projectA}`, { name: "Permitted edit" })).status,
-    ).toBe(200);
+      (await client.call("patch", `projects/${projectA}`, { name: "Denied edit" })).status,
+    ).toBe(403);
     expect(
       (await client.call("patch", `projects/${projectB}`, { name: "Other tenant" })).status,
     ).toBe(404);

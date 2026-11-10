@@ -6,18 +6,27 @@ import { z } from "zod";
 import {
   authResponseSchema,
   auditEventsResponseSchema,
+  createRoleRequestSchema,
   csrfResponseSchema,
   invitationResponseSchema,
+  memberRoleRequestSchema,
   membersResponseSchema,
   messageResponseSchema,
   mfaEnrollmentResponseSchema,
   mfaVerificationResponseSchema,
+  permissionCatalogueResponseSchema,
   projectResponseSchema,
   projectsResponseSchema,
+  roleReferenceSchema,
+  roleResponseSchema,
+  rolesResponseSchema,
   sessionsResponseSchema,
   tenantCreatedResponseSchema,
   tenantRoleSchema,
   tenantsResponseSchema,
+  updateRoleRequestSchema,
+  type PermissionCatalogueResponse,
+  type Role,
 } from "@pm-buddy/validation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,9 +34,10 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { FoundationApiError, foundationRequest } from "@/lib/foundation-api";
 import { formatDateTime } from "@/lib/format";
-import type messages from "../../../messages/en.json";
+import type { Messages } from "@pm-buddy/i18n";
+import { RolesPanel, useRoleLabel, type RoleDraft } from "./roles-panel";
 
-type NoticeKey = keyof typeof messages.foundation.notices;
+type NoticeKey = keyof Messages["foundation"]["notices"];
 type Account = z.infer<typeof authResponseSchema>;
 type Tenant = z.infer<typeof tenantsResponseSchema>["tenants"][number];
 type Project = z.infer<typeof projectsResponseSchema>["projects"][number];
@@ -149,6 +159,8 @@ export function FoundationConsole() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [catalogue, setCatalogue] = useState<PermissionCatalogueResponse | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
 
@@ -183,6 +195,8 @@ export function FoundationConsole() {
     setSessions([]);
     setMembers([]);
     setAudit([]);
+    setRoles([]);
+    setCatalogue(null);
   }
 
   function applyAccount(next: Account | null) {
@@ -256,9 +270,50 @@ export function FoundationConsole() {
     setSessions(result.sessions);
   }
 
+  async function loadMembers() {
+    setMembers(
+      (await foundationRequest("/tenants/current/members", membersResponseSchema)).members,
+    );
+  }
+
+  async function loadRoles() {
+    setCatalogue(await foundationRequest("/permissions", permissionCatalogueResponseSchema));
+    setRoles((await foundationRequest("/tenants/current/roles", rolesResponseSchema)).roles);
+  }
+
+  async function saveRole(draft: RoleDraft) {
+    let saved = false;
+    await run(
+      "role",
+      async () => {
+        const input = (draft.id ? updateRoleRequestSchema : createRoleRequestSchema).safeParse({
+          name: draft.name,
+          permissions: draft.permissions,
+          tenantWide: draft.tenantWide,
+        });
+        if (!input.success) throw new FoundationApiError(400, "validation-error");
+        await mutate(
+          draft.id
+            ? `/tenants/current/roles/${encodeURIComponent(draft.id)}`
+            : "/tenants/current/roles",
+          roleResponseSchema,
+          input.data,
+          draft.id ? "PATCH" : "POST",
+        );
+        await loadRoles();
+        saved = true;
+      },
+      draft.id ? "roleUpdated" : "roleCreated",
+    );
+    return saved;
+  }
+
   const disabled = busy !== null || loading;
   const activeTenant = tenants.find((tenant) => tenant.id === account?.session.tenantId);
-  const owner = activeTenant?.role === "owner";
+  // UI gating mirrors the API's permission checks; the API remains the authority.
+  const held: readonly string[] = activeTenant?.permissions ?? [];
+  const can = (permission: string) => held.includes(permission);
+  const roleLabel = useRoleLabel();
   const identifier: InputField = {
     name: "identifier",
     label: t("identifier"),
@@ -690,7 +745,7 @@ export function FoundationConsole() {
                         <span>
                           {tenant.name}{" "}
                           <span className="text-sm text-muted-foreground">
-                            ({t(`roles.${tenant.role}`)})
+                            ({roleLabel(tenant.role, tenant.roleName)})
                           </span>
                         </span>
                         <Button
@@ -721,7 +776,7 @@ export function FoundationConsole() {
               </Card>
               {account.session.tenantId ? (
                 <>
-                  {owner ? (
+                  {can("projects.create") ? (
                     <ActionForm
                       id="project"
                       title={t("createProject")}
@@ -758,81 +813,81 @@ export function FoundationConsole() {
                       </ul>
                     </CardContent>
                   </Card>
-                  {owner ? (
-                    <>
-                      <ActionForm
-                        id="invite"
-                        title={t("invite")}
-                        submit={t("invite")}
-                        fields={[identifier]}
-                        disabled={disabled}
-                        onSubmit={(data) =>
-                          void run(
-                            "invite",
-                            async () => {
-                              const projectIds = data.getAll("projectIds");
-                              if (!projectIds.every((id): id is string => typeof id === "string"))
-                                throw new FoundationApiError(400, "validation-error");
-                              await mutate(
-                                "/tenants/current/invitations",
-                                invitationResponseSchema,
-                                {
-                                  identifier: value(data, "identifier"),
-                                  role: tenantRoleSchema.parse(value(data, "role")),
-                                  projectIds,
-                                },
-                              );
-                            },
-                            "invitationSent",
-                          )
-                        }
-                      >
-                        <Field>
-                          <FieldLabel htmlFor="invite-role">{t("role")}</FieldLabel>
-                          <select
-                            id="invite-role"
-                            name="role"
-                            className="h-10 rounded border bg-background px-3"
-                            defaultValue="project_manager"
-                          >
-                            {tenantRoleSchema.options.map((role) => (
-                              <option key={role} value={role}>
-                                {t(`roles.${role}`)}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <fieldset className="space-y-2">
-                          <legend className="mb-2 text-sm font-medium">
-                            {t("assignedProjects")}
-                          </legend>
-                          {projects.map((project) => (
-                            <label key={project.id} className="flex items-center gap-2 text-sm">
-                              <input type="checkbox" name="projectIds" value={project.id} />
-                              {project.name}
-                            </label>
-                          ))}
-                        </fieldset>
-                      </ActionForm>
-                      <div className="flex flex-wrap gap-2">
+                  {can("users.invite") ? (
+                    <ActionForm
+                      id="invite"
+                      title={t("invite")}
+                      submit={t("invite")}
+                      fields={[identifier]}
+                      disabled={disabled}
+                      onSubmit={(data) =>
+                        void run(
+                          "invite",
+                          async () => {
+                            const projectIds = data.getAll("projectIds");
+                            if (!projectIds.every((id): id is string => typeof id === "string"))
+                              throw new FoundationApiError(400, "validation-error");
+                            const role = roleReferenceSchema.safeParse(value(data, "role"));
+                            if (!role.success)
+                              throw new FoundationApiError(400, "validation-error");
+                            await mutate("/tenants/current/invitations", invitationResponseSchema, {
+                              identifier: value(data, "identifier"),
+                              role: role.data,
+                              projectIds,
+                            });
+                          },
+                          "invitationSent",
+                        )
+                      }
+                    >
+                      <Field>
+                        <FieldLabel htmlFor="invite-role">{t("role")}</FieldLabel>
+                        <select
+                          id="invite-role"
+                          name="role"
+                          className="h-10 rounded border bg-background px-3"
+                          defaultValue="project_manager"
+                        >
+                          {roles.length
+                            ? roles
+                                .filter((role) => role.assignable)
+                                .map((role) => (
+                                  <option key={role.id} value={role.id}>
+                                    {roleLabel(role.id, role.name)}
+                                  </option>
+                                ))
+                            : tenantRoleSchema.options.map((role) => (
+                                <option key={role} value={role}>
+                                  {t(`roles.${role}`)}
+                                </option>
+                              ))}
+                        </select>
+                      </Field>
+                      <fieldset className="space-y-2">
+                        <legend className="mb-2 text-sm font-medium">
+                          {t("assignedProjects")}
+                        </legend>
+                        {projects.map((project) => (
+                          <label key={project.id} className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" name="projectIds" value={project.id} />
+                            {project.name}
+                          </label>
+                        ))}
+                      </fieldset>
+                    </ActionForm>
+                  ) : null}
+                  {can("users.invite") || can("roles.manage") || can("audit.view") ? (
+                    <div className="flex flex-wrap gap-2">
+                      {can("users.invite") || can("roles.manage") ? (
                         <Button
                           variant="outline"
                           disabled={disabled}
-                          onClick={() =>
-                            void run("members", async () =>
-                              setMembers(
-                                (
-                                  await foundationRequest(
-                                    "/tenants/current/members",
-                                    membersResponseSchema,
-                                  )
-                                ).members,
-                              ),
-                            )
-                          }
+                          onClick={() => void run("members", loadMembers)}
                         >
                           {t("loadMembers")}
                         </Button>
+                      ) : null}
+                      {can("audit.view") ? (
                         <Button
                           variant="outline"
                           disabled={disabled}
@@ -851,159 +906,205 @@ export function FoundationConsole() {
                         >
                           {t("loadAudit")}
                         </Button>
-                      </div>
-                      {members.length ? (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>
-                              <h2>{t("members")}</h2>
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <ul className="space-y-3">
-                              {members.map((member) => (
-                                <li
-                                  key={member.userId}
-                                  className="flex flex-wrap items-center justify-between gap-3 rounded border p-3"
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {members.length ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>
+                          <h2>{t("members")}</h2>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-3">
+                          {members.map((member) => (
+                            <li
+                              key={member.userId}
+                              className="flex flex-wrap items-center justify-between gap-3 rounded border p-3"
+                            >
+                              <span>
+                                {member.user.displayName}{" "}
+                                <span className="text-sm text-muted-foreground">
+                                  ({roleLabel(member.role, member.roleName)})
+                                </span>
+                              </span>
+                              {can("roles.manage") ? (
+                                <Button
+                                  variant="outline"
+                                  disabled={disabled || member.userId === account.user.id}
+                                  onClick={() =>
+                                    void run(
+                                      "remove",
+                                      async () => {
+                                        await mutate(
+                                          `/tenants/current/members/${encodeURIComponent(member.userId)}`,
+                                          messageResponseSchema,
+                                          {},
+                                          "DELETE",
+                                        );
+                                        await loadMembers();
+                                      },
+                                      "memberRemoved",
+                                    )
+                                  }
                                 >
-                                  <span>
-                                    {member.user.displayName}{" "}
-                                    <span className="text-sm text-muted-foreground">
-                                      ({t(`roles.${member.role}`)})
-                                    </span>
-                                  </span>
-                                  <Button
-                                    variant="outline"
-                                    disabled={disabled || member.userId === account.user.id}
-                                    onClick={() =>
-                                      void run(
-                                        "remove",
-                                        async () => {
-                                          await mutate(
-                                            `/tenants/current/members/${encodeURIComponent(member.userId)}`,
-                                            messageResponseSchema,
-                                            {},
-                                            "DELETE",
-                                          );
-                                          setMembers(
-                                            (
-                                              await foundationRequest(
-                                                "/tenants/current/members",
-                                                membersResponseSchema,
-                                              )
-                                            ).members,
-                                          );
-                                        },
-                                        "memberRemoved",
-                                      )
-                                    }
-                                  >
-                                    {t("removeMember", { name: member.user.displayName })}
-                                  </Button>
-                                </li>
-                              ))}
-                            </ul>
-                          </CardContent>
-                        </Card>
-                      ) : null}
-                      {members.length && projects.length ? (
-                        <ActionForm
-                          id="assignment"
-                          title={t("assignPermissions")}
-                          submit={t("assignPermissions")}
-                          fields={[]}
-                          disabled={disabled}
-                          onSubmit={(data) =>
-                            void run(
-                              "assign",
-                              async () => {
-                                const access = value(data, "access");
-                                if (!["none", "read", "manage"].includes(access))
-                                  throw new FoundationApiError(400, "validation-error");
-                                const permissions =
-                                  access === "manage"
-                                    ? ["projects.view", "projects.manage"]
-                                    : access === "read"
-                                      ? ["projects.view"]
-                                      : [];
-                                await mutate(
-                                  `/projects/${encodeURIComponent(value(data, "project"))}/members/${encodeURIComponent(value(data, "member"))}`,
-                                  messageResponseSchema,
-                                  { permissions },
-                                  "PUT",
-                                );
-                              },
-                              "permissionsUpdated",
-                            )
-                          }
+                                  {t("removeMember", { name: member.user.displayName })}
+                                </Button>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                  {can("users.invite") && members.length && projects.length ? (
+                    <ActionForm
+                      id="assignment"
+                      title={t("assignPermissions")}
+                      submit={t("assignPermissions")}
+                      fields={[]}
+                      disabled={disabled}
+                      onSubmit={(data) =>
+                        void run(
+                          "assign",
+                          async () => {
+                            const access = value(data, "access");
+                            if (!["none", "read", "manage"].includes(access))
+                              throw new FoundationApiError(400, "validation-error");
+                            const permissions =
+                              access === "manage"
+                                ? ["projects.view", "projects.manage"]
+                                : access === "read"
+                                  ? ["projects.view"]
+                                  : [];
+                            await mutate(
+                              `/projects/${encodeURIComponent(value(data, "project"))}/members/${encodeURIComponent(value(data, "member"))}`,
+                              messageResponseSchema,
+                              { permissions },
+                              "PUT",
+                            );
+                          },
+                          "permissionsUpdated",
+                        )
+                      }
+                    >
+                      <Field>
+                        <FieldLabel htmlFor="assignment-project">{t("projectName")}</FieldLabel>
+                        <select
+                          id="assignment-project"
+                          name="project"
+                          required
+                          className="h-10 rounded border bg-background px-3"
                         >
-                          <Field>
-                            <FieldLabel htmlFor="assignment-project">{t("projectName")}</FieldLabel>
-                            <select
-                              id="assignment-project"
-                              name="project"
-                              required
-                              className="h-10 rounded border bg-background px-3"
-                            >
-                              {projects.map((project) => (
-                                <option key={project.id} value={project.id}>
-                                  {project.name}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="assignment-member">{t("member")}</FieldLabel>
-                            <select
-                              id="assignment-member"
-                              name="member"
-                              required
-                              className="h-10 rounded border bg-background px-3"
-                            >
-                              {members.map((member) => (
-                                <option key={member.userId} value={member.userId}>
-                                  {member.user.displayName}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="assignment-access">{t("access")}</FieldLabel>
-                            <select
-                              id="assignment-access"
-                              name="access"
-                              className="h-10 rounded border bg-background px-3"
-                            >
-                              <option value="read">{t("readAccess")}</option>
-                              <option value="manage">{t("manageAccess")}</option>
-                              <option value="none">{t("noAccess")}</option>
-                            </select>
-                          </Field>
-                        </ActionForm>
-                      ) : null}
-                      {audit.length ? (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>
-                              <h2>{t("audit")}</h2>
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <ul className="space-y-2 text-sm">
-                              {audit.map((event) => (
-                                <li key={event.id} className="rounded border p-3">
-                                  <time dateTime={event.createdAt}>
-                                    {formatDateTime(event.createdAt)}
-                                  </time>{" "}
-                                  <span className="font-mono">{event.action}</span>
-                                </li>
-                              ))}
-                            </ul>
-                            <p className="mt-3 text-sm text-muted-foreground">{t("auditLimit")}</p>
-                          </CardContent>
-                        </Card>
-                      ) : null}
-                    </>
+                          {projects.map((project) => (
+                            <option key={project.id} value={project.id}>
+                              {project.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="assignment-member">{t("member")}</FieldLabel>
+                        <select
+                          id="assignment-member"
+                          name="member"
+                          required
+                          className="h-10 rounded border bg-background px-3"
+                        >
+                          {members.map((member) => (
+                            <option key={member.userId} value={member.userId}>
+                              {member.user.displayName}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="assignment-access">{t("access")}</FieldLabel>
+                        <select
+                          id="assignment-access"
+                          name="access"
+                          className="h-10 rounded border bg-background px-3"
+                        >
+                          <option value="read">{t("readAccess")}</option>
+                          <option value="manage">{t("manageAccess")}</option>
+                          <option value="none">{t("noAccess")}</option>
+                        </select>
+                      </Field>
+                    </ActionForm>
+                  ) : null}
+                  {can("roles.manage") || can("users.invite") ? (
+                    <RolesPanel
+                      disabled={disabled}
+                      held={held}
+                      heldTenantWide={activeTenant?.tenantWide ?? false}
+                      canManage={can("roles.manage")}
+                      roles={roles}
+                      catalogue={catalogue}
+                      members={members}
+                      onLoad={() => void run("roles", loadRoles)}
+                      onSave={saveRole}
+                      onDelete={(role) =>
+                        void run(
+                          "deleteRole",
+                          async () => {
+                            await mutate(
+                              `/tenants/current/roles/${encodeURIComponent(role.id)}`,
+                              messageResponseSchema,
+                              {},
+                              "DELETE",
+                            );
+                            await loadRoles();
+                          },
+                          "roleDeleted",
+                        )
+                      }
+                      onChangeMemberRole={(userId, role) =>
+                        void run(
+                          "memberRole",
+                          async () => {
+                            const body = memberRoleRequestSchema.safeParse({ role });
+                            if (!body.success)
+                              throw new FoundationApiError(400, "validation-error");
+                            await mutate(
+                              `/tenants/current/members/${encodeURIComponent(userId)}/role`,
+                              messageResponseSchema,
+                              body.data,
+                              "PUT",
+                            );
+                            if (userId === account.user.id) {
+                              applyAccount(null);
+                              return;
+                            }
+                            await loadMembers();
+                            await loadRoles();
+                          },
+                          "memberRoleChanged",
+                        )
+                      }
+                    />
+                  ) : null}
+                  {audit.length ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>
+                          <h2>{t("audit")}</h2>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-2 text-sm">
+                          {audit.map((event) => (
+                            <li key={event.id} className="rounded border p-3">
+                              <time dateTime={event.createdAt}>
+                                {formatDateTime(event.createdAt)}
+                              </time>{" "}
+                              <span className="font-mono">{event.action}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-3 text-sm text-muted-foreground">{t("auditLimit")}</p>
+                      </CardContent>
+                    </Card>
                   ) : null}
                 </>
               ) : null}

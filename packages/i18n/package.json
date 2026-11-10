@@ -1,0 +1,36 @@
+{
+  "name": "@pm-buddy/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PM-Buddy English and Kiswahili ICU message catalogues (web, site app, SMS/USSD)",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint -c ../../.oxlintrc.json --type-aware src",
+    "test": "vitest run",
+    "i18n:check": "node scripts/check-i18n.mjs"
+  },
+  "dependencies": {
+    "@pm-buddy/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@pm-buddy/config": "workspace:*",
+    "intl-messageformat": "12.1.4",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

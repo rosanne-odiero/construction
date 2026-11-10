@@ -191,6 +191,8 @@ erDiagram
   }
 ```
 
+> **Implemented in D1.4 (differs from the target model above):** system roles and their permissions are code constants (`packages/types` `SYSTEM_ROLE_PERMISSIONS`), not `Role` rows. Company custom roles are `tenant_roles (tenant_id, id, name citext, permissions text[], tenant_wide)` with forced RLS. `memberships` and `invitations` hold `role` (a system key, or `custom`) plus `custom_role_id`, referencing `tenant_roles` through the composite key `(tenant_id, custom_role_id)`. Permission keys are checked by database CHECK constraints rather than a `Permission` table. `ProjectMembership.permissions` holds the project assignment (effective = role ∩ assignment). See [ARCHITECTURE §8](./ARCHITECTURE.md#8-authorisation-rbac-with-project-scope).
+
 ## 2. Configuration and rules (effective-dated)
 
 ```mermaid

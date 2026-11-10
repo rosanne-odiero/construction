@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { normalizeKenyanPhone } from "@pm-buddy/domain";
-import { projectPermissionSchema, tenantRoleSchema } from "@pm-buddy/validation";
+import { projectPermissionSchema, roleReferenceSchema } from "@pm-buddy/validation";
 
 export const identifierSchema = z
   .string()
@@ -71,7 +71,7 @@ export const nameSchema = z.object({ name: z.string().trim().min(1).max(150) }).
 export const inviteSchema = z
   .object({
     identifier: identifierSchema,
-    role: tenantRoleSchema,
+    role: roleReferenceSchema,
     projectIds: z.array(uuidSchema).max(100).default([]),
   })
   .strict();

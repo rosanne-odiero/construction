@@ -7,100 +7,60 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { ProjectPermission } from "@pm-buddy/validation";
-import type { Prisma, Membership } from "../../generated/prisma/client.js";
-import { PrismaService } from "../../infra/prisma.service.js";
-import { AuthService, type Principal, requestId } from "./auth.service.js";
+import { AccessPolicy, customRoleColumns } from "./access-policy.js";
+import { AuthService, type Principal } from "./auth.service.js";
 import { AuthSecurity, digest, opaqueToken } from "./auth-security.service.js";
+import { grantOf, requiresMfa, roleReference, type Grant } from "./role-grants.js";
 import { TenantDatabase } from "./tenant-database.service.js";
+import { TenantScope } from "./tenant-scope.service.js";
 
-type Tx = Prisma.TransactionClient;
 const publicProject = { id: true, name: true, createdAt: true } as const;
-const rolePermissions = (role: string): ProjectPermission[] =>
-  role === "project_manager" ? ["projects.view", "projects.manage"] : ["projects.view"];
+/** Project permissions that an assignment can carry today (the Phase 1 project policy). */
+const ASSIGNABLE_PROJECT_PERMISSIONS: readonly ProjectPermission[] = [
+  "projects.view",
+  "projects.manage",
+];
+/** Invitation acceptance assigns the role's own project permissions on each invited project. */
+const defaultAssignment = (grant: Grant): ProjectPermission[] =>
+  ASSIGNABLE_PROJECT_PERMISSIONS.filter((permission) => grant.permissions.has(permission));
 
 @Injectable()
 export class TenancyService {
   constructor(
     private readonly db: TenantDatabase,
-    private readonly prisma: PrismaService,
     private readonly auth: AuthService,
     private readonly security: AuthSecurity,
+    private readonly scope: TenantScope,
+    private readonly policy: AccessPolicy,
   ) {}
-
-  private context(principal: Principal, req: Request, tenantId = principal.session.activeTenantId) {
-    return { userId: principal.user.id, tenantId, requestId: requestId(req) };
-  }
-
-  private async run<T>(
-    principal: Principal,
-    req: Request,
-    operation: (tx: Tx, membership: Membership) => Promise<T>,
-    mutation = false,
-  ): Promise<T> {
-    this.auth.requireMfa(principal);
-    const tenantId = principal.session.activeTenantId;
-    if (!tenantId) throw new ForbiddenException("Select a tenant first");
-    return this.db.run(this.context(principal, req), async (tx) => {
-      if (mutation) {
-        await tx.$queryRaw`SELECT tenant_id FROM tenants WHERE tenant_id = ${tenantId}::uuid FOR UPDATE`;
-      }
-      await tx.$queryRaw`SELECT user_id FROM memberships WHERE tenant_id = ${tenantId}::uuid
-        AND user_id = ${principal.user.id}::uuid FOR SHARE`;
-      const membership = await tx.membership.findUnique({
-        where: { tenantId_userId: { tenantId, userId: principal.user.id } },
-      });
-      if (!membership) throw new ForbiddenException("Tenant membership required");
-      if (
-        ["owner", "finance"].includes(membership.role) &&
-        (!principal.user.mfaEnabled || !principal.session.mfaVerifiedAt)
-      ) {
-        throw new ForbiddenException("This role requires MFA");
-      }
-      return operation(tx, membership);
-    });
-  }
-
-  private owner(principal: Principal, membership: Membership): void {
-    if (membership.role !== "owner") throw new ForbiddenException("Owner permission required");
-    this.auth.requireMfa(principal, true);
-  }
-
-  private async audit(
-    tx: Tx,
-    action: string,
-    resourceId: string,
-    metadata: Prisma.InputJsonValue = {},
-  ) {
-    const context = this.db.current();
-    if (!context.tenantId) throw new Error("Audit requires a tenant");
-    await tx.auditEvent.create({
-      data: {
-        tenantId: context.tenantId,
-        actorId: context.userId,
-        requestId: context.requestId,
-        action,
-        resourceId,
-        metadata,
-      },
-    });
-  }
 
   async list(principal: Principal, req: Request) {
     this.auth.requireMfa(principal);
-    return this.db.run(this.context(principal, req, null), async (tx) => {
+    return this.db.run(this.scope.context(principal, req, null), async (tx) => {
       const memberships = await tx.membership.findMany({
         where: { userId: principal.user.id },
-        include: { tenant: { select: { id: true, name: true } } },
+        select: { ...customRoleColumns, tenant: { select: { id: true, name: true } } },
         orderBy: { joinedAt: "asc" },
       });
-      return { tenants: memberships.map((member) => ({ ...member.tenant, role: member.role })) };
+      return {
+        tenants: memberships.map((member) => {
+          const grant = grantOf(member);
+          return {
+            ...member.tenant,
+            role: roleReference(grant),
+            roleName: grant.roleName,
+            tenantWide: grant.tenantWide,
+            permissions: [...grant.permissions],
+          };
+        }),
+      };
     });
   }
 
   async create(principal: Principal, name: string, req: Request, res: Response) {
     this.auth.requireMfa(principal, true);
     const id = randomUUID();
-    const tenant = await this.db.run(this.context(principal, req, id), async (tx) => {
+    const tenant = await this.db.run(this.scope.context(principal, req, id), async (tx) => {
       const value = await tx.tenant.create({
         data: { id, name, createdBy: principal.user.id },
         select: { id: true, name: true },
@@ -108,7 +68,7 @@ export class TenancyService {
       await tx.membership.create({
         data: { tenantId: id, userId: principal.user.id, role: "owner" },
       });
-      await this.audit(tx, "tenant.created", id);
+      await this.scope.audit(tx, "tenant.created", id);
       await tx.session.update({
         where: { id: principal.session.id },
         data: { activeTenantId: id },
@@ -121,14 +81,12 @@ export class TenancyService {
 
   async select(principal: Principal, tenantId: string, req: Request, res: Response) {
     this.auth.requireMfa(principal);
-    await this.db.run(this.context(principal, req, tenantId), async (tx) => {
+    await this.db.run(this.scope.context(principal, req, tenantId), async (tx) => {
       await tx.$queryRaw`SELECT user_id FROM memberships WHERE tenant_id = ${tenantId}::uuid
         AND user_id = ${principal.user.id}::uuid FOR SHARE`;
-      const membership = await tx.membership.findUnique({
-        where: { tenantId_userId: { tenantId, userId: principal.user.id } },
-      });
-      if (!membership) throw new NotFoundException("Tenant not found");
-      if (["owner", "finance"].includes(membership.role)) this.auth.requireMfa(principal, true);
+      const access = await this.policy.load(tx, tenantId, principal.user.id);
+      if (!access) throw new NotFoundException("Tenant not found");
+      if (requiresMfa(access)) this.auth.requireMfa(principal, true);
       await tx.session.update({
         where: { id: principal.session.id },
         data: { activeTenantId: tenantId },
@@ -138,19 +96,25 @@ export class TenancyService {
   }
 
   members(principal: Principal, req: Request) {
-    return this.run(principal, req, async (tx, member) => {
-      this.owner(principal, member);
-      const members = await tx.membership.findMany({
-        where: { tenantId: member.tenantId },
+    return this.scope.run(principal, req, async (scope) => {
+      // Member identifiers are personal data: listing them keeps the step-up the owner-only API had.
+      await this.policy.requireAny(scope, ["users.invite", "roles.manage"], { stepUp: true });
+      const members = await scope.tx.membership.findMany({
+        where: { tenantId: scope.access.tenantId },
         select: {
+          ...customRoleColumns,
           userId: true,
-          role: true,
           joinedAt: true,
           user: { select: { displayName: true, identifier: true, mfaEnabled: true } },
         },
         orderBy: { joinedAt: "asc" },
       });
-      return { members };
+      return {
+        members: members.map(({ role, customRoleId, customRole, ...member }) => {
+          const grant = grantOf({ role, customRoleId, customRole });
+          return { ...member, role: roleReference(grant), roleName: grant.roleName };
+        }),
+      };
     });
   }
 
@@ -161,40 +125,42 @@ export class TenancyService {
   ) {
     await this.auth.throttle(req, "invitation", principal.user.id);
     const token = opaqueToken();
-    const invitation = await this.run(
+    const invitation = await this.scope.run(
       principal,
       req,
-      async (tx, member) => {
-        this.owner(principal, member);
+      async (scope) => {
+        const { tx, access } = scope;
+        await this.policy.require(scope, "users.invite", { stepUp: true });
         if (input.projectIds.length !== new Set(input.projectIds).size)
           throw new ConflictException("Duplicate project IDs");
-        const count = await tx.project.count({
-          where: { tenantId: member.tenantId, id: { in: input.projectIds } },
-        });
-        if (count !== input.projectIds.length) throw new NotFoundException("Project not found");
+        const grant = await this.policy.resolveRole(scope, input.role);
+        this.policy.assertGrantable(access, grant);
+        for (const projectId of input.projectIds)
+          await this.policy.require(scope, "projects.manage", { projectId });
         const invitation = await tx.invitation.create({
           data: {
-            tenantId: member.tenantId,
+            tenantId: access.tenantId,
             identifier: input.identifier,
-            role: input.role,
+            role: grant.role,
+            customRoleId: grant.customRoleId,
             digest: digest(token),
             expiresAt: new Date(Date.now() + 48 * 60 * 60_000),
             createdBy: principal.user.id,
           },
-          select: { id: true, identifier: true, role: true, expiresAt: true },
+          select: { id: true, identifier: true, expiresAt: true },
         });
         await tx.invitationProject.createMany({
           data: input.projectIds.map((projectId) => ({
-            tenantId: member.tenantId,
+            tenantId: access.tenantId,
             invitationId: invitation.id,
             projectId,
           })),
         });
-        await this.audit(tx, "membership.invited", invitation.id, {
-          role: input.role,
+        await this.scope.audit(tx, "membership.invited", invitation.id, {
+          role: roleReference(grant),
           projectIds: input.projectIds,
         });
-        return invitation;
+        return { ...invitation, role: roleReference(grant), roleName: grant.roleName };
       },
       true,
     );
@@ -209,7 +175,7 @@ export class TenancyService {
   async accept(principal: Principal, token: string, req: Request) {
     await this.auth.throttle(req, "invitation-accept", principal.user.id);
     this.auth.requireMfa(principal);
-    const invitation = await this.db.run(this.context(principal, req, null), (tx) =>
+    const invitation = await this.db.run(this.scope.context(principal, req, null), (tx) =>
       tx.invitation.findFirst({
         where: {
           digest: digest(token),
@@ -220,9 +186,15 @@ export class TenancyService {
       }),
     );
     if (!invitation) throw new NotFoundException("Invitation not found or expired");
-    if (["owner", "finance"].includes(invitation.role)) this.auth.requireMfa(principal, true);
-    await this.db.run(this.context(principal, req, invitation.tenantId), async (tx) => {
+    await this.db.run(this.scope.context(principal, req, invitation.tenantId), async (tx) => {
       await tx.$queryRaw`SELECT tenant_id FROM tenants WHERE tenant_id = ${invitation.tenantId}::uuid FOR UPDATE`;
+      const stored = await tx.invitation.findUniqueOrThrow({
+        where: { id: invitation.id },
+        select: customRoleColumns,
+      });
+      const grant = grantOf(stored);
+      // Privileged roles (by permission) need enrolled, freshly verified MFA before joining.
+      if (requiresMfa(grant)) this.auth.requireMfa(principal, true);
       const result = await tx.invitation.updateMany({
         where: { id: invitation.id, acceptedAt: null, expiresAt: { gt: new Date() } },
         data: { acceptedAt: new Date() },
@@ -236,7 +208,12 @@ export class TenancyService {
           "Already a member; roles cannot be changed through an invitation",
         );
       await tx.membership.create({
-        data: { tenantId: invitation.tenantId, userId: principal.user.id, role: invitation.role },
+        data: {
+          tenantId: invitation.tenantId,
+          userId: principal.user.id,
+          role: grant.role,
+          customRoleId: grant.customRoleId,
+        },
       });
       const invitedProjects = await tx.invitationProject.findMany({
         where: { tenantId: invitation.tenantId, invitationId: invitation.id },
@@ -252,40 +229,46 @@ export class TenancyService {
             tenantId: invitation.tenantId,
             projectId,
             userId: principal.user.id,
-            permissions: rolePermissions(invitation.role),
+            permissions: defaultAssignment(grant),
           },
         });
       }
-      await this.audit(tx, "membership.joined", principal.user.id, { role: invitation.role });
+      await this.scope.audit(tx, "membership.joined", principal.user.id, {
+        role: roleReference(grant),
+      });
     });
     return { message: "Invitation accepted. Select the company to continue." };
   }
 
   remove(principal: Principal, userId: string, req: Request) {
-    return this.run(
+    return this.scope.run(
       principal,
       req,
-      async (tx, member) => {
-        this.owner(principal, member);
+      async (scope) => {
+        const { tx, access } = scope;
+        await this.policy.require(scope, "roles.manage", { stepUp: true });
         const target = await tx.membership.findUnique({
-          where: { tenantId_userId: { tenantId: member.tenantId, userId } },
+          where: { tenantId_userId: { tenantId: access.tenantId, userId } },
+          select: customRoleColumns,
         });
         if (!target) throw new NotFoundException("Member not found");
+        const grant = grantOf(target);
+        this.policy.assertGrantable(access, grant);
         if (
           target.role === "owner" &&
           (await tx.membership.count({
-            where: { tenantId: member.tenantId, role: "owner" },
+            where: { tenantId: access.tenantId, role: "owner" },
           })) <= 1
         )
           throw new ConflictException("The last owner cannot be removed");
         await tx.membership.delete({
-          where: { tenantId_userId: { tenantId: member.tenantId, userId } },
+          where: { tenantId_userId: { tenantId: access.tenantId, userId } },
         });
         await tx.session.updateMany({
-          where: { userId, activeTenantId: member.tenantId, revokedAt: null },
+          where: { userId, activeTenantId: access.tenantId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
-        await this.audit(tx, "membership.removed", userId, { role: target.role });
+        await this.scope.audit(tx, "membership.removed", userId, { role: roleReference(grant) });
         return { message: "Membership removed and active tenant sessions revoked." };
       },
       true,
@@ -293,10 +276,10 @@ export class TenancyService {
   }
 
   auditLog(principal: Principal, req: Request) {
-    return this.run(principal, req, async (tx, member) => {
-      this.owner(principal, member);
-      const events = await tx.auditEvent.findMany({
-        where: { tenantId: member.tenantId },
+    return this.scope.run(principal, req, async (scope) => {
+      await this.policy.require(scope, "audit.view", { stepUp: true });
+      const events = await scope.tx.auditEvent.findMany({
+        where: { tenantId: scope.access.tenantId },
         orderBy: { sequence: "desc" },
         take: 100,
       });
@@ -305,16 +288,9 @@ export class TenancyService {
   }
 
   projects(principal: Principal, req: Request) {
-    return this.run(principal, req, async (tx, member) => ({
-      projects: await tx.project.findMany({
-        where: {
-          tenantId: member.tenantId,
-          ...(member.role === "owner"
-            ? {}
-            : {
-                members: { some: { userId: member.userId, permissions: { has: "projects.view" } } },
-              }),
-        },
+    return this.scope.run(principal, req, async (scope) => ({
+      projects: await scope.tx.project.findMany({
+        where: this.policy.projectWhere(scope, "projects.view"),
         select: publicProject,
         orderBy: { createdAt: "asc" },
       }),
@@ -322,16 +298,16 @@ export class TenancyService {
   }
 
   createProject(principal: Principal, name: string, req: Request) {
-    return this.run(
+    return this.scope.run(
       principal,
       req,
-      async (tx, member) => {
-        this.owner(principal, member);
-        const project = await tx.project.create({
-          data: { tenantId: member.tenantId, name },
+      async (scope) => {
+        await this.policy.require(scope, "projects.create", { stepUp: true });
+        const project = await scope.tx.project.create({
+          data: { tenantId: scope.access.tenantId, name },
           select: publicProject,
         });
-        await this.audit(tx, "project.created", project.id);
+        await this.scope.audit(scope.tx, "project.created", project.id);
         return { project };
       },
       true,
@@ -339,33 +315,17 @@ export class TenancyService {
   }
 
   updateProject(principal: Principal, projectId: string, name: string, req: Request) {
-    return this.run(
+    return this.scope.run(
       principal,
       req,
-      async (tx, member) => {
-        const project = await tx.project.findUnique({
-          where: { tenantId_id: { tenantId: member.tenantId, id: projectId } },
-        });
-        if (!project) throw new NotFoundException("Project not found");
-        if (member.role !== "owner") {
-          const assignment = await tx.projectMembership.findUnique({
-            where: {
-              tenantId_projectId_userId: {
-                tenantId: member.tenantId,
-                projectId,
-                userId: member.userId,
-              },
-            },
-          });
-          if (!assignment?.permissions.includes("projects.manage"))
-            throw new ForbiddenException("Project update permission required");
-        }
-        const updated = await tx.project.update({
-          where: { id: project.id },
+      async (scope) => {
+        await this.policy.require(scope, "projects.manage", { projectId });
+        const updated = await scope.tx.project.update({
+          where: { tenantId_id: { tenantId: scope.access.tenantId, id: projectId } },
           data: { name },
           select: publicProject,
         });
-        await this.audit(tx, "project.updated", projectId);
+        await this.scope.audit(scope.tx, "project.updated", projectId);
         return { project: updated };
       },
       true,
@@ -379,28 +339,32 @@ export class TenancyService {
     permissions: ProjectPermission[],
     req: Request,
   ) {
-    return this.run(
+    return this.scope.run(
       principal,
       req,
-      async (tx, member) => {
-        this.owner(principal, member);
-        const [project, target] = await Promise.all([
-          tx.project.findUnique({
-            where: { tenantId_id: { tenantId: member.tenantId, id: projectId } },
-          }),
-          tx.membership.findUnique({
-            where: { tenantId_userId: { tenantId: member.tenantId, userId } },
-          }),
-        ]);
-        if (!project || !target) throw new NotFoundException("Project or member not found");
+      async (scope) => {
+        const { tx, access } = scope;
+        await this.policy.require(scope, "users.invite", { stepUp: true });
+        const held = await this.policy.require(scope, "projects.manage", { projectId });
+        const target = await tx.membership.findUnique({
+          where: { tenantId_userId: { tenantId: access.tenantId, userId } },
+        });
+        if (!target) throw new NotFoundException("Project or member not found");
         if (new Set(permissions).size !== permissions.length)
           throw new ConflictException("Duplicate permissions");
+        if (permissions.some((permission) => !held.has(permission)))
+          throw new ForbiddenException(
+            "You can only grant project permissions you hold on this project",
+          );
         await tx.projectMembership.upsert({
-          where: { tenantId_projectId_userId: { tenantId: member.tenantId, projectId, userId } },
-          create: { tenantId: member.tenantId, projectId, userId, permissions },
+          where: { tenantId_projectId_userId: { tenantId: access.tenantId, projectId, userId } },
+          create: { tenantId: access.tenantId, projectId, userId, permissions },
           update: { permissions },
         });
-        await this.audit(tx, "project.permissions.changed", projectId, { userId, permissions });
+        await this.scope.audit(tx, "project.permissions.changed", projectId, {
+          userId,
+          permissions,
+        });
         return { message: "Project permissions updated." };
       },
       true,

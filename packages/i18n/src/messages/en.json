@@ -4,7 +4,7 @@
     "live": "Live API · Phase 1",
     "description": "Real authentication, MFA and tenant-scoped company/project records. This is separate from the mock business dashboards.",
     "development": "Local development only: verification, reset and invitation messages go to Mailpit on localhost:8025. Phone messages use a development mailbox. Use synthetic identities; no external SMS or real payments are sent.",
-    "limitations": "Foundation review, not production approval. Passkeys, external messaging, custom roles, mobile device binding and action-bound financial approvals are not implemented. Payroll, payment providers, biometric capture and offline business sync remain later-phase work.",
+    "limitations": "Foundation review, not production approval. Passkeys, external messaging, mobile device binding and action-bound financial approvals are not implemented. Payroll, payment providers, biometric capture and offline business sync remain later-phase work.",
     "links": "Foundation resources",
     "designSystem": "Design system",
     "status": "System status",
@@ -91,6 +91,145 @@
       "consultant": "Consultant",
       "supplier": "Supplier"
     },
+    "rolesTitle": "Roles and permissions",
+    "rolesHint": "System roles are fixed. Custom roles combine catalogue permissions, and you can only grant permissions you hold yourself. Every change needs an MFA code verified in the last five minutes.",
+    "loadRoles": "Load roles and permissions",
+    "systemRole": "System role",
+    "customRole": "Custom role",
+    "companyWide": "All projects",
+    "projectScoped": "Assigned projects only",
+    "mfaRequiredBadge": "MFA required",
+    "memberCount": "{count, plural, one {# member} other {# members}}",
+    "showPermissions": "Permissions ({count})",
+    "createRole": "Create a custom role",
+    "editRole": "Edit {name}",
+    "saveRole": "Save role",
+    "cancelEdit": "Cancel editing",
+    "deleteRole": "Delete {name}",
+    "roleName": "Role name",
+    "tenantWide": "Applies to all projects in the company",
+    "tenantWideHint": "Otherwise holders act only on projects they are assigned to, within that assignment.",
+    "permissionsLegend": "Permissions",
+    "notHeld": "you do not hold this",
+    "needsMfa": "needs MFA",
+    "changeRole": "Change a member's role",
+    "newRole": "New role",
+    "changeRoleHint": "The member's active sessions in this company are signed out so the new permissions apply. Only roles whose permissions you hold are offered.",
+    "permissionAreas": {
+      "tenancy": "Company",
+      "users": "People",
+      "roles": "Roles",
+      "audit": "Audit",
+      "config": "Configuration",
+      "projects": "Projects",
+      "bq": "Bill of quantities",
+      "labour": "Labour",
+      "attendance": "Attendance",
+      "payroll": "Payroll",
+      "payments": "Payments",
+      "procurement": "Procurement",
+      "stores": "Stores",
+      "finance": "Finance",
+      "site": "Site",
+      "quality": "Quality",
+      "safety": "Health and safety",
+      "plant": "Plant and equipment",
+      "documents": "Documents",
+      "reports": "Reports",
+      "portal": "Portals",
+      "platform": "Platform"
+    },
+    "permissionLabels": {
+      "tenancy": {
+        "manage": "Manage company settings"
+      },
+      "users": {
+        "invite": "Invite people and assign projects"
+      },
+      "roles": {
+        "manage": "Manage roles and members"
+      },
+      "audit": {
+        "view": "View the audit log"
+      },
+      "config": {
+        "manage": "Manage configuration",
+        "manage_statutory": "Manage statutory rules"
+      },
+      "projects": {
+        "view": "View projects",
+        "create": "Create projects",
+        "manage": "Manage projects"
+      },
+      "bq": {
+        "view": "View the BQ",
+        "edit": "Edit the BQ",
+        "import": "Import BQs",
+        "approve_variation": "Approve variations"
+      },
+      "labour": {
+        "view": "View workers",
+        "manage": "Manage workers",
+        "view_sensitive": "View sensitive worker details"
+      },
+      "attendance": {
+        "view": "View attendance",
+        "record": "Record attendance",
+        "override": "Correct attendance",
+        "review_anomalies": "Review attendance anomalies"
+      },
+      "payroll": {
+        "prepare": "Prepare payroll",
+        "review": "Review payroll",
+        "approve": "Approve payroll"
+      },
+      "payments": {
+        "view": "View payments",
+        "approve": "Approve payments",
+        "disburse": "Send payouts",
+        "record_cash": "Record cash payments",
+        "reverse": "Reverse payments"
+      },
+      "procurement": {
+        "requisition": "Raise requisitions",
+        "approve": "Approve purchases",
+        "manage_suppliers": "Manage suppliers"
+      },
+      "stores": {
+        "manage": "Manage stores"
+      },
+      "finance": {
+        "view": "View finances",
+        "manage": "Manage finances",
+        "view_sensitive": "View sensitive financial details"
+      },
+      "site": {
+        "diary": "Keep the site diary",
+        "photos": "Take site photos"
+      },
+      "quality": {
+        "manage": "Manage quality"
+      },
+      "safety": {
+        "manage": "Manage health and safety"
+      },
+      "plant": {
+        "manage": "Manage plant and equipment"
+      },
+      "documents": {
+        "manage": "Manage documents"
+      },
+      "reports": {
+        "view": "View reports"
+      },
+      "portal": {
+        "client": "Use the client portal",
+        "supplier": "Use the supplier portal"
+      },
+      "platform": {
+        "admin": "Platform administration"
+      }
+    },
     "notices": {
       "signedIn": "Signed in. Complete MFA if required, then load your workspace.",
       "instructions": "If the account is eligible, instructions are available through the development notification transport.",
@@ -106,16 +245,20 @@
       "invitationSent": "Invitation created. Instructions were sent to the development mailbox.",
       "memberRemoved": "Membership removed and affected active tenant sessions revoked.",
       "permissionsUpdated": "Project permissions updated.",
-      "sessionRevoked": "Session revoked."
+      "sessionRevoked": "Session revoked.",
+      "roleCreated": "Custom role created.",
+      "roleUpdated": "Role updated.",
+      "roleDeleted": "Role deleted.",
+      "memberRoleChanged": "Role changed. The member's sessions in this company were signed out."
     },
     "errors": {
       "network": "The API could not be reached or the request timed out. Check connectivity and reload current records before repeating a change.",
       "invalidResponse": "The API returned an unexpected response. No success is assumed. Check system status and report the support reference.",
       "validation": "Check the entered values and required formats.",
       "unauthorized": "Credentials, code, token or session could not be verified. Check your input or sign in again. No automatic retry was made.",
-      "forbidden": "This action is not allowed. Check company/project access, sign in again if needed, and verify a fresh MFA code for privileged actions.",
+      "forbidden": "This action is not allowed. Check your role's permissions and project access, sign in again if needed, and verify a fresh MFA code for privileged actions. You cannot grant permissions you do not hold.",
       "notFound": "The record or invitation is unavailable, expired or not accessible to this account.",
-      "conflict": "The request conflicts with current state. Reload records before retrying; used codes and last-owner removal are not allowed.",
+      "conflict": "The request conflicts with current state. Reload records before retrying; used codes, removing or demoting the last owner, duplicate role names and deleting roles still in use are not allowed.",
       "rateLimited": "Too many attempts. Wait before trying again; requests are not retried automatically.",
       "unavailable": "A required service is unavailable. Check system status; no success is assumed.",
       "unexpected": "The request failed unexpectedly. Check system status and report the support reference; no success is assumed."

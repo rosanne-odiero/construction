@@ -154,7 +154,7 @@ pm-buddy/
 │  │     │  ├─ (supplier)/  # supplier portal (D7.2)
 │  │     │  └─ site/        # D0 only: web mock-ups of the site app
 │  │     ├─ components/     # app components (ui/ = shadcn primitives until D1.2)
-│  │     ├─ i18n/           # next-intl request config
+│  │     ├─ i18n/           # next-intl request config (catalogues come from packages/i18n)
 │  │     ├─ lib/            # formatters, API client, utils
 │  │     └─ mocks/          # D0 prototype data (removed as real APIs land)
 │  ├─ api/                 # NestJS modular monolith (D1.1)
@@ -174,7 +174,7 @@ pm-buddy/
 │  ├─ types/               # shared TS types, permission catalogue, enums
 │  ├─ validation/          # Zod schemas shared by web, site and api
 │  ├─ domain/              # pure calculation engines (no I/O)
-│  ├─ i18n/                # EN/SW ICU message catalogues (web, site, SMS/USSD)
+│  ├─ i18n/                # EN/SW ICU message catalogues (web, site, SMS/USSD) and the i18n:check parity script
 │  ├─ ui-tokens/           # design tokens shared by web and site app
 │  ├─ api-client/          # generated from OpenAPI (openapi-typescript + openapi-fetch)
 │  └─ config/              # shared tsconfig presets (lint rules: root .oxlintrc.json, D-25)
@@ -192,7 +192,7 @@ pm-buddy/
 └─ turbo.json
 ```
 
-> **D1.1 note:** the workspace, `apps/web` (prototype plus the live `/status` page), `apps/api` (health module only), `packages/{types,validation,domain,config}`, `infra/docker` and `.github/` exist so far. Everything else arrives in the deliverable named in [ROADMAP](./ROADMAP.md).
+> **Current state:** the workspace, `apps/web` (prototype, `/status`, `/design-system` and the live `/foundation` console), `apps/api` (health, identity, tenancy, roles and permissions), `packages/{types,validation,domain,i18n,config}`, `infra/docker` and `.github/` exist. The EN/SW catalogues moved from `apps/web/messages` to `packages/i18n/src/messages` (D1.2); `pnpm --filter @pm-buddy/i18n i18n:check` checks their parity. Everything else arrives in the deliverable named in [ROADMAP](./ROADMAP.md).
 
 ---
 
@@ -250,7 +250,7 @@ Project-level access (who can see or act on project X) is enforced in the applic
 | Identifiers | Email and/or phone. Phones are normalised to `2547XXXXXXXX` / `2541XXXXXXXX` by `packages/domain/phone`. |
 | Passwords | **Argon2id** (`@node-rs/argon2`) with OWASP-recommended parameters, tuned during D1.3. Minimum 12 characters, maximum 128. No composition rules. Common and breached passwords are blocked (local list, with an optional k-anonymity lookup). |
 | OTP | SMS or WhatsApp via `NotificationProvider`. Six digits, five-minute expiry, stored hashed, rate-limited per identifier, IP and device. Used for verification and recovery. Low-privilege roles may also use it as a second factor. |
-| MFA | **TOTP** (RFC 6238, `otpauth`), **passkeys** (WebAuthn, `@simplewebauthn/server`) and hashed one-time recovery codes. **Mandatory for Owner/Director, Finance and Admin roles**, enforced at role assignment and at login. |
+| MFA | **TOTP** (RFC 6238, `otpauth`), **passkeys** (WebAuthn, `@simplewebauthn/server`) and hashed one-time recovery codes. **Mandatory for anyone holding an MFA-required permission** (§8; Owner/Director, Finance and Admin by default), enforced at role assignment, invitation acceptance, company selection and login, and by a database trigger. |
 | Access token | JWT signed with EdDSA or ES256 (`jose`), **10-minute TTL**. Claims: `sub`, `tid` (active tenant), `sid` (session), `amr`, `auth_time`, `mfa_at`. Sent in the `__Host-pmb_at` cookie (httpOnly, Secure, SameSite=Lax, Path=/). |
 | Refresh token | Opaque 256-bit random value, stored as a **SHA-256 hash** with a family ID. **Rotated on every use.** If a used token is presented again, the whole family is revoked and the user is alerted. Sent in the `__Secure-pmb_rt` cookie with Path=/api/v1/auth (the versioned API base path). Idle and absolute lifetimes are configurable and shorter for privileged roles. |
 | Step-up MFA | Sensitive actions (payment approval, payout, changing a payee's phone number, changing statutory rules) require `mfa_at` within N minutes (configurable). Otherwise the API returns `401` with problem type `step-up-required`. `POST /auth/step-up` returns a short-lived step-up token, sent back in the `X-Step-Up-Token` header. The token is **bound to the action**: it carries a hash of the approval ID and amount, a lightweight form of transaction signing. |
@@ -266,15 +266,43 @@ Project-level access (who can see or act on project X) is enforced in the applic
 
 ## 8. Authorisation: RBAC with project scope
 
-- **Permission catalogue.** Granular strings such as `projects.create`, `bq.edit`, `bq.approve_variation`, `attendance.override`, `payroll.prepare`, `payroll.review`, `payments.approve`, `payments.disburse`, `labour.view_sensitive` and `config.manage_statutory`. They are defined in `packages/types` and seeded.
-- **Roles.** Bundles of permissions. The system roles come from the brief's table (§3). Tenants can create custom roles later.
-- **Assignments.**
-  - A `Membership` (user ↔ tenant) holds tenant-wide roles.
-  - A `ProjectMembership` (user ↔ project) holds project roles.
-  - **Approval limits** are attributes on an assignment, for example `payments.approve ≤ KES 2,000,000`.
-- **Evaluation.** `@RequirePermission('payments.approve', { project: 'params.projectId' })` resolves to `can(user, permission, scope)`. Results are cached per request.
+- **Permission catalogue.** Granular strings such as `projects.create`, `bq.edit`, `bq.approve_variation`, `attendance.override`, `payroll.prepare`, `payroll.review`, `payments.approve`, `payments.disburse`, `labour.view_sensitive` and `config.manage_statutory`, defined once in `packages/types` (`PERMISSIONS`, grouped by area: the part before the dot). `GET /api/v1/permissions` serves the catalogue grouped by area. The database lists the same keys in CHECK constraints (`tenant_roles_permissions_check`, `project_permissions_check`), so a new permission needs a migration as well as the code change.
+- **Company-level and project-scoped permissions.** `tenancy.manage`, `users.invite`, `roles.manage`, `audit.view`, `config.manage`, `config.manage_statutory`, `projects.create` and `procurement.manage_suppliers` are company-level (`TENANT_LEVEL_PERMISSIONS`). Every other tenant permission is project-scoped (`PROJECT_PERMISSIONS`). `platform.admin` belongs to platform operators only.
+- **System roles.** Immutable bundles from the brief's table (§3), defined in `SYSTEM_ROLE_PERMISSIONS` (table below). They live in code, not in the database; a membership stores the role key.
+- **Custom roles (D1.4).** A company can create, rename, change and delete roles made of catalogue permissions (`tenant_roles`: name, permissions, `tenant_wide`). Memberships and invitations reference a system role key, or `custom` plus `custom_role_id` through the composite foreign key `(tenant_id, custom_role_id) → tenant_roles(tenant_id, id)`, so no row can name another company's role. `tenant_roles` has forced RLS; before a company is selected a user can read only the custom role they hold there.
+- **Guards.** Changing roles needs `roles.manage` plus step-up MFA (verified within five minutes) and is audited (`role.created`, `role.updated` with added/removed permissions, `role.deleted`, `membership.role_changed`).
+  - System roles are immutable (403).
+  - `platform.admin` can never be granted: request schemas reject it (400) and the database CHECK refuses it.
+  - **Privilege-escalation guard:** nobody can create, change, assign or remove a role carrying a permission they do not hold, and only a company-wide role can grant company-wide scope. This applies to role edits, invitations, member role changes, member removal and project assignments (an assigner can grant only project permissions they hold on that project).
+  - A role still held by members cannot be deleted (409, plus `ON DELETE RESTRICT`); nor can one named in a pending invitation. Expired and accepted invitations that named it are removed with it.
+  - The last owner cannot be removed or demoted (409).
+- **Member role change.** `PUT /tenants/current/members/:userId/role` is the only way to change a member's role. It revokes the member's active sessions in that company, so they sign in again under the new permissions.
+- **Evaluation.** One policy service, `AccessPolicy` (`apps/api/src/modules/identity/access-policy.ts`), serves every tenancy and project endpoint: `require(scope, permission, { projectId?, stepUp? })`, `requireAny`, `projectWhere` (list filters), `resolveRole` and `assertGrantable`. The tenant and the caller's membership come from the session inside the tenant transaction; project IDs from the URL are looked up in that tenant (404 otherwise), never trusted from a body. Permissions are evaluated per request, so a custom role change applies at the caller's next request.
+- **Project scope.** Company-wide roles (`owner`, `finance`, and custom roles marked company-wide) hold their project-scoped permissions on every project. Every other role needs a `ProjectMembership`, and its effective project permissions are **role ∩ assignment**. A project-scoped permission used without a project counts as company-wide use and needs a company-wide role. Today an assignment can carry `projects.view` and `projects.manage` only (the implemented project policy); later modules widen `project_permissions_check` and the assignment schema when their permissions gain project behaviour.
+- **MFA by permission.** Holding any of `payroll.approve`, `payments.approve`, `payments.disburse`, `payments.reverse`, `finance.manage`, `config.manage_statutory`, `roles.manage`, `tenancy.manage` or `platform.admin` (`MFA_REQUIRED_PERMISSIONS`) makes enrolled, verified MFA mandatory: at sign-in, when selecting the company, when accepting an invitation and on every company request. The database enforces the same rule: `app.require_privileged_mfa()` on memberships (system roles via `app.system_role_requires_mfa`, custom roles via `app.permissions_require_mfa`), and `app.require_role_member_mfa()` refuses to add a privileged permission to a custom role while any holder lacks MFA. The API e2e suite checks the database lists against the shared code.
+- **Approval limits** (later) are attributes on an assignment, for example `payments.approve ≤ KES 2,000,000`.
 - **Maker-checker.** The person who prepared a batch cannot review or approve it. This is enforced in the domain service and with a DB `CHECK` / trigger on approval rows.
 - **Sensitive fields.** For example, the do-not-rehire reason, full ID numbers and bank details are returned only with `labour.view_sensitive` or `finance.view_sensitive`. Everyone else sees masked values.
+
+### 8.1 System role defaults
+
+Derived from brief §3; `packages/types` `SYSTEM_ROLE_PERMISSIONS` is the source of truth and its tests pin the rules (owner holds every tenant permission; clients and suppliers hold only their portal and view permissions; nobody but the platform operator holds `platform.admin`). Portal permissions cover the portal actions the brief lists (a client paying instalments and approving variations, a supplier's LPOs, deliveries and invoices).
+
+| Role | Scope | MFA required | Permissions |
+|---|---|---|---|
+| `platform_admin` | Platform operator, not a company role | Yes | `platform.admin` |
+| `owner` | All projects | Yes | All 44 tenant permissions (everything except `platform.admin`) |
+| `project_manager` | Assigned projects | No | `projects.view`, `projects.manage`, `bq.view`, `bq.edit`, `bq.import`, `bq.approve_variation`, `labour.view`, `labour.manage`, `attendance.view`, `attendance.override`, `attendance.review_anomalies`, `payroll.prepare`, `payroll.review`, `payments.view`, `procurement.requisition`, `procurement.approve`, `finance.view`, `site.diary`, `site.photos`, `quality.manage`, `safety.manage`, `plant.manage`, `documents.manage`, `reports.view` |
+| `site_agent` | Assigned projects | No | `projects.view`, `bq.view`, `labour.view`, `attendance.view`, `attendance.record`, `procurement.requisition`, `site.diary`, `site.photos`, `quality.manage`, `safety.manage`, `reports.view` |
+| `foreman` | Assigned projects | No | `projects.view`, `labour.view`, `attendance.view`, `attendance.record`, `site.diary`, `site.photos` |
+| `quantity_surveyor` | Assigned projects | No | `projects.view`, `bq.view`, `bq.edit`, `bq.import`, `finance.view`, `documents.manage`, `reports.view` |
+| `storekeeper` | Assigned projects | No | `projects.view`, `procurement.requisition`, `stores.manage` |
+| `finance` | All projects | Yes | `config.manage_statutory`, `projects.view`, `labour.view`, `payroll.review`, `payments.view`, `payments.approve`, `payments.disburse`, `payments.record_cash`, `payments.reverse`, `finance.view`, `finance.manage`, `finance.view_sensitive`, `reports.view` |
+| `client` | Assigned projects | No | `projects.view`, `bq.view`, `portal.client` |
+| `consultant` | Assigned projects | No | `projects.view`, `bq.view`, `bq.approve_variation`, `site.photos`, `quality.manage`, `documents.manage`, `reports.view` |
+| `supplier` | Assigned projects | No | `projects.view`, `portal.supplier` |
+
+Endpoint permissions today: member list `users.invite` or `roles.manage` (+ step-up, as identifiers are personal data); invitations and project assignments `users.invite` (+ step-up); member removal and every role change `roles.manage` (+ step-up); audit log `audit.view` (+ step-up); project creation `projects.create` (+ step-up); project rename `projects.manage` on that project; project list filtered by `projects.view`; role list `roles.manage` or `users.invite`.
 
 ---
 

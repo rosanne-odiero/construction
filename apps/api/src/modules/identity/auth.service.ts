@@ -26,6 +26,7 @@ import {
   opaqueToken,
   verifyPassword,
 } from "./auth-security.service.js";
+import { grantOf, requiresMfa } from "./role-grants.js";
 import { TenantDatabase } from "./tenant-database.service.js";
 
 const MINUTE = 60_000;
@@ -251,19 +252,26 @@ export class AuthService {
     return this.describe(session.user, session);
   }
 
+  /** MFA is mandatory once the user holds an MFA-required permission in any company (brief §7). */
   private async describe(user: User, session: Session): Promise<Principal> {
-    const requiredRole = await this.tenantDb.run(
+    const memberships = await this.tenantDb.run(
       {
         userId: user.id,
         tenantId: null,
         requestId: "authentication",
       },
       (tx) =>
-        tx.membership.findFirst({
-          where: { userId: user.id, role: { in: ["owner", "finance"] } },
+        tx.membership.findMany({
+          where: { userId: user.id },
+          select: {
+            role: true,
+            customRoleId: true,
+            customRole: { select: { name: true, permissions: true, tenantWide: true } },
+          },
         }),
     );
-    return { user, session, mfaRequired: user.mfaEnabled || Boolean(requiredRole) };
+    const privileged = memberships.some((membership) => requiresMfa(grantOf(membership)));
+    return { user, session, mfaRequired: user.mfaEnabled || privileged };
   }
 
   response(principal: Principal) {

@@ -77,7 +77,7 @@ Reply with the **item number and what to change**, or **"approved"**. Feedback i
 5. Inspect `/manifest.webmanifest` and `/icon.svg`. Manifest metadata is not offline attendance/payroll support; no service worker caches sensitive information.
 6. Follow **Open live foundation** for real Phase 1 operations; **Browse prototype** retains mock business flows. The original `/sign-in` is a labelled D0 preview, not production authentication.
 
-Checks: `pnpm --filter @pm-buddy/web test`, `i18n:check`, `lint`, `typecheck`, `build`, and `test:e2e`. Before browser tests run `pnpm --filter @pm-buddy/web exec playwright install --no-shell chromium`. Playwright owns/stops its isolated temporary server on port 3100; it does not reuse an unrelated developer server.
+Checks: `pnpm --filter @pm-buddy/web test`, `lint`, `typecheck`, `build`, and `test:e2e`, plus `pnpm --filter @pm-buddy/i18n i18n:check` (the EN/SW catalogues now live in `packages/i18n/src/messages`; the web app loads them through `@pm-buddy/i18n`). Before browser tests run `pnpm --filter @pm-buddy/web exec playwright install --no-shell chromium`. Playwright owns/stops its isolated temporary server on port 3100; it does not reuse an unrelated developer server.
 
 Automated axe coverage is not full WCAG certification. Human Kiswahili wording, shared-device privacy, outdoor readability and real low-end Android performance still require user evidence.
 
@@ -100,7 +100,7 @@ Start local services, apply migrations and run API/web as above. Configure the a
 5. Create a company. A fresh MFA check is required; TOTP codes cannot be reused, including the enrollment code. After five minutes, verify a new authenticator code before privileged operations.
 6. Create a project. Reload the workspace to verify it persists. Create/select another company and confirm the first company's projects disappear; switch back to recover the authorised view.
 7. Invite a synthetic second identity with a role and project assignments. Its invitation arrives only in Mailpit, expires after 48 hours and is recipient-bound/single-use. Register/verify that identity separately, accept its token and select the company. Owner/Finance invitations also require enrolled/fresh MFA.
-8. As an owner, load members and grant/revoke project view/manage access. The canonical permissions are `projects.view` and `projects.manage`; the API checks membership/project scope independently of controls.
+8. As an owner, load members and grant/revoke project view/manage access. The canonical permissions are `projects.view` and `projects.manage`; the API checks membership/project scope independently of controls. A member's effective project permissions are their role's permissions ∩ the assignment, so granting "manage" to a client still leaves them read-only.
 9. Load the latest audit events. The UI shows event summaries, not raw sensitive diffs. The database refuses audit UPDATE/DELETE/TRUNCATE.
 10. Inspect active sessions. Refresh explicitly, revoke another session or sign out; consumed refresh replay revokes the family. Revoking the current session returns to signed-out forms and clears workspace state.
 11. Try the password-reset and MFA-recovery forms with synthetic credentials. Reset revokes sessions but preserves MFA; a recovery code works once and does not disable financial approval controls.
@@ -110,4 +110,23 @@ Start local services, apply migrations and run API/web as above. Configure the a
 
 Final local verification: 22 lint/type/unit/i18n/build tasks successful, formatting passed; 35 API integration tests and 8 browser/a11y tests passed. A separate real-browser smoke used the actual API, PostgreSQL runtime role and Mailpit to verify registration through MFA, company/project persistence, cross-company switching, audit/member views and logout. Its isolated database/message and helper servers were cleaned up.
 
-Passkeys, custom roles, external messaging, action-bound financial approvals, mobile binding and full breached-password checking are not presented as implemented. Financial/domain reviewer approval, coherent restore and field/mobile evidence remain required before any live pilot.
+Passkeys, external messaging, action-bound financial approvals, mobile binding and full breached-password checking are not presented as implemented. Financial/domain reviewer approval, coherent restore and field/mobile evidence remain required before any live pilot.
+
+---
+
+## D1.4: Roles and permissions
+
+Permission-based RBAC with company custom roles ([ARCHITECTURE §8](../ARCHITECTURE.md#8-authorisation-rbac-with-project-scope)). Use synthetic identities only.
+
+1. Sign in to `/foundation` as a company owner with MFA, load the workspace, then choose **Load roles and permissions**. The ten system roles show their permissions, scope (all projects or assigned projects), whether MFA is required and how many members hold them. System roles have no edit or delete buttons; the API refuses changes to them too.
+2. Verify a fresh authenticator code (every role change needs MFA from the last five minutes). Under **Create a custom role**, name it (for example "Site clerk"), tick permissions grouped by area and save. Permissions marked "needs MFA" make MFA mandatory for every holder. `platform.admin` is never offered, and the API and database both reject it.
+3. Edit the role: rename it or change its permissions. Try a duplicate name in a different case: the API answers with a conflict.
+4. Load company members and use **Change a member's role** to move a member to the custom role. The member's sessions in this company are signed out at once; when they sign in again the new permissions apply. The audit log shows `role.created`, `role.updated` (added/removed permissions) and `membership.role_changed`.
+5. Try to delete the role while the member still holds it: the request is refused. Move the member back, then delete it.
+6. Create a custom role with **Manage roles and members**, **Invite people and assign projects** and **View projects**, and invite a second synthetic identity (with MFA) into it. Signed in as that person, the editor disables permissions they do not hold and the company-wide option, and only roles whose permissions they hold are offered. Attempts through the API to grant more, to change the owner or to edit a more powerful role are refused (403).
+7. Try to change the last owner's role: refused (409). Adding a privileged permission to a role whose holder has no MFA, or giving such a member the Finance role, is also refused (409).
+8. Switch to Kiswahili: the roles panel, permission names and notices are translated.
+
+Checks: `pnpm --filter @pm-buddy/types test`, `pnpm --filter @pm-buddy/validation test`, `pnpm --filter @pm-buddy/api test`, `pnpm --filter @pm-buddy/api test:e2e` (`test/roles.e2e-spec.ts` runs under the real `pmb_app` role) and `pnpm --filter @pm-buddy/web test:e2e` (`test/foundation.spec.ts`, axe included).
+
+Remaining: project assignments still carry only `projects.view`/`projects.manage` until later modules give other permissions project behaviour; approval limits per assignment arrive with the financial modules; Kiswahili permission wording needs a human review.

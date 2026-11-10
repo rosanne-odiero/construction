@@ -2,10 +2,28 @@ packages:
   - "apps/*"
   - "packages/*"
 
-# pnpm blocks dependency build scripts by default. These packages ship prebuilt
-# platform binaries through optional dependencies, so their scripts are not needed.
+# Shared tool and library versions; reference them in package.json as "catalog:".
+catalog:
+  "@types/node": ^24.0.0
+  "@vitest/coverage-v8": 4.1.12
+  decimal.js: 10.6.0
+  oxlint: 1.91.0
+  oxlint-tsgolint: 7.0.2005
+  typescript: 6.0.3
+  vite: 8.3.5
+  vitest: 4.1.12
+  zod: 4.6.7
+
+# pnpm blocks dependency build scripts by default (supply-chain hardening, D-22).
+# true  = needed: Prisma downloads its schema (migration) engine on install.
+# false = not needed: prebuilt binaries ship as optional deps, or the script is only
+#         install analytics (@scarf/scarf) / informational output (protobufjs).
 allowBuilds:
   "@parcel/watcher": false
+  "@prisma/engines": true
+  "@scarf/scarf": false
   "@swc/core": false
+  prisma: true
+  protobufjs: false
   sharp: false
   unrs-resolver: false

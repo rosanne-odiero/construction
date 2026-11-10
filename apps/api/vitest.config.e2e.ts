@@ -1,0 +1,16 @@
+import { defineConfig } from "vitest/config";
+import { testDatabaseUrls } from "./test/test-database.js";
+
+// End-to-end tests boot the whole app against the docker compose services (pnpm services:up),
+// using the separate pmb_test database, which global-setup migrates first.
+export default defineConfig({
+  resolve: { tsconfigPaths: true },
+  test: {
+    root: "./",
+    include: ["test/**/*.e2e-spec.ts"],
+    globalSetup: ["./test/global-setup.ts"],
+    env: { NODE_ENV: "test", LOG_LEVEL: "silent", DATABASE_URL: testDatabaseUrls().appUrl },
+    testTimeout: 20_000,
+    hookTimeout: 60_000,
+  },
+});

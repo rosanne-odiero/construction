@@ -4,7 +4,7 @@ import type { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
 import { Logger } from "nestjs-pino";
 import { ProblemDetailsFilter } from "./common/problem-details.filter.js";
-import { AppConfig } from "./config/app-config.js";
+import { AppConfig, trustProxySetting } from "./config/app-config.js";
 
 export const API_PREFIX = "api";
 export const DOCS_PATH = "api/docs";
@@ -20,6 +20,15 @@ export function configureApp(app: INestApplication): void {
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
   app.useGlobalFilters(new ProblemDetailsFilter());
   app.enableShutdownHooks();
+
+  // req.ip comes from X-Forwarded-For only for proxies listed in TRUST_PROXY (see env.ts).
+  const trustProxy = trustProxySetting(config.get("TRUST_PROXY"));
+  if (trustProxy !== false) {
+    (app.getHttpAdapter().getInstance() as { set(name: string, value: unknown): void }).set(
+      "trust proxy",
+      trustProxy,
+    );
+  }
 
   // JSON responses need no CSP sources at all (OWASP REST Security Cheat Sheet). Swagger UI loads
   // only same-origin scripts, so helmet's defaults suit it. Upgrading insecure requests is
@@ -50,8 +59,7 @@ export function configureApp(app: INestApplication): void {
             "Errors use RFC 9457 problem+json; every response carries X-Request-Id.",
         )
         .setVersion(config.get("APP_VERSION"))
-        .addCookieAuth("__Host-pmb_at")
-        .addBearerAuth()
+        .addCookieAuth(config.isProduction ? "__Host-pmb_at" : "pmb_at")
         .build(),
     );
     SwaggerModule.setup(DOCS_PATH, app, document, {

@@ -3,7 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Activity, HardHat, MonitorSmartphone, Settings, Smartphone, Sparkles } from "lucide-react";
+import {
+  Activity,
+  HardHat,
+  MonitorSmartphone,
+  Palette,
+  Settings,
+  ShieldCheck,
+  Smartphone,
+  Sparkles,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -121,6 +130,30 @@ export function AppSidebar() {
 
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname === "/foundation"}
+              tooltip={t("items.foundation")}
+            >
+              <Link href="/foundation">
+                <ShieldCheck aria-hidden />
+                <span>{t("items.foundation")}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname === "/design-system"}
+              tooltip={t("items.designSystem")}
+            >
+              <Link href="/design-system">
+                <Palette aria-hidden />
+                <span>{t("items.designSystem")}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild

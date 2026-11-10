@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import Link from "next/link";
 import { CloudUpload, HardHat, ShieldCheck, Wallet } from "lucide-react";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { PrototypeBanner } from "@/components/prototype-banner";
@@ -12,6 +13,7 @@ export async function generateMetadata() {
 
 export default async function SignInPage() {
   const t = await getTranslations("auth");
+  const design = await getTranslations("designSystem");
   const points = [
     { key: "mfa", icon: ShieldCheck },
     { key: "money", icon: Wallet },
@@ -61,7 +63,13 @@ export default async function SignInPage() {
               <ThemeToggle />
             </div>
           </div>
-          <div className="flex flex-1 items-center justify-center px-4 pb-12">
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 pb-12">
+            <Link
+              href="/foundation"
+              className="text-sm font-medium text-primary underline underline-offset-4"
+            >
+              {design("foundation")}
+            </Link>
             <SignInForm />
           </div>
         </main>

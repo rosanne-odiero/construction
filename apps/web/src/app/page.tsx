@@ -9,8 +9,10 @@ import {
   KeyRound,
   LayoutDashboard,
   MonitorSmartphone,
+  Palette,
   ScanFace,
   Smartphone,
+  ShieldCheck,
   Table2,
   Wallet,
 } from "lucide-react";
@@ -22,6 +24,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const screens = [
+  { key: "foundation", href: "/foundation", icon: ShieldCheck, live: true },
+  { key: "designSystem", href: "/design-system", icon: Palette },
   { key: "signIn", href: "/sign-in", icon: KeyRound },
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard },
   { key: "project", href: "/projects/ruiru-heights", icon: Building },
@@ -36,6 +40,15 @@ const screens = [
 ] as const;
 
 const docs = [
+  "docs/IMPLEMENTATION_STATUS.md",
+  "docs/ACCEPTANCE_MATRIX.md",
+  "docs/WORKFLOWS.md",
+  "docs/INVARIANTS.md",
+  "docs/FINANCIAL_MODEL.md",
+  "docs/OFFLINE_SYNC.md",
+  "docs/OPERATIONS.md",
+  "docs/RELEASE_PLAN.md",
+  "docs/PILOT_PLAN.md",
   "docs/ROADMAP.md",
   "docs/ARCHITECTURE.md",
   "docs/ERD.md",

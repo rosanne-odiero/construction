@@ -2,7 +2,24 @@
 
 Every legal, tax or regulatory assumption in PM-Buddy lands here first (brief rule 4). Nothing in this list is hard-coded. Each item maps to one or more **configuration keys**, listed in [CONFIGURATION.md](./CONFIGURATION.md), with effective dates and a `compliance_status`.
 
-The application shows a warning wherever a rule with `compliance_status ≠ approved` is used. In code, these points carry a `// COMPLIANCE-REVIEW:` comment.
+Unverified rules are reference/demo material only and must be disabled for production calculations, not merely accompanied by a warning. In code, these points carry a `// COMPLIANCE-REVIEW:` comment. Approval requires the evidence fields below; expiry or a material legal change requires re-review.
+
+## Required approval record
+
+Every rule below requires a versioned review record. Existing "Where to check" entries identify research leads, not verified legal advice.
+
+| Field | Requirement |
+|---|---|
+| Rule / affected features | Register ID, configuration keys, calculations, exports and workflows affected |
+| Jurisdiction | Kenya plus relevant county/engagement context; review applicability explicitly |
+| Authoritative source | Exact official publication/URL, section and published version; not an unsourced seed |
+| Effective dates | `effective_from` and optional `effective_to`; do not assume the verification date is the effective date |
+| Verification date | Date the reviewer checked the source and applicability |
+| Reviewer | Named qualified reviewer and recorded approval evidence |
+| Approval status | `open`, `in-review`, `confirmed` or `changed`; only confirmed records map to an approved production configuration |
+| Impact and history | Superseded rule/version and affected feature/report migration; historical snapshots unchanged |
+
+All existing entries remain unverified: source publication, effective dates, verification date and reviewer are not yet recorded. No production approval is implied by listing candidate sources or seed values.
 
 > **Owner:** a qualified Kenyan adviser for each area (tax and payroll, employment law, data protection, construction regulation). **Status values:** `open` (not yet reviewed), `in-review`, `confirmed` (with a reference and date), `changed` (config updated).
 

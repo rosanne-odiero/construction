@@ -3,6 +3,8 @@
 > **Status:** Phase 0 draft for approval. This is a living document. Decisions are tracked in §22, open items in [QUESTIONS.md](./QUESTIONS.md), and compliance items in [COMPLIANCE_TODO.md](./COMPLIANCE_TODO.md).
 >
 > Related: [ROADMAP](./ROADMAP.md) · [ERD](./ERD.md) · [OpenAPI outline](./api/openapi-outline.yaml) · [Threat model](./THREAT_MODEL.md) · [DPIA template](./DPIA_TEMPLATE.md) · [Configuration register](./CONFIGURATION.md)
+>
+> The [brief §15 safeguards](./PROJECT_BRIEF.md#15-mandatory-safeguards-pm-buddy-additions) take precedence. Detailed contracts: [workflows](./WORKFLOWS.md), [invariants](./INVARIANTS.md), [financial model](./FINANCIAL_MODEL.md), [offline sync](./OFFLINE_SYNC.md), [operations](./OPERATIONS.md), [release plan](./RELEASE_PLAN.md). These are design requirements, not a claim that the target architecture is implemented; see [implementation status](./IMPLEMENTATION_STATUS.md).
 
 ---
 
@@ -10,7 +12,7 @@
 
 | Attribute | What it means for PM-Buddy | Main design responses |
 |---|---|---|
-| **Trust and integrity** | Money moves and biometrics are involved; diaspora clients rely on verifiable progress | Maker-checker, step-up MFA, append-only hash-chained audit, server-verified photo metadata, signed offline records |
+| **Trust and integrity** | Money moves and biometrics are involved; diaspora clients rely on verifiable progress | Snapshot-bound maker-checker, step-up MFA, append-only redacted audit, evidence provenance/limitations, signed offline records |
 | **Tenant isolation** | One contractor must never see another's data | `tenant_id` everywhere, PostgreSQL RLS (fail-closed), composite tenant foreign keys, automated isolation tests |
 | **Offline-first on site** | Poor connectivity, low-to-mid Android phones | Expo app with encrypted SQLite, local outbox, push/pull sync, clock-drift detection |
 | **Configurability** | Tax, statutory, M-Pesa and overtime rules change | Effective-dated, scoped, versioned configuration with `COMPLIANCE-REVIEW` status; payroll snapshots the rule versions it used |
@@ -368,7 +370,7 @@ sequenceDiagram
 
 ### 12.4 Conflict rules (from the brief)
 
-**Server wins** for approved or locked records: a client edit is rejected with a reason, and the client copy is replaced. **Last write wins, with an audit trail**, for drafts: both versions are kept in the audit log.
+Approved or locked records are immutable: reject attempted edits with a reason while preserving unsynced evidence for correction/review. Attendance, stock and financial events are append-only with linked corrections. Editable drafts use optimistic version checks; consequential conflicts preserve both versions for review, never silent last-write-wins. See [OFFLINE_SYNC.md](./OFFLINE_SYNC.md).
 
 ### 12.5 Clock integrity
 
@@ -450,20 +452,23 @@ interface PaymentProvider {
 stateDiagram-v2
   [*] --> created
   created --> queued: outbox relay
-  queued --> submitted: worker calls Daraja
-  submitted --> accepted: sync ack (not final)
-  submitted --> failed: request rejected
-  accepted --> succeeded: result callback ResultCode 0
-  accepted --> failed: result callback error
-  accepted --> timed_out: no callback within timeout
-  timed_out --> succeeded: Transaction Status confirms
-  timed_out --> failed: Transaction Status confirms failure
-  succeeded --> reversed: reversal confirmed
-  succeeded --> [*]
+  queued --> submitting: persist intent before provider call
+  submitting --> pending: sync ack (not final)
+  submitting --> unknown: timeout or crash
+  submitting --> failed: verified definitive rejection
+  pending --> confirmed: verified matched provider result
+  pending --> failed: definitive non-settlement
+  pending --> unknown: result timeout
+  unknown --> confirmed: reconciliation confirms settlement
+  unknown --> failed: reconciliation proves non-settlement
+  confirmed --> reversal_pending: separately approved request
+  reversal_pending --> reversed: verified reversal
+  reversal_pending --> confirmed: definitive reversal rejection
+  reversed --> [*]
   failed --> [*]
 ```
 
-**A payment becomes `succeeded` only from a matched result callback or a Transaction Status result.** The initial API response and the client side can never mark a payment as paid.
+**An attempt becomes `confirmed` only from verified provider evidence matched by identifiers, amount, currency and direction.** Acceptance is not settlement. An uncertain attempt retains its reservation and blocks resubmission until reconciled; internal idempotency is not proof of external exactly-once delivery. Obligations, attempts, provider transactions, allocations and journal postings remain separate.
 
 ### 14.3 Payroll payout sequence (B2C)
 
@@ -475,49 +480,50 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant W as Worker (BullMQ)
   participant M as Daraja
-  Dir->>API: approve batch (step-up MFA token bound to batch id + total)
-  API->>DB: TX: batch approved + payment_requests + outbox_events
+  Dir->>API: approve immutable versioned snapshot (fresh step-up MFA)
+  API->>DB: TX: identity-based maker-checker + approval + obligations + outbox
   W->>M: Account Balance (float check)
   M-->>API: balance result callback
   API->>DB: store raw callback, enqueue
-  W->>W: block payout if float < total + charges
+  W->>W: advisory balance check; reserve authorised internal funding
   loop each payroll line, rate-limited
+    W->>DB: persist submitting intent; enforce outstanding balance and payout pause
     W->>M: B2C SalaryPayment (OriginatorConversationID = our request id)
     M-->>W: sync ack (ConversationID)
-    W->>DB: state accepted, raw req/resp stored (redacted)
+    W->>DB: state pending or unknown; store protected redacted evidence
   end
   M-->>API: result callback per line (unique URL token)
-  API->>DB: store raw, respond 200 fast, enqueue
-  W->>DB: match by ids, idempotent transition, receipt, name check, charges, cost entry
-  W->>W: no callback by timeout, then Transaction Status query
+  API->>DB: commit durable inbox before 200; process later if queue unavailable
+  W->>DB: verify ids/amount/currency/direction; atomic allocation + balanced journal
+  W->>W: timeout/crash means unknown; reconcile before another provider call
   W->>API: notify payslip SMS (EN/SW)
 ```
 
 ### 14.4 Callback hardening
 
-Daraja callbacks are not signed, so they are protected in layers:
+Verify current official provider callback authentication/status-query capabilities before implementation; do not assume signatures exist. Callback protections are layered and are not independently proof of settlement:
 
 1. **HTTPS only.** The callback URL is `/webhooks/mpesa/{channelToken}/{kind}/{requestToken}`, with an unguessable per-channel token **and** a per-request token.
 2. **Configurable IP allowlist** of Safaricom ranges (a config rule, not code).
-3. **Store raw, then respond, then queue.** The raw body is appended to `payment_callbacks` (secrets redacted), `200` is returned immediately, and processing happens in a queue.
-4. **Match to a stored pending request** by `CheckoutRequestID`/`MerchantRequestID` (STK), `ConversationID`/`OriginatorConversationID` (B2C, B2B, status, balance, reversal), or `TransID` plus the bill reference (C2B). **Never match by the phone number**, which may be masked. **Unknown callbacks** are stored as `unmatched` and raise an alert; they are never applied.
+3. **Persist durable inbox, then acknowledge.** Protected/redacted evidence is committed before `200`; return non-success if persistence fails. Process repeatably even if the queue was unavailable at intake.
+4. **Match to a stored request** by supported identifiers, amount, currency and direction. **Never match by phone number**, which may be masked. Quarantine unknown/mismatched callbacks and alert; do not apply them.
 5. **Idempotency.**
-   - A unique constraint on the provider transaction ID (M-Pesa receipt).
-   - State transitions are monotonic, so duplicate or out-of-order callbacks are no-ops.
-   - Outgoing requests carry idempotency keys, and the public API accepts an `Idempotency-Key` header on every financial endpoint.
+   - Provider receipt uniqueness is scoped to tenant/provider account; allocations and journal postings cannot repeat.
+   - Explicit transition guards prevent regression; contradictory results open a dispute rather than being silently ignored.
+   - Keys bind tenant, operation and payload fingerprint; changed payloads conflict. Define key retention and residual external duplicate risk.
 6. **C2B validation URL.** Must answer synchronously and fast (accept or reject) against open invoice and project codes and configured limits.
 
 ### 14.5 Other payment rules
 
 | Rule | Design |
 |---|---|
-| Recipient name check | The B2C result's receiver name is fuzzy-matched against the registered worker name. A mismatch raises a review flag, and future payouts to that number are optionally held. |
+| Recipient verification | Verify details independently before approval using supported procedures; changes invalidate approval. Names returned after payout are detection evidence only, not pre-payment verification. |
 | Reconciliation | A daily job matches records against the M-Pesa statement, uploaded as CSV from the M-Pesa organisation portal or pulled if an API is available. Results are matched, unmatched or disputed. |
 | Charges | A tariff table (effective-dated config) estimates charges before payout. Actual charges from results or statements are booked as project `cost_entries`. |
 | Limits | Per-transaction, daily and per-recipient limits are configurable and checked before submission. |
 | Unusual payouts | Rules flag a new recipient with a large amount, many payouts to one number, or payouts outside business hours. Flagged payouts need extra approval. |
 | Cash and bank | Recorded as `payments` with an evidence photo or signature, a reason and the approver. Cash always needs a reason. |
-| Retries | Only for non-terminal errors, and **only after Transaction Status confirms the transaction was not processed**, to avoid paying twice. |
+| Retries | Bounded/provider-specific; reconcile unknown outcomes before a new attempt. Notification failure retries only the notification. A payout pause preserves queued obligations. |
 
 > Endpoint versions (for example, B2C v1 vs v3) and field names are verified against the current Daraja documentation in D4.2. The mock server in `apps/mock-daraja` mirrors them for tests.
 
@@ -617,7 +623,7 @@ flowchart LR
 | Environments | `local` (docker-compose and mock Daraja), `staging` (Daraja sandbox), `production`. Preview environments per PR are optional. |
 | Abstractions | `StorageProvider` (S3 API, with an Azure Blob adapter if needed), `KeyManagementProvider`, `SecretsProvider`, `NotificationProvider`, `PaymentProvider`, `MalwareScanner`. These keep us cloud-agnostic. |
 | Data residency | **COMPLIANCE-REVIEW.** The Data Protection Act 2019 (Part VI) and its regulations govern cross-border transfers and may restrict some processing to Kenya. Phase 9 compares in-country hosting (Kenyan data centres or colocation) with an offshore hyperscaler region plus documented safeguards. See CR-DP-05 in [COMPLIANCE_TODO](./COMPLIANCE_TODO.md). |
-| Backups | Point-in-time recovery with **RPO ≤ 15 min** and **RTO ≤ 4 h** (both configurable). A restore drill is documented in D9.3 and repeated quarterly. |
+| Backups | Target **RPO ≤ 15 min**, **RTO ≤ 4 h** for acknowledged server data; prove by coherent DB/object/config/key restore from the first relevant phase. Pause payouts and reconcile provider outcomes before workers resume; never blindly replay restored outbox. Unsynced device records are outside server RPO. Final rehearsal in D9.3, then quarterly. |
 | CI/CD | GitHub Actions with required checks on a protected `main`. Images get an SBOM (syft), are scanned (Trivy) and signed (cosign). Deployments use GitHub Environments with manual approval for production. |
 
 ---

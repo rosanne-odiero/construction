@@ -30,3 +30,13 @@ export function validateEnv(raw: Record<string, unknown>): ApiEnv {
 export function envFilePaths(nodeEnv = process.env["NODE_ENV"]): string[] {
   return nodeEnv === "production" ? [] : [".env", ".env.example"];
 }
+
+/** Converts TRUST_PROXY into an Express "trust proxy" value; false when unset. */
+export function trustProxySetting(value: string | undefined): false | number | string[] {
+  if (!value || value === "false") return false;
+  if (/^\d+$/.test(value)) return Number(value);
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}

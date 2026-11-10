@@ -12,6 +12,24 @@ export const apiEnvSchema = z.object({
   GIT_SHA: z.string().min(1).optional(),
 
   DATABASE_URL: z.url(),
+  WEB_ORIGIN: z.url().default("http://localhost:3000"),
+  // Express "trust proxy": the addresses (comma-separated, CIDR allowed) or hop count of proxies
+  // allowed to report the client IP in X-Forwarded-For. Leave unset unless an edge proxy appends
+  // the real client address: the Next.js /api rewrite passes client-supplied values through.
+  // Without it, rate limits use accounts, users and sessions only (no per-IP limit).
+  TRUST_PROXY: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((value) => value !== "true", "Never trust every proxy; list addresses or a hop count")
+    .optional(),
+  AUTH_SIGNING_PRIVATE_KEY: z.string().min(1).optional(),
+  AUTH_MFA_ENCRYPTION_KEY: z
+    .string()
+    .regex(/^[a-fA-F0-9]{64}$/)
+    .optional(),
+  AUTH_NOTIFICATION_TRANSPORT: z.enum(["development", "disabled"]).default("disabled"),
+  AUTH_MAILPIT_PORT: z.coerce.number().int().min(1).max(65535).default(8025),
 
   REDIS_URL: z.url(),
 

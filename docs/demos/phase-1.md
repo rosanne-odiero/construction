@@ -2,6 +2,8 @@
 
 Phase 1 has four deliverables (D1.1–D1.4). Each gets its own section here as it lands.
 
+> **Safeguard integration:** implementation of D1.1–D1.4 is approved, not automatic acceptance. Read [implementation status](../IMPLEMENTATION_STATUS.md) for actual current evidence. The D1.1 walkthrough/results below are historical; they are not claims that this session reran every command. No pilot, live payments or biometrics are approved.
+
 ---
 
 ## D1.1: Workspace, tooling and CI
@@ -63,3 +65,49 @@ npx pnpm@12.17.0 dev             # shared packages + API on :4000 + web on :3000
 ### 6. How to give feedback
 
 Reply with the **item number and what to change**, or **"approved"**. Feedback is fixed on the `phase-1/d1.1-workspace-ci` branch before D1.2 starts.
+
+---
+
+## D1.2: Shared design system, i18n and installation metadata
+
+1. Start the existing web app and open http://localhost:3000/design-system.
+2. Switch EN/SW and light/dark. Inspect labelled inputs, visible validation, semantic status labels and KES/Nairobi formats.
+3. Use keyboard Tab: the skip link receives focus first. Inspect on a 360px-wide viewport without horizontal overflow.
+4. Read the pending/unknown-payment and offline examples: neither claims settlement or server-verified evidence. Gallery inputs are not persisted.
+5. Inspect `/manifest.webmanifest` and `/icon.svg`. Manifest metadata is not offline attendance/payroll support; no service worker caches sensitive information.
+6. Follow **Open live foundation** for real Phase 1 operations; **Browse prototype** retains mock business flows. The original `/sign-in` is a labelled D0 preview, not production authentication.
+
+Checks: `pnpm --filter @pm-buddy/web test`, `i18n:check`, `lint`, `typecheck`, `build`, and `test:e2e`. Before browser tests run `pnpm --filter @pm-buddy/web exec playwright install --no-shell chromium`. Playwright owns/stops its isolated temporary server on port 3100; it does not reuse an unrelated developer server.
+
+Automated axe coverage is not full WCAG certification. Human Kiswahili wording, shared-device privacy, outdoor readability and real low-end Android performance still require user evidence.
+
+---
+
+## D1.3/D1.4: Live identity, MFA and tenant/project foundation
+
+These are real database-backed foundation operations, not the `/sign-in` mock. Full phase acceptance remains open for the limitations in [implementation status](../IMPLEMENTATION_STATUS.md).
+
+### Setup
+
+Start local services, apply migrations and run API/web as above. Configure the auth/key settings described in [the API README](../../apps/api/README.md). `WEB_ORIGIN` must exactly match the browser origin: normally `http://localhost:3000`; `127.0.0.1` and other ports are different origins. Never copy production keys/data into development.
+
+### Walkthrough
+
+1. Open http://localhost:3000/foundation. Register a **synthetic** identity such as a unique `review-...@example.invalid`, with a test-only password of 12–128 characters.
+2. Read its verification code in local Mailpit, http://localhost:8025. Phone-first identities use a `phone-<canonical-number>@development.invalid` mailbox, not real SMS.
+3. Verify the identity, then sign in. Invalid/unverified credentials and codes remain errors; the UI does not auto-refresh or retry them.
+4. Choose **Set up authenticator MFA**, add the temporary secret/URI to an authenticator, then confirm a six-digit code. Save the ten recovery codes securely; they appear once and are never stored in browser storage. Hide them after saving.
+5. Create a company. A fresh MFA check is required; TOTP codes cannot be reused, including the enrollment code. After five minutes, verify a new authenticator code before privileged operations.
+6. Create a project. Reload the workspace to verify it persists. Create/select another company and confirm the first company's projects disappear; switch back to recover the authorised view.
+7. Invite a synthetic second identity with a role and project assignments. Its invitation arrives only in Mailpit, expires after 48 hours and is recipient-bound/single-use. Register/verify that identity separately, accept its token and select the company. Owner/Finance invitations also require enrolled/fresh MFA.
+8. As an owner, load members and grant/revoke project view/manage access. The canonical permissions are `projects.view` and `projects.manage`; the API checks membership/project scope independently of controls.
+9. Load the latest audit events. The UI shows event summaries, not raw sensitive diffs. The database refuses audit UPDATE/DELETE/TRUNCATE.
+10. Inspect active sessions. Refresh explicitly, revoke another session or sign out; consumed refresh replay revokes the family. Revoking the current session returns to signed-out forms and clears workspace state.
+11. Try the password-reset and MFA-recovery forms with synthetic credentials. Reset revokes sessions but preserves MFA; a recovery code works once and does not disable financial approval controls.
+12. Switch EN/SW and light/dark. Disconnect the API or enter an invalid token and verify actionable errors, not saved-success fallbacks. The prototype tour remains separate and labelled.
+
+### Evidence and remaining gates
+
+Final local verification: 22 lint/type/unit/i18n/build tasks successful, formatting passed; 35 API integration tests and 8 browser/a11y tests passed. A separate real-browser smoke used the actual API, PostgreSQL runtime role and Mailpit to verify registration through MFA, company/project persistence, cross-company switching, audit/member views and logout. Its isolated database/message and helper servers were cleaned up.
+
+Passkeys, custom roles, external messaging, action-bound financial approvals, mobile binding and full breached-password checking are not presented as implemented. Financial/domain reviewer approval, coherent restore and field/mobile evidence remain required before any live pilot.

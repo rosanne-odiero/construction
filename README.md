@@ -9,24 +9,35 @@ Construction project management for Kenya: a secure, multi-tenant system for con
 - An offline-first site app
 - Client, supplier and USSD self-service
 
-> **Status: Phase 1, deliverable D1.1 (workspace, tooling and CI) in review.** D0 (design pack and clickable prototype) is approved. Most screens still show **mock data**; the `/status` page is the first one on the real API. See the [roadmap](docs/ROADMAP.md) for the 32 deliverables.
+> **Status: Phase 1 core foundation implemented and locally verified; full phase acceptance remains open.** D0 (design pack and clickable prototype) is approved. Business screens remain **mock data**; `/foundation` and `/status` use the real API. See [implementation status](docs/IMPLEMENTATION_STATUS.md) for exact evidence and missing requirements, and the [roadmap](docs/ROADMAP.md) for all deliverables.
+
+> **Safeguard integration:** D1.1–D1.4 implementation is approved, not automatically accepted. See [implementation status](docs/IMPLEMENTATION_STATUS.md) and [acceptance matrix](docs/ACCEPTANCE_MATRIX.md) for actual evidence and remaining work. Business previews remain mock data. No live pilot, payments or biometrics are approved.
 
 ## Documents
 
-| Document                                         | What it covers                                                                  |
-| ------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [Project brief](docs/PROJECT_BRIEF.md)           | The original requirements                                                       |
-| [Roadmap](docs/ROADMAP.md)                       | Phases → deliverables, review gates, definition of done                         |
-| [Architecture](docs/ARCHITECTURE.md)             | System design, folder structure, security, payments, offline sync, decision log |
-| [ERD](docs/ERD.md)                               | Data model (Mermaid), split by domain                                           |
-| [OpenAPI outline](docs/api/openapi-outline.yaml) | REST API outline (OpenAPI 3.1)                                                  |
-| [Threat model](docs/THREAT_MODEL.md)             | STRIDE analysis and domain abuse cases                                          |
-| [DPIA template](docs/DPIA_TEMPLATE.md)           | Data protection impact assessment for biometric attendance                      |
-| [Compliance TODO](docs/COMPLIANCE_TODO.md)       | Legal, tax and regulatory items awaiting expert confirmation                    |
-| [Configuration register](docs/CONFIGURATION.md)  | Every configurable rule, its seed value and status                              |
-| [Open questions](docs/QUESTIONS.md)              | Decisions needed from the product owner                                         |
-| [Phase 0 demo script](docs/demos/phase-0.md)     | How to run and review the prototype                                             |
-| [Phase 1 demo script](docs/demos/phase-1.md)     | How to run and review the Phase 1 deliverables                                  |
+| Document                                               | What it covers                                                                  |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| [Project brief](docs/PROJECT_BRIEF.md)                 | Original scope plus mandatory workflow, payment, offline and release safeguards |
+| [Implementation status](docs/IMPLEMENTATION_STATUS.md) | Changes, actual commands/results, limitations and next step                     |
+| [Acceptance matrix](docs/ACCEPTANCE_MATRIX.md)         | Requirement coverage and mandatory failure-mode evidence                        |
+| [Workflows](docs/WORKFLOWS.md)                         | State machines, actors, preconditions, retry and audit contracts                |
+| [Invariants](docs/INVARIANTS.md)                       | Database/business correctness constraints and required tests                    |
+| [Financial model](docs/FINANCIAL_MODEL.md)             | Proposed postings, precision, allocations, reversals and closure                |
+| [Offline sync](docs/OFFLINE_SYNC.md)                   | Deduplication, conflict review, revoked devices and uploads                     |
+| [Operations](docs/OPERATIONS.md)                       | Alerts, support boundaries and coherent restore/reconciliation                  |
+| [Release plan](docs/RELEASE_PLAN.md)                   | Environments, migration compatibility, rollback and release gates               |
+| [Pilot design](docs/PILOT_PLAN.md)                     | One-site design/delivery order approved; live activation still gated            |
+| [Roadmap](docs/ROADMAP.md)                             | Phases → deliverables, review gates, definition of done                         |
+| [Architecture](docs/ARCHITECTURE.md)                   | System design, folder structure, security, payments, offline sync, decision log |
+| [ERD](docs/ERD.md)                                     | Data model (Mermaid), split by domain                                           |
+| [OpenAPI outline](docs/api/openapi-outline.yaml)       | REST API outline (OpenAPI 3.1)                                                  |
+| [Threat model](docs/THREAT_MODEL.md)                   | STRIDE analysis and domain abuse cases                                          |
+| [DPIA template](docs/DPIA_TEMPLATE.md)                 | Data protection impact assessment for biometric attendance                      |
+| [Compliance TODO](docs/COMPLIANCE_TODO.md)             | Legal, tax and regulatory items awaiting expert confirmation                    |
+| [Configuration register](docs/CONFIGURATION.md)        | Every configurable rule, its seed value and status                              |
+| [Open questions](docs/QUESTIONS.md)                    | Decisions needed from the product owner                                         |
+| [Phase 0 demo script](docs/demos/phase-0.md)           | How to run and review the prototype                                             |
+| [Phase 1 demo script](docs/demos/phase-1.md)           | How to run and review the Phase 1 deliverables                                  |
 
 ## Quick start
 
@@ -40,6 +51,8 @@ pnpm dev           # shared packages, API on :4000 and web on :3000, all in watc
 ```
 
 Then open http://localhost:3000/status: every service should show **Operational**.
+
+Foundation review: `/foundation` (API-backed identity/company setup) and `/design-system` (EN/SW, light/dark controls and states). `/sign-in` and business dashboards remain labelled prototype routes. The web manifest supplies installation metadata only; it does not imply offline payroll/attendance capability or cache sensitive records.
 
 | URL                                             | What                                       |
 | ----------------------------------------------- | ------------------------------------------ |
@@ -55,21 +68,23 @@ Checks (CI runs the same):
 ```bash
 pnpm format:check
 pnpm turbo run lint typecheck test i18n:check build
-pnpm test:e2e      # API end-to-end tests; needs `pnpm services:up`
+pnpm test:e2e      # API and web browser tests; API needs `pnpm services:up`
 ```
+
+Before the first web browser run, install its browser: `pnpm --filter @pm-buddy/web exec playwright install --no-shell chromium`.
 
 `pnpm services:down` stops the containers and keeps the data. To start again from empty databases and storage, run `docker compose -f infra/docker/compose.yaml down -v`. All local credentials are throwaway development values ([configuration §8](docs/CONFIGURATION.md#8-process-environment-deployment-settings)).
 
 ## Repository layout (today)
 
 ```text
-apps/web/          Next.js (App Router) + Tailwind + shadcn/ui: prototype screens and /status
+apps/web/          Next.js + shared design system: /foundation, /status and labelled business previews
   messages/        English and Kiswahili catalogues
   src/mocks/       Mock data (replaced by the API from D1.3 onwards)
-apps/api/          NestJS 12 API: health module, Prisma 7, pino logging, OpenAPI
+apps/api/          NestJS API: health, identity/MFA/sessions, tenancy/project access and audit
 packages/types/    Permission catalogue, roles, shared types
 packages/domain/   Pure business rules: Kenyan phones, money, age, geofences
-packages/validation/ Zod schemas shared by web and API (environment, health, primitives)
+packages/validation/ Shared Zod request primitives and foundation response contracts
 packages/config/   Shared tsconfig presets
 infra/docker/      Local services (compose.yaml) and database role setup
 .github/           CI, CodeQL, secret scanning, dependency review, Dependabot

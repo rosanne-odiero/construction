@@ -5,7 +5,7 @@ openapi: 3.1.0
 info:
   title: PM-Buddy API
   version: 0.1.0-outline
-  summary: Phase 0 outline of the PM-Buddy REST API. Design only, nothing is implemented yet.
+  summary: Design outline of the PM-Buddy REST API; runtime implementation is tracked separately.
   description: |
     Outline of the REST API for **PM-Buddy**, a multi-tenant construction project management
     SaaS for Kenya. Clients are the Next.js web app (office, client and supplier portals), the
@@ -16,6 +16,23 @@ info:
     **skeletal** (key properties only) and reuse the entity and field names from the ERD in
     camelCase. From D1.1 the Zod schemas in `packages/validation` become the source of truth and
     the NestJS app publishes the complete, generated spec at `/api/docs`.
+
+    **Safeguard precedence:** PROJECT_BRIEF.md section 15 and WORKFLOWS.md, INVARIANTS.md,
+    FINANCIAL_MODEL.md and OFFLINE_SYNC.md override older draft descriptions below.
+    This outline is not runtime API evidence; use generated Swagger and IMPLEMENTATION_STATUS.md.
+    Approval snapshots bind recipients, amounts, allocations and effective rules. Approved
+    financial records are immutable; corrections use linked amendments/reversals.
+    Attempt states distinguish submitting, pending and unknown. A timeout/crash never
+    authorises automatic resubmission; reconcile first. Persist callback intake durably
+    before acknowledging, verify identifiers/amount/currency/direction and quarantine mismatches.
+    Internal idempotency is not external exactly-once delivery. Scope keys by tenant and
+    operation with a payload fingerprint; retention must cover provider/reconciliation risk,
+    not assume 24 hours is sufficient. Separate obligations, attempts, provider transactions,
+    allocations and balanced journal postings.
+    Offline events are append-only and deduplicated; editable drafts use expected versions
+    and review conflicts. Never use last-write-wins for attendance, stock or financial data.
+    Unverified compliance rules are disabled in production, not merely shown with a banner.
+    Capture location/time is claimed evidence, separate from server receipt/provenance.
 
     ## Conventions
 

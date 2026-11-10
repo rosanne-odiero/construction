@@ -5,6 +5,7 @@ import { AppConfig, envFilePaths, validateEnv } from "./config/app-config.js";
 import { loggerOptions } from "./common/logging.js";
 import { InfraModule } from "./infra/infra.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
+import { IdentityModule } from "./modules/identity/identity.module.js";
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { HealthModule } from "./modules/health/health.module.js";
     InfraModule,
     LoggerModule.forRootAsync({ inject: [AppConfig], useFactory: loggerOptions }),
     HealthModule,
+    IdentityModule,
   ],
 })
 export class AppModule {}

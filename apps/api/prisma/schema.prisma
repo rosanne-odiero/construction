@@ -11,3 +11,180 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model User {
+  id                String          @id @default(uuid()) @db.Uuid
+  identifier        String          @unique @db.VarChar(254)
+  displayName       String          @map("display_name") @db.VarChar(100)
+  passwordHash      String          @map("password_hash")
+  verifiedAt        DateTime?       @map("verified_at") @db.Timestamptz
+  failedLogins      Int             @default(0) @map("failed_logins")
+  lockedUntil       DateTime?       @map("locked_until") @db.Timestamptz
+  mfaSecret         String?         @map("mfa_secret")
+  mfaPending        String?         @map("mfa_pending")
+  mfaPendingUntil   DateTime?       @map("mfa_pending_until") @db.Timestamptz
+  mfaEnabled        Boolean         @default(false) @map("mfa_enabled")
+  mfaCounter        BigInt          @default(-1) @map("mfa_counter")
+  mfaFailedAttempts Int             @default(0) @map("mfa_failed_attempts")
+  mfaLockedUntil    DateTime?       @map("mfa_locked_until") @db.Timestamptz
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  sessions          Session[]
+  challenges        AuthChallenge[]
+  recoveryCodes     RecoveryCode[]
+  memberships       Membership[]
+
+  @@map("users")
+}
+
+model AuthChallenge {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  purpose    String    @db.VarChar(20)
+  digest     String
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("auth_challenges")
+}
+
+model Session {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  activeTenantId String?        @map("active_tenant_id") @db.Uuid
+  generation     Int            @default(0)
+  mfaVerifiedAt  DateTime?      @map("mfa_verified_at") @db.Timestamptz
+  authTime       DateTime       @default(now()) @map("auth_time") @db.Timestamptz
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  lastSeenAt     DateTime       @default(now()) @map("last_seen_at") @db.Timestamptz
+  expiresAt      DateTime       @map("expires_at") @db.Timestamptz
+  idleExpiresAt  DateTime       @map("idle_expires_at") @db.Timestamptz
+  revokedAt      DateTime?      @map("revoked_at") @db.Timestamptz
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens  RefreshToken[]
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  digest    String    @id @db.VarChar(64)
+  sessionId String    @map("session_id") @db.Uuid
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("refresh_tokens")
+}
+
+model RecoveryCode {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  digest     String    @unique @db.VarChar(64)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("recovery_codes")
+}
+
+model Tenant {
+  id        String       @id @default(uuid()) @map("tenant_id") @db.Uuid
+  name      String       @db.VarChar(150)
+  createdBy String       @map("created_by") @db.Uuid
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  members   Membership[]
+  projects  Project[]
+  invites   Invitation[]
+  audit     AuditEvent[]
+
+  @@map("tenants")
+}
+
+model Membership {
+  tenantId String              @map("tenant_id") @db.Uuid
+  userId   String              @map("user_id") @db.Uuid
+  role     String              @db.VarChar(30)
+  joinedAt DateTime            @default(now()) @map("joined_at") @db.Timestamptz
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects ProjectMembership[]
+
+  @@id([tenantId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Project {
+  id          String              @id @default(uuid()) @db.Uuid
+  tenantId    String              @map("tenant_id") @db.Uuid
+  name        String              @db.VarChar(150)
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members     ProjectMembership[]
+  invitations InvitationProject[]
+
+  @@unique([tenantId, id])
+  @@map("projects")
+}
+
+model ProjectMembership {
+  tenantId    String     @map("tenant_id") @db.Uuid
+  projectId   String     @map("project_id") @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  permissions String[]
+  project     Project    @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  membership  Membership @relation(fields: [tenantId, userId], references: [tenantId, userId], onDelete: Cascade)
+
+  @@id([tenantId, projectId, userId])
+  @@map("project_memberships")
+}
+
+model Invitation {
+  id         String              @id @default(uuid()) @db.Uuid
+  tenantId   String              @map("tenant_id") @db.Uuid
+  identifier String              @db.VarChar(254)
+  role       String              @db.VarChar(30)
+  digest     String              @unique @db.VarChar(64)
+  expiresAt  DateTime            @map("expires_at") @db.Timestamptz
+  acceptedAt DateTime?           @map("accepted_at") @db.Timestamptz
+  createdBy  String              @map("created_by") @db.Uuid
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  projects   InvitationProject[]
+
+  @@unique([tenantId, id])
+  @@index([identifier])
+  @@map("invitations")
+}
+
+model InvitationProject {
+  tenantId     String     @map("tenant_id") @db.Uuid
+  invitationId String     @map("invitation_id") @db.Uuid
+  projectId    String     @map("project_id") @db.Uuid
+  invitation   Invitation @relation(fields: [tenantId, invitationId], references: [tenantId, id], onDelete: Cascade)
+  project      Project    @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, invitationId, projectId])
+  @@index([tenantId, projectId])
+  @@map("invitation_projects")
+}
+
+model AuditEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  actorId      String   @map("actor_id") @db.Uuid
+  action       String   @db.VarChar(100)
+  resourceId   String   @map("resource_id")
+  requestId    String   @map("request_id")
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  sequence     BigInt   @default(autoincrement())
+  previousHash String   @default("") @map("previous_hash")
+  hash         String   @default("")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, sequence])
+  @@map("audit_events")
+}

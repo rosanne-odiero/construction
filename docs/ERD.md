@@ -15,6 +15,8 @@
 | Append-only | Marked "append-only": no `UPDATE` or `DELETE` granted to the app role; corrections are new rows |
 | Effective dating | Configuration tables carry `effective_from`, `effective_to`, `version`, `source_reference` and `compliance_status` |
 
+Immutable event/journal/audit records have creation metadata and linked corrections, not mutable update/soft-delete semantics. Retention and deletion follow a reviewed data-class/legal-hold policy. The runtime Prisma schema and migrations, not these draft diagrams, prove implementation.
+
 ## Domain map
 
 ```mermaid
@@ -1044,6 +1046,8 @@ erDiagram
 
 ## 7. Payroll and payments
 
+The original draft diagram below is retained for context. Its combined `Payment` and `PaymentProviderRequest` model and status labels are superseded by **§7.1**, [WORKFLOWS.md](./WORKFLOWS.md) and [FINANCIAL_MODEL.md](./FINANCIAL_MODEL.md). Do not implement the draft's one-payment-per-payroll-line assumption or use its flags as independent settlement truth.
+
 ```mermaid
 erDiagram
   PayPeriod ||--o{ PayrollBatch : "paid in"
@@ -1211,6 +1215,112 @@ erDiagram
     text status "matched, unmatched, disputed"
   }
 ```
+
+### 7.1 Canonical obligation, attempt, allocation and journal boundaries
+
+Conceptual design for Phase 4; not implemented by foundation migrations.
+
+```mermaid
+erDiagram
+  PayrollLine ||--o{ PayableObligation : authorises
+  ApprovalSnapshot ||--o{ PayableObligation : binds
+  PayableObligation ||--o{ PaymentAttempt : attempted
+  PaymentChannel ||--o{ PaymentAttempt : routes
+  PaymentAttempt ||--o{ ProviderTransaction : reconciles
+  ProviderTransaction ||--o{ SettlementAllocation : allocates
+  PayableObligation ||--o{ SettlementAllocation : settled
+  SettlementAllocation ||--o{ JournalEntry : posts
+  JournalEntry ||--|{ JournalLine : balances
+  JournalAccount ||--o{ JournalLine : classifies
+  PaymentAttempt ||--o{ CallbackInbox : receives
+  PaymentAttempt ||--o{ OutboxEvent : schedules
+  IdempotencyRecord }o--o| PaymentAttempt : identifies
+
+  ApprovalSnapshot {
+    uuid id PK
+    int entity_version
+    text content_digest
+    jsonb protected_snapshot "amounts, recipients, allocations, rates and rules"
+    uuid preparer_id
+    uuid reviewer_id
+    uuid approver_id
+  }
+  PayableObligation {
+    uuid id PK
+    uuid approval_snapshot_id FK
+    uuid project_id FK
+    bigint authorised_minor
+    text currency "KES"
+    uuid correction_of_id FK
+  }
+  PaymentAttempt {
+    uuid id PK
+    uuid obligation_id FK
+    uuid channel_id FK
+    bigint reserved_minor
+    text state "created, queued, submitting, pending, unknown, confirmed, failed, reversal_pending, reversed"
+    text request_fingerprint
+    uuid reversal_of_id FK
+  }
+  ProviderTransaction {
+    uuid id PK
+    uuid attempt_id FK
+    text receipt "unique per tenant and provider account"
+    bigint amount_minor
+    text currency
+    text direction
+    text verification_evidence_ref
+  }
+  SettlementAllocation {
+    uuid id PK
+    uuid obligation_id FK
+    uuid provider_transaction_id FK
+    bigint amount_minor
+    uuid reversal_of_id FK
+  }
+  JournalEntry {
+    uuid id PK
+    text source_posting_key UK
+    date posting_date
+    uuid reversal_of_id FK
+  }
+  JournalLine {
+    uuid id PK
+    uuid entry_id FK
+    uuid account_id FK
+    uuid project_id FK
+    uuid cost_code_id FK
+    bigint debit_minor
+    bigint credit_minor
+  }
+  JournalAccount {
+    uuid id PK
+    text code "unique per tenant"
+    text kind
+  }
+  CallbackInbox {
+    uuid id PK
+    uuid attempt_id FK
+    text event_fingerprint
+    timestamptz received_at
+    text protected_payload_ref
+  }
+  IdempotencyRecord {
+    uuid id PK
+    text operation
+    text key "unique per tenant and operation"
+    text request_fingerprint
+    timestamptz retain_until
+  }
+  OutboxEvent {
+    uuid id PK
+    uuid attempt_id FK
+    text event_type
+    int schema_version
+  }
+```
+
+Every tenant-owned relation uses tenant-consistent foreign keys and runtime-role RLS. Settlement/reservation transactions lock the obligation; total allocations cannot exceed authorised outstanding. Each journal balances exactly, remains immutable and retains project/cost-code lineage. Inbox intake is durable before callback acknowledgement; queue processing state lives separately from append-only evidence. Unknown attempts retain reservations and require reconciliation before a new payout.
 
 ## 8. Finance: costs, budgets, petty cash and cash flow
 
@@ -1681,4 +1791,3 @@ erDiagram
 - `OutboxEvent`, `IdempotencyRecord`, `SyncChange` and `DeviceSyncState` for reliability and offline sync.
 - `DataSubjectRequest` for Data Protection Act rights, and `DpiaRecord` for the biometric go-live gate.
 - `Alert` as one inbox for anomalies and thresholds.
-

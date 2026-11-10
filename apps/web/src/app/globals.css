@@ -55,7 +55,7 @@
 }
 
 /*
- * PM-Buddy design tokens (D0 prototype).
+ * PM-Buddy shared design tokens (D1.2).
  * Neutral cool-grey base + royal blue accent. OKLCH values follow the Tailwind v4 palette:
  * light primary = blue-700 (white text, ~7:1), dark primary = blue-500 (dark text, ~5:1),
  * so text and buttons meet WCAG 2.2 AA in both themes.
@@ -72,11 +72,11 @@
   --secondary: oklch(0.967 0.003 264.542);
   --secondary-foreground: oklch(0.278 0.033 256.848);
   --muted: oklch(0.967 0.003 264.542);
-  --muted-foreground: oklch(0.551 0.027 264.364);
+  --muted-foreground: oklch(0.446 0.03 256.802);
   --accent: oklch(0.97 0.014 254.604);
   --accent-foreground: oklch(0.424 0.199 265.638);
-  --destructive: oklch(0.577 0.245 27.325);
-  --success: oklch(0.527 0.154 150.069);
+  --destructive: oklch(0.505 0.213 27.518);
+  --success: oklch(0.448 0.119 151.328);
   --success-foreground: oklch(0.982 0.018 155.826);
   --warning: oklch(0.666 0.179 58.318);
   --warning-foreground: oklch(0.279 0.077 45.635);

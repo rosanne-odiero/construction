@@ -1,0 +1,908 @@
+{
+  "meta": {
+    "description": "PM-Buddy: usimamizi wa miradi ya ujenzi kwa Kenya. Mfano wa Awamu ya 0 unaobofyeka wenye data ya mfano."
+  },
+  "prototype": {
+    "banner": "Mfano wa Awamu ya 0: data ya mfano pekee, hakuna kinachohifadhiwa wala kutumwa.",
+    "tourLink": "Ziara ya mfano",
+    "actionToast": "Mfano: kitendo hiki kimesanifiwa lakini kitakuja katika {deliverable}."
+  },
+  "common": {
+    "language": "Lugha",
+    "theme": "Mandhari",
+    "light": "Mwanga",
+    "dark": "Giza",
+    "system": "Mfumo"
+  },
+  "nav": {
+    "groups": {
+      "overview": "Muhtasari",
+      "commercial": "Biashara",
+      "site": "Eneo la kazi",
+      "finance": "Fedha",
+      "records": "Kumbukumbu",
+      "previews": "Mwonekano wa awali"
+    },
+    "items": {
+      "dashboard": "Dashibodi",
+      "projects": "Miradi",
+      "bq": "BQ na mabadiliko",
+      "valuations": "Tathmini",
+      "labour": "Wafanyakazi",
+      "attendance": "Mahudhurio",
+      "diary": "Shajara ya eneo",
+      "materials": "Vifaa",
+      "stores": "Stoo",
+      "plant": "Mitambo",
+      "safety": "Afya na usalama",
+      "payroll": "Mishahara",
+      "payments": "Malipo",
+      "spending": "Matumizi",
+      "documents": "Nyaraka",
+      "reports": "Ripoti",
+      "clientPortal": "Lango la mteja",
+      "siteApp": "Programu ya eneo",
+      "settings": "Mipangilio",
+      "tour": "Ziara ya mfano"
+    },
+    "phase": "Awamu {phase}"
+  },
+  "command": {
+    "title": "Tafuta",
+    "placeholder": "Tafuta kurasa, miradi, wafanyakazi…",
+    "empty": "Hakuna matokeo.",
+    "pages": "Kurasa",
+    "projects": "Miradi",
+    "workers": "Wafanyakazi"
+  },
+  "topbar": {
+    "notifications": "Arifa ({count})",
+    "alertsTitle": "Tahadhari",
+    "account": "Menyu ya akaunti",
+    "role": "Mkurugenzi",
+    "profile": "Wasifu",
+    "security": "Usalama na MFA",
+    "signOut": "Toka"
+  },
+  "alerts": {
+    "materialVariance": "Saruji iliyotolewa imezidi matumizi yanayotarajiwa kwa {pct}% kwenye fremu ya Bill {bill} (wiki ya {week}).",
+    "impossibleTravel": "{name} aliingia kwenye maeneo mawili yaliyo umbali wa km {km} ndani ya dakika {minutes}.",
+    "budgetThreshold": "{pct}% ya bajeti ya Bill {bill} imetumika.",
+    "unusualPayout": "Malipo yasiyo ya kawaida: {amount} kwa mpokeaji mpya ({phone}).",
+    "etimsMissing": "Ankara {invoice} kutoka {supplier} haina nambari ya eTIMS. Malipo yamezuiwa.",
+    "accreditationExpiry": "{count, plural, one {Kadi # ya NCA inaisha} other {Kadi # za NCA zinaisha}} muda ndani ya siku {days}.",
+    "documentExpiry": "Bima ya Contractor’s All Risk inaisha tarehe {date}."
+  },
+  "severity": {
+    "critical": "Hatari",
+    "warning": "Onyo",
+    "info": "Taarifa"
+  },
+  "health": {
+    "on_track": "Kwa wakati",
+    "at_risk": "Iko hatarini",
+    "behind": "Imechelewa"
+  },
+  "categories": {
+    "materials": "Vifaa",
+    "labour": "Wafanyakazi",
+    "plant": "Mitambo",
+    "subcontract": "Wakandarasi wadogo",
+    "preliminaries": "Maandalizi",
+    "transport": "Usafiri",
+    "pettyCash": "Pesa ndogo",
+    "mpesaCharges": "Ada za M-Pesa"
+  },
+  "tour": {
+    "eyebrow": "Kazi D0 · Awamu ya 0: usanifu",
+    "title": "Mfano wa PM-Buddy unaobofyeka",
+    "intro": "Kila skrini inatumia data halisi ya mfano ya mkandarasi wa Kenya mwenye miradi miwili. Hakuna kinachohifadhiwa wala kutumwa. Itumie kukagua mwonekano, mpangilio na michakato muhimu kabla hatujajenga mfumo halisi katika Awamu ya 1.",
+    "start": "Anza kwa kuingia",
+    "skipToDashboard": "Nenda kwenye dashibodi",
+    "screensTitle": "Skrini za kukagua",
+    "screens": {
+      "signIn": {
+        "title": "Kuingia na MFA",
+        "description": "Ingia kwa barua pepe au simu (nambari hubadilishwa kuwa 2547…), kisha hatua ya TOTP pamoja na passkey au SMS."
+      },
+      "dashboard": {
+        "title": "Dashibodi ya mmiliki",
+        "description": "Fedha, matumizi, wafanyakazi eneo la kazi na idhini; miradi na CPI/SPI; tahadhari; chati za matumizi na mtiririko wa fedha; ramani ya maeneo."
+      },
+      "project": {
+        "title": "Muhtasari wa mradi",
+        "description": "Ruiru Heights: S-curve, bajeti dhidi ya thamani iliyopatikana na gharama halisi kwa kila bill, hatua muhimu, eneo lenye mipaka na shughuli."
+      },
+      "bq": {
+        "title": "Jedwali la Kiasi cha Kazi (BQ)",
+        "description": "Mti wa Bill → Sehemu → Kipengele wenye maendeleo, jumla, VAT, jumla ya mkataba ya awali na iliyorekebishwa, na maagizo ya mabadiliko."
+      },
+      "bqImport": {
+        "title": "Kuingiza BQ",
+        "description": "Hatua tano za kuingiza Excel: kugundua karatasi na kichwa, kulinganisha safu, kanuni za mpangilio na kuoanisha jumla."
+      },
+      "labour": {
+        "title": "Daftari la wafanyakazi",
+        "description": "Mionekano iliyohifadhiwa, vitendo vya pamoja, vitambulisho na simu zilizofichwa, paneli ya mfanyakazi, kuzuia usajili wa walio chini ya miaka 18."
+      },
+      "attendance": {
+        "title": "Mahudhurio na hitilafu",
+        "description": "Orodha ya mahudhurio ya leo kwa njia ya kuingia, pamoja na foleni ya hitilafu: safari isiyowezekana, mipaka, saa iliyopotoka, kuingiza kwa mkono."
+      },
+      "payroll": {
+        "title": "Idhini ya mishahara na malipo ya M-Pesa",
+        "description": "Hatua za mtayarishaji na mkaguzi, ukaguzi wa salio, MFA ya ziada, kisha malipo ya B2C ya mfano yenye kosa moja na jina moja lisilolingana."
+      },
+      "portal": {
+        "title": "Lango la mteja",
+        "description": "Kwa mteja aliye nje ya nchi: maendeleo, picha zilizothibitishwa, idhini ya mabadiliko, sarafu za kigeni na malipo ya STK Push."
+      },
+      "site": {
+        "title": "Programu ya eneo (Android)",
+        "description": "Mifano ya wavuti ya programu inayofanya kazi bila mtandao: kioski cha uso, orodha ya msimamizi bila mtandao na hali ya usawazishaji."
+      }
+    },
+    "reviewTitle": "Mambo ya kuangalia",
+    "review": {
+      "look": "Mwonekano: msingi wa rangi tulivu pamoja na bluu ya kifalme, maandishi na nafasi.",
+      "density": "Ofisi: majedwali, vichujio, paneli za pembeni na utafutaji kwa kibodi (⌘K / Ctrl+K).",
+      "language": "Badilisha EN ↔ SW (juu kulia): kila lebo, hali na ujumbe unapaswa kubadilika.",
+      "dark": "Hali ya mwanga na giza, na usomekaji wa rangi za hali katika zote mbili.",
+      "mobile": "Mpangilio wa simu: lango la mteja na programu ya eneo (vitufe vikubwa, utofautishaji wa juu).",
+      "trust": "Ishara za uaminifu: picha zilizothibitishwa, data binafsi iliyofichwa, mtayarishaji-mkaguzi na MFA kwenye pesa."
+    },
+    "docsTitle": "Nyaraka za usanifu",
+    "docsIntro": "Zipo kwenye hazina, tawi phase-0/design-pack:"
+  },
+  "auth": {
+    "title": "Ingia",
+    "description": "Tumia barua pepe yako au nambari ya simu ya Kenya.",
+    "tagline": "Kila shilingi, kila mfanyakazi, kila eneo: vyote vinahesabiwa.",
+    "points": {
+      "mfa": "Kuingia kwa hatua mbili ni lazima kwa wamiliki, fedha na wasimamizi wa mfumo.",
+      "money": "Idhini za mtayarishaji-mkaguzi na malipo ya M-Pesa yanayothibitishwa na Safaricom.",
+      "offline": "Timu za eneo zinaendelea kufanya kazi bila mtandao. Rekodi husawazishwa mtandao ukirudi."
+    },
+    "footer": "Imetengenezwa kwa wakandarasi, wastawishaji na wanaojenga nyumba nchini Kenya.",
+    "emailTab": "Barua pepe",
+    "phoneTab": "Simu",
+    "email": "Barua pepe",
+    "phone": "Nambari ya simu",
+    "password": "Nenosiri",
+    "forgot": "Umesahau nenosiri?",
+    "resetToast": "Mfano: kiungo cha kubadilisha nenosiri kingetumwa kwa barua pepe au SMS.",
+    "showPassword": "Onyesha nenosiri",
+    "hidePassword": "Ficha nenosiri",
+    "continue": "Endelea",
+    "prototypeNote": "Mfano: thamani yoyote inafanya kazi. Kuingia halisi kunakuja katika D1.3.",
+    "phoneInvalid": "Weka nambari ya simu ya Kenya, kwa mfano 0712 345 678.",
+    "phoneNormalised": "Utaingia kama {phone}.",
+    "mfaTitle": "Uthibitisho wa hatua mbili",
+    "mfaDescription": "Weka msimbo wa tarakimu 6 kutoka programu yako ya uthibitishaji.",
+    "codeLabel": "Msimbo wa uthibitisho",
+    "codeHint": "Mfano: andika tarakimu zozote sita.",
+    "verify": "Thibitisha na uingie",
+    "or": "au",
+    "usePasskey": "Tumia passkey",
+    "passkeyToast": "Mfano: ombi la passkey la kifaa chako lingeonekana.",
+    "useSms": "Tuma msimbo kwa SMS badala yake",
+    "smsToast": "Mfano: msimbo ungetumwa kwa {phone}.",
+    "back": "Rudi",
+    "mfaRequiredNote": "Inahitajika kwa wadhifa wako"
+  },
+  "dashboard": {
+    "greeting": "Habari za asubuhi, {name}",
+    "subtitle": "Kila kitu katika miradi yako leo.",
+    "reviewApprovals": "Kagua idhini {count}",
+    "kpi": {
+      "cash": "Hali ya fedha",
+      "cashHint": "Imepanda {change} tangu wiki iliyopita · salio la M-Pesa {float}",
+      "spend": "Matumizi ya mwezi huu",
+      "spendHint": "{pct} ya mpango wa {plan}",
+      "workers": "Wafanyakazi eneo la kazi leo",
+      "workersHint": "Katika maeneo {sites}",
+      "approvals": "Zinasubiri idhini yako",
+      "approvalsHint": "{amount} za malipo"
+    },
+    "projectsTitle": "Miradi",
+    "projectsDescription": "Maendeleo, gharama na utendaji wa ratiba",
+    "viewAll": "Tazama yote",
+    "table": {
+      "project": "Mradi",
+      "progress": "Maendeleo",
+      "burn": "Bajeti iliyotumika",
+      "workers": "Wafanyakazi",
+      "health": "Hali"
+    },
+    "alertsTitle": "Tahadhari",
+    "alertsDescription": "{count, plural, one {Tahadhari # inahitaji} other {Tahadhari # zinahitaji}} kushughulikiwa",
+    "spendTitle": "Matumizi kwa aina",
+    "spendDescription": "Novemba 2026, miradi yote",
+    "cashFlowTitle": "Utabiri wa mtiririko wa fedha",
+    "cashFlowDescription": "Wiki sita zijazo: vyeti vinavyodaiwa dhidi ya mishahara, LPO na matumizi mengine",
+    "inflow": "Pesa inayoingia",
+    "outflow": "Pesa inayotoka",
+    "weekOf": "Wiki ya",
+    "mapTitle": "Maeneo",
+    "mapDescription": "Maeneo yanayoendelea na mipaka yake",
+    "upcomingTitle": "Malipo yajayo",
+    "upcomingDescription": "Siku 10 zijazo",
+    "payments": {
+      "payrollRuiru": "Mishahara PR-2026-W45 · Ruiru Heights",
+      "payrollKitengela": "Mishahara · Kitengela Bungalow",
+      "lpo42": "LPO-0042 · Thika Road Hardware",
+      "lpo45": "LPO-0045 · Juja Quarry Products",
+      "ipc3": "IPC-03 kutoka kwa mteja wa Kitengela"
+    },
+    "paymentStates": {
+      "awaitingApproval": "Inasubiri idhini",
+      "prepared": "Imeandaliwa",
+      "matched": "Imelinganishwa (njia 3)",
+      "blocked": "Imezuiwa",
+      "due": "Inaingia"
+    }
+  },
+  "projects": {
+    "title": "Miradi",
+    "description": "Miradi yote ya Jenga Bora Builders Ltd",
+    "newProject": "Mradi mpya",
+    "progress": "Maendeleo",
+    "planned": "iliyopangwa {pct}",
+    "contractSum": "Jumla ya mkataba (iliyorekebishwa)",
+    "client": "Mteja",
+    "workersToday": "Wafanyakazi {present} kati ya {total} wapo eneo la kazi leo",
+    "open": "Fungua mradi",
+    "openBq": "Fungua BQ",
+    "openPortal": "Tazama kama mteja"
+  },
+  "project": {
+    "breadcrumb": "Miradi",
+    "client": "Mteja",
+    "sectionsLabel": "Sehemu za mradi",
+    "tabs": {
+      "overview": "Muhtasari",
+      "bq": "BQ",
+      "labour": "Wafanyakazi",
+      "attendance": "Mahudhurio",
+      "payroll": "Mishahara"
+    },
+    "kpi": {
+      "progress": "Maendeleo halisi",
+      "progressHint": "Iliyopangwa {planned} · SPI {spi}",
+      "valueDone": "Thamani ya kazi iliyofanyika",
+      "valueDoneHint": "CPI {cpi}",
+      "contractSum": "Jumla ya mkataba iliyorekebishwa",
+      "contractSumHint": "Ya awali {original}",
+      "workers": "Wafanyakazi eneo la kazi leo",
+      "workersHint": "{issues, plural, one {Suala # lililo wazi} other {Masuala # yaliyo wazi}}"
+    },
+    "sCurveTitle": "S-curve",
+    "sCurveDescription": "Maendeleo ya jumla, yaliyopangwa dhidi ya halisi",
+    "planned": "Yaliyopangwa",
+    "actual": "Halisi",
+    "budgetTitle": "Bajeti kwa kila bill",
+    "budgetDescription": "Bajeti dhidi ya thamani iliyopatikana na gharama halisi (KES milioni)",
+    "budgetKitengela": "Data ya mfano ya BQ kwa kina iko kwenye Ruiru Heights. Mteja anaona mradi huu kwenye lango lake.",
+    "openPortal": "Fungua lango la mteja",
+    "budget": "Bajeti",
+    "earned": "Thamani iliyopatikana",
+    "actualCost": "Gharama halisi",
+    "bill": "Bill",
+    "milestonesTitle": "Hatua muhimu",
+    "milestoneStates": {
+      "done": "Imekamilika",
+      "at_risk": "Iko hatarini",
+      "upcoming": "Inakuja",
+      "in_progress": "Inaendelea"
+    },
+    "plannedDate": "Iliyopangwa {date}",
+    "actualDate": "halisi {date}",
+    "siteTitle": "Eneo na mipaka",
+    "siteDescription": "Mahudhurio nje ya mipaka ya mita {radius} hutiwa alama.",
+    "activityTitle": "Shughuli za karibuni",
+    "activity": {
+      "diarySubmitted": "Shajara ya {date} imewasilishwa na {name}",
+      "grnReceived": "{grn}: mifuko {qty} ya saruji imepokelewa kutoka {supplier} ({lpo})",
+      "voApproved": "{vo} imeidhinishwa na mteja ({amount})",
+      "payrollReviewed": "Mishahara {batch} imekaguliwa na {name}: inasubiri idhini ya mkurugenzi",
+      "inspectionPassed": "Ukaguzi wa {element} umepita ({name})"
+    },
+    "activityEmpty": "Hakuna shughuli za karibuni kwenye data ya mfano."
+  },
+  "milestones": {
+    "substructure": "Msingi wa jengo umekamilika",
+    "firstSlabs": "Sakafu za chini na ghorofa ya 1 zimemiminwa",
+    "secondSlab": "Sakafu ya ghorofa ya 2 imemiminwa",
+    "roofBeam": "Sakafu ya ghorofa ya 3 na boriti ya paa",
+    "roofCovered": "Paa limeezekwa",
+    "practicalCompletion": "Ukamilishaji wa kiutendaji",
+    "foundation": "Msingi umekamilika",
+    "ringBeam": "Kuta hadi boriti ya juu (ring beam)",
+    "plastering": "Upakaji lipu",
+    "finishes": "Umaliziaji na viungo",
+    "handover": "Makabidhiano"
+  },
+  "bq": {
+    "title": "Jedwali la Kiasi cha Kazi (BQ)",
+    "description": "Vipengele {items} · toleo {version} (la sasa) · limeandaliwa na QS, Faith Achieng",
+    "import": "Ingiza BQ",
+    "exportExcel": "Excel",
+    "exportPdf": "PDF",
+    "kpi": {
+      "original": "Jumla ya mkataba ya awali",
+      "originalHint": "Pamoja na dharura na VAT",
+      "variations": "Mabadiliko yaliyoidhinishwa",
+      "variationsHint": "{count, plural, one {Agizo # la mabadiliko} other {Maagizo # ya mabadiliko}}, pamoja na VAT",
+      "revised": "Jumla ya mkataba iliyorekebishwa",
+      "revisedHint": "Ya awali pamoja na mabadiliko yaliyoidhinishwa",
+      "done": "Thamani ya kazi iliyofanyika",
+      "doneHint": "{pct} ya kazi iliyopimwa"
+    },
+    "search": "Tafuta vipengele kwa maelezo au rejea",
+    "expandAll": "Fungua zote",
+    "collapseAll": "Funga zote",
+    "cols": {
+      "ref": "Rejea",
+      "description": "Maelezo",
+      "unit": "Kipimo",
+      "qty": "Kiasi",
+      "rate": "Bei (KES)",
+      "amount": "Jumla",
+      "done": "Imefanyika"
+    },
+    "billLabel": "Bill {number}",
+    "kinds": {
+      "preliminaries": "Maandalizi",
+      "measured": "Iliyopimwa",
+      "provisional": "Prov. na PC sums"
+    },
+    "noResults": "Hakuna vipengele vya BQ vinavyolingana na utafutaji wako.",
+    "billsTotal": "Jumla ya bills",
+    "summaryTitle": "Muhtasari",
+    "summaryDescription": "Muhtasari mkuu, unaopelekwa kwenye fomu ya zabuni",
+    "summary": {
+      "bills": "Jumla ya bills 1–9",
+      "contingency": "Dharura (contingencies)",
+      "subtotal": "Jumla ndogo",
+      "vat": "VAT ya {rate} (kutoka kwenye mipangilio)",
+      "contractSum": "Jumla ya mkataba"
+    },
+    "versionsTitle": "Matoleo",
+    "current": "La sasa",
+    "compare": "Linganisha matoleo",
+    "variationsTitle": "Maagizo ya mabadiliko",
+    "variationsDescription": "Kila moja limeunganishwa na agizo la msanifu majengo",
+    "voStatus": {
+      "approved": "Imeidhinishwa",
+      "awaiting_client": "Inasubiri mteja",
+      "draft": "Rasimu"
+    },
+    "exVat": "bila VAT"
+  },
+  "bqImport": {
+    "title": "Ingiza BQ kutoka Excel",
+    "description": "Miundo ya QS hutofautiana, kwa hivyo unalinganisha safu mara moja na kuhifadhi ulinganisho kama kiolezo.",
+    "stepsLabel": "Hatua za kuingiza",
+    "steps": {
+      "upload": "Pakia",
+      "sheet": "Karatasi na kichwa",
+      "map": "Linganisha safu",
+      "hierarchy": "Mpangilio",
+      "validate": "Thibitisha na uingize"
+    },
+    "help": {
+      "upload": "Pakia faili ya .xlsx ya QS. Inakaguliwa na kuhifadhiwa kwa faragha.",
+      "sheet": "Chagua karatasi za kuingiza na uthibitishe safu ya kichwa.",
+      "map": "Mwambie PM-Buddy safu ipi ina kila sehemu. Mistari iliyotambuliwa inaonyeshwa hapa chini.",
+      "hierarchy": "Kanuni zinazogeuza mistari kuwa Bill → Sehemu → Kipengele.",
+      "validate": "Kila jumla ya bill inakokotolewa upya kutoka kiasi × bei na kulinganishwa na karatasi."
+    },
+    "uploadedBy": "imepakiwa na {name}",
+    "scanned": "Imekaguliwa: hakuna hatari",
+    "rules": {
+      "xlsxOnly": "Faili za .xlsx pekee. Kikomo cha ukubwa kinaweza kubadilishwa.",
+      "private": "Faili huhifadhiwa kwa faragha na kufunguliwa kwa viungo vya muda mfupi."
+    },
+    "sheet": "Karatasi",
+    "allBillSheets": "Karatasi zote za bills ({count})",
+    "headerDetected": "Safu ya kichwa imegunduliwa kwenye mstari wa {row}.",
+    "useTemplate": "Tumia kiolezo cha ulinganisho kilichohifadhiwa",
+    "templateName": "“Mwangi & Associates QS format”, kilitumika mwisho kwa Kitengela Bungalow",
+    "column": "Safu {letter}",
+    "fields": {
+      "itemRef": "Rejea ya kipengele",
+      "description": "Maelezo",
+      "unit": "Kipimo",
+      "quantity": "Kiasi",
+      "rate": "Bei",
+      "amount": "Jumla",
+      "ignore": "Puuza"
+    },
+    "detected": "Imetambuliwa kama",
+    "roles": {
+      "bill": "Bill",
+      "section": "Sehemu",
+      "collection": "Jumla ndogo",
+      "item": "Kipengele"
+    },
+    "hierarchy": {
+      "bill": "Mistari inayoanza na “BILL NO.” huanzisha bill mpya",
+      "section": "Mistari ya HERUFI KUBWA isiyo na kiasi ni vichwa vya sehemu",
+      "collection": "“Carried to Collection” na mistari ya muhtasari ni jumla ndogo: hukaguliwa, haziingizwi",
+      "lumpSum": "Vipengele vyenye kipimo Sum au Item bila kiasi ni jumla za mkupuo, za muda au PC"
+    },
+    "treePreview": "Matokeo",
+    "counts": {
+      "bills": "Bills",
+      "sections": "Sehemu",
+      "items": "Vipengele"
+    },
+    "mismatchTitle": "Mstari 1 unahitaji uamuzi",
+    "mismatchDetail": "Bill 2, mstari 23 (zege kwenye boriti za ardhini): karatasi inasema {sheet} lakini kiasi × bei ni {computed}. Inaonekana ni kosa la kuandika.",
+    "resolution": {
+      "computed": "Tumia kiasi × bei (inapendekezwa)",
+      "sheet": "Baki na jumla iliyoandikwa kwenye karatasi",
+      "flag": "Muulize QS athibitishe kabla ya kuingiza"
+    },
+    "billCol": "Bill",
+    "sheetTotal": "Jumla ya karatasi",
+    "computedTotal": "Jumla iliyokokotolewa",
+    "result": "Matokeo",
+    "match": "Zinalingana",
+    "diff": "Tofauti ya {amount}",
+    "grandTotal": "Jumla ya bills",
+    "pendingQs": "Inasubiri QS",
+    "reconciled": "Zimeoanishwa",
+    "cancel": "Ghairi",
+    "back": "Rudi",
+    "next": "Endelea",
+    "importDraft": "Ingiza kama toleo {version} (rasimu)",
+    "importedToast": "Mfano: toleo {version} lingeundwa kama rasimu kwa idhini ya QS (D2.2)."
+  },
+  "labour": {
+    "title": "Wafanyakazi",
+    "description": "Wafanyakazi waliosajiliwa, vikundi na hali ya leo",
+    "kpi": {
+      "active": "Wafanyakazi hai",
+      "activeHint": "Katika vikundi {gangs}",
+      "onSite": "Wapo eneo la kazi leo",
+      "onSiteHint": "{late} wamechelewa",
+      "consent": "Ridhaa ya bayometriki",
+      "consentHint": "{declined} wanatumia kadi + picha",
+      "expiring": "Vibali vinavyoisha",
+      "expiringHint": "Ndani ya siku {days}"
+    },
+    "views": {
+      "all": "Wote",
+      "onSite": "Wapo leo",
+      "expiring": "Kibali kinaisha",
+      "declined": "Kadi + picha pekee",
+      "nearThreshold": "Karibu na kikomo cha kibarua"
+    },
+    "search": "Tafuta kwa jina au nambari ya mfanyakazi",
+    "allTrades": "Fani zote",
+    "selected": "{count} wamechaguliwa",
+    "bulkToast": "Mfano: vitendo vya pamoja vinakuja katika {deliverable}.",
+    "bulk": {
+      "assignGang": "Weka kwenye kikundi",
+      "sms": "Tuma SMS",
+      "clear": "Futa"
+    },
+    "selectAll": "Chagua wote",
+    "selectWorker": "Chagua {name}",
+    "cols": {
+      "worker": "Mfanyakazi",
+      "trade": "Fani",
+      "gang": "Kikundi",
+      "rate": "Kiwango cha siku",
+      "phone": "Nambari ya M-Pesa",
+      "today": "Leo",
+      "flags": "Alama"
+    },
+    "status": {
+      "absent": "Hayupo",
+      "flagged": "Ametiwa alama",
+      "onSite": "Yupo"
+    },
+    "flags": {
+      "expiring": "Kadi ya NCA inaisha",
+      "qrOnly": "Kadi + picha",
+      "threshold": "Karibu na kikomo"
+    },
+    "empty": "Hakuna wafanyakazi wanaolingana na vichujio hivi.",
+    "register": {
+      "open": "Sajili mfanyakazi",
+      "title": "Sajili mfanyakazi",
+      "description": "Hatua ya 1 kati ya 3: taarifa binafsi. Ridhaa na usajili wa kadi au bayometriki vinafuata.",
+      "name": "Jina kamili (kama kwenye kitambulisho)",
+      "idNumber": "Nambari ya kitambulisho",
+      "dob": "Tarehe ya kuzaliwa",
+      "dobHint": "Wafanyakazi lazima wawe na miaka 18 au zaidi.",
+      "underage": "Usajili umezuiwa: mtu huyu ana miaka {age}. Wafanyakazi lazima wawe na miaka 18 au zaidi.",
+      "phone": "Nambari ya simu ya M-Pesa",
+      "phoneNormalised": "Itahifadhiwa kama {phone}",
+      "phoneInvalid": "Weka nambari halali ya simu ya Kenya.",
+      "trade": "Fani",
+      "rate": "Kiwango cha siku (KES)",
+      "rateHint": "Kiwango cha kawaida cha mradi kwa fani hii kitatumika ikiachwa wazi.",
+      "encryptionNote": "Nambari za vitambulisho, simu na KRA PIN zimesimbwa kwa njia fiche. Ni wasimamizi pekee wanaoweza kuzifichua, na kila ufichuzi hurekodiwa.",
+      "cancel": "Ghairi",
+      "next": "Endelea: ridhaa",
+      "savedToast": "Mfano: hatua inayofuata ingechukua ridhaa (D3.1)."
+    },
+    "detail": {
+      "identity": "Utambulisho",
+      "idNumber": "Nambari ya kitambulisho",
+      "reveal": "Fichua",
+      "revealToast": "Ufikiaji umerekodiwa kwenye kumbukumbu ya ukaguzi.",
+      "phone": "Nambari ya M-Pesa",
+      "dob": "Tarehe ya kuzaliwa",
+      "county": "Kaunti ya nyumbani",
+      "engagement": "Ajira",
+      "type": "Aina",
+      "engagementTypes": {
+        "casual": "Kibarua",
+        "term": "Mkataba wa muda"
+      },
+      "rate": "Kiwango cha siku",
+      "gang": "Kikundi",
+      "joined": "Alijiunga",
+      "thresholdWarning": "Ameajiriwa mfululizo kwa siku {days}. Kagua ubadilishaji kutoka kibarua kuwa mkataba (kikomo kinaweza kubadilishwa na kinahitaji ukaguzi wa kisheria).",
+      "ledger": "Wiki hii ya malipo (PR-2026-W45)",
+      "days": "Siku alizofanya kazi",
+      "gross": "Mshahara ghafi",
+      "advances": "Malipo ya awali yaliyorejeshwa",
+      "net": "Mshahara halisi",
+      "compliance": "Uzingatiaji",
+      "accreditation": "Kadi ya NCA inaisha",
+      "notApplicable": "Haihitajiki",
+      "consent": "Ridhaa ya bayometriki",
+      "consentGranted": "Imetolewa (uso)",
+      "consentDeclined": "Imekataliwa: kadi + picha",
+      "consentNote": "Ridhaa ilirekodiwa kwa Kiswahili na kusomwa kwa sauti mbele ya shahidi. Mfanyakazi anaweza kuiondoa wakati wowote bila adhabu.",
+      "managersOnly": "Inaonekana kwa wasimamizi pekee",
+      "doNotRehire": "Asiajiriwe tena",
+      "dnrToast": "Mfano: sababu ingehitajika na mabadiliko yangekaguliwa.",
+      "dnrNote": "Inahitaji sababu iliyoandikwa. Ni wasimamizi pekee wanaoweza kuiona."
+    }
+  },
+  "trades": {
+    "foreman": "Msimamizi (foreman)",
+    "mason": "Fundi mwashi",
+    "steel_fixer": "Fundi chuma",
+    "carpenter": "Seremala",
+    "plumber": "Fundi bomba",
+    "electrician": "Fundi umeme",
+    "welder": "Fundi wa kuchomelea",
+    "plasterer": "Fundi lipu",
+    "machine_operator": "Mwendeshaji mashine",
+    "watchman": "Mlinzi",
+    "general_labourer": "Kibarua"
+  },
+  "skills": {
+    "skilled": "Mwenye ujuzi",
+    "semi_skilled": "Ujuzi wa kati",
+    "unskilled": "Asiye na ujuzi"
+  },
+  "attendance": {
+    "title": "Mahudhurio",
+    "description": "Orodha ya mahudhurio ya leo. Wanaoingia baada ya {lateAfter} wanahesabiwa kuchelewa. Hitilafu zinahitaji uamuzi.",
+    "kpi": {
+      "present": "Waliopo",
+      "presentHint": "Wameingia leo",
+      "late": "Wamechelewa",
+      "lateHint": "Baada ya {time}",
+      "absent": "Hawapo",
+      "absentHint": "Hawajaingia bado",
+      "anomalies": "Hitilafu",
+      "anomaliesHint": "{critical} za hatari"
+    },
+    "tabs": {
+      "muster": "Orodha ya mahudhurio",
+      "anomalies": "Hitilafu"
+    },
+    "gangFilter": "Chuja kwa kikundi",
+    "allGangs": "Vikundi vyote",
+    "cols": {
+      "worker": "Mfanyakazi",
+      "in": "Kuingia",
+      "out": "Kutoka",
+      "method": "Njia",
+      "confidence": "Ulinganifu",
+      "geofence": "Mipaka",
+      "device": "Kifaa",
+      "flags": "Alama"
+    },
+    "gang": "Kikundi {gang}",
+    "nightShift": "zamu ya usiku",
+    "absent": "Hayupo",
+    "methods": {
+      "face_kiosk": "Uso (kioski)",
+      "qr_card_photo": "Kadi + picha",
+      "manual_override": "Kuingiza kwa mkono"
+    },
+    "inside": "Ndani",
+    "outside": "Mita {distance} nje",
+    "kinds": {
+      "impossible_travel": "Safari isiyowezekana",
+      "outside_geofence": "Nje ya mipaka",
+      "clock_drift": "Saa imepotoka",
+      "manual_override": "Kuingiza kwa mkono",
+      "duplicate": "Kuingia mara mbili",
+      "low_confidence": "Ulinganifu mdogo"
+    },
+    "severity": {
+      "critical": "Hatari",
+      "warning": "Onyo",
+      "info": "Taarifa"
+    },
+    "autoResolved": "Imetatuliwa kiotomatiki",
+    "decisions": {
+      "accepted": "Imekubaliwa",
+      "rejected": "Imekataliwa"
+    },
+    "details": {
+      "impossible_travel": "Aliingia {siteA} saa {timeA} na {siteB} saa {timeB}: umbali wa km {km} ndani ya dakika {minutes}.",
+      "outside_geofence": "Aliingia mita {distance} nje ya eneo (usahihi wa GPS ±mita {accuracy}) kwenye {device}.",
+      "clock_drift": "Kifaa {device} kilikuwa nyuma ya saa ya seva kwa dakika {minutes}. Matukio {events} yamerekebishwa na kutiwa alama.",
+      "manual_override": "Ameingizwa kwa mkono na {by}. Sababu: “{reason}”.",
+      "duplicate": "Kuingia mara mbili saa {first} na {second}. Cha kwanza kimehifadhiwa.",
+      "low_confidence": "Ulinganifu wa uso {score} ulikuwa chini ya kiwango cha {threshold}. Imethibitishwa kwa kadi ya mfanyakazi na msimamizi."
+    },
+    "notePlaceholder": "Maelezo ya ukaguzi (yanahitajika ili kukataa)",
+    "accept": "Kubali",
+    "reject": "Kataa",
+    "noteRequired": "Ongeza maelezo kabla ya kukataa.",
+    "acceptedToast": "Hitilafu imekubaliwa na kurekodiwa kwenye kumbukumbu ya ukaguzi.",
+    "rejectedToast": "Hitilafu imekataliwa. Rekodi imeondolewa kwenye karatasi ya saa."
+  },
+  "payroll": {
+    "title": "Mishahara {batch}",
+    "description": "Mishahara ya wiki ya {start} – {end}",
+    "awaitingApproval": "Inasubiri idhini yako",
+    "stagePaying": "Inalipa…",
+    "stageDone": "Imelipwa: 2 zinahitaji ukaguzi",
+    "steps": {
+      "prepared": "Imeandaliwa",
+      "reviewed": "Imekaguliwa na fedha",
+      "approved": "Imeidhinishwa (MFA)",
+      "disbursed": "Imelipwa kwa M-Pesa"
+    },
+    "waitingForYou": "Inakusubiri",
+    "summaryTitle": "Muhtasari wa kundi",
+    "summaryDescription": "Wafanyakazi {workers} · malipo kwa M-Pesa B2C (malipo ya mshahara)",
+    "summary": {
+      "gross": "Mshahara ghafi",
+      "statutory": "Makato ya kisheria",
+      "advances": "Malipo ya awali yaliyorejeshwa",
+      "net": "Jumla ya kulipwa",
+      "charges": "Makadirio ya ada za M-Pesa",
+      "required": "Salio linalohitajika"
+    },
+    "illustrative": "Makato haya ni ya mfano tu. Injini ya makato ya kisheria (PAYE, NSSF, SHIF, Housing Levy) inakuja katika D4.1 na itatumia kanuni zenye matoleo na tarehe za kuanza kutumika, zinazohitaji ukaguzi wa kisheria.",
+    "checksTitle": "Ukaguzi kabla ya idhini",
+    "checks": {
+      "float": "Salio la M-Pesa la {float} linatosha malipo na ada",
+      "limit": "Ndani ya kikomo chako cha idhini cha {limit}",
+      "makerChecker": "Imeandaliwa, kukaguliwa na kuidhinishwa na watu tofauti",
+      "timesheets": "Karatasi zote 40 za saa zimeidhinishwa na kufungwa"
+    },
+    "approve": "Idhinisha na ulipe",
+    "return": "Rudisha",
+    "returnedToast": "Mfano: kundi lingerudishwa kwa fedha pamoja na maoni yako.",
+    "disbursingTitle": "Inatuma malipo…",
+    "doneTitle": "Malipo yamekamilika",
+    "progress": "{confirmed} kati ya {total} yamethibitishwa na M-Pesa · {failed} yameshindwa",
+    "doneToast": "Malipo yamekamilika: moja limeshindwa na jina moja halilingani; yanahitaji ukaguzi.",
+    "failedTitle": "{count, plural, one {Malipo # yameshindwa} other {Malipo # yameshindwa}}",
+    "failedDetail": "Ukaguzi wa hali ya muamala umethibitisha kuwa hakuna kilichotumwa. Ni salama kujaribu tena baada ya nambari ya mfanyakazi kusahihishwa.",
+    "mismatchTitle": "{count, plural, one {Jina # halilingani} other {Majina # hayalingani}}",
+    "mismatchDetail": "Jina lililorudishwa na M-Pesa halilingani na mfanyakazi aliyesajiliwa. Malipo yajayo kwa nambari hii yamesimamishwa hadi msimamizi akague.",
+    "cols": {
+      "worker": "Mfanyakazi",
+      "days": "Siku",
+      "ot": "Saa za ziada",
+      "gross": "Ghafi",
+      "statutory": "Kisheria",
+      "advance": "Malipo ya awali",
+      "net": "Halisi",
+      "mpesa": "Nambari ya M-Pesa",
+      "status": "Hali",
+      "receipt": "Risiti"
+    },
+    "statuses": {
+      "pending": "Inasubiri",
+      "sent": "Imetumwa",
+      "confirmed": "Imethibitishwa",
+      "failed": "Imeshindwa",
+      "reversed": "Imerejeshwa"
+    },
+    "nameOnMpesa": "Jina kwenye M-Pesa: {name}",
+    "failedReason": "Haikuwekwa: tatizo la akaunti ya mpokeaji",
+    "totals": "Jumla",
+    "stepUpTitle": "Thibitisha kwa programu yako ya uthibitishaji",
+    "stepUpDescription": "Unaidhinisha {batch}: {amount} kwa wafanyakazi {workers}.",
+    "codeLabel": "Msimbo wa uthibitishaji",
+    "stepUpNote": "Idhini hii imefungwa kwa kundi hili na kiasi hiki. Msimbo wa idhini moja hauwezi kutumika kwa nyingine.",
+    "cancel": "Ghairi",
+    "confirmApprove": "Idhinisha na ulipe",
+    "approvedToast": "Imeidhinishwa. Malipo yamepangwa na yatathibitishwa tu M-Pesa ikijibu."
+  },
+  "soon": {
+    "phase": "Inakuja katika Awamu ya {phase}",
+    "back": "Rudi kwenye dashibodi",
+    "sections": {
+      "valuations": {
+        "title": "Tathmini na vyeti",
+        "description": "Maendeleo yanayopimwa dhidi ya BQ, thamani iliyopatikana, tathmini za muda, vyeti vya malipo na fedha zinazozuiliwa (retention)."
+      },
+      "diary": {
+        "title": "Shajara ya eneo",
+        "description": "Shajara ya kila siku yenye wafanyakazi kutoka kwenye mahudhurio, picha zenye mahali, ucheleweshaji, ukaguzi na kusainiwa."
+      },
+      "materials": {
+        "title": "Vifaa na ununuzi",
+        "description": "Ombi → RFQ → LPO → upokeaji → ankara yenye eTIMS → ulinganisho wa njia tatu → malipo."
+      },
+      "stores": {
+        "title": "Stoo",
+        "description": "Leja ya bidhaa kwa kila eneo, utoaji kwa vipengele vya BQ, uhamisho, kuhesabu bidhaa na tahadhari za tofauti kati ya matumizi yanayotarajiwa na halisi."
+      },
+      "plant": {
+        "title": "Mitambo na vifaa",
+        "description": "Mitambo inayomilikiwa na ya kukodi, matumizi, utoaji na matumizi ya mafuta, kuharibika na matengenezo."
+      },
+      "safety": {
+        "title": "Afya na usalama",
+        "description": "Mafunzo ya utangulizi, mazungumzo ya usalama, daftari la PPE, ajali na karibu-ajali, na hatua za kurekebisha."
+      },
+      "payments": {
+        "title": "Kituo cha malipo",
+        "description": "Kila ombi na jibu la M-Pesa, kuoanisha na taarifa za akaunti, majibu yasiyolingana na marejesho."
+      },
+      "spending": {
+        "title": "Matumizi na mtiririko wa fedha",
+        "description": "Pesa ndogo, matumizi yenye risiti, kisomaji cha SMS za M-Pesa, bajeti dhidi ya halisi na ahadi, na utabiri."
+      },
+      "documents": {
+        "title": "Nyaraka na daftari la uzingatiaji",
+        "description": "Michoro, mikataba na vibali vyenye matoleo, pamoja na daftari la uzingatiaji lenye vikumbusho vya kuisha muda."
+      },
+      "reports": {
+        "title": "Ripoti",
+        "description": "Orodha ya mahudhurio, mishahara, leja, stoo, tathmini, gharama na ripoti za kuoanisha, kwa PDF na Excel."
+      },
+      "settings": {
+        "title": "Mipangilio",
+        "description": "Kampuni, watumiaji na majukumu, MFA na vipindi, kanuni za mipangilio na kumbukumbu ya ukaguzi."
+      }
+    }
+  },
+  "portal": {
+    "portalName": "Lango la mteja",
+    "welcome": "Karibu tena, {name}",
+    "currency": "Sarafu ya kuonyesha",
+    "fxNote": "Viwango vya makadirio kufikia {asOf} EAT. Malipo daima ni kwa KES.",
+    "progressLabel": "{pct}% imekamilika",
+    "onTrack": "Kwa wakati",
+    "progressSummary": "Nyumba yako iko kwenye ratiba (iliyopangwa: {planned}%).",
+    "contractSum": "Jumla ya mkataba",
+    "handover": "Makabidhiano yaliyopangwa",
+    "voTitle": "Uamuzi wako unahitajika",
+    "voDescription": "{number} kutoka agizo {instruction} la {architect}, lililotolewa {date}",
+    "voBody": "Kubadilisha vigae vya sakafu ya sebule na korido kutoka seramiki hadi porcelain ya 600 × 600 mm.",
+    "inclVat": "pamoja na VAT",
+    "voCommentPlaceholder": "Maoni kwa mkandarasi (yanahitajika ili kukataa)",
+    "approve": "Idhinisha",
+    "reject": "Kataa",
+    "voApprovedToast": "Mabadiliko yameidhinishwa. Mkandarasi amearifiwa.",
+    "voReasonRequired": "Tafadhali ongeza maoni yanayoeleza kwa nini unakataa.",
+    "voRejectedToast": "Mabadiliko yamekataliwa. Maoni yako yametumwa kwa mkandarasi.",
+    "voApprovedNote": "Umeidhinisha {number}. Sasa yamo kwenye jumla ya mkataba iliyorekebishwa.",
+    "voRejectedNote": "Umekataa {number}. Mkandarasi atajibu maoni yako.",
+    "photosTitle": "Picha za maendeleo",
+    "photosDescription": "Zimepigwa eneo la kazi na timu ya eneo",
+    "photos": {
+      "internalPlaster": "Upakaji lipu wa ndani",
+      "windowFrames": "Fremu za madirisha zimewekwa",
+      "roofSheets": "Mabati yameezekwa",
+      "roofTrusses": "Kenchi za paa zimewekwa",
+      "septicTank": "Uchimbaji wa tanki la maji taka",
+      "ringBeam": "Boriti ya juu imemiminwa"
+    },
+    "verified": "Imethibitishwa eneo la kazi",
+    "unverified": "Mahali hapajathibitishwa",
+    "verifiedExplainer": "“Imethibitishwa eneo la kazi” inamaanisha GPS ya picha ilikuwa ndani ya mipaka ya eneo na muda wake ulilingana na seva yetu ilipopakiwa. Picha zinazoshindwa ukaguzi wowote hutiwa alama, hazifichwi kamwe.",
+    "dueTitle": "Malipo yanayodaiwa",
+    "dueDescription": "Cheti {number}, mwisho {date}",
+    "payInKes": "Kulipwa kwa KES: {amount}",
+    "partPaid": "{amount} zimepokelewa. Asante.",
+    "payMpesa": "Lipa kwa M-Pesa",
+    "payOther": "Uhamisho wa benki au Paybill",
+    "paybill": "Paybill",
+    "account": "Akaunti",
+    "bankNote": "Maelezo ya benki yapo kwenye PDF ya cheti. Malipo huunganishwa na cheti chako kiotomatiki.",
+    "milestonesTitle": "Hatua muhimu",
+    "completedOn": "Imekamilika {date}",
+    "plannedFor": "Imepangwa {date}",
+    "weekTitle": "Wiki hii eneo la kazi",
+    "weekWorkers": "Wastani wa wafanyakazi {count} kwa siku",
+    "weekPlaster": "Upakaji lipu wa ndani umefikia {pct}%",
+    "weekRain": "{days, plural, one {Siku # imepotea} other {Siku # zimepotea}} kwa sababu ya mvua",
+    "historyTitle": "Vyeti",
+    "certStatus": {
+      "paid": "Imelipwa",
+      "due": "Inadaiwa"
+    },
+    "stk": {
+      "title": "Lipa kwa M-Pesa",
+      "description": "Tutatuma ombi la malipo kwa simu iliyo hapa chini kwa cheti {reference}.",
+      "phone": "Nambari ya simu ya M-Pesa",
+      "willPrompt": "Ombi litaenda kwa {phone}",
+      "phoneInvalid": "Weka nambari ya M-Pesa ya Kenya.",
+      "amount": "Kiasi (KES)",
+      "overLimit": "Kinazidi kikomo cha M-Pesa cha {limit} kwa muamala mmoja. Lipa kwa awamu au tumia uhamisho wa benki.",
+      "invalidAmount": "Weka kiasi kisichozidi {max}.",
+      "limitNote": "Kikomo cha M-Pesa kwa muamala: {limit} (kimewekwa kwenye mipangilio).",
+      "cancel": "Ghairi",
+      "send": "Tuma ombi la malipo",
+      "waitingTitle": "Angalia simu yako",
+      "waitingBody": "Weka PIN yako ya M-Pesa kwenye simu. Tunaweka alama ya kulipwa tu baada ya Safaricom kuthibitisha.",
+      "confirmedTitle": "{amount} zimepokelewa",
+      "confirmedBody": "Imethibitishwa na M-Pesa. Risiti imetumwa kwa barua pepe na SMS.",
+      "done": "Sawa"
+    }
+  },
+  "site": {
+    "title": "Programu ya eneo (Android): mifano",
+    "subtitle": "Mifano ya wavuti ya Awamu ya 0 ya programu ya Expo inayofanya kazi bila mtandao, itakayojengwa katika D3.2. Vitufe vikubwa na utofautishaji wa juu kwa matumizi ya nje.",
+    "captions": {
+      "kiosk": "Kompyuta kibao ya eneo katika hali ya kioski: kuingia kwa uso na ukaguzi wa uhai, ikilinganishwa tu na orodha ya eneo hili. Maelekezo ni kwa Kiingereza na Kiswahili.",
+      "muster": "Simu ya msimamizi bila mtandao: mahudhurio yanaendelea kurekodiwa, yakihifadhiwa kwa usimbaji fiche na sahihi kwenye simu.",
+      "sync": "Hali ya usawazishaji: hakuna kinachopotea kimyakimya. Ukaguzi wa saa hugundua saa ya kifaa iliyochezewa."
+    },
+    "kiosk": {
+      "header": "Ruiru Heights · Lango A",
+      "synced": "Imesawazishwa 07:10",
+      "result": "Fundi mwashi · Kikundi B · aliingia 07:02 · ulinganifu 0.96 · ndani ya eneo",
+      "checkIn": "Ingia",
+      "checkOut": "Toka"
+    },
+    "muster": {
+      "offline": "Nje ya mtandao: rekodi {count} zimehifadhiwa kwenye simu hii. Zitasawazishwa kiotomatiki.",
+      "gang": "Kikundi B: uashi na lipu",
+      "today": "Jumanne, 10/11/2026",
+      "in": "{count} wameingia",
+      "notYet": "{count} bado",
+      "absent": "{count, plural, one {# hayupo} other {# hawapo}}",
+      "statusAbsent": "Hayupo",
+      "statusNotYet": "Bado hajaingia",
+      "statusIn": "Aliingia {time} · uso",
+      "card": "Kadi",
+      "nav": "Sehemu za programu"
+    },
+    "tabs": {
+      "muster": "Mahudhurio",
+      "diary": "Shajara",
+      "stores": "Stoo",
+      "sync": "Sawazisha"
+    },
+    "sync": {
+      "title": "Hali ya usawazishaji",
+      "lastSynced": "Ilisawazishwa mwisho leo saa {time}",
+      "waiting": "Zinasubiri kusawazishwa",
+      "attendance": "Rekodi za mahudhurio",
+      "grn": "Upokeaji (GRN)",
+      "photos": "Picha",
+      "clockTitle": "Saa ya kifaa iko sawa",
+      "clockBody": "Ndani ya sekunde 8 za saa ya seva wakati wa usawazishaji wa mwisho.",
+      "deviceTitle": "Kifaa kilichosajiliwa",
+      "deviceBody": "KIOSK-RU-01 · Ruiru Heights, Lango A",
+      "securityTitle": "Imesimbwa na kusainiwa",
+      "securityBody": "Rekodi zimesimbwa fiche kwenye kifaa hiki na kusainiwa kwa ufunguo wake.",
+      "syncNow": "Sawazisha sasa",
+      "autoNote": "Husawazisha kiotomatiki mtandao ukirudi."
+    },
+    "footnote": "Programu halisi: React Native (Expo) yenye SQLite iliyosimbwa, injini ya usawazishaji ya chinichini na hali ya kioski. Utaweza kuijaribu kwenye simu yako ya Android kuanzia D3.2."
+  }
+}

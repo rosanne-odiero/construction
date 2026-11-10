@@ -1,0 +1,908 @@
+{
+  "meta": {
+    "description": "PM-Buddy: construction project management for Kenya. Phase 0 clickable prototype with mock data."
+  },
+  "prototype": {
+    "banner": "Phase 0 prototype: mock data only, nothing is saved or sent.",
+    "tourLink": "Prototype tour",
+    "actionToast": "Prototype: this action is designed but arrives in {deliverable}."
+  },
+  "common": {
+    "language": "Language",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "nav": {
+    "groups": {
+      "overview": "Overview",
+      "commercial": "Commercial",
+      "site": "Site",
+      "finance": "Finance",
+      "records": "Records",
+      "previews": "Previews"
+    },
+    "items": {
+      "dashboard": "Dashboard",
+      "projects": "Projects",
+      "bq": "BQ and variations",
+      "valuations": "Valuations",
+      "labour": "Labour",
+      "attendance": "Attendance",
+      "diary": "Site diary",
+      "materials": "Materials",
+      "stores": "Stores",
+      "plant": "Plant",
+      "safety": "Health and safety",
+      "payroll": "Payroll",
+      "payments": "Payments",
+      "spending": "Spending",
+      "documents": "Documents",
+      "reports": "Reports",
+      "clientPortal": "Client portal",
+      "siteApp": "Site app",
+      "settings": "Settings",
+      "tour": "Prototype tour"
+    },
+    "phase": "Phase {phase}"
+  },
+  "command": {
+    "title": "Search",
+    "placeholder": "Search pages, projects, workers…",
+    "empty": "No results found.",
+    "pages": "Pages",
+    "projects": "Projects",
+    "workers": "Workers"
+  },
+  "topbar": {
+    "notifications": "Notifications ({count})",
+    "alertsTitle": "Alerts",
+    "account": "Account menu",
+    "role": "Director",
+    "profile": "Profile",
+    "security": "Security and MFA",
+    "signOut": "Sign out"
+  },
+  "alerts": {
+    "materialVariance": "Cement issued is {pct}% above theoretical use for Bill {bill} frame (week {week}).",
+    "impossibleTravel": "{name} checked in at two sites {km} km apart within {minutes} minutes.",
+    "budgetThreshold": "{pct}% of the Bill {bill} budget has been spent.",
+    "unusualPayout": "Unusual payout: {amount} to a new recipient ({phone}).",
+    "etimsMissing": "Invoice {invoice} from {supplier} has no eTIMS number. Payment is blocked.",
+    "accreditationExpiry": "{count, plural, one {# NCA accreditation card expires} other {# NCA accreditation cards expire}} within {days} days.",
+    "documentExpiry": "The Contractor’s All Risk policy expires on {date}."
+  },
+  "severity": {
+    "critical": "Critical",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "health": {
+    "on_track": "On track",
+    "at_risk": "At risk",
+    "behind": "Behind"
+  },
+  "categories": {
+    "materials": "Materials",
+    "labour": "Labour",
+    "plant": "Plant",
+    "subcontract": "Subcontract",
+    "preliminaries": "Preliminaries",
+    "transport": "Transport",
+    "pettyCash": "Petty cash",
+    "mpesaCharges": "M-Pesa charges"
+  },
+  "tour": {
+    "eyebrow": "Deliverable D0 · Phase 0 design",
+    "title": "PM-Buddy clickable prototype",
+    "intro": "Every screen uses realistic mock data for a Kenyan contractor with two projects. Nothing is saved or sent. Use it to review the look and feel, layout and key workflows before we build the real thing in Phase 1.",
+    "start": "Start at sign-in",
+    "skipToDashboard": "Go to the dashboard",
+    "screensTitle": "Screens to review",
+    "screens": {
+      "signIn": {
+        "title": "Sign-in and MFA",
+        "description": "Email or phone sign-in, phone normalisation to 2547…, then a TOTP step with passkey and SMS fallbacks."
+      },
+      "dashboard": {
+        "title": "Owner dashboard",
+        "description": "Cash, spend, labour on site and approvals; projects with CPI/SPI; alerts; spend and cash-flow charts; sites map."
+      },
+      "project": {
+        "title": "Project overview",
+        "description": "Ruiru Heights: S-curve, budget vs earned vs actual by bill, milestones, geofenced site and activity."
+      },
+      "bq": {
+        "title": "Bill of Quantities",
+        "description": "Bill → Section → Item tree with progress, totals, VAT, original vs revised contract sum and variation orders."
+      },
+      "bqImport": {
+        "title": "BQ import mapping",
+        "description": "Five-step Excel import: sheet and header detection, column mapping, hierarchy rules and totals reconciliation."
+      },
+      "labour": {
+        "title": "Labour registry",
+        "description": "Saved views, bulk actions, masked IDs and phones, worker side panel, under-18 registration block."
+      },
+      "attendance": {
+        "title": "Attendance and anomalies",
+        "description": "Today’s muster roll by capture method, plus the anomaly queue: impossible travel, geofence, clock drift, overrides."
+      },
+      "payroll": {
+        "title": "Payroll approval and M-Pesa payout",
+        "description": "Maker-checker steps, float check, step-up MFA, then a simulated bulk B2C payout with a failure and a name mismatch."
+      },
+      "portal": {
+        "title": "Client portal",
+        "description": "For a diaspora client: progress, verified photos, variation approval, FX display and STK Push payment."
+      },
+      "site": {
+        "title": "Site app (Android)",
+        "description": "Web mock-ups of the offline-first site app: face kiosk, foreman’s offline muster roll and sync status."
+      }
+    },
+    "reviewTitle": "What to look for",
+    "review": {
+      "look": "Look and feel: neutral base with a royal blue accent, typography and spacing.",
+      "density": "Office density: tables, filters, side panels and keyboard search (⌘K / Ctrl+K).",
+      "language": "Switch EN ↔ SW (top right): every label, status and message should change.",
+      "dark": "Light and dark mode, and readability of status colours in both.",
+      "mobile": "Mobile layouts: client portal and site app (large touch targets, high contrast).",
+      "trust": "Trust signals: verified photos, masked personal data, maker-checker and MFA on money."
+    },
+    "docsTitle": "Design documents",
+    "docsIntro": "These are in the repository on branch phase-0/design-pack:"
+  },
+  "auth": {
+    "title": "Sign in",
+    "description": "Use your email or Kenyan phone number.",
+    "tagline": "Every shilling, every worker, every site, accounted for.",
+    "points": {
+      "mfa": "Multi-factor sign-in is mandatory for owners, finance and admins.",
+      "money": "Maker-checker approvals and M-Pesa payouts confirmed by Safaricom.",
+      "offline": "Site teams keep working offline. Records sync when the network returns."
+    },
+    "footer": "Made for Kenyan contractors, developers and home builders.",
+    "emailTab": "Email",
+    "phoneTab": "Phone",
+    "email": "Email",
+    "phone": "Phone number",
+    "password": "Password",
+    "forgot": "Forgot password?",
+    "resetToast": "Prototype: a reset link would be sent by email or SMS.",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "continue": "Continue",
+    "prototypeNote": "Prototype: any values work. Real sign-in arrives in D1.3.",
+    "phoneInvalid": "Enter a Kenyan mobile number, for example 0712 345 678.",
+    "phoneNormalised": "You’ll sign in as {phone}.",
+    "mfaTitle": "Two-step verification",
+    "mfaDescription": "Enter the 6-digit code from your authenticator app.",
+    "codeLabel": "Verification code",
+    "codeHint": "Prototype: type any six digits.",
+    "verify": "Verify and sign in",
+    "or": "or",
+    "usePasskey": "Use a passkey",
+    "passkeyToast": "Prototype: your device’s passkey prompt would appear.",
+    "useSms": "Send a code by SMS instead",
+    "smsToast": "Prototype: a code would be sent to {phone}.",
+    "back": "Back",
+    "mfaRequiredNote": "Required for your role"
+  },
+  "dashboard": {
+    "greeting": "Good morning, {name}",
+    "subtitle": "Everything across your projects today.",
+    "reviewApprovals": "Review {count, plural, one {# approval} other {# approvals}}",
+    "kpi": {
+      "cash": "Cash position",
+      "cashHint": "Up {change} on last week · M-Pesa float {float}",
+      "spend": "Spend this month",
+      "spendHint": "{pct} of the {plan} plan",
+      "workers": "Workers on site today",
+      "workersHint": "Across {sites} sites",
+      "approvals": "Awaiting your approval",
+      "approvalsHint": "{amount} in payments"
+    },
+    "projectsTitle": "Projects",
+    "projectsDescription": "Progress, cost and schedule performance",
+    "viewAll": "View all",
+    "table": {
+      "project": "Project",
+      "progress": "Progress",
+      "burn": "Budget used",
+      "workers": "Workers",
+      "health": "Status"
+    },
+    "alertsTitle": "Alerts",
+    "alertsDescription": "{count, plural, one {# alert needs} other {# alerts need}} attention",
+    "spendTitle": "Spend by category",
+    "spendDescription": "November 2026, all projects",
+    "cashFlowTitle": "Cash-flow forecast",
+    "cashFlowDescription": "Next six weeks: certificates due vs payroll, LPOs and other outgoings",
+    "inflow": "Money in",
+    "outflow": "Money out",
+    "weekOf": "Week of",
+    "mapTitle": "Sites",
+    "mapDescription": "Active sites and their geofences",
+    "upcomingTitle": "Upcoming payments",
+    "upcomingDescription": "Next 10 days",
+    "payments": {
+      "payrollRuiru": "Payroll PR-2026-W45 · Ruiru Heights",
+      "payrollKitengela": "Payroll · Kitengela Bungalow",
+      "lpo42": "LPO-0042 · Thika Road Hardware",
+      "lpo45": "LPO-0045 · Juja Quarry Products",
+      "ipc3": "IPC-03 from the Kitengela client"
+    },
+    "paymentStates": {
+      "awaitingApproval": "Awaiting approval",
+      "prepared": "Prepared",
+      "matched": "3-way matched",
+      "blocked": "Blocked",
+      "due": "Incoming"
+    }
+  },
+  "projects": {
+    "title": "Projects",
+    "description": "All projects for Jenga Bora Builders Ltd",
+    "newProject": "New project",
+    "progress": "Progress",
+    "planned": "planned {pct}",
+    "contractSum": "Contract sum (revised)",
+    "client": "Client",
+    "workersToday": "{present} of {total} workers on site today",
+    "open": "Open project",
+    "openBq": "Open BQ",
+    "openPortal": "View as client"
+  },
+  "project": {
+    "breadcrumb": "Projects",
+    "client": "Client",
+    "sectionsLabel": "Project sections",
+    "tabs": {
+      "overview": "Overview",
+      "bq": "BQ",
+      "labour": "Labour",
+      "attendance": "Attendance",
+      "payroll": "Payroll"
+    },
+    "kpi": {
+      "progress": "Physical progress",
+      "progressHint": "Planned {planned} · SPI {spi}",
+      "valueDone": "Value of work done",
+      "valueDoneHint": "CPI {cpi}",
+      "contractSum": "Revised contract sum",
+      "contractSumHint": "Original {original}",
+      "workers": "Workers on site today",
+      "workersHint": "{issues, plural, one {# open issue} other {# open issues}}"
+    },
+    "sCurveTitle": "S-curve",
+    "sCurveDescription": "Cumulative progress, planned vs actual",
+    "planned": "Planned",
+    "actual": "Actual",
+    "budgetTitle": "Budget by bill",
+    "budgetDescription": "Budget vs earned value vs actual cost (KES millions)",
+    "budgetKitengela": "Detailed BQ demo data is on Ruiru Heights. The client sees this project in the portal.",
+    "openPortal": "Open the client portal",
+    "budget": "Budget",
+    "earned": "Earned value",
+    "actualCost": "Actual cost",
+    "bill": "Bill",
+    "milestonesTitle": "Milestones",
+    "milestoneStates": {
+      "done": "Done",
+      "at_risk": "At risk",
+      "upcoming": "Upcoming",
+      "in_progress": "In progress"
+    },
+    "plannedDate": "Planned {date}",
+    "actualDate": "actual {date}",
+    "siteTitle": "Site and geofence",
+    "siteDescription": "Attendance outside the {radius} m geofence is flagged.",
+    "activityTitle": "Recent activity",
+    "activity": {
+      "diarySubmitted": "Site diary for {date} submitted by {name}",
+      "grnReceived": "{grn}: {qty} bags of cement received from {supplier} ({lpo})",
+      "voApproved": "{vo} approved by the client ({amount})",
+      "payrollReviewed": "Payroll {batch} reviewed by {name}: awaiting director approval",
+      "inspectionPassed": "{element} inspection passed ({name})"
+    },
+    "activityEmpty": "No recent activity in the demo data."
+  },
+  "milestones": {
+    "substructure": "Substructure complete",
+    "firstSlabs": "Ground and 1st floor slabs cast",
+    "secondSlab": "2nd floor slab cast",
+    "roofBeam": "3rd floor slab and roof beam",
+    "roofCovered": "Roof covered",
+    "practicalCompletion": "Practical completion",
+    "foundation": "Foundation complete",
+    "ringBeam": "Walling to ring beam",
+    "plastering": "Plastering",
+    "finishes": "Finishes and fittings",
+    "handover": "Handover"
+  },
+  "bq": {
+    "title": "Bill of Quantities",
+    "description": "{items} items · version {version} (current) · prepared by the QS, Faith Achieng",
+    "import": "Import BQ",
+    "exportExcel": "Excel",
+    "exportPdf": "PDF",
+    "kpi": {
+      "original": "Original contract sum",
+      "originalHint": "Including contingency and VAT",
+      "variations": "Approved variations",
+      "variationsHint": "{count, plural, one {# variation order} other {# variation orders}}, including VAT",
+      "revised": "Revised contract sum",
+      "revisedHint": "Original plus approved variations",
+      "done": "Value of work done",
+      "doneHint": "{pct} of measured work"
+    },
+    "search": "Search items by description or ref",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "cols": {
+      "ref": "Ref",
+      "description": "Description",
+      "unit": "Unit",
+      "qty": "Qty",
+      "rate": "Rate (KES)",
+      "amount": "Amount",
+      "done": "Done"
+    },
+    "billLabel": "Bill {number}",
+    "kinds": {
+      "preliminaries": "Preliminaries",
+      "measured": "Measured",
+      "provisional": "Prov. and PC sums"
+    },
+    "noResults": "No BQ items match your search.",
+    "billsTotal": "Total of bills",
+    "summaryTitle": "Summary",
+    "summaryDescription": "Grand summary, carried to the form of tender",
+    "summary": {
+      "bills": "Total of bills 1–9",
+      "contingency": "Contingencies",
+      "subtotal": "Subtotal",
+      "vat": "VAT at {rate} (from configuration)",
+      "contractSum": "Contract sum"
+    },
+    "versionsTitle": "Versions",
+    "current": "Current",
+    "compare": "Compare versions",
+    "variationsTitle": "Variation orders",
+    "variationsDescription": "Each one is linked to an architect’s instruction",
+    "voStatus": {
+      "approved": "Approved",
+      "awaiting_client": "Awaiting client",
+      "draft": "Draft"
+    },
+    "exVat": "excl. VAT"
+  },
+  "bqImport": {
+    "title": "Import BQ from Excel",
+    "description": "QS formats vary, so you map the columns once and save the mapping as a template.",
+    "stepsLabel": "Import steps",
+    "steps": {
+      "upload": "Upload",
+      "sheet": "Sheet and header",
+      "map": "Map columns",
+      "hierarchy": "Hierarchy",
+      "validate": "Validate and import"
+    },
+    "help": {
+      "upload": "Upload the QS’s .xlsx file. It is scanned and stored privately.",
+      "sheet": "Choose which sheets to import and confirm the header row.",
+      "map": "Tell PM-Buddy which column holds each field. Detected rows are shown below.",
+      "hierarchy": "Rules that turn rows into Bill → Section → Item.",
+      "validate": "Every bill total is recomputed from quantity × rate and compared with the sheet."
+    },
+    "uploadedBy": "uploaded by {name}",
+    "scanned": "Scanned: no threats found",
+    "rules": {
+      "xlsxOnly": ".xlsx files only. The size limit is configurable.",
+      "private": "Files are stored in a private bucket and opened with short-lived links."
+    },
+    "sheet": "Sheets",
+    "allBillSheets": "All bill sheets ({count})",
+    "headerDetected": "Header row detected on row {row}.",
+    "useTemplate": "Use a saved mapping template",
+    "templateName": "“Mwangi & Associates QS format”, last used on Kitengela Bungalow",
+    "column": "Column {letter}",
+    "fields": {
+      "itemRef": "Item ref",
+      "description": "Description",
+      "unit": "Unit",
+      "quantity": "Quantity",
+      "rate": "Rate",
+      "amount": "Amount",
+      "ignore": "Ignore"
+    },
+    "detected": "Detected as",
+    "roles": {
+      "bill": "Bill",
+      "section": "Section",
+      "collection": "Subtotal",
+      "item": "Item"
+    },
+    "hierarchy": {
+      "bill": "Rows starting with “BILL NO.” start a new bill",
+      "section": "Rows in CAPITALS without a quantity are section headings",
+      "collection": "“Carried to Collection” and summary rows are subtotals: checked, not imported",
+      "lumpSum": "Items with unit Sum or Item and no quantity are lump, provisional or PC sums"
+    },
+    "treePreview": "Result",
+    "counts": {
+      "bills": "Bills",
+      "sections": "Sections",
+      "items": "Items"
+    },
+    "mismatchTitle": "1 row needs a decision",
+    "mismatchDetail": "Bill 2, row 23 (concrete in ground beams): the sheet says {sheet} but quantity × rate is {computed}. This looks like a typing error.",
+    "resolution": {
+      "computed": "Use quantity × rate (recommended)",
+      "sheet": "Keep the amount typed in the sheet",
+      "flag": "Ask the QS to confirm before importing"
+    },
+    "billCol": "Bill",
+    "sheetTotal": "Sheet total",
+    "computedTotal": "Computed total",
+    "result": "Result",
+    "match": "Matches",
+    "diff": "Differs by {amount}",
+    "grandTotal": "Total of bills",
+    "pendingQs": "Waiting for QS",
+    "reconciled": "Reconciled",
+    "cancel": "Cancel",
+    "back": "Back",
+    "next": "Next",
+    "importDraft": "Import as version {version} (draft)",
+    "importedToast": "Prototype: version {version} would be created as a draft for QS approval (D2.2)."
+  },
+  "labour": {
+    "title": "Labour",
+    "description": "Registered workers, gangs and today’s status",
+    "kpi": {
+      "active": "Active workers",
+      "activeHint": "In {gangs} gangs",
+      "onSite": "On site today",
+      "onSiteHint": "{late} late",
+      "consent": "Biometric consent",
+      "consentHint": "{declined} use the card + photo method",
+      "expiring": "Accreditations expiring",
+      "expiringHint": "Within {days} days"
+    },
+    "views": {
+      "all": "All",
+      "onSite": "On site today",
+      "expiring": "Expiring accreditation",
+      "declined": "Card + photo only",
+      "nearThreshold": "Near casual limit"
+    },
+    "search": "Search by name or worker number",
+    "allTrades": "All trades",
+    "selected": "{count} selected",
+    "bulkToast": "Prototype: bulk actions arrive in {deliverable}.",
+    "bulk": {
+      "assignGang": "Assign to gang",
+      "sms": "Send SMS",
+      "clear": "Clear"
+    },
+    "selectAll": "Select all",
+    "selectWorker": "Select {name}",
+    "cols": {
+      "worker": "Worker",
+      "trade": "Trade",
+      "gang": "Gang",
+      "rate": "Daily rate",
+      "phone": "M-Pesa number",
+      "today": "Today",
+      "flags": "Flags"
+    },
+    "status": {
+      "absent": "Absent",
+      "flagged": "Flagged",
+      "onSite": "On site"
+    },
+    "flags": {
+      "expiring": "NCA card expiring",
+      "qrOnly": "Card + photo",
+      "threshold": "Near casual limit"
+    },
+    "empty": "No workers match these filters.",
+    "register": {
+      "open": "Register worker",
+      "title": "Register a worker",
+      "description": "Step 1 of 3: personal details. Consent and the card or biometric enrolment come next.",
+      "name": "Full name (as on ID)",
+      "idNumber": "National ID number",
+      "dob": "Date of birth",
+      "dobHint": "Workers must be 18 or older.",
+      "underage": "Registration blocked: this person is {age}. Workers must be 18 or older.",
+      "phone": "M-Pesa phone number",
+      "phoneNormalised": "Saved as {phone}",
+      "phoneInvalid": "Enter a valid Kenyan mobile number.",
+      "trade": "Trade",
+      "rate": "Daily rate (KES)",
+      "rateHint": "The project default for this trade is used if left blank.",
+      "encryptionNote": "ID numbers, phone numbers and KRA PINs are encrypted. Only managers can reveal them, and every reveal is logged.",
+      "cancel": "Cancel",
+      "next": "Next: consent",
+      "savedToast": "Prototype: the next step would capture consent (D3.1)."
+    },
+    "detail": {
+      "identity": "Identity",
+      "idNumber": "ID number",
+      "reveal": "Reveal",
+      "revealToast": "Access recorded in the audit log.",
+      "phone": "M-Pesa number",
+      "dob": "Date of birth",
+      "county": "Home county",
+      "engagement": "Engagement",
+      "type": "Type",
+      "engagementTypes": {
+        "casual": "Casual",
+        "term": "Term contract"
+      },
+      "rate": "Daily rate",
+      "gang": "Gang",
+      "joined": "Joined",
+      "thresholdWarning": "Continuously engaged for {days} days. Review casual-to-term conversion (the threshold is configurable and needs legal review).",
+      "ledger": "This pay week (PR-2026-W45)",
+      "days": "Days worked",
+      "gross": "Gross pay",
+      "advances": "Advance recovered",
+      "net": "Net pay",
+      "compliance": "Compliance",
+      "accreditation": "NCA card expiry",
+      "notApplicable": "Not required",
+      "consent": "Biometric consent",
+      "consentGranted": "Granted (face)",
+      "consentDeclined": "Declined: card + photo",
+      "consentNote": "Consent was recorded in Kiswahili and read aloud with a witness. Workers can withdraw at any time without penalty.",
+      "managersOnly": "Visible to managers only",
+      "doNotRehire": "Do not rehire",
+      "dnrToast": "Prototype: a reason would be required and the change audited.",
+      "dnrNote": "Requires a written reason. Only managers can see it."
+    }
+  },
+  "trades": {
+    "foreman": "Foreman",
+    "mason": "Mason",
+    "steel_fixer": "Steel fixer",
+    "carpenter": "Carpenter",
+    "plumber": "Plumber",
+    "electrician": "Electrician",
+    "welder": "Welder",
+    "plasterer": "Plasterer",
+    "machine_operator": "Machine operator",
+    "watchman": "Watchman",
+    "general_labourer": "General labourer (kibarua)"
+  },
+  "skills": {
+    "skilled": "Skilled",
+    "semi_skilled": "Semi-skilled",
+    "unskilled": "Unskilled"
+  },
+  "attendance": {
+    "title": "Attendance",
+    "description": "Today’s muster roll. Check-ins after {lateAfter} count as late. Anomalies need a decision.",
+    "kpi": {
+      "present": "Present",
+      "presentHint": "Checked in today",
+      "late": "Late",
+      "lateHint": "After {time}",
+      "absent": "Absent",
+      "absentHint": "No check-in yet",
+      "anomalies": "Anomalies",
+      "anomaliesHint": "{critical} critical"
+    },
+    "tabs": {
+      "muster": "Muster roll",
+      "anomalies": "Anomalies"
+    },
+    "gangFilter": "Filter by gang",
+    "allGangs": "All gangs",
+    "cols": {
+      "worker": "Worker",
+      "in": "In",
+      "out": "Out",
+      "method": "Method",
+      "confidence": "Match",
+      "geofence": "Geofence",
+      "device": "Device",
+      "flags": "Flags"
+    },
+    "gang": "Gang {gang}",
+    "nightShift": "night shift",
+    "absent": "Absent",
+    "methods": {
+      "face_kiosk": "Face (kiosk)",
+      "qr_card_photo": "Card + photo",
+      "manual_override": "Manual override"
+    },
+    "inside": "Inside",
+    "outside": "{distance} m outside",
+    "kinds": {
+      "impossible_travel": "Impossible travel",
+      "outside_geofence": "Outside geofence",
+      "clock_drift": "Clock drift",
+      "manual_override": "Manual override",
+      "duplicate": "Duplicate check-in",
+      "low_confidence": "Low match score"
+    },
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warning",
+      "info": "Info"
+    },
+    "autoResolved": "Auto-resolved",
+    "decisions": {
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "details": {
+      "impossible_travel": "Checked in at {siteA} at {timeA} and at {siteB} at {timeB}: {km} km apart in {minutes} minutes.",
+      "outside_geofence": "Checked in {distance} m outside the site (GPS accuracy ±{accuracy} m) on {device}.",
+      "clock_drift": "Device {device} was {minutes} minutes behind server time. {events} events were adjusted and flagged.",
+      "manual_override": "Manual check-in by {by}. Reason: “{reason}”.",
+      "duplicate": "Two check-ins at {first} and {second}. The first was kept.",
+      "low_confidence": "Face match {score} was below the {threshold} threshold. Confirmed with the worker card by a supervisor."
+    },
+    "notePlaceholder": "Review note (required to reject)",
+    "accept": "Accept",
+    "reject": "Reject",
+    "noteRequired": "Add a note before rejecting.",
+    "acceptedToast": "Anomaly accepted and recorded in the audit log.",
+    "rejectedToast": "Anomaly rejected. The record is excluded from the timesheet."
+  },
+  "payroll": {
+    "title": "Payroll {batch}",
+    "description": "Weekly payroll for {start} – {end}",
+    "awaitingApproval": "Awaiting your approval",
+    "stagePaying": "Paying…",
+    "stageDone": "Paid: 2 need review",
+    "steps": {
+      "prepared": "Prepared",
+      "reviewed": "Reviewed by finance",
+      "approved": "Approved (MFA)",
+      "disbursed": "Paid via M-Pesa"
+    },
+    "waitingForYou": "Waiting for you",
+    "summaryTitle": "Batch summary",
+    "summaryDescription": "{workers} workers · payout by M-Pesa B2C (salary payment)",
+    "summary": {
+      "gross": "Gross pay",
+      "statutory": "Statutory deductions",
+      "advances": "Advances recovered",
+      "net": "Net payout",
+      "charges": "Est. M-Pesa charges",
+      "required": "Float required"
+    },
+    "illustrative": "Deductions are illustrative only. The statutory engine (PAYE, NSSF, SHIF, Housing Levy) arrives in D4.1 and uses versioned, effective-dated rules that need compliance review.",
+    "checksTitle": "Pre-approval checks",
+    "checks": {
+      "float": "M-Pesa float {float} covers the payout and charges",
+      "limit": "Within your approval limit of {limit}",
+      "makerChecker": "Prepared, reviewed and approved by different people",
+      "timesheets": "All 40 timesheets approved and locked"
+    },
+    "approve": "Approve and pay",
+    "return": "Return",
+    "returnedToast": "Prototype: the batch would go back to finance with your comment.",
+    "disbursingTitle": "Sending payments…",
+    "doneTitle": "Payout finished",
+    "progress": "{confirmed} of {total} confirmed by M-Pesa · {failed} failed",
+    "doneToast": "Payout finished: 1 failed and 1 name mismatch need review.",
+    "failedTitle": "{count, plural, one {# payment failed} other {# payments failed}}",
+    "failedDetail": "A transaction status check confirmed nothing was sent. It is safe to retry after the worker’s number is corrected.",
+    "mismatchTitle": "{count, plural, one {# name mismatch} other {# name mismatches}}",
+    "mismatchDetail": "The name M-Pesa returned doesn’t match the registered worker. Future payouts to this number are on hold until a manager reviews it.",
+    "cols": {
+      "worker": "Worker",
+      "days": "Days",
+      "ot": "OT hrs",
+      "gross": "Gross",
+      "statutory": "Statutory",
+      "advance": "Advance",
+      "net": "Net",
+      "mpesa": "M-Pesa number",
+      "status": "Status",
+      "receipt": "Receipt"
+    },
+    "statuses": {
+      "pending": "Pending",
+      "sent": "Sent",
+      "confirmed": "Confirmed",
+      "failed": "Failed",
+      "reversed": "Reversed"
+    },
+    "nameOnMpesa": "M-Pesa name: {name}",
+    "failedReason": "Not credited: recipient account issue",
+    "totals": "Totals",
+    "stepUpTitle": "Confirm with your authenticator",
+    "stepUpDescription": "You are approving {batch}: {amount} to {workers} workers.",
+    "codeLabel": "Authenticator code",
+    "stepUpNote": "This approval is tied to this batch and amount. A code for one approval can’t be reused for another.",
+    "cancel": "Cancel",
+    "confirmApprove": "Approve and pay",
+    "approvedToast": "Approved. Payments are queued and confirmed only when M-Pesa replies."
+  },
+  "soon": {
+    "phase": "Arrives in Phase {phase}",
+    "back": "Back to the dashboard",
+    "sections": {
+      "valuations": {
+        "title": "Valuations and certificates",
+        "description": "Progress measured against the BQ, earned value, interim valuations, payment certificates and retention."
+      },
+      "diary": {
+        "title": "Site diary",
+        "description": "Daily diary with the workforce filled in from attendance, geotagged photos, delays, inspections and sign-off."
+      },
+      "materials": {
+        "title": "Materials and procurement",
+        "description": "Requisition → RFQ → LPO → delivery → invoice with eTIMS → three-way match → payment."
+      },
+      "stores": {
+        "title": "Stores",
+        "description": "Stock ledger per site, issues to BQ items, transfers, stock takes and theoretical vs actual variance alerts."
+      },
+      "plant": {
+        "title": "Plant and equipment",
+        "description": "Owned and hired plant, usage, fuel issues and consumption, breakdowns and maintenance."
+      },
+      "safety": {
+        "title": "Health and safety",
+        "description": "Inductions, toolbox talks, PPE register, incidents and near misses, and corrective actions."
+      },
+      "payments": {
+        "title": "Payments console",
+        "description": "Every M-Pesa request and callback, reconciliation against statements, unmatched callbacks and reversals."
+      },
+      "spending": {
+        "title": "Spending and cash flow",
+        "description": "Petty cash floats, expenses with receipts, the M-Pesa SMS parser, budget vs actual vs committed, and forecasts."
+      },
+      "documents": {
+        "title": "Documents and compliance register",
+        "description": "Versioned drawings, contracts and permits, plus the compliance register with expiry reminders."
+      },
+      "reports": {
+        "title": "Reports",
+        "description": "Muster roll, payroll, ledgers, stock, valuations, cost and reconciliation reports exported to PDF and Excel."
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Company, users and roles, MFA and sessions, configuration rules and audit log."
+      }
+    }
+  },
+  "portal": {
+    "portalName": "Client portal",
+    "welcome": "Welcome back, {name}",
+    "currency": "Display currency",
+    "fxNote": "Indicative rates as at {asOf} EAT. You always pay in KES.",
+    "progressLabel": "{pct}% complete",
+    "onTrack": "On track",
+    "progressSummary": "Your house is on schedule (planned: {planned}%).",
+    "contractSum": "Contract sum",
+    "handover": "Planned handover",
+    "voTitle": "Your decision is needed",
+    "voDescription": "{number} from instruction {instruction} by {architect}, issued {date}",
+    "voBody": "Upgrade the living-room and corridor floor tiles from ceramic to 600 × 600 mm porcelain.",
+    "inclVat": "incl. VAT",
+    "voCommentPlaceholder": "Comment for the contractor (required to reject)",
+    "approve": "Approve",
+    "reject": "Reject",
+    "voApprovedToast": "Variation approved. The contractor has been notified.",
+    "voReasonRequired": "Please add a comment explaining why you are rejecting.",
+    "voRejectedToast": "Variation rejected. Your comment was sent to the contractor.",
+    "voApprovedNote": "You approved {number}. It now appears in the revised contract sum.",
+    "voRejectedNote": "You rejected {number}. The contractor will respond to your comment.",
+    "photosTitle": "Progress photos",
+    "photosDescription": "Taken on site by the site team",
+    "photos": {
+      "internalPlaster": "Internal plastering",
+      "windowFrames": "Window frames fixed",
+      "roofSheets": "Roof sheets fixed",
+      "roofTrusses": "Roof trusses installed",
+      "septicTank": "Septic tank excavation",
+      "ringBeam": "Ring beam cast"
+    },
+    "verified": "Verified on site",
+    "unverified": "Location not verified",
+    "verifiedExplainer": "“Verified on site” means the photo’s GPS was inside the site boundary and its time matched our server when it was uploaded. Photos that fail either check are labelled, never hidden.",
+    "dueTitle": "Payment due",
+    "dueDescription": "Certificate {number}, due {date}",
+    "payInKes": "Payable in KES: {amount}",
+    "partPaid": "{amount} received. Thank you.",
+    "payMpesa": "Pay with M-Pesa",
+    "payOther": "Bank transfer or Paybill",
+    "paybill": "Paybill",
+    "account": "Account",
+    "bankNote": "Bank details are on the certificate PDF. Payments are matched to your certificate automatically.",
+    "milestonesTitle": "Milestones",
+    "completedOn": "Completed {date}",
+    "plannedFor": "Planned for {date}",
+    "weekTitle": "This week on site",
+    "weekWorkers": "{count} workers on site per day on average",
+    "weekPlaster": "Internal plastering {pct}% complete",
+    "weekRain": "{days, plural, one {# day} other {# days}} lost to rain",
+    "historyTitle": "Certificates",
+    "certStatus": {
+      "paid": "Paid",
+      "due": "Due"
+    },
+    "stk": {
+      "title": "Pay with M-Pesa",
+      "description": "We’ll send a payment prompt to the phone below for certificate {reference}.",
+      "phone": "M-Pesa phone number",
+      "willPrompt": "Prompt will go to {phone}",
+      "phoneInvalid": "Enter a Kenyan M-Pesa number.",
+      "amount": "Amount (KES)",
+      "overLimit": "Above the M-Pesa limit of {limit} per transaction. Pay in parts or use a bank transfer.",
+      "invalidAmount": "Enter an amount up to {max}.",
+      "limitNote": "M-Pesa limit per transaction: {limit} (set in configuration).",
+      "cancel": "Cancel",
+      "send": "Send payment prompt",
+      "waitingTitle": "Check your phone",
+      "waitingBody": "Enter your M-Pesa PIN on your phone. We only mark this as paid once Safaricom confirms it.",
+      "confirmedTitle": "{amount} received",
+      "confirmedBody": "Confirmed by M-Pesa. A receipt has been sent by email and SMS.",
+      "done": "Done"
+    }
+  },
+  "site": {
+    "title": "Site app (Android): mock-ups",
+    "subtitle": "Phase 0 web mock-ups of the offline-first Expo app built in D3.2. Large touch targets and high contrast for outdoor use.",
+    "captions": {
+      "kiosk": "Shared site tablet in kiosk mode: face check-in with liveness, matched only against this site’s roster. Prompts are in English and Kiswahili.",
+      "muster": "Foreman’s phone with no network: attendance keeps working and is saved, encrypted and signed on the phone.",
+      "sync": "Sync status: nothing is ever dropped silently. Clock checks catch tampered device time."
+    },
+    "kiosk": {
+      "header": "Ruiru Heights · Gate A",
+      "synced": "Synced 07:10",
+      "result": "Mason · Gang B · In 07:02 · match 0.96 · inside site",
+      "checkIn": "Check in",
+      "checkOut": "Check out"
+    },
+    "muster": {
+      "offline": "Offline: {count} records saved on this phone. They will sync automatically.",
+      "gang": "Gang B: masonry and plaster",
+      "today": "Tuesday, 10/11/2026",
+      "in": "{count} in",
+      "notYet": "{count} not yet",
+      "absent": "{count} absent",
+      "statusAbsent": "Absent",
+      "statusNotYet": "Not checked in yet",
+      "statusIn": "In {time} · face",
+      "card": "Card",
+      "nav": "Site app sections"
+    },
+    "tabs": {
+      "muster": "Muster",
+      "diary": "Diary",
+      "stores": "Stores",
+      "sync": "Sync"
+    },
+    "sync": {
+      "title": "Sync status",
+      "lastSynced": "Last synced today at {time}",
+      "waiting": "Waiting to sync",
+      "attendance": "Attendance records",
+      "grn": "Delivery (GRN)",
+      "photos": "Photos",
+      "clockTitle": "Device clock OK",
+      "clockBody": "Within 8 seconds of server time at the last sync.",
+      "deviceTitle": "Registered device",
+      "deviceBody": "KIOSK-RU-01 · Ruiru Heights, Gate A",
+      "securityTitle": "Encrypted and signed",
+      "securityBody": "Records are encrypted on this device and signed with its key.",
+      "syncNow": "Sync now",
+      "autoNote": "Syncs automatically when the network returns."
+    },
+    "footnote": "Real app: React Native (Expo) with encrypted SQLite, a background sync engine and kiosk mode. Preview it on your Android phone from D3.2."
+  }
+}

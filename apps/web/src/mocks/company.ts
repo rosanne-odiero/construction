@@ -1,5 +1,7 @@
 /** Prototype "now": all mock data is relative to Tuesday 10/11/2026 07:45 EAT. */
 export const NOW = "2026-11-10T07:45:00+03:00";
+/** Calendar date of NOW in Africa/Nairobi (NOW is already written with the +03:00 offset). */
+export const TODAY = NOW.slice(0, 10);
 
 export const company = {
   name: "Jenga Bora Builders Ltd",

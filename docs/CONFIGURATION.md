@@ -164,5 +164,10 @@ These are not business rules: they tell each process where its dependencies are.
 | `S3_AUTO_CREATE_BUCKET` | api | `false` (`true` in `.env.example`) | Development convenience only; deployed buckets come from infrastructure code | SECURITY |
 | `API_DOCS_ENABLED` | api | `true` | Swagger UI at `/api/docs`. Decide before go-live whether production publishes it | SECURITY |
 | `HEALTH_CHECK_TIMEOUT_MS` | api | `2000` | Per dependency probe in `/api/v1/health/ready` | OPS |
+| `WEB_ORIGIN` | api | `http://localhost:3000` | Exact origin of the web app (scheme, host and port). State-changing requests must send this `Origin`; production requires HTTPS | SECURITY |
+| `TRUST_PROXY` | api | unset (trust no proxy) | Proxies allowed to report the client IP in `X-Forwarded-For` (addresses, CIDRs or a hop count; `true` is rejected). Set it only when an edge proxy **appends** the real client address, because the web app's `/api` rewrite passes client-supplied values through. When unset, rate limits key on accounts, users, sessions and tokens only | SECURITY |
+| `AUTH_MFA_ENCRYPTION_KEY` | api | none (required; 64 hex characters) | Encrypts TOTP secrets and CSRF tokens. Replacing it invalidates TOTP enrolments. Secrets manager outside local development | SECURITY |
+| `AUTH_SIGNING_PRIVATE_KEY` | api | ephemeral in development | Base64 Ed25519 PKCS8 PEM that signs access tokens; required in production | SECURITY |
+| `AUTH_NOTIFICATION_TRANSPORT` / `AUTH_MAILPIT_PORT` | api | `disabled` (`development` in `.env.example`) / `8025` | `development` delivers to loopback Mailpit only and is refused in production. Delivery runs after the response, so it never reveals whether an account exists | SECURITY |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_SERVICE_NAME` | api | unset / `pm-buddy-api` | Tracing starts only when the endpoint is set; needs `pnpm start`, which preloads `telemetry.js` | OPS |
 | `API_INTERNAL_URL` | web | `http://localhost:4000` | Where the web server reaches the API. Also the target of the same-origin `/api/*` rewrite, which is **fixed at build time** (D-16) | OPS |

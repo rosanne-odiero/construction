@@ -2,6 +2,8 @@
 
 Questions for you, grouped by topic. Each one has the **default I'll use if there's no answer**, so work never stalls, and the **deliverable that needs it**. Answer inline (or in chat) and I'll record the decision here and in the [ARCHITECTURE decision log](./ARCHITECTURE.md).
 
+Defaults are design assumptions only, not owner approval. Under [brief §15](./PROJECT_BRIEF.md#15-mandatory-safeguards-pm-buddy-additions), later-phase implementation, pilot scope/delivery-order changes, live payouts, biometric collection and production legal rules need explicit approval. D1.1–D1.4 implementation is approved; evidence/acceptance is tracked separately.
+
 > **Most urgent (for D0 approval):** Q-R1–Q-R3. **Needed before D1.x:** Q-A1, Q-A3, Q-H2, Q-U4, Q-U5, Q-E1, Q-E2.
 
 ## Review of this deliverable (D0)
@@ -9,8 +11,8 @@ Questions for you, grouped by topic. Each one has the **default I'll use if ther
 | ID | Question | Default if no answer | Needed by |
 |---|---|---|---|
 | Q-R1 | Do you approve the **look and feel** in the prototype (royal blue on neutral, density, layout, mobile screens)? What would you change? | Keep it as is | D1.2 |
-| Q-R2 | Do you approve the **delivery plan** ([ROADMAP](./ROADMAP.md)): 32 deliverables, review gates, branches per deliverable? | Proceed as written | D1.1 |
-| Q-R3 | Do you approve the decisions marked **Proposed** in ARCHITECTURE §22 (D-03, D-07, D-08, D-10, D-12–D-15, D-17)? | Accept the proposals | D1.1 |
+| Q-R2 | Do you approve the **delivery plan** ([ROADMAP](./ROADMAP.md)): 32 deliverables, review gates, branches per deliverable? | Preserve existing roadmap; changes await explicit review | D1.1 |
+| Q-R3 | Do you approve the decisions marked **Proposed** in ARCHITECTURE §22 (D-03, D-07, D-08, D-10, D-12–D-15, D-17)? | Keep proposed decisions unapproved; do not infer acceptance | Relevant implementation gate |
 
 ## Product and scope
 
@@ -18,7 +20,7 @@ Questions for you, grouped by topic. Each one has the **default I'll use if ther
 |---|---|---|---|
 | Q-P1 | Who are the **first customers**: contractor size, number of sites, workers per site? | Mid-size contractors: 2–5 sites, up to 200 workers | D1.4 (seed data, performance targets) |
 | Q-P2 | How will tenants **pay for PM-Buddy** (per project, per active worker, per site, flat)? | Model a `Subscription` only; billing UI later | D1.4 |
-| Q-P3 | Do you want a **limited pilot after Phase 4** (labour, attendance, payroll, M-Pesa) with the security subset of D9.1 pulled forward? (ROADMAP §4) | No, follow the phase order | D4.3 |
+| Q-P3 | Do you approve the [one-contractor/one-site pilot proposal](./PILOT_PLAN.md): manual/QR attendance, reviewed payroll, one payout method and reconciliation, with later biometrics/USSD/rails/analytics? | Answered: owner approved design and proposed delivery order only; activation/evidence gates remain | Before live pilot activation |
 | Q-P4 | Should PM-Buddy integrate with **accounting software** (QuickBooks, Xero, Sage, Odoo)? | CSV/Excel exports only; integration later | D5.4 |
 | Q-P5 | Should diaspora clients pay by **card or international transfer** (for example Pesapal, Flutterwave, Stripe) as well as M-Pesa and bank? | M-Pesa STK, C2B Paybill and recorded bank transfers only | D7.1 |
 | Q-P6 | Do **suppliers** need their own logins at launch, or are emailed/SMS links enough? | Logins in D7.2 | D7.2 |
@@ -60,7 +62,7 @@ Questions for you, grouped by topic. Each one has the **default I'll use if ther
 
 | ID | Question | Default if no answer | Needed by |
 |---|---|---|---|
-| Q-C1 | Who will **confirm the COMPLIANCE_TODO items** (tax/payroll adviser, employment lawyer, data protection adviser)? | Items stay `needs_review` and screens show warnings | D4.1 |
+| Q-C1 | Who will **confirm the COMPLIANCE_TODO items** (tax/payroll adviser, employment lawyer, data protection adviser)? | Items stay unverified and disabled for production calculations | Before relevant production feature |
 | Q-C2 | What do you **deduct for casual workers (vibarua)** today? | Nothing assumed; the adviser decides (CR-PAY-07) | D4.1 |
 | Q-C3 | What **overtime policy** and normal working hours do your sites use? | Demo values (8 h day; 1.5× / 2.0×) until confirmed | D3.3 |
 | Q-C4 | What are your **pay periods, pay day and cut-off times** (for example weekly, Friday afternoon, timesheets locked Thursday 18:00)? | Weekly, Friday payout, Thursday cut-off | D4.1 |

@@ -152,7 +152,8 @@
       "documents": "Nyaraka",
       "reports": "Ripoti",
       "portal": "Malango",
-      "platform": "Jukwaa"
+      "platform": "Jukwaa",
+      "timesheets": "Rejista za saa za kazi"
     },
     "permissionLabels": {
       "tenancy": {
@@ -193,7 +194,8 @@
         "view": "Kuona mahudhurio",
         "record": "Kurekodi mahudhurio",
         "override": "Kusahihisha mahudhurio",
-        "review_anomalies": "Kukagua kasoro za mahudhurio"
+        "review_anomalies": "Kukagua kasoro za mahudhurio",
+        "confirm": "Kuthibitisha siku za mahudhurio"
       },
       "payroll": {
         "prepare": "Kuandaa mishahara",
@@ -245,6 +247,11 @@
       },
       "platform": {
         "admin": "Usimamizi wa jukwaa"
+      },
+      "timesheets": {
+        "submit": "Kuwasilisha vipindi vya saa za kazi",
+        "approve": "Kuidhinisha vipindi vya saa za kazi",
+        "manage_rules": "Kusimamia kanuni za saa za kazi"
       }
     },
     "notices": {
@@ -1447,7 +1454,33 @@
     "viewNameTaken": "Tayari una mwonekano wenye jina hili.",
     "viewLimit": "Unaweza kuhifadhi hadi mionekano 20.",
     "mfaRequired": "Weka uthibitishaji wa hatua mbili kwenye akaunti yako kabla ya kufanya hivi.",
-    "labourRule": "Hii inavunja kanuni ya daftari la wafanyakazi. Hakuna kilichohifadhiwa."
+    "labourRule": "Hii inavunja kanuni ya daftari la wafanyakazi. Hakuna kilichohifadhiwa.",
+    "periodLocked": "Kipindi hicho cha saa za kazi kimewasilishwa au kuidhinishwa, kwa hiyo mahudhurio yake hayawezi kubadilishwa hapa. Tumia marekebisho.",
+    "periodOverlap": "Tarehe hizo zinaingiliana na kipindi kingine cha saa za kazi.",
+    "dayNotDraft": "Siku hii ya mahudhurio imeshawasilishwa. Omba usahihishaji badala yake.",
+    "dayEmpty": "Rekodi angalau mfanyakazi mmoja kabla ya kuwasilisha siku.",
+    "samePerson": "Mtu yuleyule hawezi kurekodi na kuthibitisha (au kuomba na kuidhinisha) jambo hili. Muombe mwenzako.",
+    "noChanges": "Hakuna kilichobadilika, kwa hiyo hakuna kilichohifadhiwa.",
+    "correctionPending": "Usahihishaji wa mfanyakazi huyu kwa siku hii tayari unasubiri uamuzi.",
+    "correctionNotNeeded": "Thamani zilizopendekezwa ni sawa na zilizorekodiwa.",
+    "pendingCorrections": "Amua kwanza usahihishaji unaosubiri katika kipindi hiki.",
+    "periodNotDue": "Muda wa mwisho wa kipindi bado haujapita.",
+    "unconfirmedDays": "Kila siku ya mahudhurio ya kipindi lazima ithibitishwe kwanza.",
+    "openAnomalies": "Kagua kila hitilafu iliyo wazi ya kipindi kabla ya kukiidhinisha.",
+    "rulesNotConfigured": "Weka kwanza kanuni ya saa za kazi kwa kila tarehe iliyorekodiwa.",
+    "rulesUnverified": "Kanuni za saa za kazi bado hazijaidhinishwa na mkaguzi wa uzingatiaji.",
+    "periodChanged": "Rejista ya saa ilibadilika baada ya kuwasilishwa. Ikatae ili iwasilishwe tena.",
+    "periodNotApproved": "Marekebisho ni kwa vipindi vilivyoidhinishwa tu; sahihisha kipindi kilicho wazi moja kwa moja.",
+    "dateOutsidePeriod": "Tarehe hiyo iko nje ya kipindi.",
+    "adjustmentPending": "Marekebisho ya mfanyakazi huyu kwa siku hii tayari yanasubiri uamuzi.",
+    "noTargetPeriod": "Bado hakuna kipindi kilicho wazi cha kubeba marekebisho.",
+    "useCorrection": "Kipindi hiki bado kiko wazi: tumia usahihishaji kwenye siku ya mahudhurio badala yake.",
+    "ruleExists": "Toleo la kanuni tayari linaanza tarehe hiyo kwa wigo huu.",
+    "ruleInForce": "Kanuni zilizokwisha anza haziwezi kughairiwa; ongeza toleo jipya badala yake.",
+    "holidayExists": "Tayari kuna sikukuu ya umma tarehe hiyo.",
+    "idempotencyKeyReused": "Ombi hili lilishatumwa likiwa na maelezo tofauti. Pakia upya kisha ujaribu tena.",
+    "invalidIdempotencyKey": "Ombi halikuweza kutambuliwa kwa usalama. Pakia upya kisha ujaribu tena.",
+    "attendanceRule": "Hii inavunja kanuni ya mahudhurio. Hakuna kilichohifadhiwa."
   },
   "projectStatus": {
     "planning": "Mipango",
@@ -2808,6 +2841,433 @@
       "daysAgo": "{days, plural, one {siku # iliyopita} other {siku # zilizopita}}",
       "daysLeft": "{days, plural, =0 {inaisha leo} one {baada ya siku #} other {baada ya siku #}}",
       "none": "Hakuna arifa za NCA."
+    }
+  },
+  "attendanceLive": {
+    "live": "Moja kwa moja",
+    "title": "Mahudhurio na saa za kazi",
+    "description": "Orodha za mahudhurio za kila siku, uthibitisho wa msimamizi na rejista za saa za kila wiki za {company}. Leo ni {today}.",
+    "prototypeLink": "Fungua mfano wa mahudhurio (alama za mwili na kadi za QR, data ya mfano)",
+    "nav": {
+      "label": "Sehemu za mahudhurio",
+      "overview": "Muhtasari",
+      "muster": "Orodha ya mahudhurio",
+      "periods": "Saa za kazi",
+      "anomalies": "Hitilafu",
+      "settings": "Kanuni na sikukuu"
+    },
+    "common": {
+      "project": "Mradi",
+      "site": "Eneo",
+      "date": "Tarehe",
+      "dateHint": "Andika tarehe kama DD/MM/YYYY.",
+      "gang": "Kikundi",
+      "allGangs": "Vikundi vyote",
+      "show": "Onyesha",
+      "reason": "Sababu",
+      "reasonHint": "Angalau herufi 10. Huhifadhiwa kwenye kumbukumbu za ukaguzi.",
+      "reject": "Kataa"
+    },
+    "status": {
+      "present": "Yupo",
+      "half_day": "Nusu siku",
+      "absent": "Hayupo",
+      "leave": "Likizo",
+      "sick": "Mgonjwa"
+    },
+    "dayStatus": {
+      "none": "Haijaanza",
+      "draft": "Rasimu",
+      "submitted": "Imewasilishwa",
+      "confirmed": "Imethibitishwa"
+    },
+    "periodStatus": {
+      "open": "Kiko wazi",
+      "submitted": "Kimewasilishwa",
+      "rejected": "Kimekataliwa",
+      "approved": "Kimeidhinishwa"
+    },
+    "decision": {
+      "pending": "Inasubiri",
+      "approved": "Imeidhinishwa",
+      "rejected": "Imekataliwa"
+    },
+    "dayType": {
+      "weekday": "Siku ya kazi",
+      "rest_day": "Siku ya mapumziko",
+      "public_holiday": "Sikukuu ya umma"
+    },
+    "anomalyKind": {
+      "two_sites": "Maeneo mawili siku moja",
+      "overlapping_times": "Saa zinazoingiliana",
+      "excess_hours": "Saa zaidi ya kikomo",
+      "not_engaged": "Hakupangiwa siku hiyo",
+      "labourer_inactive": "Mfanyakazi hayupo kazini",
+      "do_not_rehire": "Alama ya kutoajiriwa tena",
+      "accreditation_invalid": "Kadi ya NCA imeisha au haipo",
+      "manual_override": "Usahihishaji wa mkono"
+    },
+    "anomalyStatus": {
+      "open": "Iko wazi",
+      "resolved": "Imetatuliwa",
+      "dismissed": "Imepuuzwa",
+      "cleared": "Imeondolewa"
+    },
+    "compliance": {
+      "unverified": "Haijathibitishwa (ukaguzi wa uzingatiaji)",
+      "approved": "Imeidhinishwa na uzingatiaji"
+    },
+    "weekdays": {
+      "d1": "Jumatatu",
+      "d2": "Jumanne",
+      "d3": "Jumatano",
+      "d4": "Alhamisi",
+      "d5": "Ijumaa",
+      "d6": "Jumamosi",
+      "d7": "Jumapili"
+    },
+    "overview": {
+      "none": "Bado hujawekwa kwenye mradi wowote wenye mahudhurio.",
+      "timesheets": "Saa za kazi",
+      "queues": {
+        "anomalies": "Hitilafu zilizo wazi",
+        "corrections": "Usahihishaji wa kuamua",
+        "adjustments": "Marekebisho ya kuamua",
+        "awaiting": "Vipindi vinavyosubiri idhini"
+      },
+      "currentPeriod": "Kipindi cha sasa",
+      "cutoff": "mwisho {cutoff}",
+      "sitesCaption": "Orodha za mahudhurio za leo katika {project}",
+      "columns": {
+        "site": "Eneo",
+        "today": "Leo",
+        "records": "Rekodi",
+        "actions": "Vitendo"
+      },
+      "record": "Rekodi mahudhurio katika {site}",
+      "open": "Fungua orodha ya mahudhurio ya {site}",
+      "noSites": "Mradi huu bado hauna maeneo."
+    },
+    "muster": {
+      "title": "Orodha ya mahudhurio",
+      "description": "{project} · {site} · {date}",
+      "filters": "Chagua orodha ya mahudhurio",
+      "previousDay": "Siku iliyopita",
+      "nextDay": "Siku inayofuata",
+      "summary": "Muhtasari wa siku",
+      "day": "Siku",
+      "period": "Kipindi",
+      "dayType": "Aina ya siku",
+      "ruleSummary": "Siku ya kawaida saa {normal} kuanzia {start}; amechelewa baada ya dakika {grace} za neema.",
+      "noRule": "Hakuna kanuni ya saa za kazi kwa tarehe hii, kwa hiyo saa haziwezi kuhesabiwa.",
+      "noRuleLink": "Weka kanuni",
+      "submittedBy": "Imewasilishwa na {name} tarehe {at}",
+      "confirmedBy": "imethibitishwa na {name} tarehe {at}",
+      "returned": "Imerudishwa na {name}: {reason}",
+      "locked": {
+        "future-date": "Mahudhurio hayawezi kurekodiwa kwa tarehe ya baadaye.",
+        "project-read-only": "Mradi huu umefungwa au kughairiwa, kwa hiyo mahudhurio yake ni ya kusoma tu.",
+        "period-submitted": "Kipindi cha saa za kazi cha siku hii kimewasilishwa. Kikatae ili kubadilisha, au subiri idhini kisha utumie marekebisho.",
+        "period-approved": "Kipindi cha saa za kazi cha siku hii kimeidhinishwa na kufungwa. Mabadiliko ni marekebisho yanayoingia kipindi kinachofuata.",
+        "day-submitted": "Siku hii imewasilishwa na inasubiri kuthibitishwa na mtu asiye mrekodi. Mabadiliko sasa ni usahihishaji wenye sababu.",
+        "day-confirmed": "Siku hii imethibitishwa. Mabadiliko ni usahihishaji wenye sababu, unaoidhinishwa na mtu mwingine."
+      },
+      "save": "{count, plural, =0 {Hifadhi mabadiliko} one {Hifadhi badiliko #} other {Hifadhi mabadiliko #}}",
+      "markPresent": "{count, plural, =0 {Weka wasiorekodiwa kuwa wapo} one {Weka mfanyakazi # asiyerekodiwa kuwa yupo} other {Weka wafanyakazi # wasiorekodiwa kuwa wapo}}",
+      "submit": "Wasilisha siku",
+      "confirm": "Thibitisha siku",
+      "return": "Rudisha kwa mabadiliko",
+      "keyboardHint": "Tab huhamia sehemu inayofuata; kwenye orodha ya hali, andika herufi ya kwanza (Y, N, H, L, M). Enter au Ctrl+S huhifadhi.",
+      "tableLabel": "Rekodi za orodha ya mahudhurio",
+      "columns": {
+        "worker": "Mfanyakazi",
+        "status": "Hali",
+        "in": "Kuingia",
+        "out": "Kutoka",
+        "overnight": "Usiku",
+        "break": "Mapumziko (dakika)",
+        "notes": "Maelezo",
+        "hours": "Saa",
+        "flags": "Alama"
+      },
+      "empty": "Hakuna wafanyakazi waliopangiwa mradi na eneo hili kwa siku hii (au kwenye kikundi hiki).",
+      "invalidRow": "Kagua saa za {name}: muda wa kutoka lazima uwe baada ya kuingia (weka alama Usiku kwa zamu za usiku) na mapumziko yawe mafupi kuliko zamu.",
+      "invalid": "Baadhi ya rekodi si sahihi. Kagua mistari iliyoangaziwa.",
+      "saved": "{count, plural, one {Rekodi # imehifadhiwa.} other {Rekodi # zimehifadhiwa.}}",
+      "submitted": "Siku imewasilishwa kwa uthibitisho.",
+      "confirmed": "Siku imethibitishwa.",
+      "returnedDone": "Siku imerudishwa kwa mrekodi.",
+      "corrections": {
+        "title": "Usahihishaji",
+        "none": "Hakuna usahihishaji kwa siku hii.",
+        "change": "{from} → {to}",
+        "requested": "Umeombwa na {name} tarehe {at}: {reason}",
+        "decided": "Umeamuliwa na {name} tarehe {at}",
+        "approve": "Idhinisha usahihishaji",
+        "reject": "Kataa usahihishaji",
+        "distinct": "Usahihishaji huamuliwa na mthibitishaji asiye mtu aliyeuomba.",
+        "approved": "Usahihishaji umeidhinishwa na kutumika.",
+        "rejected": "Usahihishaji umekataliwa.",
+        "sent": "Usahihishaji umetumwa kwa idhini.",
+        "rejectTitle": "Kataa usahihishaji"
+      },
+      "notEngaged": "Hakupangiwa",
+      "corrected": "Imesahihishwa",
+      "notRecorded": "Haijarekodiwa",
+      "breakDefault": "Kanuni",
+      "overnightShort": "siku inayofuata",
+      "yes": "Ndiyo",
+      "overtime": "Ziada {hours}",
+      "late": "Amechelewa dakika {minutes}",
+      "otherSite": "Pia katika {site} ({project}): {status}",
+      "correct": "Sahihisha",
+      "correctFor": "Sahihisha mahudhurio ya {name}",
+      "returnTitle": "Rudisha siku kwa mabadiliko",
+      "returnDescription": "Mrekodi anaweza kubadilisha rekodi na kuwasilisha siku tena.",
+      "overnightLabel": "Zamu ya usiku (inaisha asubuhi inayofuata)",
+      "correctTitle": "Sahihisha mahudhurio ya {name}",
+      "correctDescription": "Badiliko linatumika tu baada ya mtu mwingine kuliidhinisha. Huwekewa alama ya kukaguliwa na kuhifadhiwa kwenye kumbukumbu za ukaguzi.",
+      "correctSubmit": "Omba idhini"
+    },
+    "periods": {
+      "title": "Vipindi vya saa za kazi",
+      "description": "{project}: vipindi vya kila wiki vinavyoisha {weekEnd} saa {cutoff}; siku ya malipo {payday}.",
+      "filter": "Chagua mradi",
+      "pendingAdjustments": "{count, plural, one {Marekebisho # yanasubiri uamuzi.} other {Marekebisho # yanasubiri uamuzi.}}",
+      "caption": "Vipindi vya saa za kazi vya {project}",
+      "columns": {
+        "period": "Kipindi",
+        "status": "Hali",
+        "days": "Siku za mahudhurio",
+        "unconfirmed": "Hazijathibitishwa",
+        "anomalies": "Hitilafu zilizo wazi",
+        "labourers": "Wafanyakazi",
+        "cutoff": "Mwisho"
+      },
+      "due": "Kimefika",
+      "none": "Bado hakuna vipindi: kimoja huanza mahudhurio yanaporekodiwa mara ya kwanza."
+    },
+    "period": {
+      "title": "Kipindi cha saa za kazi",
+      "heading": "Saa za kazi {start} – {end}",
+      "description": "{project} · mwisho {cutoff}",
+      "state": "Hali ya kipindi",
+      "source": {
+        "snapshot": "Nakala iliyoidhinishwa",
+        "live": "Jumla za sasa"
+      },
+      "submittedBy": "Kimewasilishwa na {name} tarehe {at}",
+      "approvedBy": "Kimeidhinishwa na {name} tarehe {at}",
+      "rejected": "Kimekataliwa na {name}: {reason}",
+      "rulesUnverified": "Jumla hizi zinatumia kanuni za saa za kazi ambazo bado hazijaidhinishwa na uzingatiaji (COMPLIANCE-REVIEW). Mfumo halisi unakataa idhini hadi mkaguzi aziidhinishe.",
+      "blockers": {
+        "title": "Kabla ya kuwasilisha",
+        "notDue": "Muda wa mwisho ni {cutoff}.",
+        "openAnomalies": "{count, plural, one {Hitilafu # iliyo wazi lazima ikaguliwe kabla ya idhini.} other {Hitilafu # zilizo wazi lazima zikaguliwe kabla ya idhini.}}",
+        "pendingCorrections": "{count, plural, one {Usahihishaji # unasubiri uamuzi.} other {Usahihishaji # unasubiri uamuzi.}}",
+        "missingRules": "Hakuna kanuni ya saa za kazi kwa: {dates}.",
+        "unconfirmedDay": "{site}, {date}: {status}",
+        "reviewAnomalies": "Kagua hitilafu zilizo wazi"
+      },
+      "lines": {
+        "title": "Jumla kwa kila mfanyakazi",
+        "caption": "Jumla za saa za kazi kwa kila mfanyakazi",
+        "worker": "Mfanyakazi",
+        "days": "Siku",
+        "worked": "Alizofanya",
+        "normal": "Kawaida",
+        "otWeekday": "Ziada siku ya kazi",
+        "otRestDay": "Ziada siku ya mapumziko",
+        "otHoliday": "Ziada sikukuu",
+        "late": "Kuchelewa",
+        "absences": "Hayupo / likizo / mgonjwa",
+        "adjustment": "marekebisho",
+        "none": "Hakuna mahudhurio katika kipindi hiki.",
+        "total": "Jumla",
+        "note": "Saa ziko kwa h:mm. Siku ya mfanyakazi huhesabiwa mara moja kwa maeneo yote; viwango vya saa za ziada hutumiwa na mishahara."
+      },
+      "rules": "Kanuni zilizotumika",
+      "ruleLine": "{scope} kuanzia {from}: kawaida saa {normal}; ziada ×{weekday} siku ya kazi, ×{rest} siku ya mapumziko, ×{holiday} sikukuu.",
+      "holidays": "Sikukuu za umma katika kipindi hiki",
+      "actions": "Vitendo vya kipindi",
+      "submit": "Wasilisha kwa idhini",
+      "approve": "Idhinisha na ufunge",
+      "reject": "Kataa",
+      "reopen": "Fungua tena",
+      "done": {
+        "submit": "Kipindi kimewasilishwa kwa idhini.",
+        "approve": "Kipindi kimeidhinishwa na kufungwa.",
+        "reopen": "Kipindi kimefunguliwa tena.",
+        "reject": "Kipindi kimekataliwa."
+      },
+      "awaitingOther": "Kinasubiri idhini ya mtu asiye aliyewasilisha.",
+      "lockedNote": "Vipindi vilivyoidhinishwa vimefungwa. Mahudhurio ya kuchelewa au usahihishaji ni marekebisho, yanayoidhinishwa na mtu mwingine na kulipwa katika kipindi kinachofuata.",
+      "rejectTitle": "Kataa kipindi",
+      "adjustments": {
+        "title": "Marekebisho",
+        "request": "Omba marekebisho",
+        "change": "{date} katika {site}: {from} → {to}",
+        "requested": "Yameombwa na {name} tarehe {at}: {reason}",
+        "delta": "Badiliko: siku {days}, saa {worked} za kazi",
+        "target": "Yanaingia kipindi kinachofuata",
+        "original": "Yanasahihisha kipindi cha awali",
+        "approve": "Idhinisha marekebisho",
+        "reject": "Kataa marekebisho",
+        "approved": "Marekebisho yameidhinishwa.",
+        "rejected": "Marekebisho yamekataliwa.",
+        "rejectTitle": "Kataa marekebisho",
+        "sent": "Marekebisho yametumwa kwa idhini.",
+        "requestTitle": "Omba marekebisho",
+        "requestDescription": "Kipindi kilichoidhinishwa hakibadiliki. Mwidhinishaji mwingine akiyakubali, tofauti huingia katika kipindi kinachofuata kilicho wazi.",
+        "requestSubmit": "Omba idhini"
+      }
+    },
+    "anomalies": {
+      "title": "Ukaguzi wa hitilafu",
+      "description": "Alama zinazowekwa mahudhurio yanapohifadhiwa au kipindi kinapowasilishwa. Tatua au puuza kila moja kwa maelezo; mfanyakazi halipwi mara mbili kwa siku moja.",
+      "filter": "Chuja hitilafu",
+      "allProjects": "Miradi yote",
+      "status": "Hali",
+      "allStatuses": "Hali zote",
+      "kind": "Aina",
+      "allKinds": "Aina zote",
+      "count": "{count, plural, one {Hitilafu # inaonyeshwa} other {Hitilafu # zinaonyeshwa}} · {open} ziko wazi, {critical} za hatari",
+      "columns": {
+        "date": "Tarehe",
+        "worker": "Mfanyakazi",
+        "flag": "Alama",
+        "where": "Wapi",
+        "status": "Hali",
+        "actions": "Vitendo"
+      },
+      "details": {
+        "two_sites": "Amerekodiwa katika maeneo {count} siku hiyo",
+        "overlapping_times": "Dakika {minutes} zinaingiliana na rekodi nyingine",
+        "excess_hours": "Saa {worked} za kazi; kikomo saa {max}",
+        "manual_override": "Hufungwa usahihishaji unapoamuliwa"
+      },
+      "recordedBy": "Imerekodiwa na {name}",
+      "reviewedBy": "{name}, {at}",
+      "none": "Hakuna hitilafu zinazolingana na vichujio hivi.",
+      "manualNote": "Usahihishaji wa mkono hufungwa na uamuzi wa usahihishaji wenyewe. Waliorekodi mahudhurio hawawezi kukagua hitilafu zake.",
+      "pendingCorrections": "Usahihishaji unaosubiri uamuzi",
+      "correctionLine": "{name}, {date} — umeombwa na {by}",
+      "review": "Kagua",
+      "reviewFor": "Kagua {kind} ya {name}",
+      "reviewTitle": "Kagua hitilafu ya {name}",
+      "decision": "Uamuzi",
+      "decisions": {
+        "resolve": "Tatua",
+        "dismiss": "Puuza"
+      },
+      "decisionHints": {
+        "resolve": "Mahudhurio yamekaguliwa na ni sahihi, au yamesahihishwa.",
+        "dismiss": "Si tatizo (kwa mfano siku ya maeneo mawili iliyokubaliwa)."
+      }
+    },
+    "settings": {
+      "title": "Kanuni za saa za kazi na sikukuu",
+      "description": "Kanuni zenye tarehe ya kuanza (chaguo-msingi la kampuni na za miradi), mwisho wa kila wiki na kalenda ya sikukuu za umma. Kubadilisha kanuni hakubadilishi rejista zilizoidhinishwa.",
+      "periods": {
+        "title": "Vipindi vya kila wiki",
+        "description": "Vipindi vinaisha {weekEnd} saa {cutoff} (Africa/Nairobi); siku ya malipo ni {payday}.",
+        "weekEndsOn": "Wiki inaisha",
+        "cutoff": "Saa ya mwisho",
+        "payday": "Siku ya malipo",
+        "save": "Hifadhi vipindi",
+        "saved": "Imehifadhiwa. Vipindi vilivyopo vinabaki na tarehe zake."
+      },
+      "rules": {
+        "title": "Kanuni za saa za kazi",
+        "description": "Thamani za mfano hazijathibitishwa hadi mkaguzi wa uzingatiaji aziidhinishe (COMPLIANCE-REVIEW).",
+        "company": "Chaguo-msingi la kampuni",
+        "add": "Ongeza toleo la kanuni",
+        "addTitle": "Ongeza toleo la kanuni ya saa za kazi",
+        "addDescription": "Toleo jipya linatumika kuanzia tarehe yake. Haliwezi kuanza ndani ya kipindi kilichowasilishwa au kuidhinishwa.",
+        "addSubmit": "Ongeza toleo",
+        "scope": "Linahusu",
+        "effectiveFrom": "Linaanza (DD/MM/YYYY)",
+        "fields": {
+          "dayStart": "Muda wa kuanza",
+          "normalMinutes": "Siku ya kawaida (dakika)",
+          "defaultBreakMinutes": "Mapumziko ya kawaida (dakika)",
+          "breakAfterMinutes": "Mapumziko baada ya (dakika)",
+          "lateGraceMinutes": "Muda wa neema wa kuchelewa (dakika)",
+          "halfDayThresholdMinutes": "Siku nzima kuanzia (dakika)",
+          "maxPlausibleMinutes": "Kikomo cha siku inayowezekana (dakika)",
+          "otWeekdayMultiplier": "Ziada ×, siku ya kazi",
+          "otRestDayMultiplier": "Ziada ×, siku ya mapumziko",
+          "otHolidayMultiplier": "Ziada ×, sikukuu ya umma",
+          "restDays": "Siku za mapumziko",
+          "source": "Chanzo"
+        },
+        "sourceHint": "Thamani zinatoka wapi, kwa mfano kifungu cha CBA au mkataba wa ajira.",
+        "issues": {
+          "out_of_range": "Thamani moja iko nje ya kiwango kinachoruhusiwa.",
+          "half_day_above_normal": "Kiwango cha siku nzima hakiwezi kuzidi siku ya kawaida.",
+          "max_below_normal": "Kikomo cha siku lazima kiwe angalau siku ya kawaida.",
+          "rest_days_invalid": "Chagua siku za mapumziko zisizozidi sita na zisizojirudia.",
+          "multiplier_invalid": "Viwango huandikwa kama 1.50 na viko kati ya 1.00 na 5.00.",
+          "invalid": "Kagua thamani."
+        },
+        "cancel": "Ghairi toleo",
+        "cancelTitle": "Ughairi toleo hili la kanuni lililopangwa?",
+        "cancelDescription": "Ni matoleo ambayo hayajaanza tu yanayoweza kughairiwa.",
+        "installDemo": "Weka kanuni ya mfano",
+        "columns": {
+          "scope": "Wigo",
+          "effective": "Muda wa kutumika",
+          "day": "Siku ya kazi",
+          "overtime": "Saa za ziada",
+          "compliance": "Uzingatiaji",
+          "actions": "Vitendo"
+        },
+        "inForce": "Inatumika",
+        "scheduled": "Imepangwa",
+        "superseded": "Imepitwa",
+        "dayText": "Kawaida saa {normal} kuanzia {start} (neema dakika {grace}); mapumziko dakika {breakMinutes} baada ya saa {breakAfter}; siku nzima kuanzia saa {halfDay}; kikomo saa {max}.",
+        "restDays": "Siku za mapumziko: {days}",
+        "overtimeText": "×{weekday} siku ya kazi · ×{rest} siku ya mapumziko · ×{holiday} sikukuu",
+        "none": "Bado hakuna kanuni. Bila kanuni, mahudhurio yanaweza kurekodiwa lakini saa hazihesabiwi na vipindi haviwezi kuwasilishwa."
+      },
+      "holidays": {
+        "title": "Sikukuu za umma",
+        "description": "Sikukuu za umma za Kenya chini ya Sheria ya Sikukuu za Umma (Sura 110) na matangazo ya Gazeti. Sikukuu zinazohamahama (Idd) huongezwa zikishatangazwa. Thibitisha kabla ya kuzitegemea (COMPLIANCE-REVIEW).",
+        "install": "Ongeza sikukuu za Kenya zinazokosekana",
+        "add": "Ongeza sikukuu",
+        "addTitle": "Ongeza sikukuu ya umma",
+        "addDescription": "Kwa mfano sikukuu ya Idd iliyotangazwa kwenye Gazeti au sikukuu maalum iliyotangazwa na Waziri.",
+        "addSubmit": "Ongeza sikukuu",
+        "kind": "Aina",
+        "kinds": {
+          "statutory": "Ya kisheria",
+          "gazetted": "Iliyotangazwa kwenye Gazeti",
+          "observed": "Inayoadhimishwa (kanuni ya Jumapili)",
+          "company": "Ya kampuni"
+        },
+        "nameEn": "Jina kwa Kiingereza",
+        "nameSw": "Jina kwa Kiswahili",
+        "source": "Chanzo",
+        "sourceHint": "Sheria, tangazo la Gazeti au tangazo inakotoka.",
+        "remove": "Ondoa",
+        "removeFor": "Ondoa {name}",
+        "removeTitle": "Uondoe {name}?",
+        "removeDescription": "Sikukuu zilizo ndani ya vipindi vilivyowasilishwa au kuidhinishwa haziwezi kuondolewa.",
+        "none": "Bado hakuna sikukuu za umma.",
+        "year": "{year}",
+        "name": "Sikukuu",
+        "locked": "Katika kipindi kilichofungwa"
+      }
+    },
+    "worker": {
+      "title": "Mahudhurio",
+      "range": "{from} – {to}",
+      "none": "Hakuna mahudhurio yaliyorekodiwa katika muda huu.",
+      "approved": "Yameidhinishwa",
+      "pending": "Bado hayajaidhinishwa",
+      "lastWorked": "Alifanya kazi mwisho",
+      "totals": "Siku {days} · saa {hours} · ziada saa {overtime}",
+      "anomalies": "{count, plural, one {Hitilafu # iliyo wazi} other {Hitilafu # zilizo wazi}}"
     }
   }
 }

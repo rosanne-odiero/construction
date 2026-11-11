@@ -98,3 +98,4 @@ export {
   type RateQuery,
   type RateScope,
 } from "./labour.js";
+export * from "./attendance/index.js";

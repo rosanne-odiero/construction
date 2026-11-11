@@ -27,6 +27,10 @@ export const PERMISSIONS = [
   "attendance.record",
   "attendance.override",
   "attendance.review_anomalies",
+  "attendance.confirm",
+  "timesheets.submit",
+  "timesheets.approve",
+  "timesheets.manage_rules",
   "payroll.prepare",
   "payroll.review",
   "payroll.approve",
@@ -103,9 +107,10 @@ export const isProjectPermission = (permission: Permission): boolean =>
 
 /**
  * Project-scoped permissions that a project assignment may carry today (D2.1; the labour
- * do-not-rehire and consent permissions joined in D3.1): the project, BQ, labour, attendance,
- * payroll preparation/review, procurement, stores, site, quality, safety, plant, documents,
- * reports and finance-view permissions. Approval and payment permissions
+ * do-not-rehire and consent permissions joined in D3.1, attendance confirmation and the timesheet
+ * permissions in D3.3): the project, BQ, labour, attendance, timesheet, payroll
+ * preparation/review, procurement, stores, site, quality, safety, plant, documents, reports and
+ * finance-view permissions. Approval and payment permissions
  * (`payroll.approve`, `payments.*`, `finance.manage`, `finance.view_sensitive`) and the portal
  * permissions stay out until their modules define project behaviour. The database CHECK
  * `project_permissions_check` lists the same keys; effective = role ∩ assignment.
@@ -126,6 +131,10 @@ export const PROJECT_ASSIGNABLE_PERMISSIONS = [
   "attendance.record",
   "attendance.override",
   "attendance.review_anomalies",
+  "attendance.confirm",
+  "timesheets.submit",
+  "timesheets.approve",
+  "timesheets.manage_rules",
   "payroll.prepare",
   "payroll.review",
   "procurement.requisition",

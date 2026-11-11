@@ -8,6 +8,7 @@ import {
   PERMISSIONS,
   permissionsRequireMfa,
   PORTAL_HOME,
+  pinAllowed,
   portalFor,
   PROJECT_PERMISSIONS,
   problemType,
@@ -100,6 +101,16 @@ describe("system roles", () => {
     expect(portalFor(["portal.worker", "not.a.permission"])).toBe("worker");
     expect(portalFor([])).toBe("office");
     expect(PORTAL_HOME).toEqual({ office: "/projects", client: "/portal", worker: "/worker" });
+  });
+
+  it("lets a PIN session act only with the labourer portal permission", () => {
+    expect(pinAllowed(SYSTEM_ROLE_PERMISSIONS.labourer)).toBe(true);
+    // A worker for portalFor, but a guessed PIN must not open BQ rates or contract sums.
+    expect(portalFor(["portal.worker", "bq.view", "projects.view"])).toBe("worker");
+    expect(pinAllowed(["portal.worker", "bq.view", "projects.view"])).toBe(false);
+    expect(pinAllowed(["portal.worker", "portal.client"])).toBe(false);
+    expect(pinAllowed(SYSTEM_ROLE_PERMISSIONS.client)).toBe(false);
+    expect(pinAllowed([])).toBe(false);
   });
 
   it("derives the MFA-required roles from their permissions (owner, finance, platform admin)", () => {

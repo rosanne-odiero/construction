@@ -34,3 +34,14 @@ export function portalFor(permissions: Iterable<string>): Portal {
   if (held.includes("portal.client")) return "client";
   return "office";
 }
+
+/**
+ * Whether a six-digit PIN session may act with these permissions: the labourer portal and nothing
+ * else. Stricter than `portalFor`, which also counts view-only permissions as non-staff, so a
+ * custom role holding `portal.worker` with `bq.view` is a worker there; a guessed PIN must still
+ * not open BQ rates or contract sums.
+ */
+export function pinAllowed(permissions: Iterable<string>): boolean {
+  const held = [...permissions];
+  return held.length > 0 && held.every((permission) => permission === "portal.worker");
+}

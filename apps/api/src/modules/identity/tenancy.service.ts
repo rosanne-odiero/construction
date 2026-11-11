@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import {
-  portalFor,
+  pinAllowed,
   PROJECT_ASSIGNABLE_PERMISSIONS,
   type ProjectAssignablePermission,
 } from "@pm-buddy/types";
@@ -275,7 +275,7 @@ export class TenancyService {
       this.redeem(tx, invitation, principal.user.id, (grant) => {
         // Privileged roles (by permission) need enrolled, freshly verified MFA before joining.
         if (requiresMfa(grant)) this.auth.requireMfa(principal, true);
-        if (principal.session.authMethod === "pin" && portalFor(grant.permissions) !== "worker")
+        if (principal.session.authMethod === "pin" && !pinAllowed(grant.permissions))
           throw pinSessionLimited();
       }),
     );

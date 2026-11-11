@@ -1379,6 +1379,7 @@
       "invalidPin": "Nambari ya simu na PIN havikulingana, au akaunti haipatikani. Baada ya PIN zisizo sahihi mara tano, subiri dakika 15.",
       "invalidCode": "Msimbo huo haukuweza kuthibitishwa. Ukague kisha ujaribu tena.",
       "rateLimited": "Majaribio mengi sana. Subiri dakika chache kabla ya kujaribu tena.",
+      "pinResetRequired": "PIN zisizo sahihi zimekuwa nyingi leo. Chagua “Umesahau PIN?” upate kiungo cha kubadilisha kwa SMS.",
       "network": "PM-Buddy haikufikiwa. Kagua muunganisho wako kisha ujaribu tena.",
       "invalidResponse": "PM-Buddy imejibu bila kutarajiwa. Hujaingia. Jaribu tena au kagua hali ya mfumo.",
       "passkeyCancelled": "Ombi la passkey lilighairiwa, muda wake uliisha au halipatikani kwenye kifaa hiki.",

@@ -31,6 +31,7 @@ import {
 } from "../notifications/notification.provider.js";
 
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
+const rateKey = (key: string) => `pmb:auth:rate:${digest(key)}`;
 export type CookieKind = "at" | "rt" | "csrf" | "oauth";
 export const opaqueToken = (): string => randomBytes(32).toString("base64url");
 export const hashPassword = (value: string): Promise<string> =>
@@ -216,13 +217,19 @@ export class AuthSecurity implements OnModuleInit {
   }
 
   async limit(key: string, maximum: number, seconds: number): Promise<void> {
+    if ((await this.increment(key, seconds)) > maximum)
+      throw new HttpException("Too many attempts; retry later", 429);
+  }
+
+  /** Adds one to a rate-limit counter (window starts at the first hit) and returns the count. */
+  async increment(key: string, seconds: number): Promise<number> {
     let count: unknown;
     try {
       await this.redis.ping();
       count = await this.redis.client.eval(
         "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n",
         1,
-        `pmb:auth:rate:${digest(key)}`,
+        rateKey(key),
         seconds,
       );
     } catch {
@@ -230,7 +237,27 @@ export class AuthSecurity implements OnModuleInit {
     }
     if (typeof count !== "number")
       throw new ServiceUnavailableException("Invalid rate limit response");
-    if (count > maximum) throw new HttpException("Too many attempts; retry later", 429);
+    return count;
+  }
+
+  /** A rate-limit counter's current value, without adding to it. */
+  async counted(key: string): Promise<number> {
+    try {
+      await this.redis.ping();
+      return Number((await this.redis.client.get(rateKey(key))) ?? 0);
+    } catch {
+      throw new ServiceUnavailableException("Rate limiting is unavailable");
+    }
+  }
+
+  /** Forgets a rate-limit counter, for example once a PIN reset proves control of the phone. */
+  async forget(key: string): Promise<void> {
+    try {
+      await this.redis.ping();
+      await this.redis.client.del(rateKey(key));
+    } catch {
+      throw new ServiceUnavailableException("Rate limiting is unavailable");
+    }
   }
 
   /**

@@ -2,12 +2,13 @@ import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { pinProblem } from "@pm-buddy/domain";
-import { portalFor } from "@pm-buddy/types";
+import { pinAllowed } from "@pm-buddy/types";
 import { PrismaService } from "../../infra/prisma.service.js";
 import {
   AuthSecurity,
@@ -23,6 +24,17 @@ import { TenantDatabase } from "./tenant-database.service.js";
 
 const MINUTE = 60_000;
 const DAY_SECONDS = 86_400;
+/** Wrong PINs per number per day before sign-in needs a PIN reset by SMS. */
+export const PIN_DAILY_FAILURES = 30;
+const dailyFailures = (identifier: string) => `pin-day:key:${identifier}`;
+const resetRequired = () =>
+  new HttpException(
+    {
+      code: "pin-reset-required",
+      message: "Too many wrong PINs today. Reset your PIN with the link we send by SMS.",
+    },
+    429,
+  );
 const weakPin = (problem: string) =>
   new BadRequestException({
     code: "pin-too-weak",
@@ -34,7 +46,9 @@ const weakPin = (problem: string) =>
  * Labourer sign-in with a Kenyan phone number and a six-digit PIN. Accounts are created only
  * from a labourer invitation (the SMS link proves control of the phone). PIN sessions are
  * limited to the labourer portal (TenantScope), so a guessed PIN never unlocks staff data;
- * guessing is bounded by the shared five-failure lockout and per-number limits.
+ * guessing is bounded by the shared five-failure lockout, the per-number request limit and a
+ * daily budget of wrong PINs per number. Only wrong PINs count against the budget; once it is
+ * spent the owner resets the PIN by SMS, which also clears it.
  */
 @Injectable()
 export class PinService {
@@ -48,7 +62,8 @@ export class PinService {
 
   async login(identifier: string, pin: string, req: Request, res: Response) {
     await this.auth.throttle(req, "pin-login", identifier);
-    await this.security.limit(`pin-day:key:${identifier}`, 30, DAY_SECONDS);
+    if ((await this.security.counted(dailyFailures(identifier))) >= PIN_DAILY_FAILURES)
+      throw resetRequired();
     const result = await this.prisma.$transaction(
       async (tx) => {
         const found = await tx.user.findUnique({ where: { identifier } });
@@ -80,8 +95,11 @@ export class PinService {
       },
       { timeout: 10_000 },
     );
-    if (!result)
+    if (!result) {
+      // Counted for unknown numbers too, so the response never reveals whether one exists.
+      await this.security.increment(dailyFailures(identifier), DAY_SECONDS);
       throw new UnauthorizedException("Invalid phone number or PIN, or account unavailable");
+    }
     return this.auth.issue(result.id, res);
   }
 
@@ -161,7 +179,7 @@ export class PinService {
         if (!invitation) throw new UnauthorizedException("Invalid or expired invitation");
         await tx.$executeRaw`SELECT set_config('app.tenant_id', ${invitation.tenantId}, true)`;
         await this.tenancy.redeem(tx, invitation, userId, (grant) => {
-          if (portalFor(grant.permissions) !== "worker") throw pinSessionLimited();
+          if (!pinAllowed(grant.permissions)) throw pinSessionLimited();
         });
         const session = await tx.session.create({
           data: {
@@ -218,6 +236,7 @@ export class PinService {
       return true;
     });
     if (!valid) throw new UnauthorizedException("Invalid or expired reset token");
+    await this.security.forget(dailyFailures(pending.user.identifier));
     return { message: "PIN changed. Sign in again." };
   }
 

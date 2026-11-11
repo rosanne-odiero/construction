@@ -641,3 +641,172 @@ Also: `@pm-buddy/types` exports `AUTOMATIC_ADJUSTMENT_REASON`; the web shows a t
 | Drop and recreate `pmb`, then `db:migrate`, `db:migrate`, `db:seed`, `db:seed` | All migrations applied, then "No pending migrations to apply."; seed run 1 "created": 1508 attendance records, 20 periods (16 approved), 29 open anomalies, 1 adjustment, 23 holidays; run 2 "already present" with the same counts |
 | `cd apps/api && npx --yes pnpm@12.17.0 exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` | "No difference detected.", exit 0 |
 
+
+## Phase 6 — increment 1: live site-diary foundation (11 November 2026)
+
+Owner selected **"Implement all Phase 6 incrementally, starting with its foundations"**.
+This increment starts D6.1; it does not mark D6.1 or Phase 6 accepted, and does not
+silently assume the attendance, stores or financial-ledger modules exist.
+
+Delivered:
+
+- `/diary` lists accessible projects; the sidebar opens it and legacy `/soon/diary`
+  redirects to it. `/projects/[projectId]?tab=diary` is live, not a prototype.
+- Daily site drafts capture work, weather, constraints and a **manual**, nullable
+  workforce count. Unknown remains null; zero explicitly means no workers. Site/day
+  is unique; future Nairobi dates and mismatched project/site IDs are refused.
+- Original-author edits, submission, independent `quality.manage` approval/rejection,
+  author reopening of rejection, expected-version conflicts and permanent approval
+  locking. Reads use `projects.view`; writing uses `site.diary`. All permissions use
+  the existing role ∩ assignment policy. EN/SW, mobile layout and explicit errors.
+- Persisted `site_diaries` with forced tenant RLS, composite tenant/project/site
+  reference, database actor/state/version/locking protections, safe-summary audit in
+  the same transaction, bounded cursor pagination and strict shared contracts.
+- Local development migration applied successfully; `prisma migrate diff
+  --from-config-datasource --to-schema prisma/schema.prisma --exit-code` reported
+  **No difference detected**. No production migration/deployment was performed.
+
+Executed evidence:
+
+| Command | Actual result |
+|---|---|
+| `pnpm --filter @pm-buddy/domain test` | 10 files, 133 tests passed |
+| `pnpm --filter @pm-buddy/validation test` | 7 files, 62 tests passed, including impossible sign-off response rejection |
+| `pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/diaries.e2e-spec.ts` | 10 tests passed against real PostgreSQL/runtime role: persistence, CSRF/auth, role/project scope, cross-tenant RLS and references, concurrent edits, author-only drafts, independent approval, rejection/reopen, immutable SQL backstops, pagination, audit redaction, revoked assignments and cancelled-project writes |
+| API integration regression run: diary + projects + identity | 3 files, 58 tests passed before the final cancelled-project test was added; final diary suite rerun separately as above |
+| `pnpm --filter @pm-buddy/web exec playwright test test/diaries.spec.ts` | 3 Chromium tests passed: live-route navigation, draft CRUD/submission, independent lock/reload, rejection reason, stale-version and malformed-success failures, EN/SW, 360px, dark theme and axe |
+| `pnpm --filter @pm-buddy/web test` | 5 files, 20 existing unit tests passed |
+| API/web `typecheck`, `lint`; domain/validation `lint` | Passed |
+| `pnpm --filter @pm-buddy/i18n i18n:check` | Passed: 1,855 EN/SW keys and ICU compilation |
+| `pnpm --filter @pm-buddy/api build` | Passed |
+| `PLAYWRIGHT_TEST=1 pnpm --filter @pm-buddy/web build` | Passed; includes `/diary` and project diary tab |
+
+Tooling used the already-cached pnpm 12.17.0 executable after the interactive PATH
+lacked pnpm/npx. Browser tests now use `.next-e2e` (`PLAYWRIGHT_TEST=1`) so they do not
+compete with the existing developer server. ESLint ignores generated browser build
+and test-output directories. Existing server at port 3200 was left running and
+remained responsive. The existing identity suite still emits its previously noted
+Node listener warning. No GitHub CI or all-project browser-suite run is claimed.
+The running API's OpenAPI document through port 3200 exposes all three diary paths;
+an unauthenticated diary read returns 401, and `/diary` redirects to sign-in. These
+are route/auth smoke checks, not a real-API authenticated browser workflow.
+
+Remaining Phase 6 work, in incremental delivery order:
+
+1. Finish D6.1: attendance-backed workforce snapshot with provenance; offline/site-app
+   capture; attachments and server photo verification; inspections/checklists,
+   cube/slump tests, snags, practical completion and defects-liability workflow.
+2. D6.2: schedule activities/dependencies, milestones, immutable baseline, actual
+   dates, variance/Gantt and reasoned delays.
+3. D6.3: approved-BQ-linked measurements/evidence, separate physical/earned/certified
+   values, cost inputs and unavailable ratios when undefined, S-curve, retention and
+   releases, subcontract/piece-rate linkage, cost-to-complete, independent certificate
+   review/issuance and immutable PDF snapshots. Prevent double billing materials on
+   site when incorporated. No EVM or certificate figures are fabricated today.
+
+See [Phase 6 demo](./demos/phase-6.md) and the [API contract](../apps/api/README.md#site-diary-foundation-d61-phase-6-increment-1).
+
+## Continue with Google (11 November 2026)
+
+Owner request: "allow login with gmail". Owner decisions: accept **Gmail and Google
+Workspace addresses** (Google-authoritative only), **link automatically** to an existing
+account with the same email, and **create a new verified account** for people without one.
+
+Delivered: "Continue with Google" on `/sign-in` (EN/SW), shown only when the API reports it
+configured; OpenID Connect code flow with PKCE, state and nonce via `openid-client@6.8.9`
+(pinned; adds `oauth4webapi@3.8.8`, reuses `jose@6.2.15`); ID token issuer, audience,
+expiry, nonce and signature checks; `user_identities` table (migration
+`20261116100000_google_sign_in`, unique per Google subject and per user); emailed notice on
+linking; takeover of an unverified pending registration discards its password; explicit
+`?google=` outcomes; PM-Buddy MFA, roles and tenancy unchanged. Off unless
+`AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` are set (see the
+[API README](../apps/api/README.md#continue-with-google)).
+
+| Command | Actual result |
+|---|---|
+| `pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/google.e2e-spec.ts` | 11 tests passed against a local fake provider with the real openid-client exchange and PostgreSQL |
+| `pnpm --filter @pm-buddy/api test` / `test:e2e` | 100 unit tests (17 files) and 119 integration tests (9 files) passed |
+| `pnpm --filter @pm-buddy/web exec playwright test test/sign-in.spec.ts` | 6 Chromium tests passed (4 existing, 2 new: button and safe `next`, EN/SW errors, hidden when off, MFA after Google, axe) |
+| API/web `typecheck` and `lint`; `i18n:check` | Passed (1,864 EN/SW keys) |
+| Local migration + `prisma migrate diff --exit-code` | Applied; no difference |
+| Running dev server (port 3200) | `GET /api/v1/auth/providers` → `{"google":false}`; `/auth/google/start` → 303 to `/sign-in?google=unavailable&next=%2Fdiary` |
+
+Not yet done: a sign-in against real Google (needs the owner's OAuth client and redirect URI
+registration); unlinking Google from an account; showing linked sign-in methods in the
+account console. Google sign-in does not reset password-lockout counters.
+
+## Portals for clients, labourers and staff (11 November 2026)
+
+Owner request: "id like different portals for clients admin and labourers" (and Google sign-in,
+delivered above). Owner decisions: **admin = company staff** (the existing office app),
+**one sign-in page routing by role**, **labourers sign in with phone + PIN invited by a PM**, and
+**all three portals now with the live data that exists**. This adds a labourer web portal on top
+of the brief's USSD-only plan (§3); USSD remains D7.3.
+
+Delivered: `labourer` system role (`portal.worker` only); `portal.client`/`portal.worker`
+project-assignable (migration `20261116110000_portals`, backfilling existing clients); `portalFor`
+routing in sign-in, the office layout and both portal layouts; live `/portal` (assigned
+projects, milestones, approved diaries) and `/worker` (assigned projects and sites, attendance
+and pay explicitly "coming"); `/worker/join` and `/worker/pin`; **Labourer PIN** tab on
+`/sign-in`; **Invite a labourer** on a project's Team tab (`labour.manage`); PIN accounts
+(Argon2id, weak-PIN rules, shared lockout, per-number limits) with `sessions.auth_method` and
+PIN sessions limited to the labourer portal; site-diary lists restricted to staff permissions so
+clients never see drafts; the mock client-portal prototype moved to `/prototype/portal`.
+
+| Command | Actual result |
+|---|---|
+| `pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/portals.e2e-spec.ts` | 9 tests passed (real PostgreSQL, `pmb_app` role) |
+| `pnpm --filter @pm-buddy/api test` / `test:e2e` (after the API changes) | 100 unit tests (17 files) and 128 integration tests (10 files) passed |
+| `pnpm --filter @pm-buddy/web exec playwright test` | Full browser suite: 53 passed, including 8 new portal tests |
+| `pnpm --filter @pm-buddy/web test`, `typecheck`, `lint`, `PLAYWRIGHT_TEST=1 … build` | Passed (20 unit tests; build lists `/portal`, `/worker`, `/worker/join`, `/worker/pin`, `/prototype/portal`) |
+| Shared packages: types 16, domain 138, validation 62, i18n 3 tests; `i18n:check` | Passed (1,951 EN/SW keys) |
+| `pnpm exec prettier --check packages apps/api/src apps/api/test apps/web/src apps/web/test` | Passed |
+| Dev database: `pnpm db:migrate`, `prisma migrate diff --exit-code` | Applied; no difference |
+| Running dev servers (port 3200) | Portal APIs 401 signed out; `/portal`, `/worker` redirect to sign-in; `/worker/join`, `/worker/pin`, `/prototype/portal` 200; OpenAPI lists all seven new operations |
+
+Limitations: production SMS (invitation and PIN-reset links) is unavailable until the D7.3
+provider is approved; no USSD; no attendance or pay data; client photos, certificates, payments,
+variations and FX are not built; no supplier portal; a six-digit PIN is a low-entropy secret,
+which is why PIN sessions are confined to labourer data. Kiswahili strings need a native
+speaker's review. No real-API browser smoke of the portals and no GitHub CI run are claimed.
+
+## Phase 6 — increment 2: verified site photos (11 November 2026)
+
+Owner instruction: "continue" (Phase 6, incrementally). This increment delivers D6.1's second
+done-when check, "photo metadata is verified"; with locked approved diaries (increment 1) both
+D6.1 checks now pass locally. D6.1 is still not complete: attendance-backed workforce, in-app and
+offline capture, inspections/checklists, cube/slump tests, snags and completion/DLP remain.
+
+Delivered: project **Photos** tab (upload from the phone camera, timeline with Verified / Not
+verified and reasons, EN/SW); `site_photos` (migration `20261116120000_site_photos`: forced RLS,
+composite site and draft-diary references, CHECKs binding `verified` to the checks and keys to
+tenant/project/photo, insert-only for the runtime role, unique SHA-256 per project); EXIF reading
+(`sharp@0.35.5`, `exif-reader@2.0.3`, both pinned); `verifyPhotoEvidence` against the geofence
+version in force at capture; private originals and metadata-free thumbnails; `liveUpload`
+can send form fields.
+
+| Command | Actual result |
+|---|---|
+| `pnpm --filter @pm-buddy/domain test` | 142 tests passed (photo evidence: tolerance, distance outside, missing data, future/stale, Nairobi diary day) |
+| `pnpm --filter @pm-buddy/validation test` | 65 tests passed |
+| `pnpm --filter @pm-buddy/api test` | 103 unit tests passed (EXIF reader against generated JPEGs) |
+| `pnpm --filter @pm-buddy/api test:e2e` | 11 files, 137 tests passed, including 9 photo tests (real PostgreSQL, object storage, generated EXIF JPEGs: verified/outside/missing/stale/future/assumed zone, geofence version in force, draft-diary only, duplicate, PNG, corrupt, 56-megapixel and 15 MB+ refusals, permissions, cross-company 404s, append-only SQL, pagination, audit redaction) |
+| `pnpm --filter @pm-buddy/web exec playwright test --workers=3` | 55 passed, including 2 photo tests (badges and reasons, upload/duplicate/unverified outcomes, EN/SW, 360 px, axe) |
+| Web `typecheck`, `lint`, unit tests (20), `PLAYWRIGHT_TEST=1 … build`; API/domain/validation lint; `i18n:check` (1,995 keys); `prettier --check` | Passed |
+| Dev database migration + `prisma migrate diff --exit-code` | Applied; no difference |
+| Running dev API (port 3200) | Photo list 401 signed out; OpenAPI lists the four photo operations |
+
+Test notes: a concurrent labourer-join test from the portals increment expected exactly 409 for
+the losing request; it can correctly be 401 when it arrives after the invitation is spent (the
+invariant, one account, held). The assertion now accepts either. The 7-page project
+accessibility sweep is marked slow (it took 24 s alone against a 30 s limit). Default-parallel
+browser runs were unstable while another checkout (`construction-p34`) ran its own Playwright
+suite on this machine (load average ~170); with three workers the full suite passed.
+
+Limitations: no in-app capture proof (web uploads can come from the gallery) and no perceptual
+reuse detection, so the badge is weaker than THREAT_MODEL A-13's target; HEIC is refused;
+thumbnails are generated in the API process; no client-portal photo timeline yet (D7.1).
+
+Remaining Phase 6 work: rest of D6.1 (inspections/checklists, cube/slump tests, snags,
+completion/DLP; attendance-backed workforce and site-app capture after Phase 3), D6.2 schedule
+(baseline, actuals, variance, delay log), D6.3 measurement, EVM and interim payment certificates.

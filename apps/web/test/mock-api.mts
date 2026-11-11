@@ -19,6 +19,7 @@ import {
   checkProjectTransition,
   geofenceMetrics,
   nairobiDate,
+  normalizeKenyanPhone,
   wbsWeightGroups,
   wbsWeightsComplete,
   type Geofence,
@@ -32,6 +33,7 @@ import {
   type Permission,
 } from "@pm-buddy/types";
 import {
+  authProvidersResponseSchema,
   authResponseSchema,
   changeGeofenceRequestSchema,
   createMilestoneRequestSchema,
@@ -40,6 +42,7 @@ import {
   createWbsNodeRequestSchema,
   csrfResponseSchema,
   geofenceHistoryResponseSchema,
+  invitationResponseSchema,
   messageResponseSchema,
   milestoneResponseSchema,
   milestonesResponseSchema,
@@ -65,6 +68,8 @@ import {
   type Project,
   type ProjectStatusChange,
   type Site,
+  type SiteDiary,
+  type SitePhoto,
   type WbsNode,
 } from "@pm-buddy/validation";
 import { handleBq, initialProjectBq, type BqState } from "./mock-bq.mts";
@@ -76,6 +81,9 @@ import {
 } from "./mock-procurement.mts";
 import { attendanceFixture, handleAttendance, type AttendanceState } from "./mock-attendance.mts";
 import { handleLabour, labourFixture, type LabourState } from "./mock-labour.mts";
+import { handleDiaries, initialDiaries } from "./mock-diaries.mts";
+import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
+import { handlePhotos, initialPhotos } from "./mock-photos.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -155,6 +163,8 @@ type State = {
   procurement: ProcurementState;
   labour: LabourState;
   attendance: AttendanceState;
+  diaries: SiteDiary[];
+  photos: SitePhoto[];
 };
 
 const states = new Map<string, State>();
@@ -344,6 +354,8 @@ function fixture(persona: Persona): State {
   return {
     persona,
     stepUpAt: new Map(),
+    diaries: initialDiaries(RUIRU_ID, MAIN_PLOT_ID, OWNER_ID, AGENT_ID),
+    photos: initialPhotos(RUIRU_ID, MAIN_PLOT_ID),
     bq: {
       projects: new Map([
         [RUIRU_ID, initialProjectBq(true, ruiru.project.contractSumMinor)],
@@ -585,9 +597,26 @@ async function handle(
   raw: Buffer,
 ): Promise<Reply> {
   if (path === "/auth/csrf") return { body: { csrfToken: MOCK_CSRF }, schema: csrfResponseSchema };
+  // Google sign-in is offered unless a test sets the `mock_google=off` cookie.
+  if (path === "/auth/providers")
+    return {
+      body: { google: !/(^|;\s*)mock_google=off(;|$)/.test(req.headers.cookie ?? "") },
+      schema: authProvidersResponseSchema,
+    };
   if (path === "/auth/refresh") throw new HttpError(401, "unauthorized");
   if (path === "/auth/logout")
     return { body: { message: "Signed out." }, schema: messageResponseSchema };
+  const persona = cookie(req, "pmb_at")?.split(".")[0];
+  if (isPortalPersona(persona)) {
+    if (method !== "GET" && req.headers["x-csrf-token"] !== MOCK_CSRF)
+      throw new HttpError(403, "forbidden");
+    return handlePortalPersona(
+      persona,
+      method,
+      path,
+      (status, code) => new HttpError(status, code),
+    );
+  }
   const state = stateFor(req);
   if (method !== "GET" && req.headers["x-csrf-token"] !== MOCK_CSRF)
     throw new HttpError(403, "forbidden");
@@ -747,6 +776,33 @@ async function handle(
   const match = /^\/projects\/([^/]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw new HttpError(404, "not-found");
   const [, projectId, rest = ""] = match;
+  if (rest === "photos") {
+    const entry = find(state, projectId!, method === "GET" ? "projects.view" : "site.photos");
+    return handlePhotos(
+      state.photos,
+      projectId!,
+      entry.sites.map((site) => site.site.id),
+      method,
+      raw,
+      (status, code) => new HttpError(status, code),
+    );
+  }
+  if (rest === "diaries" || rest.startsWith("diaries/")) {
+    const entry = find(state, projectId!, method === "GET" ? "projects.view" : "site.diary");
+    if (method !== "GET" && ["closed", "cancelled"].includes(entry.project.status))
+      throw new HttpError(409, "project-read-only");
+    return handleDiaries(
+      state.diaries,
+      state.persona === "owner" ? OWNER_ID : AGENT_ID,
+      projectId!,
+      entry.sites.map((site) => site.site.id),
+      method,
+      rest,
+      query,
+      body,
+      (status, code) => new HttpError(status, code),
+    );
+  }
   if (rest === "bq" || rest.startsWith("bq/")) {
     const entry = find(state, projectId!, "projects.view");
     return handleBq(
@@ -967,6 +1023,26 @@ async function handle(
       Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)),
     );
     return { body: { milestone }, schema: milestoneResponseSchema };
+  }
+  if (rest === "labourers/invitations" && method === "POST") {
+    find(state, projectId!, "labour.manage");
+    const identifier = normalizeKenyanPhone(
+      String((body as { identifier?: unknown })?.identifier ?? ""),
+    );
+    if (!identifier) throw new HttpError(400, "validation-error");
+    return {
+      status: 201,
+      body: {
+        invitation: {
+          id: id(),
+          identifier,
+          role: "labourer",
+          roleName: null,
+          expiresAt: new Date(Date.now() + 48 * 3_600_000).toISOString(),
+        },
+      },
+      schema: invitationResponseSchema,
+    };
   }
   if (rest === "team" && method === "GET")
     return {

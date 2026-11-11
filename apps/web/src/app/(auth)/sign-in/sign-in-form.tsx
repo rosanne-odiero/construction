@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { z } from "zod";
 import { Building2, Eye, EyeOff, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
+import { PORTAL_HOME, portalFor } from "@pm-buddy/types";
 import {
   authResponseSchema,
   csrfResponseSchema,
@@ -14,6 +15,7 @@ import {
   passkeyAuthenticationOptionsResponseSchema,
   tenantsResponseSchema,
   type AuthResponse,
+  type GoogleSignInOutcome,
   type TenantsResponse,
 } from "@pm-buddy/validation";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,7 @@ import {
 } from "@/components/ui/input-otp";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FoundationApiError, foundationRequest } from "@/lib/foundation-api";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { refreshSession } from "@/lib/live-api";
 import { normalizeKenyanPhone } from "@/lib/format";
 
@@ -42,6 +45,7 @@ type Step = "checking" | "credentials" | "mfa" | "enrol" | "company" | "noCompan
 type Company = TenantsResponse["tenants"][number];
 type ErrorKey =
   | "invalidCredentials"
+  | "invalidPin"
   | "invalidCode"
   | "rateLimited"
   | "network"
@@ -49,11 +53,15 @@ type ErrorKey =
   | "passkeyCancelled"
   | "unexpected";
 
-function errorKey(error: unknown, credentials: boolean): ErrorKey {
+function errorKey(error: unknown, credentials: boolean | "pin"): ErrorKey {
   if (!(error instanceof FoundationApiError)) return "unexpected";
   if (error.code === "passkey-cancelled") return "passkeyCancelled";
   if (error.status === 401 || error.status === 400)
-    return credentials ? "invalidCredentials" : "invalidCode";
+    return credentials === "pin"
+      ? "invalidPin"
+      : credentials
+        ? "invalidCredentials"
+        : "invalidCode";
   if (error.status === 429) return "rateLimited";
   if (error.code === "network") return "network";
   if (error.code === "invalidResponse") return "invalidResponse";
@@ -69,16 +77,36 @@ async function post<T>(path: string, schema: z.ZodType<T>, body: Record<string, 
   });
 }
 
+const googleErrors = {
+  cancelled: "cancelled",
+  unavailable: "unavailable",
+  "rate-limited": "rateLimited",
+  "email-unsupported": "emailUnsupported",
+  "account-conflict": "accountConflict",
+  failed: "failed",
+} as const satisfies Record<GoogleSignInOutcome, string>;
+
 /**
- * Real sign-in for the office app: password, then TOTP, passkey or recovery-code verification
- * when required, then company selection. Tokens stay in httpOnly cookies set by the API; this
- * component only sees the parsed account summary. `next` is already a safe relative path.
+ * Real sign-in for the office app: password or Google, then TOTP, passkey or recovery-code
+ * verification when required, then company selection. Tokens stay in httpOnly cookies set by
+ * the API; this component only sees the parsed account summary. `next` is already a safe
+ * relative path. Google returns to this page with a session (resumed below) or `googleOutcome`.
  */
-export function SignInForm({ next }: { next: string }) {
+export function SignInForm({
+  next,
+  google = false,
+  googleOutcome,
+}: {
+  next: string;
+  google?: boolean;
+  googleOutcome?: GoogleSignInOutcome;
+}) {
   const t = useTranslations("signIn");
   const router = useRouter();
   const [step, setStep] = useState<Step>("checking");
-  const [method, setMethod] = useState<"email" | "phone">("email");
+  const [googleFailure, setGoogleFailure] = useState(googleOutcome);
+  const [method, setMethod] = useState<"email" | "phone" | "pin">("email");
+  const [pin, setPin] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -93,11 +121,18 @@ export function SignInForm({ next }: { next: string }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const normalised = normalizeKenyanPhone(phone);
 
-  const finish = useCallback(() => {
-    setStep("done");
-    router.replace(next);
-    router.refresh();
-  }, [next, router]);
+  /** Staff go to `next`; clients and labourers to their own portal (unless `next` is inside it). */
+  const finish = useCallback(
+    (company?: Company) => {
+      const portal = company ? portalFor(company.permissions) : "office";
+      const home = PORTAL_HOME[portal];
+      const inPortal = next === home || next.startsWith(`${home}/`) || next.startsWith(`${home}?`);
+      setStep("done");
+      router.replace(portal === "office" || inPortal ? next : home);
+      router.refresh();
+    },
+    [next, router],
+  );
 
   const selectCompany = useCallback(
     async (company: Company) => {
@@ -105,7 +140,7 @@ export function SignInForm({ next }: { next: string }) {
         setAccount(
           await post(`/tenants/${encodeURIComponent(company.id)}/select`, authResponseSchema),
         );
-        finish();
+        finish(company);
       } catch (error) {
         // Companies whose role requires MFA need a verification within the last five minutes.
         if (error instanceof FoundationApiError && error.status === 403) setStep("mfa");
@@ -124,11 +159,9 @@ export function SignInForm({ next }: { next: string }) {
       }
       const { tenants } = await foundationRequest("/tenants", tenantsResponseSchema);
       setCompanies(tenants);
-      if (
-        current.session.tenantId &&
-        tenants.some((tenant) => tenant.id === current.session.tenantId)
-      ) {
-        finish();
+      const selected = tenants.find((tenant) => tenant.id === current.session.tenantId);
+      if (selected) {
+        finish(selected);
       } else if (tenants.length === 1) {
         await selectCompany(tenants[0]!);
       } else {
@@ -171,10 +204,11 @@ export function SignInForm({ next }: { next: string }) {
     if (step !== "checking") heading.current?.focus();
   }, [step]);
 
-  async function run(operation: () => Promise<void>, credentials = false) {
+  async function run(operation: () => Promise<void>, credentials: boolean | "pin" = false) {
     if (busy) return;
     setBusy(true);
     setFailure(null);
+    setGoogleFailure(undefined);
     try {
       await operation();
     } catch (error) {
@@ -185,6 +219,7 @@ export function SignInForm({ next }: { next: string }) {
   }
 
   const identifier = method === "email" ? email.trim() : (normalised ?? "");
+  const usingPin = method === "pin";
   const status = (
     <div aria-live="polite" className="min-h-0">
       {busy ? (
@@ -200,6 +235,13 @@ export function SignInForm({ next }: { next: string }) {
       className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
     >
       {t(`errors.${failure}`)}
+    </p>
+  ) : googleFailure ? (
+    <p
+      role="alert"
+      className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+    >
+      {t(`googleErrors.${googleErrors[googleFailure]}`)}
     </p>
   ) : null;
   const restart = (
@@ -449,7 +491,15 @@ export function SignInForm({ next }: { next: string }) {
         onSubmit={(event) => {
           event.preventDefault();
           if (!identifier) {
-            setFailure("invalidCredentials");
+            setFailure(usingPin ? "invalidPin" : "invalidCredentials");
+            return;
+          }
+          if (usingPin) {
+            void run(async () => {
+              const result = await post("/auth/pin/login", authResponseSchema, { identifier, pin });
+              setPin("");
+              await afterAuthentication(result);
+            }, "pin");
             return;
           }
           void run(async () => {
@@ -462,10 +512,14 @@ export function SignInForm({ next }: { next: string }) {
         <CardContent>
           <FieldGroup>
             {alert}
-            <Tabs value={method} onValueChange={(value) => setMethod(value as "email" | "phone")}>
+            <Tabs
+              value={method}
+              onValueChange={(value) => setMethod(value as "email" | "phone" | "pin")}
+            >
               <TabsList className="w-full">
                 <TabsTrigger value="email">{t("emailTab")}</TabsTrigger>
                 <TabsTrigger value="phone">{t("phoneTab")}</TabsTrigger>
+                <TabsTrigger value="pin">{t("pinTab")}</TabsTrigger>
               </TabsList>
               {/* Both panels stay mounted so each tab's aria-controls points at a real panel. */}
               <TabsContent value="email" forceMount hidden={method !== "email"}>
@@ -505,45 +559,91 @@ export function SignInForm({ next }: { next: string }) {
                   </Field>
                 ) : null}
               </TabsContent>
+              <TabsContent value="pin" forceMount hidden={method !== "pin"}>
+                {method === "pin" ? (
+                  <Field>
+                    <FieldLabel htmlFor="pin-phone">{t("phone")}</FieldLabel>
+                    <Input
+                      id="pin-phone"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="username"
+                      value={phone}
+                      onChange={(event) => setPhone(event.target.value)}
+                      aria-invalid={phone.length > 0 && !normalised}
+                      aria-describedby="pin-phone-hint"
+                      required
+                    />
+                    <FieldDescription id="pin-phone-hint">
+                      {normalised ? t("phoneNormalised", { phone: normalised }) : t("pinTabHint")}
+                    </FieldDescription>
+                  </Field>
+                ) : null}
+              </TabsContent>
             </Tabs>
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="password">{t("password")}</FieldLabel>
-                <Link
-                  href="/foundation"
-                  className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  {t("forgot")}
-                </Link>
-              </div>
-              <div className="relative">
+            {usingPin ? (
+              <Field>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="pin">{t("pin")}</FieldLabel>
+                  <Link
+                    href="/worker/pin"
+                    className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {t("forgotPin")}
+                  </Link>
+                </div>
                 <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
+                  id="pin"
+                  type="password"
+                  inputMode="numeric"
                   autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="pr-10"
-                  maxLength={128}
+                  maxLength={6}
+                  value={pin}
+                  onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
                   required
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="absolute top-1/2 right-1 -translate-y-1/2"
-                  aria-label={showPassword ? t("hidePassword") : t("showPassword")}
-                  aria-pressed={showPassword}
-                  onClick={() => setShowPassword((value) => !value)}
-                >
-                  {showPassword ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
-                </Button>
-              </div>
-            </Field>
+              </Field>
+            ) : (
+              <Field>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="password">{t("password")}</FieldLabel>
+                  <Link
+                    href="/foundation"
+                    className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {t("forgot")}
+                  </Link>
+                </div>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="pr-10"
+                    maxLength={128}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="absolute top-1/2 right-1 -translate-y-1/2"
+                    aria-label={showPassword ? t("hidePassword") : t("showPassword")}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((value) => !value)}
+                  >
+                    {showPassword ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
+                  </Button>
+                </div>
+              </Field>
+            )}
             {status}
             <Button type="submit" className="w-full" disabled={busy}>
               {t("submit")}
             </Button>
+            {google && !usingPin ? <GoogleSignInButton next={next} /> : null}
           </FieldGroup>
         </CardContent>
       </form>

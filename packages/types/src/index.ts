@@ -39,6 +39,7 @@ export {
   type ProjectStatus,
 } from "./projects.js";
 export { problemType, PROBLEM_TYPE_BASE, type ProblemDetails } from "./problem.js";
+export { PORTAL_HOME, portalFor, PORTALS, type Portal } from "./portals.js";
 export {
   MFA_REQUIRED_ROLES,
   SYSTEM_ROLE_PERMISSIONS,

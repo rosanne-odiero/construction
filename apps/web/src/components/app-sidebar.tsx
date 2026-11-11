@@ -108,10 +108,10 @@ export function AppSidebar({ companyName }: { companyName?: string }) {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === "/portal"}
+                  isActive={pathname === "/prototype/portal"}
                   tooltip={t("items.clientPortal")}
                 >
-                  <Link href="/portal">
+                  <Link href="/prototype/portal">
                     <MonitorSmartphone aria-hidden />
                     <span>{t("items.clientPortal")}</span>
                   </Link>

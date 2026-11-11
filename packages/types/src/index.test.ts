@@ -7,6 +7,8 @@ import {
   PERMISSION_AREAS,
   PERMISSIONS,
   permissionsRequireMfa,
+  PORTAL_HOME,
+  portalFor,
   PROJECT_PERMISSIONS,
   problemType,
   SYSTEM_ROLE_PERMISSIONS,
@@ -79,12 +81,25 @@ describe("system roles", () => {
   it("limits clients and suppliers to their portal and view permissions", () => {
     const allowed = (permission: Permission) =>
       permission.startsWith("portal.") || permission.endsWith(".view");
-    for (const role of ["client", "supplier"] as const)
+    for (const role of ["client", "supplier", "labourer"] as const)
       expect(SYSTEM_ROLE_PERMISSIONS[role].every(allowed), role).toBe(true);
     expect(SYSTEM_ROLE_PERMISSIONS.client).toContain("portal.client");
     expect(SYSTEM_ROLE_PERMISSIONS.client).not.toContain("portal.supplier");
     expect(SYSTEM_ROLE_PERMISSIONS.supplier).toContain("portal.supplier");
     expect(SYSTEM_ROLE_PERMISSIONS.supplier).not.toContain("portal.client");
+    expect(SYSTEM_ROLE_PERMISSIONS.labourer).toEqual(["portal.worker"]);
+  });
+
+  it("sends staff to the office, clients and labourers to their own portals", () => {
+    expect(portalFor(SYSTEM_ROLE_PERMISSIONS.client)).toBe("client");
+    expect(portalFor(SYSTEM_ROLE_PERMISSIONS.labourer)).toBe("worker");
+    for (const role of TENANT_SYSTEM_ROLES.filter((r) => r !== "client" && r !== "labourer"))
+      expect(portalFor(SYSTEM_ROLE_PERMISSIONS[role]), role).toBe("office");
+    expect(portalFor(["portal.client", "site.diary"])).toBe("office");
+    expect(portalFor(["projects.view"])).toBe("office");
+    expect(portalFor(["portal.worker", "not.a.permission"])).toBe("worker");
+    expect(portalFor([])).toBe("office");
+    expect(PORTAL_HOME).toEqual({ office: "/projects", client: "/portal", worker: "/worker" });
   });
 
   it("derives the MFA-required roles from their permissions (owner, finance, platform admin)", () => {

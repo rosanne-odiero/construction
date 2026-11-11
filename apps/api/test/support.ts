@@ -28,8 +28,13 @@ import {
   bqTemplateResponseSchema,
   bqTemplatesResponseSchema,
   auditEventsResponseSchema,
+  authProvidersResponseSchema,
   authResponseSchema,
+  clientProjectResponseSchema,
+  clientProjectsResponseSchema,
   csrfResponseSchema,
+  diariesResponseSchema,
+  diaryResponseSchema,
   invitationResponseSchema,
   membersResponseSchema,
   messageResponseSchema,
@@ -116,6 +121,8 @@ import {
   payslipResponseSchema,
   projectPayrollResponseSchema,
   statutoryRuleResponseSchema,
+  workerPortalResponseSchema,
+  sitePhotosResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -130,6 +137,7 @@ export const notifications = new Map<string, { subject: string; text: string }[]
 export function responseContract(method: string, target: string) {
   const path = target.split("?")[0]!;
   if (path === "auth/csrf") return csrfResponseSchema;
+  if (path === "auth/providers") return authProvidersResponseSchema;
   if (path === "auth/mfa/enroll") return mfaEnrollmentResponseSchema;
   if (path === "auth/mfa/verify") return mfaVerificationResponseSchema;
   if (path === "auth/sessions" && method === "get") return sessionsResponseSchema;
@@ -146,6 +154,8 @@ export function responseContract(method: string, target: string) {
       "auth/mfa/step-up",
       "auth/mfa/recover",
       "auth/passkeys/step-up",
+      "auth/pin/login",
+      "auth/pin/join",
     ].includes(path) ||
     /^tenants\/[^/]+\/select$/.test(path)
   )
@@ -160,7 +170,16 @@ export function responseContract(method: string, target: string) {
     return method === "get" ? rolesResponseSchema : roleResponseSchema;
   if (/^tenants\/current\/roles\/[^/]+$/.test(path) && method === "patch")
     return roleResponseSchema;
+  if (path === "portal/client/projects") return clientProjectsResponseSchema;
+  if (/^portal\/client\/projects\/[^/]+$/.test(path)) return clientProjectResponseSchema;
+  if (path === "portal/worker") return workerPortalResponseSchema;
+  if (/^projects\/[^/]+\/labourers\/invitations$/.test(path)) return invitationResponseSchema;
   if (path === "projects") return method === "get" ? projectsResponseSchema : projectResponseSchema;
+  if (/^projects\/[^/]+\/photos(\?.*)?$/.test(path) && method === "get")
+    return sitePhotosResponseSchema;
+  if (/^projects\/[^/]+\/diaries$/.test(path))
+    return method === "get" ? diariesResponseSchema : diaryResponseSchema;
+  if (/^projects\/[^/]+\/diaries\/[^/]+(\/actions)?$/.test(path)) return diaryResponseSchema;
   if (/^projects\/[^/]+$/.test(path))
     return method === "get" ? projectDetailResponseSchema : projectResponseSchema;
   if (/^projects\/[^/]+\/status$/.test(path)) return projectResponseSchema;

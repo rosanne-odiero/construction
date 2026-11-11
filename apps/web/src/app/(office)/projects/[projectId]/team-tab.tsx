@@ -1,10 +1,19 @@
 import { getTranslations } from "next-intl/server";
 import { projectTeamResponseSchema, type Project } from "@pm-buddy/validation";
+import { InviteLabourer } from "@/components/projects/invite-labourer";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { TeamPanel } from "@/components/projects/team-panel";
 import { serverApi } from "@/lib/server-api";
 
-export async function TeamTab({ project, returnTo }: { project: Project; returnTo: string }) {
+export async function TeamTab({
+  project,
+  returnTo,
+  canInviteLabourers,
+}: {
+  project: Project;
+  returnTo: string;
+  canInviteLabourers: boolean;
+}) {
   const t = await getTranslations("team");
   const result = await serverApi(`/projects/${project.id}/team`, projectTeamResponseSchema);
   if (!result.ok)
@@ -18,6 +27,7 @@ export async function TeamTab({ project, returnTo }: { project: Project; returnT
         <p className="text-sm text-muted-foreground">{t("description")}</p>
       </div>
       <TeamPanel projectId={project.id} team={result.data} />
+      {canInviteLabourers ? <InviteLabourer projectId={project.id} /> : null}
     </section>
   );
 }

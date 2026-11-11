@@ -34,6 +34,7 @@ import {
   type Role,
 } from "@pm-buddy/validation";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -76,6 +77,7 @@ function ActionForm({
   disabled,
   onSubmit,
   children,
+  footer,
 }: {
   id: string;
   title: string;
@@ -84,6 +86,8 @@ function ActionForm({
   disabled: boolean;
   onSubmit: (data: FormData) => void;
   children?: ReactNode;
+  /** Shown below the form, outside it (for example another way to complete the step). */
+  footer?: ReactNode;
 }) {
   return (
     <Card>
@@ -120,6 +124,7 @@ function ActionForm({
             <Button type="submit">{submit}</Button>
           </fieldset>
         </form>
+        {footer ? <div className="mt-4">{footer}</div> : null}
       </CardContent>
     </Card>
   );
@@ -172,7 +177,8 @@ async function ceremony<T>(prompt: () => Promise<T>): Promise<T> {
   }
 }
 
-export function FoundationConsole() {
+/** `google`: the API offers "Continue with Google" (shown on the create-account card). */
+export function FoundationConsole({ google = false }: { google?: boolean }) {
   const t = useTranslations("foundation");
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
@@ -511,6 +517,7 @@ export function FoundationConsole() {
                 { ...password, autoComplete: "new-password" },
               ]}
               disabled={disabled}
+              footer={google ? <GoogleSignInButton next="/foundation" /> : null}
               onSubmit={(data) =>
                 void run(
                   "register",

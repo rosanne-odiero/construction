@@ -170,7 +170,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
             </CardHeader>
             <CardContent>
               <Button asChild variant="outline">
-                <Link href="/portal">{t("openPortal")}</Link>
+                <Link href="/prototype/portal">{t("openPortal")}</Link>
               </Button>
             </CardContent>
           </Card>

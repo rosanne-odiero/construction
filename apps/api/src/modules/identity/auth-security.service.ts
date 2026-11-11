@@ -31,6 +31,7 @@ import {
 } from "../notifications/notification.provider.js";
 
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
+export type CookieKind = "at" | "rt" | "csrf" | "oauth";
 export const opaqueToken = (): string => randomBytes(32).toString("base64url");
 export const hashPassword = (value: string): Promise<string> =>
   hash(value, {
@@ -96,17 +97,18 @@ export class AuthSecurity implements OnModuleInit {
     return { privateKey, publicKey };
   }
 
-  name(kind: "at" | "rt" | "csrf"): string {
+  /** `oauth` holds a pending Google sign-in (state, nonce, PKCE verifier), encrypted, 10 minutes. */
+  name(kind: CookieKind): string {
     if (!this.config.isProduction) return `pmb_${kind}`;
-    return kind === "rt" ? "__Secure-pmb_rt" : `__Host-pmb_${kind}`;
+    return kind === "rt" || kind === "oauth" ? `__Secure-pmb_${kind}` : `__Host-pmb_${kind}`;
   }
 
-  setCookie(res: Response, kind: "at" | "rt" | "csrf", value: string, maxAge: number): void {
+  setCookie(res: Response, kind: CookieKind, value: string, maxAge: number): void {
     res.cookie(this.name(kind), value, {
       httpOnly: true,
       secure: this.config.isProduction,
       sameSite: "lax",
-      path: kind === "rt" ? "/api/v1/auth" : "/",
+      path: kind === "rt" ? "/api/v1/auth" : kind === "oauth" ? "/api/v1/auth/google" : "/",
       maxAge,
     });
     res.setHeader("Cache-Control", "no-store");

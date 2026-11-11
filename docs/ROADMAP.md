@@ -112,7 +112,7 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D6.1 | **Site diary and quality**:<br/>• Daily diary with workforce auto-filled from attendance; sign-off and locking<br/>• Geotagged photos with server verification<br/>• Inspections and checklists; cube and slump tests<br/>• Snags; practical completion and defects liability period | Diary (site app and web), photo timeline, inspections, snags | A diary is locked after approval; photo metadata is verified | L | ⬜ |
+| D6.1 | **Site diary and quality**:<br/>• Daily diary with workforce auto-filled from attendance; sign-off and locking<br/>• Geotagged photos with server verification<br/>• Inspections and checklists; cube and slump tests<br/>• Snags; practical completion and defects liability period | Diary (site app and web), photo timeline, inspections, snags | A diary is locked after approval; photo metadata is verified | L | 🟨 Both done-when checks implemented/tested locally (locked approved diaries; server-verified photo GPS/time against the geofence in force). Attendance-backed workforce, in-app/offline capture, inspections, tests, snags and completion/DLP remain |
 | D6.2 | **Schedule**: Gantt with dependencies, milestones, baseline vs actual, delay log with causes | Gantt view, delay log | The baseline is frozen and variance is shown | M | ⬜ |
 | D6.3 | **Measurement and valuations**:<br/>• Progress measured against BQ items, with photos<br/>• Earned value (PV, EV, AC, CPI, SPI) and S-curve<br/>• Interim valuations and payment certificates; retention and its release<br/>• Subcontracts and piece-rate links (brief §5.14)<br/>• Cost to complete | Measurement entry, EVM dashboard, valuation and certificate PDF | **Phase 6 acceptance:** an interim payment certificate generates correctly from measured progress | XL | ⬜ |
 
@@ -120,9 +120,9 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D7.1 | **Client portal**:<br/>• Progress, S-curve and verified photo timeline; diary summaries<br/>• Certificates and statements; **pay via STK Push**; C2B Paybill instructions<br/>• Variation approvals<br/>• FX display (USD/GBP/EUR) | Client portal on mobile and desktop | A client can view progress and pay (sandbox) | L | ⬜ |
+| D7.1 | **Client portal**:<br/>• Progress, S-curve and verified photo timeline; diary summaries<br/>• Certificates and statements; **pay via STK Push**; C2B Paybill instructions<br/>• Variation approvals<br/>• FX display (USD/GBP/EUR) | Client portal on mobile and desktop | A client can view progress and pay (sandbox) | L | 🟨 Live client portal (assigned projects, milestones, approved diaries) built early on owner request; photos, certificates, STK Push, variations and FX remain |
 | D7.2 | **Supplier portal**: LPOs, deliveries, invoices with eTIMS, payment status, statements | Supplier portal | A supplier can see an LPO and submit an invoice | M | ⬜ |
-| D7.3 | **Labourer USSD/SMS and notifications**:<br/>• Africa's Talking USSD menu (EN/SW) with ID + PIN<br/>• Notification centre: templates (EN/SW), preferences, WhatsApp | USSD simulator, notification settings and templates | **Phase 7 acceptance:** a labourer can check pay via USSD | M | ⬜ |
+| D7.3 | **Labourer USSD/SMS and notifications**:<br/>• Africa's Talking USSD menu (EN/SW) with ID + PIN<br/>• Notification centre: templates (EN/SW), preferences, WhatsApp | USSD simulator, notification settings and templates | **Phase 7 acceptance:** a labourer can check pay via USSD | M | 🟨 Labourer web portal with phone + PIN built early on owner request (assigned sites only); USSD, pay, attendance and the real SMS provider remain |
 
 ### Phase 8: Reports, H&S, plant and compliance
 

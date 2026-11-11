@@ -55,6 +55,9 @@ mfaRequired }`. `mfaEnabled` means at least one MFA factor (an authenticator app
 | POST auth/passkeys/step-up               | `{credential}`                           | authentication response (MFA verified, like `mfa/step-up`)                   |
 | POST auth/password/forgot                | `{identifier}`                           | `{message}` (always generic)                                                 |
 | POST auth/password/reset                 | `{token,password}`                       | `{message}`                                                                  |
+| GET auth/providers                       | —                                        | `{google}`: whether "Continue with Google" is configured                     |
+| GET auth/google/start?next=              | —                                        | 303 to Google (or `/sign-in?google=unavailable`); see below                  |
+| GET auth/google/callback                 | — (Google's redirect)                    | 303 to `/sign-in`; see below                                                 |
 | GET auth/sessions                        | —                                        | `{sessions:[{id,createdAt,lastSeenAt,expiresAt,current}]}`                   |
 | DELETE auth/sessions/:id                 | —                                        | `{message}`                                                                  |
 | GET tenants                              | —                                        | `{tenants:[{id,name,role,roleName,tenantWide,permissions}]}`                 |
@@ -226,6 +229,154 @@ Errors use the existing RFC 9457 `application/problem+json` envelope. Invalid in
 429; unavailable notification/database/rate-limit dependency: explicit 503/500. Some 400s
 carry a more specific `code`: `password-too-weak`, `password-breached` and `passkey-invalid`
 (a registration response that failed verification).
+
+## Continue with Google
+
+OpenID Connect authorisation code flow with PKCE (S256), `state` and `nonce`, using
+`openid-client@6.8.9` (by the `jose` author; adds `oauth4webapi@3.8.8`). It is off until
+`AUTH_GOOGLE_CLIENT_ID` and `AUTH_GOOGLE_CLIENT_SECRET` are both set in `apps/api/.env`
+(never committed). In Google Cloud Console create an OAuth client of type **Web application**
+and register this **Authorized redirect URI**: `${WEB_ORIGIN}/api/v1/auth/google/callback`
+(for example `http://localhost:3000/api/v1/auth/google/callback`). Google returns the browser
+to the web origin, which proxies `/api/*` here, so cookies stay first-party.
+
+1. `auth/google/start` stores state, nonce, the PKCE verifier and `next` in an encrypted
+   (A256GCM), HttpOnly, SameSite=Lax cookie (`pmb_oauth`; production `__Secure-pmb_oauth`,
+   path `/api/v1/auth/google`, 10 minutes) and redirects to Google with
+   `scope=openid email profile` and `prompt=select_account`.
+2. `auth/google/callback` clears that cookie first (a callback URL works once), exchanges the
+   code and validates the ID token: issuer, audience, expiry, nonce and the signature against
+   Google's published keys.
+3. Only addresses Google is authoritative for are accepted: a verified `@gmail.com` /
+   `@googlemail.com`, or a verified Google Workspace address whose `hd` claim equals the email
+   domain. Anything else returns `?google=email-unsupported`.
+4. The account is found by Google's stable subject (`user_identities`). Otherwise an account
+   with the same email is linked automatically: a verified account receives an emailed
+   notice; an unverified pending registration becomes verified and its password is replaced
+   (pre-hijacking defence). Otherwise a new verified account is created with no usable
+   password (`password/forgot` can set one). An email already linked to another Google
+   account returns `?google=account-conflict`.
+5. A normal session is issued (same lifetimes as password sign-in) and the browser returns to
+   `/sign-in?next=…`, which resumes it. **PM-Buddy MFA still applies**: accounts with a factor
+   or an MFA-required role must verify TOTP, a passkey or a recovery code before company
+   access. Google sign-in does not reset password-lockout counters.
+
+Failures return to `/sign-in?google=<cancelled|unavailable|rate-limited|email-unsupported|
+account-conflict|failed>`; nothing about the code, tokens or claims is logged. `next` is
+passed through unchanged; the web app's `safeNextPath` sanitises it. The web app shows the
+button on `/sign-in` and on the account console's **Create account** card (`/foundation`),
+only while `GET auth/providers` reports `google: true`. `AUTH_GOOGLE_ISSUER` is a
+test-only override (loopback HTTP allowed, refused in production) used by
+`test/google.e2e-spec.ts` with the local `test/fake-google.ts` provider.
+
+## Portals: client, labourer and staff (owner request, 11/11/2026)
+
+One sign-in page routes each person by their selected company's permissions
+(`portalFor`, `packages/types`): staff → office app, `portal.client` only → `/portal`,
+`portal.worker` only → `/worker`. The `labourer` system role holds only `portal.worker`;
+`portal.client` and `portal.worker` are project-assignable (migration `20261116110000_portals`,
+which also gives existing client assignments `portal.client`).
+
+| Method/path                             | Body                                    | Response / access                                                                                                               |
+| --------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| GET portal/client/projects              | —                                       | `{company, projects}`: assigned projects with milestone counts; `portal.client`                                                 |
+| GET portal/client/projects/:id          | —                                       | `{project, milestones, diaries}`: **approved** diaries only (30 newest); `portal.client` on the project, otherwise 403/404      |
+| GET portal/worker                       | —                                       | `{displayName, company, assignments:[{project, sites}], attendance:null, pay:null}`; `portal.worker`                            |
+| POST projects/:id/labourers/invitations | `{identifier}` (Kenyan mobile)          | 201 `{invitation}`; `labour.manage` on the project; 409 `already-member`                                                        |
+| POST auth/pin/login                     | `{identifier, pin}`                     | authentication response (PIN session)                                                                                           |
+| POST auth/pin/join                      | `{identifier, token, displayName, pin}` | authentication response, company selected; 400 `pin-too-weak`, 401 invalid invitation, 409 `account-exists`                     |
+| POST auth/pin/reset                     | `{token, pin}`                          | `{message}`; token from `auth/password/forgot` (PIN accounts get an SMS link to `/worker/pin?token=…`); signs out every session |
+
+Labourer invitations (from this endpoint, or the general invitation with role `labourer`, which
+refuses email identifiers with `labourer-phone-required`) send an SMS link to
+`${WEB_ORIGIN}/worker/join?token=…`, valid 48 hours. Joining creates the verified account, sets
+the PIN, joins the company and assigns the project in one transaction; a pending password
+registration for the number is taken over and its password discarded. The account has no
+usable password until `auth/password/reset` sets one.
+
+PINs are six digits, Argon2id-hashed, and refuse repeated digits/pairs/triples, runs up or down
+and the last six digits of the phone (`pinProblem`, `packages/domain`). PIN sign-in shares the
+five-failure, 15-minute lockout and is limited per number (10 per 5 minutes, 30 per day).
+**PIN sessions are limited to the labourer portal:** any company request whose role is not
+worker-only gets 403 `pin-session-limited`, and PIN sessions cannot enrol MFA factors, create
+companies or accept staff invitations. Sessions record `auth_method` (`password`, `google`, `pin`).
+
+Site-diary lists now need `site.diary`, `quality.manage`, `projects.manage` or `reports.view`
+in addition to `projects.view`, so clients (who hold `projects.view`) see diaries only through
+their portal, approved ones only. Production SMS delivery still waits for D7.3 (Africa's
+Talking); in development, invitation and PIN-reset SMS go to Mailpit.
+
+## Site photos (D6.1, Phase 6 increment 2)
+
+| Method / path                                       | Input                                                              | Result / permission                                                                                                             |
+| --------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| GET `projects/:projectId/photos`                    | `siteId?`, `diaryId?`, `cursor?`, `limit?` (1–60, default 24)      | `{photos, nextCursor}`; `projects.view` plus `site.photos`, `site.diary`, `quality.manage`, `projects.manage` or `reports.view` |
+| POST `projects/:projectId/photos`                   | multipart: `file` (JPEG ≤ 15 MB), `siteId`, `diaryId?`, `caption?` | 201 `{photo}`; `site.photos`; closed/cancelled projects read-only                                                               |
+| GET `projects/:projectId/photos/:photoId/thumbnail` | —                                                                  | JPEG ≤ 960 px, no metadata; same read access                                                                                    |
+| GET `projects/:projectId/photos/:photoId/original`  | —                                                                  | The uploaded JPEG, byte for byte; same read access                                                                              |
+
+The position and capture time come **only from the photo's EXIF** (`photo-metadata.ts`,
+`exif-reader@2.0.3` on the EXIF block extracted by `sharp@0.35.5`): capture time prefers the
+camera time with its offset, then the GPS clock, then camera time assumed to be Nairobi
+(`timeSource: assumed_nairobi`). `verifyPhotoEvidence` (`packages/domain`) checks the location
+against the site's geofence version in force at capture (30 m tolerance; distance recorded when
+outside) and the time against the upload (≤ 10 minutes ahead, ≤ 72 hours old, and the diary's
+Nairobi date when attached). `verified` = location inside and time ok; otherwise the reasons are
+stored (`missing`, `outside`, `no_geofence`, `future`, `stale`, `diary_mismatch`).
+
+Uploads are refused unless they are JPEG by signature (415 `unsupported-file-type`) and decode
+within 50 megapixels (422 `invalid-image`); the guard refuses bodies over 15 MB before reading
+(413 `payload-too-large`) and limits 240 uploads per user per hour. The malware hook runs. The
+original is stored privately with its SHA-256 and a fresh, rotated, metadata-free thumbnail
+beside it (`tenants/:tenant/projects/:project/photos/:id/…`); the same file twice in a project
+is 409 `photo-duplicate`. Photos attach only to a **draft** diary of the same site (409
+`diary-not-draft`), so approved diaries stay locked. Rows are append-only (database CHECKs bind
+`verified` to the checks, keys to the tenant/project/photo, and the runtime role cannot update
+or delete). Audit `photo.uploaded` records outcomes only, never coordinates, captions or names.
+Images are served with `nosniff` and a sandboxing CSP.
+
+Limits: a web upload cannot prove in-app capture, and EXIF can be edited, so the badge means
+"metadata consistent", not proof (THREAT_MODEL A-13 also wants site-app capture and perceptual
+reuse detection, both later). Thumbnails are generated in the API process; HEIC is not accepted.
+
+## Site diary foundation (D6.1, Phase 6 increment 1)
+
+All paths below are relative to `/api/v1/projects/:projectId/diaries`; authentication,
+selected-company membership and the existing CSRF guard apply. Permissions are resolved
+through `AccessPolicy` (role ∩ project assignment), not role names.
+
+| Method / path       | Input                                                            | Result / permission                                                                                           |
+| ------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| GET                 | `siteId?`, `cursor?`, `limit?` (1–100, default 30)               | `{diaries, nextCursor}`; `projects.view`; newest created first                                                |
+| POST                | `{siteId, date, workPerformed, weather, delays, workforceCount}` | 201 `{diary}`; `site.diary`; one diary per site/day                                                           |
+| PATCH `/:id`        | `{workPerformed, weather, delays, workforceCount, version}`      | `{diary}`; author + `site.diary`, draft only                                                                  |
+| POST `/:id/actions` | `{action, version, reason?}`                                     | `{diary}`; submit/reopen by author with `site.diary`; approve/reject by independent `quality.manage` reviewer |
+
+Dates are valid `YYYY-MM-DD` Nairobi calendar days and may not be future-dated.
+`workPerformed` is required (1–6,000 trimmed characters); weather/delays are nullable
+strings (250/2,000 characters); workforce is a nullable integer from 0 to 100,000.
+Null means unknown, not zero. `workforceSource` is always `manual`: there is no
+attendance integration yet. `reason` is required only for rejection (3–500 characters).
+Create/update/action schemas are strict and exported from `@pm-buddy/validation`.
+
+The lifecycle is `draft → submitted → approved` or `submitted → rejected → draft`.
+The original author alone edits/submits/reopens; an author cannot review their own diary.
+Submitted and rejected content is immutable; reopening clears current sign-off metadata
+and requires resubmission. Approval locks the row permanently; there is no DELETE
+endpoint or approved-record reopening. Closed/cancelled projects reject all mutations.
+Every write and its safe-summary hash-chained audit event share a tenant transaction;
+updates require the last-read version.
+
+Database backstops include forced tenant RLS, a composite tenant/project/site foreign
+key, unique site/day, transition/actor/version constraints and immutable approved rows.
+Problem codes: 409 `diary-date-taken`, `diary-future-date`, `diary-not-draft`,
+`diary-invalid-transition`, `version-conflict`, `project-read-only`; 403
+`diary-author-required`, `diary-independent-review`; foreign resources return 404.
+
+Web entry points: `/diary` (accessible project picker) and
+`/projects/:projectId?tab=diary`; legacy `/soon/diary` redirects to `/diary`.
+Offline/site-app capture, photo verification, inspections, tests, snags, practical
+completion, schedules and valuations are not implemented by this increment.
 
 ## BQ import, viewer and exports (D2.2)
 

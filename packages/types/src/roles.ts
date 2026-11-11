@@ -13,6 +13,7 @@ export const SYSTEM_ROLES = [
   "client",
   "consultant",
   "supplier",
+  "labourer",
 ] as const;
 
 export type SystemRole = (typeof SYSTEM_ROLES)[number];
@@ -136,6 +137,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Readonly<Record<SystemRole, readonly Permi
     "reports.view",
   ],
   supplier: ["projects.view", "portal.supplier"],
+  // Labourers see only their own portal (assigned sites, later attendance and pay); never
+  // project details such as contract sums, teams or diaries.
+  labourer: ["portal.worker"],
 };
 
 /**

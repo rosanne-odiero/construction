@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Request } from "express";
 import { comparableUnitPrice, exactNetPrice, priceChange, splitVat } from "@pm-buddy/domain";
-import { BQ_VAT_RULE, type PriceAlertState } from "@pm-buddy/types";
+import { BQ_VAT_RULE, type PriceAlertState, type PriceSource } from "@pm-buddy/types";
 import {
   priceAlertsResponseSchema,
   priceResponseSchema,
@@ -61,13 +61,15 @@ export class PricesService {
 
   /**
    * Writes a price (or a correction) under the material row lock; the permission is checked by
-   * the caller.
+   * the caller. D5.2 quotations write `source = quotation` rows the same way (append-only, with
+   * the same comparison and alert).
    */
   async recordInScope(
     scope: Scope,
     materialId: string,
     input: RecordPriceRequest,
     correction: { priceId: string; reason: string } | null,
+    source: PriceSource = "manual",
   ) {
     const { tx, access } = scope;
     const material = await this.store.lockMaterial(scope, materialId);
@@ -153,7 +155,7 @@ export class PricesService {
         netUnitPriceMinor: BigInt(vat.netMinor),
         grossUnitPriceMinor: BigInt(vat.grossMinor),
         effectiveOn: fromCalendarDate(input.effectiveOn),
-        source: "manual",
+        source,
         sourceReference: input.sourceReference ?? null,
         note: input.note ?? null,
         comparableUnit: comparable.ok ? material.baseUnit : null,
@@ -184,6 +186,7 @@ export class PricesService {
         vatTreatment: input.vatTreatment,
         alertState: state,
         correctsPriceId: correction?.priceId ?? null,
+        source,
       },
     );
     return priceResponseSchema.parse({ price: await this.wire(scope, row) });

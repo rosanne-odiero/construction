@@ -65,6 +65,12 @@ function print(summary: SeedSummary) {
     `  ${payroll.ruleVersions} statutory rule versions; ${payroll.minimumWages} minimum wages; ${payroll.allowances} allowances`,
     `  ${payroll.outputs} piece-rate outputs; ${payroll.advances} advances; ${payroll.submittedBatches} submitted and ${payroll.draftBatches} draft batches (${payroll.lines} lines)`,
   );
+  const p2p = summary.procureToPay;
+  lines.push(
+    "",
+    `Procure-to-pay (synthetic, ${p2p.created ? "created" : "already present"}): ${p2p.requisition} → ${p2p.rfq} → ${p2p.lpo} → ${p2p.grn}`,
+  );
+  for (const invoice of p2p.invoices) lines.push(`  invoice ${invoice.number} — ${invoice.status}`);
   console.log(lines.join("\n"));
 }
 

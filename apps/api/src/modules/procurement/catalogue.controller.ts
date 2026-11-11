@@ -313,7 +313,8 @@ export class CatalogueController {
 
   @Get("procurement/settings")
   @ApiOperation({
-    summary: "Company procurement settings (price-change alert threshold)",
+    summary:
+      "Company procurement settings: price-change alert threshold, minimum quotes, three-way match tolerances and the eTIMS payment block",
     description: viewNote,
     operationId: "getProcurementSettings",
   })
@@ -324,8 +325,9 @@ export class CatalogueController {
 
   @Put("procurement/settings")
   @ApiOperation({
-    summary: "Change the price-change alert threshold",
-    description: "Requires config.manage. Send the version you read (0 before the first save).",
+    summary: "Change the procurement settings",
+    description:
+      "Requires config.manage. Send the version you read (0 before the first save); omitted D5.2 settings keep their value.",
     operationId: "updateProcurementSettings",
   })
   @ApiBody({ schema: openApi(updateProcurementSettingsRequestSchema) })

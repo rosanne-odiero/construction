@@ -28,6 +28,7 @@ import { LabourCrypto } from "../modules/labour/labour-support.js";
 import { seedAttendance, type AttendanceSeedSummary } from "./attendance-seed.js";
 import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
 import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
+import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -338,6 +339,7 @@ export type SeedSummary = {
   labour: LabourSeedSummary;
   attendance: AttendanceSeedSummary;
   payroll: PayrollSeedSummary;
+  procureToPay: ProcureToPaySeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -472,6 +474,12 @@ export async function seedDemo(
   });
 
   const procurement = await seedProcurement(app, tenantId, owner.id, userOf("finance").id);
+  const procureToPay = await seedProcureToPay(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    financeId: userOf("finance").id,
+  });
 
   const crypto = app.get(LabourCrypto);
   const labour = await db.run({ userId: owner.id, tenantId, requestId: "seed" }, async (tx) => {
@@ -523,6 +531,7 @@ export async function seedDemo(
     labour,
     attendance,
     payroll,
+    procureToPay,
   };
 }
 

@@ -49,6 +49,7 @@ export const PERMISSIONS = [
   "reports.view",
   "portal.client",
   "portal.supplier",
+  "portal.worker",
   "platform.admin",
 ] as const;
 
@@ -100,11 +101,12 @@ export const isProjectPermission = (permission: Permission): boolean =>
   PROJECT_PERMISSIONS.includes(permission);
 
 /**
- * Project-scoped permissions that a project assignment may carry today (D2.1): the project, BQ,
+ * Project-scoped permissions that a project assignment may carry today: the project, BQ,
  * labour, attendance, payroll preparation/review, procurement, stores, site, quality, safety,
- * plant, documents, reports and finance-view permissions. Approval and payment permissions
- * (`payroll.approve`, `payments.*`, `finance.manage`, `finance.view_sensitive`) and the portal
- * permissions stay out until their modules define project behaviour. The database CHECK
+ * plant, documents, reports and finance-view permissions, plus the client and labourer portals
+ * (a client or labourer sees only the projects they are assigned to). Approval and payment
+ * permissions (`payroll.approve`, `payments.*`, `finance.manage`, `finance.view_sensitive`) and
+ * the supplier portal stay out until their modules define project behaviour. The database CHECK
  * `project_permissions_check` lists the same keys; effective = role ∩ assignment.
  */
 export const PROJECT_ASSIGNABLE_PERMISSIONS = [
@@ -134,6 +136,8 @@ export const PROJECT_ASSIGNABLE_PERMISSIONS = [
   "plant.manage",
   "documents.manage",
   "reports.view",
+  "portal.client",
+  "portal.worker",
 ] as const satisfies readonly Permission[];
 export type ProjectAssignablePermission = (typeof PROJECT_ASSIGNABLE_PERMISSIONS)[number];
 

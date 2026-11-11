@@ -61,12 +61,18 @@ export async function liveRequest<T>(
 }
 
 /**
- * Same-origin multipart upload of one file (field `file`) with the CSRF token, one refresh on an
- * expired access token, and the response parsed with the shared schema.
+ * Same-origin multipart upload of one file (field `file`, after any text `fields`) with the CSRF
+ * token, one refresh on an expired access token, and the response parsed with the shared schema.
  */
-export async function liveUpload<T>(path: string, file: File, schema: z.ZodType<T>): Promise<T> {
+export async function liveUpload<T>(
+  path: string,
+  file: File,
+  schema: z.ZodType<T>,
+  fields: Record<string, string> = {},
+): Promise<T> {
   const attempt = async (): Promise<T> => {
     const form = new FormData();
+    for (const [name, value] of Object.entries(fields)) form.append(name, value);
     form.append("file", file, file.name);
     let response: Response;
     try {

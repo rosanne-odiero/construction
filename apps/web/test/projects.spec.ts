@@ -203,6 +203,8 @@ test("assigns project permissions with step-up and edits the WBS and milestones"
 for (const locale of ["en", "sw"] as const) {
   for (const theme of ["light", "dark"] as const) {
     test(`live project pages are accessible in ${locale}, ${theme}`, async ({ page, context }) => {
+      // Seven pages, each compiled on first visit by the dev server and scanned by axe.
+      test.slow();
       await signInAs(context, "owner");
       await preferences(context, page, locale, theme);
       for (const path of [

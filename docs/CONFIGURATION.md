@@ -122,6 +122,17 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | Unit conversions (`UnitConversion` table, for example sand per lorry trip) | tenant/supplier | TBD per supplier | Brief §5.3 ("configurable") | PRODUCT | D5.1 |
 | `finance.budget_alert_thresholds` | project | 75%, 90%, 100% | Proposal | PRODUCT | D5.4 |
 
+### Site photos (D6.1)
+
+Code constants (`PHOTO_VERIFICATION_DEFAULTS`, `PHOTO_LIMITS` in `packages/domain`) until per-tenant configuration exists.
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `photos.geofence_tolerance_m` | platform | 30 | Typical phone GPS accuracy | PRODUCT | D6.1 |
+| `photos.max_age_hours` | platform | 72 | Allows upload after a day or two offline | PRODUCT | D6.1 |
+| `photos.future_skew_minutes` | platform | 10 | Phone clocks running ahead | PRODUCT | D6.1 |
+| `photos.max_file_mb` / `photos.max_pixels` | platform | 15 / 50,000,000 | Upload and decompression-bomb limits (JPEG only) | SECURITY | D6.1 |
+
 ## 6. Security, auth and operations
 
 | Key | Scope | Seed / default | Source | Status | Used from |
@@ -176,6 +187,8 @@ These are not business rules: they tell each process where its dependencies are.
 | `AUTH_SIGNING_PRIVATE_KEY` | api | ephemeral in development | Base64 Ed25519 PKCS8 PEM that signs access tokens; required in production | SECURITY |
 | `AUTH_NOTIFICATION_TRANSPORT` / `AUTH_MAILPIT_PORT` | api | `disabled` (`development` in `.env.example`) / `8025` | Selects the `NotificationProvider`. `development` delivers every channel (email, SMS, WhatsApp) to loopback Mailpit only, phone channels to `phone-<number>@development.invalid` with a `[DEVELOPMENT ONLY][SMS]` / `[WHATSAPP]` subject prefix, and is refused in production; `disabled` makes every send fail explicitly. Delivery runs after the response, so it never reveals whether an account exists. Real SMS/WhatsApp (Africa's Talking) arrives in D7.3 | SECURITY |
 | `AUTH_BREACHED_PASSWORD_CHECK` | api | `off` (`off` in `.env.example`) | `hibp` checks new passwords (registration, reset) against the Have I Been Pwned range API: only the first five hex characters of the password's SHA-1 leave the server, with `Add-Padding: true` and a two-second timeout. On a timeout or error it **fails open**: the password is accepted and a warning is logged without the password or any part of its hash. Needs outbound HTTPS to `api.pwnedpasswords.com`. Strength checks (`auth.password.min_strength`) apply either way | SECURITY |
+| `AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` | api | unset (Google sign-in hidden) | Both or neither (startup fails otherwise). A Google Cloud OAuth client of type *Web application* whose authorised redirect URI is exactly `${WEB_ORIGIN}/api/v1/auth/google/callback`. Only verified Gmail or matching Google Workspace (`hd`) addresses are accepted; matching accounts are linked automatically and new ones created; PM-Buddy MFA still applies ([API README](../apps/api/README.md#continue-with-google)). The secret belongs in `apps/api/.env` or the secrets manager, never in the repository. Needs outbound HTTPS to `accounts.google.com`, `oauth2.googleapis.com` and `www.googleapis.com` | SECURITY |
+| `AUTH_GOOGLE_ISSUER` | api (tests) | unset (`https://accounts.google.com`) | Test-only override pointing at a local fake provider; plain HTTP only on loopback; refused in production | SECURITY |
 | `MALWARE_SCANNER` | api | `disabled` (`development` in `.env.example`) | Selects the `MalwareScanner` for uploads (ARCHITECTURE §17). `development` is a no-op that records `not_scanned` / `development-noop` on each import and is refused in production; `disabled` refuses BQ uploads with 503 `malware-scanner-unavailable`. ClamAV is a TODO before any pilot | SECURITY |
 | `BQ_VAT_RATE_PERCENT` | api | `16` | Interim source of `bq.vat.rate` (decimal string, 0–100, up to 4 decimals). Snapshot onto each BQ version at commit; changing it never changes committed versions. COMPLIANCE-REVIEW (CR-TAX-01) | COMPLIANCE-REVIEW |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_SERVICE_NAME` | api | unset / `pm-buddy-api` | Tracing starts only when the endpoint is set; needs `pnpm start`, which preloads `telemetry.js` | OPS |

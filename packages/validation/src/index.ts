@@ -4,6 +4,9 @@ export {
   problemDetailsSchema,
   type PaginationQuery,
 } from "./api.js";
+export * from "./site-diary.js";
+export * from "./portals.js";
+export * from "./site-photos.js";
 export { apiEnvSchema, type ApiEnv } from "./env.js";
 export {
   dependencyCheckSchema,
@@ -22,6 +25,9 @@ export {
 } from "./primitives.js";
 export {
   csrfResponseSchema,
+  authProvidersResponseSchema,
+  GOOGLE_SIGN_IN_OUTCOMES,
+  type GoogleSignInOutcome,
   authResponseSchema,
   MAX_PASSKEYS,
   messageResponseSchema,

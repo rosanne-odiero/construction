@@ -141,7 +141,7 @@ export const upcomingPayments = [
     amountMinor: 1_245_600_00,
     direction: "in",
     state: "due",
-    href: "/portal",
+    href: "/prototype/portal",
   },
 ] as const;
 

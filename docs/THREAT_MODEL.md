@@ -370,7 +370,7 @@ The brief targets **ASVS Level 2**. The current major version is **ASVS 5.0**. T
 | V7 Session Management | Short access tokens, rotating refresh tokens with reuse detection, session revoke, device binding | §7 | T-10, T-34 | D1.3, D3.2 |
 | V8 Authorization | RBAC with project scope, RLS, composite FKs, sensitive-field masking, step-up | §6, §8 | T-08, T-22, A-19 | D1.4 |
 | V9 Self-contained Tokens | JWT with pinned algorithms, short TTL, claim checks, action-bound step-up token | §7 | T-10, A-17 | D1.3 |
-| V10 OAuth and OIDC | Daraja OAuth client-credential token caching; applies more widely if an external IdP is chosen (D-03) | §7, §14.1 | T-54 | D4.2 |
+| V10 OAuth and OIDC | Daraja OAuth client-credential token caching; Google sign-in as an OIDC relying party (code flow, PKCE S256, state and nonce in an encrypted single-use cookie, ID token issuer/audience/expiry/nonce/signature checks, Gmail or matching Workspace `hd` only, linking by stable subject, PM-Buddy MFA unchanged) | §7, §14.1 | T-54 | D4.2; Google sign-in 11/11/2026 |
 | V11 Cryptography | AES-256-GCM envelope encryption, KMS-held KEKs, separate biometric KEK, HMAC blind indexes, Ed25519 device signatures, vetted libraries only | §10, §12.2 | T-35, A-20 | D1.3, D3.1, D3.4 |
 | V12 Secure Communication | TLS everywhere, including Redis and PostgreSQL connections; HSTS | §18, §20 | T-31 | D1.1, D9.3 |
 | V13 Configuration | Secrets manager, no secrets in the repo, production guards, hardened images, governed business configuration | §11, §14.1, §20 | T-63, T-65, T-68 | D1.1, D9.1 |

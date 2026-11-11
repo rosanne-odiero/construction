@@ -66,7 +66,7 @@ export const navGroups: {
     items: [
       { key: "labour", href: "/labour", icon: HardHat },
       { key: "attendance", href: "/attendance", icon: ScanFace },
-      { key: "diary", href: "/soon/diary", icon: NotebookPen, phase: 6 },
+      { key: "diary", href: "/diary", icon: NotebookPen },
       { key: "materials", href: "/soon/materials", icon: Package, phase: 5 },
       { key: "stores", href: "/soon/stores", icon: Warehouse, phase: 5 },
       { key: "plant", href: "/soon/plant", icon: Forklift, phase: 8 },
@@ -112,6 +112,6 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
  * project's BQ viewer and import wizard (D2.2).
  */
 export function isLiveRoute(pathname: string): boolean {
-  if (pathname === "/projects") return true;
+  if (pathname === "/projects" || pathname === "/diary") return true;
   return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/import)?)?$/.test(pathname);
 }

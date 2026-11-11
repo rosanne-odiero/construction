@@ -34,6 +34,13 @@ export const apiEnvSchema = z.object({
   // (k-anonymity: only the first five hex characters of the SHA-1 leave the server). It fails
   // open, with a warning, when the service is slow or unreachable.
   AUTH_BREACHED_PASSWORD_CHECK: z.enum(["off", "hibp"]).default("off"),
+  // "Continue with Google" (OpenID Connect authorisation code flow with PKCE). Set both from a
+  // Google Cloud OAuth "Web application" client, or neither to hide Google sign-in. The redirect
+  // URI to register with Google is `${WEB_ORIGIN}/api/v1/auth/google/callback`.
+  AUTH_GOOGLE_CLIENT_ID: z.string().trim().min(1).max(255).optional(),
+  AUTH_GOOGLE_CLIENT_SECRET: z.string().trim().min(1).max(255).optional(),
+  // Test-only issuer override (a local fake provider on loopback). Refused in production.
+  AUTH_GOOGLE_ISSUER: z.url().optional(),
 
   REDIS_URL: z.url(),
 

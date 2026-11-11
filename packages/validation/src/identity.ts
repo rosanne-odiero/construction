@@ -10,6 +10,18 @@ const roleName = z.string().min(1).max(60).nullable();
 
 export const csrfResponseSchema = z.object({ csrfToken: z.string().min(1) }).strict();
 export const messageResponseSchema = z.object({ message: z.string().min(1) }).strict();
+/** Sign-in methods the API offers besides email/phone and password. */
+export const authProvidersResponseSchema = z.object({ google: z.boolean() }).strict();
+/** Why a Google sign-in returned to /sign-in without a session (`?google=<outcome>`). */
+export const GOOGLE_SIGN_IN_OUTCOMES = [
+  "cancelled",
+  "unavailable",
+  "rate-limited",
+  "email-unsupported",
+  "account-conflict",
+  "failed",
+] as const;
+export type GoogleSignInOutcome = (typeof GOOGLE_SIGN_IN_OUTCOMES)[number];
 
 export const authResponseSchema = z
   .object({

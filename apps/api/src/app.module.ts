@@ -8,6 +8,8 @@ import { BqModule } from "./modules/bq/bq.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
+import { PortalsModule } from "./modules/portals/portals.module.js";
+import { ProgressModule } from "./modules/progress/progress.module.js";
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { ProjectsModule } from "./modules/projects/projects.module.js";
     IdentityModule,
     ProjectsModule,
     BqModule,
+    ProgressModule,
+    PortalsModule,
   ],
 })
 export class AppModule {}

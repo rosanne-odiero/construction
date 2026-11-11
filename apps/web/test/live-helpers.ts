@@ -18,7 +18,10 @@ const BLANK_TILE = Buffer.from(
 );
 
 /** A session cookie the mock API recognises; each call gets a fresh copy of the fixture data. */
-export async function signInAs(context: BrowserContext, persona: "owner" | "agent") {
+export async function signInAs(
+  context: BrowserContext,
+  persona: "owner" | "agent" | "client" | "labourer",
+) {
   const token = `${persona}.${randomUUID()}`;
   await context.addCookies([{ name: "pmb_at", value: token, url: BASE_URL, httpOnly: true }]);
   return token;

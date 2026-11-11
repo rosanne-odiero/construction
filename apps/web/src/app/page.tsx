@@ -34,7 +34,7 @@ const screens = [
   { key: "labour", href: "/labour", icon: HardHat },
   { key: "attendance", href: "/attendance", icon: ScanFace },
   { key: "payroll", href: "/payroll", icon: Wallet },
-  { key: "portal", href: "/portal", icon: MonitorSmartphone },
+  { key: "portal", href: "/prototype/portal", icon: MonitorSmartphone },
   { key: "site", href: "/site", icon: Smartphone },
   { key: "status", href: "/status", icon: Activity, live: true },
 ] as const;

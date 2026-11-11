@@ -17,6 +17,8 @@ model User {
   identifier          String               @unique @db.VarChar(254)
   displayName         String               @map("display_name") @db.VarChar(100)
   passwordHash        String               @map("password_hash")
+  // A labourer's six-digit sign-in PIN (Argon2id); null for staff and client accounts.
+  pinHash             String?              @map("pin_hash")
   verifiedAt          DateTime?            @map("verified_at") @db.Timestamptz
   failedLogins        Int                  @default(0) @map("failed_logins")
   lockedUntil         DateTime?            @map("locked_until") @db.Timestamptz
@@ -35,8 +37,26 @@ model User {
   recoveryCodes       RecoveryCode[]
   memberships         Membership[]
   passkeys            WebAuthnCredential[]
+  identities          UserIdentity[]
 
   @@map("users")
+}
+
+// An external sign-in identity linked to a user (Google today). `subject` is the provider's
+// stable account ID; the email is the provider-verified address at the last sign-in.
+model UserIdentity {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  provider   String   @db.VarChar(20)
+  subject    String   @db.VarChar(255)
+  email      String   @db.VarChar(254)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  lastUsedAt DateTime @default(now()) @map("last_used_at") @db.Timestamptz
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@unique([userId, provider])
+  @@map("user_identities")
 }
 
 // Verification codes, reset tokens and WebAuthn challenges (stored as SHA-256 digests). Passkey
@@ -90,6 +110,8 @@ model Session {
   expiresAt      DateTime        @map("expires_at") @db.Timestamptz
   idleExpiresAt  DateTime        @map("idle_expires_at") @db.Timestamptz
   revokedAt      DateTime?       @map("revoked_at") @db.Timestamptz
+  // password | google | pin. PIN sessions may only use the labourer portal.
+  authMethod     String          @default("password") @map("auth_method") @db.VarChar(10)
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   refreshTokens  RefreshToken[]
   challenges     AuthChallenge[]
@@ -241,10 +263,43 @@ model Site {
   updatedAt DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   project   Project        @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
   geofences SiteGeofence[]
+  diaries   SiteDiary[]
+  photos    SitePhoto[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, name])
   @@map("sites")
+}
+
+model SiteDiary {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  tenantId       String      @map("tenant_id") @db.Uuid
+  projectId      String      @map("project_id") @db.Uuid
+  siteId         String      @map("site_id") @db.Uuid
+  date           DateTime    @db.Date
+  workPerformed  String      @map("work_performed") @db.VarChar(6000)
+  weather        String?     @db.VarChar(250)
+  delays         String?     @db.VarChar(2000)
+  workforceCount Int?        @map("workforce_count")
+  status         String      @default("draft") @db.VarChar(20)
+  version        Int         @default(1)
+  createdBy      String      @map("created_by") @db.Uuid
+  submittedBy    String?     @map("submitted_by") @db.Uuid
+  submittedAt    DateTime?   @map("submitted_at") @db.Timestamptz
+  reviewedBy     String?     @map("reviewed_by") @db.Uuid
+  reviewedAt     DateTime?   @map("reviewed_at") @db.Timestamptz
+  reviewReason   String?     @map("review_reason") @db.VarChar(500)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  site           Site        @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_diaries_site_fkey")
+  photos         SitePhoto[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, siteId, id])
+  @@unique([tenantId, siteId, date])
+  @@index([tenantId, projectId, id])
+  @@map("site_diaries")
 }
 
 // One version of a site's geofence. Append-only: the database assigns `version` and
@@ -563,4 +618,44 @@ model BqImport {
   @@index([tenantId, projectId, createdAt])
   @@index([tenantId, bqVersionId])
   @@map("bq_imports")
+}
+
+// A geotagged site photo (D6.1). Append-only evidence: the server reads the photo's own EXIF
+// position and capture time and records its checks against the site geofence version in force
+// at capture; `verified` = location inside and time ok. Originals and metadata-free thumbnails
+// are private objects under tenant/project/photo keys.
+model SitePhoto {
+  id              String     @id @db.Uuid
+  tenantId        String     @map("tenant_id") @db.Uuid
+  projectId       String     @map("project_id") @db.Uuid
+  siteId          String     @map("site_id") @db.Uuid
+  diaryId         String?    @map("diary_id") @db.Uuid
+  caption         String?    @db.VarChar(500)
+  objectKey       String     @map("object_key") @db.VarChar(300)
+  thumbnailKey    String     @map("thumbnail_key") @db.VarChar(300)
+  fileSha256      String     @map("file_sha256") @db.Char(64)
+  sizeBytes       Int        @map("size_bytes")
+  width           Int
+  height          Int
+  scanStatus      String     @map("scan_status") @db.VarChar(20)
+  scanEngine      String     @map("scan_engine") @db.VarChar(60)
+  scannedAt       DateTime   @map("scanned_at") @db.Timestamptz
+  capturedAt      DateTime?  @map("captured_at") @db.Timestamptz
+  timeSource      String?    @map("time_source") @db.VarChar(20)
+  latitude        Decimal?   @db.Decimal(9, 6)
+  longitude       Decimal?   @db.Decimal(9, 6)
+  camera          String?    @db.VarChar(120)
+  geofenceVersion Int?       @map("geofence_version")
+  locationCheck   String     @map("location_check") @db.VarChar(12)
+  timeCheck       String     @map("time_check") @db.VarChar(16)
+  distanceM       Decimal?   @map("distance_m") @db.Decimal(10, 1)
+  verified        Boolean
+  uploadedBy      String     @map("uploaded_by") @db.Uuid
+  uploadedAt      DateTime   @default(now()) @map("uploaded_at") @db.Timestamptz
+  site            Site       @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_site_fkey")
+  diary           SiteDiary? @relation(fields: [tenantId, siteId, diaryId], references: [tenantId, siteId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_diary_fkey")
+
+  @@unique([tenantId, projectId, fileSha256])
+  @@index([tenantId, projectId, id])
+  @@map("site_photos")
 }

@@ -424,6 +424,16 @@ export class MusterService {
         await this.assertPeriodEditable(tx, access.tenantId, day.periodId);
         if (day.submittedBy === access.userId)
           throw samePerson("The person who submitted a day cannot return it; ask a confirmer.");
+        // A pending correction was asked against the submitted values: returning the day would
+        // let them change underneath it (review finding 4). Decide the corrections first.
+        const pending = await tx.attendanceCorrection.count({
+          where: { tenantId: access.tenantId, dayId, status: "pending" },
+        });
+        if (pending)
+          throw attendanceConflict(
+            "pending-corrections",
+            "Decide the pending corrections of this day before returning it.",
+          );
         await this.transition(tx, day, {
           status: "draft",
           submittedBy: null,

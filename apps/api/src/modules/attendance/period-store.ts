@@ -7,18 +7,24 @@ import {
   weeklyPeriodFor,
   zonedDateTime,
   type AnomalyRecord,
+  type DetectedAnomaly,
+  type LockedDrift,
 } from "@pm-buddy/domain";
 import {
   ANOMALY_SEVERITY,
+  AUTOMATIC_ADJUSTMENT_REASON,
   DEFAULT_PERIOD_SETTINGS,
   type IsoWeekday,
   type LabourerStatus,
   type PeriodSettings,
 } from "@pm-buddy/types";
+import type { AttendanceEntryValues } from "@pm-buddy/validation";
 import type { Prisma } from "../../generated/prisma/client.js";
+import { TenantDatabase } from "../identity/tenant-database.service.js";
+import { TenantScope } from "../identity/tenant-scope.service.js";
 import { fromCalendarDate, toCalendarDate } from "../projects/project-mappers.js";
 import { attendanceConflict } from "./attendance-support.js";
-import type { PeriodRow } from "./attendance-mappers.js";
+import { entryValues, type PeriodRow } from "./attendance-mappers.js";
 import { dayKey, TimesheetCalculator, type CalcContext } from "./timesheet-calculator.js";
 
 type Tx = Prisma.TransactionClient;
@@ -124,15 +130,41 @@ export class PeriodStore {
   }
 }
 
+/** Paid (locked) versus recomputed shares, summed over the drifted locked records. */
+export function driftDetails(drift: readonly LockedDrift[]): DetectedAnomaly["details"] {
+  const total = (pick: (entry: LockedDrift) => number) =>
+    drift.reduce((sum, entry) => sum + pick(entry), 0);
+  return {
+    lockedRecordIds: drift.slice(0, 20).map((entry) => entry.recordId),
+    paidHalfDays: total((entry) => entry.locked.halfDays),
+    idealHalfDays: total((entry) => entry.ideal.halfDays),
+    paidNormalMinutes: total((entry) => entry.locked.normalMinutes),
+    idealNormalMinutes: total((entry) => entry.ideal.normalMinutes),
+    paidOvertimeMinutes: total((entry) => entry.locked.overtimeMinutes),
+    idealOvertimeMinutes: total((entry) => entry.ideal.overtimeMinutes),
+  };
+}
+
 /**
  * Re-detects anomalies for labourer-days and synchronises the open ones: new findings are opened,
  * findings that no longer hold are cleared. A finding a person already resolved or dismissed is not
  * raised again unless the record has changed since. Corrections' `manual_override` anomalies are
  * managed by the correction workflow.
+ *
+ * Locked shares (review finding 3): when a day also has records in approved periods, it is
+ * recomputed as if nothing were locked. A locked record whose share differs opens a blocking
+ * `locked_share_changed` anomaly on the day's records in open periods (or on the locked record
+ * when there are none), and the system proposes a pending adjustment for that record's approved
+ * period (requested by the person whose change caused it; decided by someone else). Approving it
+ * fixes the locked share, which clears the anomaly.
  */
 @Injectable()
 export class AnomalyEvaluator {
-  constructor(private readonly calculator: TimesheetCalculator) {}
+  constructor(
+    private readonly calculator: TimesheetCalculator,
+    private readonly db: TenantDatabase,
+    private readonly scope: TenantScope,
+  ) {}
 
   async refresh(
     tx: Tx,
@@ -220,6 +252,29 @@ export class AnomalyEvaluator {
             })),
         },
       });
+      if (result.lockedDrift.length) {
+        const free = entries.filter((entry) => !entry.fromLockedPeriod);
+        const targets = free.length
+          ? free
+          : entries.filter((entry) =>
+              result.lockedDrift.some((drift) => drift.recordId === entry.id),
+            );
+        const details = driftDetails(result.lockedDrift);
+        for (const target of targets)
+          found.push({ recordId: target.id, kind: "locked_share_changed", details });
+        const lastChange = entries.reduce((latest, entry) => {
+          const updatedAt = recordById.get(entry.id)!.updatedAt;
+          return updatedAt > latest ? updatedAt : latest;
+        }, new Date(0));
+        await this.proposeAdjustment(
+          tx,
+          tenantId,
+          labourerId,
+          date,
+          result.lockedDrift,
+          lastChange,
+        );
+      }
       const foundKeys = new Set(found.map((entry) => `${entry.recordId}|${entry.kind}`));
       for (const finding of found) {
         const record = recordById.get(finding.recordId)!;
@@ -261,6 +316,92 @@ export class AnomalyEvaluator {
             where: { id: row.id },
             data: { status: "cleared", openMarker: null, version: { increment: 1 } },
           });
+    }
+  }
+
+  /**
+   * Proposes one pending adjustment (the database allows one per labourer and day) for the first
+   * drifted locked record that has none: same values as in force (`proposed` = `previous`), so
+   * approving it only moves that project's share to the recomputed one. Not proposed again after
+   * someone rejected an automatic adjustment for that site, unless the day changed since.
+   */
+  private async proposeAdjustment(
+    tx: Tx,
+    tenantId: string,
+    labourerId: string,
+    date: string,
+    drift: readonly LockedDrift[],
+    lastChange: Date,
+  ) {
+    const workDate = fromCalendarDate(date);
+    const pending = await tx.timesheetAdjustment.findFirst({
+      where: { tenantId, labourerId, workDate, status: "pending" },
+      select: { id: true },
+    });
+    if (pending) return;
+    const decided = await tx.timesheetAdjustment.findMany({
+      where: { tenantId, labourerId, workDate, status: { in: ["approved", "rejected"] } },
+      orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
+    });
+    const changedAt = decided
+      .filter((row) => row.status === "approved" && row.decidedAt)
+      .reduce((latest, row) => (row.decidedAt! > latest ? row.decidedAt! : latest), lastChange);
+    for (const entry of drift) {
+      const declined = decided.some(
+        (row) =>
+          row.status === "rejected" &&
+          row.siteId === entry.siteId &&
+          row.reason === AUTOMATIC_ADJUSTMENT_REASON &&
+          row.decidedAt !== null &&
+          row.decidedAt >= changedAt,
+      );
+      if (declined) continue;
+      const period = await tx.timesheetPeriod.findFirst({
+        where: {
+          tenantId,
+          projectId: entry.projectId,
+          status: "approved",
+          startDate: { lte: workDate },
+          endDate: { gte: workDate },
+        },
+        select: { id: true },
+      });
+      if (!period) continue;
+      const latest = decided.find(
+        (row) => row.status === "approved" && row.siteId === entry.siteId,
+      );
+      const record = await tx.attendanceRecord.findFirst({
+        where: { tenantId, labourerId, siteId: entry.siteId, workDate },
+      });
+      const values: AttendanceEntryValues | null = latest
+        ? (latest.proposed as unknown as AttendanceEntryValues)
+        : record
+          ? entryValues(record)
+          : null;
+      if (!values) continue;
+      const row = await tx.timesheetAdjustment.create({
+        data: {
+          tenantId,
+          projectId: entry.projectId,
+          originalPeriodId: period.id,
+          labourerId,
+          siteId: entry.siteId,
+          workDate,
+          recordId: record?.id ?? null,
+          proposed: values,
+          previous: values,
+          reason: AUTOMATIC_ADJUSTMENT_REASON,
+          requestedBy: this.db.current().userId,
+        },
+      });
+      await this.scope.audit(tx, "timesheet.adjustment_requested", row.id, {
+        periodId: period.id,
+        labourerId,
+        date,
+        automatic: true,
+        cause: "locked_share_changed",
+      });
+      return;
     }
   }
 }

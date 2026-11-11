@@ -35,6 +35,7 @@ export type AttendanceProblem =
   | "no-changes"
   | "correction-pending"
   | "correction-not-needed"
+  | "correction-outdated"
   | "pending-corrections"
   | "period-not-due"
   | "unconfirmed-days"

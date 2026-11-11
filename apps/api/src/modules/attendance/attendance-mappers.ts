@@ -144,6 +144,36 @@ export function entryValues(record: {
 }
 
 /** Database columns from entry values. */
+/** Whether two sets of entry values are the same (status, times, overnight, break, notes). */
+export function sameEntryValues(a: AttendanceEntryValues, b: AttendanceEntryValues): boolean {
+  return (
+    a.status === b.status &&
+    a.checkIn === b.checkIn &&
+    a.checkOut === b.checkOut &&
+    a.overnight === b.overnight &&
+    a.breakMinutes === b.breakMinutes &&
+    (a.notes ?? null) === (b.notes ?? null)
+  );
+}
+
+/**
+ * Whether a pending correction can still be applied (review finding 4): its day is still submitted
+ * or confirmed, and the labourer's record is the one, with the values, it was asked against (no
+ * record when it was asked for a labourer without one). Otherwise approving it would overwrite a
+ * newer value.
+ */
+export function correctionApplies(input: {
+  dayStatus: string;
+  recordId: string | null;
+  previous: AttendanceEntryValues | null;
+  record: (Parameters<typeof entryValues>[0] & { id: string }) | null;
+}): boolean {
+  if (input.dayStatus !== "submitted" && input.dayStatus !== "confirmed") return false;
+  if (input.recordId === null) return input.record === null;
+  if (!input.record || input.record.id !== input.recordId || !input.previous) return false;
+  return sameEntryValues(entryValues(input.record), input.previous);
+}
+
 export function entryColumns(values: AttendanceEntryValues) {
   return {
     status: values.status,

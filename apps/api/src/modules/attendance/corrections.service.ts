@@ -27,6 +27,7 @@ import {
   versionConflict,
 } from "./attendance-support.js";
 import {
+  correctionApplies,
   entryColumns,
   entryValues,
   toCorrection,
@@ -202,6 +203,21 @@ export class CorrectionsService {
       async (scope) => {
         const { tx, access } = scope;
         const { row, day } = await this.decidable(scope, correctionId, input.version);
+        const current = await tx.attendanceRecord.findFirst({
+          where: { tenantId: access.tenantId, dayId: day.id, labourerId: row.labourerId },
+        });
+        if (
+          !correctionApplies({
+            dayStatus: day.status,
+            recordId: row.recordId,
+            previous: (row.previous as unknown as AttendanceEntryValues | null) ?? null,
+            record: current,
+          })
+        )
+          throw attendanceConflict(
+            "correction-outdated",
+            "The day or the record changed after this correction was asked for. Reject it and ask again.",
+          );
         await tx.attendanceCorrection.update({
           where: { id: row.id },
           data: {

@@ -4,9 +4,15 @@ import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { addCalendarDays, isoWeekday, nairobiDate } from "@pm-buddy/domain";
-import { CURRENT_CONSENT_NOTICE, DEMO_TIMESHEET_RULE } from "@pm-buddy/types";
+import {
+  AUTOMATIC_ADJUSTMENT_REASON,
+  CURRENT_CONSENT_NOTICE,
+  DEMO_TIMESHEET_RULE,
+  KENYA_PUBLIC_HOLIDAYS,
+} from "@pm-buddy/types";
 import {
   adjustmentResponseSchema,
+  adjustmentsResponseSchema,
   anomaliesResponseSchema,
   attendanceSettingsResponseSchema,
   correctionResponseSchema,
@@ -60,6 +66,15 @@ describe("Attendance and timesheets (real runtime role)", () => {
   const periodB = { start: addCalendarDays(today, -19), end: addCalendarDays(today, -13) };
   const periodA = { start: addCalendarDays(today, -12), end: addCalendarDays(today, -6) };
   const periodC = { start: addCalendarDays(today, -26), end: addCalendarDays(today, -20) };
+  // Review-fix scenarios use their own earlier weeks (engagements start 40 days ago).
+  const periodD = { start: addCalendarDays(today, -33), end: addCalendarDays(today, -27) };
+  const periodE = { start: addCalendarDays(today, -40), end: addCalendarDays(today, -34) };
+  /** Ordinary weekdays of a period: not Sunday (the rest day) and not a public holiday. */
+  const ordinaryDays = (period: { start: string }) =>
+    datesOf(period).filter(
+      (date) =>
+        isoWeekday(date) !== 7 && !KENYA_PUBLIC_HOLIDAYS.some((entry) => entry.date === date),
+    );
   const datesOf = (period: { start: string }) =>
     Array.from({ length: 7 }, (_, index) => addCalendarDays(period.start, index));
   const sunday = datesOf(periodB).find((date) => isoWeekday(date) === 7)!;
@@ -1646,6 +1661,316 @@ describe("Attendance and timesheets (real runtime role)", () => {
         }),
       ),
     ).rejects.toThrow();
+  });
+
+  it("lets the person who rejected a period submit it again once reopened (review fix 1)", async () => {
+    const dE = ordinaryDays(periodE)[0]!;
+    await recordDay(foreman, agent, p1, p1Main, dE, [entry("W2", present())]);
+    const target = await periodFor(agent, p1, dE);
+    const submitted = await agent.call("post", `attendance/periods/${target.id}/submit`, {
+      version: target.version,
+    });
+    expect(submitted.status, JSON.stringify(submitted.body)).toBe(200);
+    // The project manager (timesheets.submit and .approve) rejects the site agent's submission.
+    const rejected = await pm.call("post", `attendance/periods/${target.id}/reject`, {
+      version: period(submitted).period.version,
+      reason: "Check the gate book for Tuesday first",
+    });
+    expect(rejected.status, JSON.stringify(rejected.body)).toBe(200);
+    const reopened = await pm.call("post", `attendance/periods/${target.id}/reopen`, {
+      version: period(rejected).period.version,
+    });
+    expect(reopened.status, JSON.stringify(reopened.body)).toBe(200);
+    // Before the fix the database refused this (rejected_by = submitted_by) with a generic 409.
+    const resubmitted = await pm.call("post", `attendance/periods/${target.id}/submit`, {
+      version: period(reopened).period.version,
+    });
+    expect(resubmitted.status, JSON.stringify(resubmitted.body)).toBe(200);
+    expect(period(resubmitted).period).toMatchObject({
+      status: "submitted",
+      submittedBy: { id: pm.auth.user.id },
+      // The last rejection stays on the period as history.
+      rejectedBy: { id: pm.auth.user.id },
+      rejectionReason: "Check the gate book for Tuesday first",
+    });
+    // Maker ≠ checker still holds for the new submission.
+    expect(
+      problem(
+        await pm.call("post", `attendance/periods/${target.id}/approve`, {
+          version: period(resubmitted).period.version,
+        }),
+      ),
+    ).toBe("same-person");
+    const approved = await owner.call("post", `attendance/periods/${target.id}/approve`, {
+      version: period(resubmitted).period.version,
+    });
+    expect(approved.status, JSON.stringify(approved.body)).toBe(200);
+    expect(period(approved).period).toMatchObject({
+      status: "approved",
+      submittedBy: { id: pm.auth.user.id },
+      approvedBy: { id: owner.auth.user.id },
+    });
+  });
+
+  it("re-evaluates an approved share when another project's record of the day changes (review fix 3)", async () => {
+    const [caseA, caseB] = ordinaryDays(periodD) as [string, string];
+    // Case (a): W1 05:00–07:00 on project two, then 07:00–16:00 on project one.
+    // Case (b): W4 07:00–11:00 on project one and 12:00–16:00 on project two (half a day each).
+    expect(
+      (await save(owner, p2, p2Site, caseA, [entry("W1", present("05:00", "07:00"))])).status,
+    ).toBe(200);
+    expect(
+      (await save(owner, p2, p2Site, caseB, [entry("W4", present("12:00", "16:00"))])).status,
+    ).toBe(200);
+    await recordDay(foreman, agent, p1, p1Main, caseA, [entry("W1", present("07:00", "16:00"))]);
+    await recordDay(foreman, agent, p1, p1Main, caseB, [entry("W4", present("07:00", "11:00"))]);
+    const p1D = await periodFor(agent, p1, caseA);
+    const submitted = await agent.call("post", `attendance/periods/${p1D.id}/submit`, {
+      version: p1D.version,
+    });
+    expect(submitted.status, JSON.stringify(submitted.body)).toBe(200);
+    for (const anomaly of (await openAnomalies(pm, p1)).filter(
+      (entry) => entry.date === caseA || entry.date === caseB,
+    ))
+      expect(
+        (
+          await pm.call("post", `attendance/anomalies/${anomaly.id}/review`, {
+            decision: "dismiss",
+            note: "Agreed split between the two plots",
+            version: anomaly.version,
+          })
+        ).status,
+      ).toBe(200);
+    const approved = await pm.call("post", `attendance/periods/${p1D.id}/approve`, {
+      version: period(submitted).period.version,
+    });
+    expect(approved.status, JSON.stringify(approved.body)).toBe(200);
+    const approvedView = period(approved);
+    expect(line(approvedView, "W1")!.totals).toMatchObject({
+      normalMinutes: 360,
+      overtimeMinutes: { weekday: 120 },
+    });
+    expect(line(approvedView, "W4")!.totals).toMatchObject({ halfDays: 1, normalMinutes: 240 });
+    const snapshot = await readA((tx) =>
+      tx.timesheetLine.findMany({ where: { periodId: p1D.id }, orderBy: { id: "asc" } }),
+    );
+    const pendingOnP1 = async () =>
+      adjustmentsResponseSchema.parse(
+        (await pm.call("get", `attendance/projects/${p1}/adjustments?status=pending`)).body,
+      ).adjustments;
+
+    // Case (a): project two's early record becomes absent (its day is still a draft).
+    const p2DayA = await getMuster(owner, p2, p2Site, caseA);
+    const absentA = await save(owner, p2, p2Site, caseA, [
+      entry("W1", { status: "absent" }, row(p2DayA, "W1")!.record!.version),
+    ]);
+    expect(absentA.status, JSON.stringify(absentA.body)).toBe(200);
+    expect(row(muster(absentA), "W1")!.anomalies.map((anomaly) => anomaly.kind)).toEqual([
+      "locked_share_changed",
+    ]);
+    const lockedA = (await openAnomalies(owner, p2)).find(
+      (entry) => entry.date === caseA && entry.kind === "locked_share_changed",
+    )!;
+    expect(lockedA).toMatchObject({
+      severity: "critical",
+      details: {
+        paidNormalMinutes: 360,
+        idealNormalMinutes: 480,
+        paidOvertimeMinutes: 120,
+        idealOvertimeMinutes: 0,
+      },
+    });
+    // The open period on project two is blocked until the share is settled.
+    const p2D = await periodFor(owner, p2, caseA);
+    expect(
+      period(await owner.call("get", `attendance/periods/${p2D.id}`)).blockers.openAnomalies,
+    ).toBeGreaterThanOrEqual(1);
+    // The system proposes an adjustment of project one's approved share (same values).
+    const autoA = (await pendingOnP1()).find(
+      (entry) => entry.labourerId === workers.W1 && entry.date === caseA,
+    )!;
+    expect(autoA).toMatchObject({
+      originalPeriodId: p1D.id,
+      reason: AUTOMATIC_ADJUSTMENT_REASON,
+      previous: { status: "present", checkIn: "07:00", checkOut: "16:00" },
+      proposed: { status: "present", checkIn: "07:00", checkOut: "16:00" },
+      requestedBy: { id: owner.auth.user.id },
+    });
+    expect(
+      problem(
+        await owner.call("post", `attendance/adjustments/${autoA.id}/approve`, {
+          version: autoA.version,
+        }),
+      ),
+    ).toBe("same-person");
+    const settledA = await pm.call("post", `attendance/adjustments/${autoA.id}/approve`, {
+      version: autoA.version,
+    });
+    expect(settledA.status, JSON.stringify(settledA.body)).toBe(200);
+    // Overpaid overtime becomes normal time: a signed delta in a later open period.
+    expect(adjustmentResponseSchema.parse(settledA.body).adjustment.delta).toMatchObject({
+      halfDays: 0,
+      workedMinutes: 0,
+      normalMinutes: 120,
+      overtimeMinutes: { weekday: -120 },
+    });
+    expect(
+      (await openAnomalies(owner, p2)).filter(
+        (entry) => entry.date === caseA && entry.kind === "locked_share_changed",
+      ),
+    ).toEqual([]);
+
+    // Case (b): the afternoon half on project two becomes absent: the morning is now the whole day.
+    const p2DayB = await getMuster(owner, p2, p2Site, caseB);
+    const absentB = await save(owner, p2, p2Site, caseB, [
+      entry("W4", { status: "absent" }, row(p2DayB, "W4")!.record!.version),
+    ]);
+    expect(absentB.status, JSON.stringify(absentB.body)).toBe(200);
+    expect(row(muster(absentB), "W4")!.anomalies.map((anomaly) => anomaly.kind)).toEqual([
+      "locked_share_changed",
+    ]);
+    const autoB = (await pendingOnP1()).find(
+      (entry) => entry.labourerId === workers.W4 && entry.date === caseB,
+    )!;
+    expect(autoB.reason).toBe(AUTOMATIC_ADJUSTMENT_REASON);
+    // Saving the same day again does not propose a second adjustment.
+    expect(
+      (
+        await save(owner, p2, p2Site, caseB, [
+          entry(
+            "W4",
+            { status: "absent", notes: "Sent home at noon" },
+            row(muster(absentB), "W4")!.record!.version,
+          ),
+        ])
+      ).status,
+    ).toBe(200);
+    expect((await pendingOnP1()).filter((entry) => entry.labourerId === workers.W4)).toHaveLength(
+      1,
+    );
+    const settledB = await pm.call("post", `attendance/adjustments/${autoB.id}/approve`, {
+      version: autoB.version,
+    });
+    expect(settledB.status, JSON.stringify(settledB.body)).toBe(200);
+    // The underpaid half day is paid in the later period.
+    expect(adjustmentResponseSchema.parse(settledB.body).adjustment.delta).toMatchObject({
+      halfDays: 1,
+      workedMinutes: 0,
+      normalMinutes: 0,
+    });
+    expect(
+      (await openAnomalies(owner, p2)).filter(
+        (entry) => entry.date === caseB && entry.kind === "locked_share_changed",
+      ),
+    ).toEqual([]);
+    // The approved period itself never changed; the deltas land in the current open period.
+    expect(
+      await readA((tx) =>
+        tx.timesheetLine.findMany({ where: { periodId: p1D.id }, orderBy: { id: "asc" } }),
+      ),
+    ).toEqual(snapshot);
+    const current = period(
+      await pm.call("get", `attendance/periods/${(await periodFor(pm, p1, today)).id}`),
+    );
+    expect(
+      current.lines.filter(
+        (entry) => entry.kind === "adjustment" && entry.originalPeriodId === p1D.id,
+      ),
+    ).toHaveLength(2);
+    // Every automatic proposal is audited.
+    const automatic = (await auditEvents()).filter(
+      (event) =>
+        event.action === "timesheet.adjustment_requested" &&
+        (event.metadata as { automatic?: boolean } | null)?.automatic === true,
+    );
+    expect(automatic.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("never applies a correction over a newer value (review fix 4)", async () => {
+    const dX = addCalendarDays(today, -2);
+    const submittedDay = await recordDay(foreman, null, p1, p1Yard, dX, [entry("W5", present())]);
+    const dayId = submittedDay.day!.id;
+    await fresh(owner);
+    const requested = await owner.call("post", `attendance/days/${dayId}/corrections`, {
+      labourerId: workers.W5,
+      status: "absent",
+      reason: "Left before the morning roll call",
+      recordVersion: row(submittedDay, "W5")!.record!.version,
+    });
+    expect(requested.status, JSON.stringify(requested.body)).toBe(201);
+    const pending = correctionResponseSchema.parse(requested.body).correction;
+    // The day cannot be returned to draft while the correction waits, in the API…
+    const refused = await pm.call("post", `attendance/days/${dayId}/return`, {
+      version: submittedDay.day!.version,
+      reason: "Please re-check the yard roll",
+    });
+    expect(refused.status).toBe(409);
+    expect(problem(refused)).toBe("pending-corrections");
+    // …or directly in the database under the runtime role.
+    await expect(
+      db.run(as(pm, tenantA, "return-under-correction"), (tx) =>
+        tx.attendanceDay.update({
+          where: { id: dayId },
+          data: {
+            status: "draft",
+            submittedBy: null,
+            submittedAt: null,
+            returnedBy: pm.auth.user.id,
+            returnReason: "Direct return under a correction",
+            version: { increment: 1 },
+          },
+        }),
+      ),
+    ).rejects.toThrow();
+    // Deciding the correction first, then returning, lets the recorder change the value…
+    expect(
+      (
+        await pm.call("post", `attendance/corrections/${pending.id}/reject`, {
+          version: pending.version,
+          note: "He signed out at the gate at 16:00",
+        })
+      ).status,
+    ).toBe(200);
+    const returned = await pm.call("post", `attendance/days/${dayId}/return`, {
+      version: submittedDay.day!.version,
+      reason: "Please re-check the yard roll",
+    });
+    expect(returned.status, JSON.stringify(returned.body)).toBe(200);
+    const edited = await save(foreman, p1, p1Yard, dX, [
+      entry("W5", present("08:00", "17:00"), row(muster(returned), "W5")!.record!.version),
+    ]);
+    expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+    const resubmitted = await foreman.call("post", `attendance/days/${dayId}/submit`, {
+      version: muster(edited).day!.version,
+    });
+    expect(resubmitted.status).toBe(200);
+    // …and the old correction can never be applied over the newer value.
+    expect(
+      problem(
+        await pm.call("post", `attendance/corrections/${pending.id}/approve`, {
+          version: pending.version + 1,
+        }),
+      ),
+    ).toBe("invalid-transition");
+    // A new correction starts from the current value and applies once decided by someone else.
+    await fresh(owner);
+    const again = await owner.call("post", `attendance/days/${dayId}/corrections`, {
+      labourerId: workers.W5,
+      status: "absent",
+      reason: "Left before the morning roll call",
+      recordVersion: row(muster(resubmitted), "W5")!.record!.version,
+    });
+    expect(again.status, JSON.stringify(again.body)).toBe(201);
+    const second = correctionResponseSchema.parse(again.body).correction;
+    expect(second.previous).toMatchObject({ checkIn: "08:00", checkOut: "17:00" });
+    const applied = await pm.call("post", `attendance/corrections/${second.id}/approve`, {
+      version: second.version,
+    });
+    expect(applied.status, JSON.stringify(applied.body)).toBe(200);
+    expect(row(await getMuster(pm, p1, p1Yard, dX), "W5")!.record).toMatchObject({
+      status: "absent",
+      corrected: true,
+    });
   });
 
   it("summarises a labourer's attendance and scopes reads to the caller's projects", async () => {

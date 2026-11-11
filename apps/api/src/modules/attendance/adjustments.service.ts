@@ -37,7 +37,7 @@ import {
   type AdjustmentRow,
   type StoredDelta,
 } from "./attendance-mappers.js";
-import { isEngaged, PeriodStore } from "./period-store.js";
+import { AnomalyEvaluator, isEngaged, PeriodStore } from "./period-store.js";
 import {
   dayKey,
   overlayValues,
@@ -120,6 +120,7 @@ export class AdjustmentsService {
     private readonly auth: AuthService,
     private readonly calculator: TimesheetCalculator,
     private readonly periods: PeriodStore,
+    private readonly anomalies: AnomalyEvaluator,
   ) {}
 
   list(
@@ -221,7 +222,18 @@ export class AdjustmentsService {
           breakMinutes: input.breakMinutes,
           notes: input.notes,
         };
-        if (sameValues(previous, proposed))
+        // The same values are a reallocation: allowed only while the approved share of this site
+        // differs from the day as recomputed now (a `locked_share_changed` anomaly).
+        if (
+          sameValues(previous, proposed) &&
+          !(await this.shareChanged(
+            tx,
+            access.tenantId,
+            input.labourerId,
+            input.siteId,
+            input.date,
+          ))
+        )
           throw attendanceConflict("no-changes", "Nothing would change.");
         const row = await tx.timesheetAdjustment.create({
           data: {
@@ -266,6 +278,10 @@ export class AdjustmentsService {
         const { tx, access } = scope;
         const row = await this.decidable(scope, adjustmentId, input.version);
         const target = await this.approveCore(tx, access.tenantId, access.userId, row, input.note);
+        // The new locked share may clear a locked_share_changed anomaly, or reveal another one.
+        await this.anomalies.refresh(tx, access.tenantId, [
+          { labourerId: row.labourerId, date: toCalendarDate(row.workDate) },
+        ]);
         await this.commands.audit(scope, "timesheet.adjustment_approved", row.id, {
           originalPeriodId: row.originalPeriodId,
           targetPeriodId: target.id,
@@ -322,7 +338,9 @@ export class AdjustmentsService {
   /**
    * Approval without the caller checks (also used by the development seed): computes the delta of
    * the labourer's day against what was paid (the snapshot or an earlier adjustment), picks the
-   * period it lands in and records the decision. Nothing of the approved period changes.
+   * period it lands in and records the decision. Nothing of the approved period changes. The new
+   * share is the record's share of the whole day recomputed with nothing locked (review finding
+   * 3), so a locked share always moves to the same value the drift check compares against.
    */
   async approveCore(
     tx: Tx,
@@ -360,7 +378,11 @@ export class AdjustmentsService {
     };
     if (index >= 0) records[index] = free;
     else records.push(free);
-    const result = this.calculator.computeDay(ctx, date, records);
+    const result = this.calculator.computeDay(
+      ctx,
+      date,
+      records.map((entry) => ({ ...entry, locked: null })),
+    );
     const allocation = result.records.find((entry) => entry.recordId === free.id)!;
     if (!result.dayType || result.missingRule)
       throw attendanceConflict(
@@ -415,6 +437,23 @@ export class AdjustmentsService {
     });
     if (!updated.count) throw versionConflict();
     return target;
+  }
+
+  /** Whether the locked share of this site differs from the day as recomputed now. */
+  private async shareChanged(
+    tx: Tx,
+    tenantId: string,
+    labourerId: string,
+    siteId: string,
+    date: string,
+  ): Promise<boolean> {
+    const ctx = await this.calculator.context(tx, tenantId);
+    const inputs = await this.calculator.inputs(tx, tenantId, [labourerId], date, date);
+    const records = inputs.get(dayKey(labourerId, date)) ?? [];
+    if (!records.length) return false;
+    return this.calculator
+      .computeDay(ctx, date, records)
+      .lockedDrift.some((drift) => drift.siteId === siteId);
   }
 
   /** The values in force for a labourer on a site and date (record, then approved adjustments). */

@@ -34,6 +34,7 @@ export {
   sumMinor,
   lineAmountFromRate,
   decimalToMinor,
+  normaliseDecimal,
   toMinor,
   type MinorUnits,
   type RoundingMode,
@@ -76,3 +77,28 @@ export {
 } from "./wbs.js";
 export * from "./bq/index.js";
 export * from "./materials/index.js";
+export {
+  accreditationStatus,
+  addCalendarDays,
+  calendarDaysBetween,
+  identityIndexValue,
+  isIdentifierSearch,
+  isOldEnoughToRegister,
+  latestAllowedBirthDate,
+  maskIdentifier,
+  normaliseIdNumber,
+  normaliseKraPin,
+  normaliseStatutoryNumber,
+  RATE_SCOPES,
+  rateEffectiveTo,
+  rateKey,
+  rateScopeOf,
+  resolveRate,
+  summariseAccreditation,
+  type AccreditationSummary,
+  type RateCandidate,
+  type RateQuery,
+  type RateScope,
+} from "./labour.js";
+export * from "./attendance/index.js";
+export * from "./payroll/index.js";

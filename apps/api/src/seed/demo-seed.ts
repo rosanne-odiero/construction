@@ -24,12 +24,19 @@ import { PrismaService } from "../infra/prisma.service.js";
 import { AuthSecurity, hashPassword } from "../modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../modules/identity/tenant-database.service.js";
 import { seedProcurement, type ProcurementSeedSummary } from "./demo-procurement.js";
+import { LabourCrypto } from "../modules/labour/labour-support.js";
+import { seedAttendance, type AttendanceSeedSummary } from "./attendance-seed.js";
+import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
+import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
  * (password + TOTP), a project manager, a site agent and a finance user (TOTP), three projects with
- * Kenyan sites, geofences, WBS and milestones, and (D5.1) the starter catalogue with synthetic
- * suppliers, prices and payout details (demo-procurement.ts). Idempotent: existing records are kept as they are. Never runs in
+ * Kenyan sites, geofences, WBS and milestones, (D3.1) the labour registry: trades, rates, 40
+ * synthetic labourers with consent, gangs and NCA cards (labour-seed.ts), (D3.3) nine weeks of
+ * synthetic attendance with timesheet periods, anomalies and an adjustment (attendance-seed.ts),
+ * and (D5.1) the starter catalogue with synthetic suppliers, prices and payout details
+ * (demo-procurement.ts). Idempotent: existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
  */
@@ -328,6 +335,9 @@ export type SeedSummary = {
   projects: { code: string; name: string; status: string; created: boolean }[];
   buildups: { code: string; name: string; rateMinor: number | null; created: boolean }[];
   procurement: ProcurementSeedSummary;
+  labour: LabourSeedSummary;
+  attendance: AttendanceSeedSummary;
+  payroll: PayrollSeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -463,12 +473,56 @@ export async function seedDemo(
 
   const procurement = await seedProcurement(app, tenantId, owner.id, userOf("finance").id);
 
+  const crypto = app.get(LabourCrypto);
+  const labour = await db.run({ userId: owner.id, tenantId, requestId: "seed" }, async (tx) => {
+    await tx.$queryRaw`SELECT tenant_id FROM tenants WHERE tenant_id = ${tenantId}::uuid FOR UPDATE`;
+    const rows = await tx.project.findMany({
+      where: { tenantId, code: { in: DEMO_PROJECTS.map((project) => project.code) } },
+      include: { sites: { select: { id: true, name: true } } },
+    });
+    const byCode = new Map(
+      rows.map((row) => [
+        row.code,
+        { id: row.id, sites: new Map(row.sites.map((site) => [site.name, site.id])) },
+      ]),
+    );
+    const team = accounts
+      .filter((account) => account.key !== "owner")
+      .map((account) => ({
+        id: account.id,
+        role: account.role,
+        projectCodes: DEMO_PROJECTS.filter((project) => project.team.includes(account.key)).map(
+          (project) => project.code,
+        ),
+      }));
+    return seedLabour(tx, crypto, tenantId, owner.id, byCode, team, audit);
+  });
+
+  const attendance = await seedAttendance(
+    app,
+    tenantId,
+    {
+      ownerId: owner.id,
+      pmId: userOf("projectManager").id,
+      agentId: userOf("siteAgent").id,
+    },
+    audit,
+  );
+  const payroll = await seedPayroll(app, tenantId, {
+    ownerId: owner.id,
+    pmId: userOf("projectManager").id,
+    agentId: userOf("siteAgent").id,
+  });
+
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
     accounts: accounts.map(({ id: _id, key: _key, ...account }) => account),
     projects,
     buildups,
     procurement,
+    labour,
+    attendance,
+    payroll,
   };
 }
 

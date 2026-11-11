@@ -1,9 +1,4 @@
-import {
-  checkQuantity,
-  isSteelBarDiameter,
-  normaliseAccountNumber,
-  normaliseKraPin,
-} from "@pm-buddy/domain";
+import { checkQuantity, isSteelBarDiameter, normaliseAccountNumber } from "@pm-buddy/domain";
 import {
   CONVERSION_SOURCES,
   DERIVED_CONVERSION_RULES,
@@ -26,6 +21,8 @@ import {
 } from "@pm-buddy/types";
 import { z } from "zod";
 import { pageInfoSchema } from "./api.js";
+// One KRA PIN rule for workers (D3.1) and suppliers (D5.1).
+import { kraPinSchema } from "./labour.js";
 import { kenyanPhoneSchema } from "./primitives.js";
 
 /**
@@ -50,7 +47,7 @@ function printable(value: string, multiline: boolean): boolean {
   return true;
 }
 /** Characters as PostgreSQL's char_length counts them (code points), like Zod 4's min/max. */
-const characters = (value: string) => [...value].length;
+const characters = (value: string) => Array.from(value).length;
 const text = (min: number, max: number, multiline = false) =>
   z
     .string()
@@ -466,16 +463,6 @@ export const updateProcurementSettingsRequestSchema = z.strictObject({
 });
 
 // Suppliers -------------------------------------------------------------------------------------
-
-/** A KRA PIN in any common spelling, stored upper-case without spaces (A/P + 9 digits + letter). */
-export const kraPinSchema = z.string().transform((value, ctx) => {
-  const pin = normaliseKraPin(value);
-  if (!pin) {
-    ctx.addIssue({ code: "custom", message: "invalid_kra_pin" });
-    return z.NEVER;
-  }
-  return pin;
-});
 
 export const supplierStatusSchema = z.enum(SUPPLIER_STATUSES);
 export const etimsStatusSchema = z.enum(ETIMS_STATUSES);

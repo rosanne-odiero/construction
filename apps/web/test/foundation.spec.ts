@@ -468,8 +468,8 @@ test("roles panel works in Kiswahili and offers a delegated manager only what th
   await page.getByRole("button", { name: "Pakia majukumu na ruhusa" }).click();
   await expect(page.getByRole("heading", { name: "Majukumu na ruhusa" })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "Kuona miradi", exact: true })).toBeEnabled();
-  await expect(page.getByRole("checkbox", { name: "Kuidhinisha malipo" })).toBeDisabled();
-  await expect(page.getByRole("checkbox", { name: "Kuidhinisha malipo" })).toHaveAccessibleName(
+  await expect(page.getByRole("checkbox", { name: /^Kuidhinisha malipo ·/ })).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: /^Kuidhinisha malipo ·/ })).toHaveAccessibleName(
     "Kuidhinisha malipo · inahitaji MFA · huna ruhusa hii",
   );
   await expect(

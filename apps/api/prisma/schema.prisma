@@ -120,10 +120,10 @@ model RecoveryCode {
 }
 
 model Tenant {
-  id                  String               @id @default(uuid()) @map("tenant_id") @db.Uuid
-  name                String               @db.VarChar(150)
-  createdBy           String               @map("created_by") @db.Uuid
-  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  id                  String                 @id @default(uuid()) @map("tenant_id") @db.Uuid
+  name                String                 @db.VarChar(150)
+  createdBy           String                 @map("created_by") @db.Uuid
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz
   members             Membership[]
   projects            Project[]
   invites             Invitation[]
@@ -135,6 +135,18 @@ model Tenant {
   materials           Material[]
   suppliers           Supplier[]
   procurementSettings ProcurementSettings?
+  trades              Trade[]
+  skillLevels         SkillLevel[]
+  labourSettings      LabourSettings?
+  labourers           Labourer[]
+  attendanceSettings  AttendanceSettings?
+  timesheetRules      TimesheetRuleVersion[]
+  publicHolidays      PublicHoliday[]
+  idempotency         IdempotencyRecord[]
+  outboxEvents        OutboxEvent[]
+  payrollSettings     PayrollSettings?
+  statutoryRules      StatutoryRuleVersion[]
+  minimumWages        MinimumWageRate[]
 
   @@map("tenants")
 }
@@ -170,6 +182,7 @@ model Membership {
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   customRole   TenantRole?         @relation(fields: [tenantId, customRoleId], references: [tenantId, id], onDelete: Restrict)
   projects     ProjectMembership[]
+  labourViews  LabourSavedView[]
 
   @@id([tenantId, userId])
   @@index([userId])
@@ -180,29 +193,29 @@ model Membership {
 // A project (D2.1). Status follows packages/domain PROJECT_TRANSITIONS, enforced by the API and
 // the app.guard_project() trigger; money is KES minor units; business dates are calendar dates.
 model Project {
-  id               String                @id @default(uuid()) @db.Uuid
-  tenantId         String                @map("tenant_id") @db.Uuid
-  code             String                @db.VarChar(20)
-  name             String                @db.VarChar(150)
-  description      String?               @db.VarChar(2000)
-  clientName       String?               @map("client_name") @db.VarChar(150)
-  clientEmail      String?               @map("client_email") @db.VarChar(254)
-  clientPhone      String?               @map("client_phone") @db.VarChar(32)
-  contractSumMinor BigInt?               @map("contract_sum_minor")
-  currency         String                @default("KES") @db.Char(3)
-  contractType     String?               @map("contract_type") @db.VarChar(30)
-  startDate        DateTime?             @map("start_date") @db.Date
-  endDate          DateTime?             @map("end_date") @db.Date
-  county           String?               @db.VarChar(30)
-  town             String?               @db.VarChar(100)
-  latitude         Decimal?              @db.Decimal(9, 6)
-  longitude        Decimal?              @db.Decimal(9, 6)
-  status           String                @default("planning") @db.VarChar(20)
-  version          Int                   @default(1)
-  createdBy        String?               @map("created_by") @db.Uuid
-  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  tenant           Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id               String                 @id @default(uuid()) @db.Uuid
+  tenantId         String                 @map("tenant_id") @db.Uuid
+  code             String                 @db.VarChar(20)
+  name             String                 @db.VarChar(150)
+  description      String?                @db.VarChar(2000)
+  clientName       String?                @map("client_name") @db.VarChar(150)
+  clientEmail      String?                @map("client_email") @db.VarChar(254)
+  clientPhone      String?                @map("client_phone") @db.VarChar(32)
+  contractSumMinor BigInt?                @map("contract_sum_minor")
+  currency         String                 @default("KES") @db.Char(3)
+  contractType     String?                @map("contract_type") @db.VarChar(30)
+  startDate        DateTime?              @map("start_date") @db.Date
+  endDate          DateTime?              @map("end_date") @db.Date
+  county           String?                @db.VarChar(30)
+  town             String?                @db.VarChar(100)
+  latitude         Decimal?               @db.Decimal(9, 6)
+  longitude        Decimal?               @db.Decimal(9, 6)
+  status           String                 @default("planning") @db.VarChar(20)
+  version          Int                    @default(1)
+  createdBy        String?                @map("created_by") @db.Uuid
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant           Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   members          ProjectMembership[]
   invitations      InvitationProject[]
   statusChanges    ProjectStatusChange[]
@@ -213,6 +226,17 @@ model Project {
   bqImports        BqImport[]
   instructions     Instruction[]
   variations       VariationOrder[]
+  engagements      LabourEngagement[]
+  labourRates      LabourRate[]
+  gangs            Gang[]
+  dnrEvents        DoNotRehireEvent[]
+  timesheetRules   TimesheetRuleVersion[]
+  timesheetPeriods TimesheetPeriod[]
+  payCalendar      PayCalendar?
+  allowances       PayrollAllowance[]
+  outputs          PieceRateOutput[]
+  advances         SalaryAdvance[]
+  payrollBatches   PayrollBatch[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -237,19 +261,25 @@ model ProjectStatusChange {
 }
 
 model Site {
-  id        String         @id @default(uuid(7)) @db.Uuid
-  tenantId  String         @map("tenant_id") @db.Uuid
-  projectId String         @map("project_id") @db.Uuid
-  name      String         @db.VarChar(120)
-  address   String?        @db.VarChar(250)
-  version   Int            @default(1)
-  createdBy String         @map("created_by") @db.Uuid
-  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  project   Project        @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  geofences SiteGeofence[]
+  id                String                @id @default(uuid(7)) @db.Uuid
+  tenantId          String                @map("tenant_id") @db.Uuid
+  projectId         String                @map("project_id") @db.Uuid
+  name              String                @db.VarChar(120)
+  address           String?               @db.VarChar(250)
+  version           Int                   @default(1)
+  createdBy         String                @map("created_by") @db.Uuid
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project           Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  geofences         SiteGeofence[]
+  gangs             Gang[]
+  attendanceDays    AttendanceDay[]
+  attendanceRecords AttendanceRecord[]
+  anomalies         AttendanceAnomaly[]
+  adjustments       TimesheetAdjustment[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, name])
   @@map("sites")
 }
@@ -525,33 +555,34 @@ model BqSection {
 // A BQ item. Quantity and rate are exact decimals; amounts are KES minor units. amountSource says
 // how the amount was obtained (CHECK bq_items_amount_rule_check); the sheet's amount is kept apart.
 model BqItem {
-  id               String           @id @default(uuid(7)) @db.Uuid
-  tenantId         String           @map("tenant_id") @db.Uuid
-  versionId        String           @map("version_id") @db.Uuid
-  billId           String           @map("bill_id") @db.Uuid
-  sectionId        String?          @map("section_id") @db.Uuid
-  lineageId        String           @map("lineage_id") @db.Uuid
-  ref              String?          @db.VarChar(30)
-  description      String           @db.VarChar(4000)
-  unit             String?          @db.VarChar(10)
-  unitRaw          String?          @map("unit_raw") @db.VarChar(30)
-  quantity         Decimal?         @db.Decimal(20, 4)
-  rate             Decimal?         @db.Decimal(20, 4)
-  amountMinor      BigInt           @map("amount_minor")
-  sheetAmountMinor BigInt?          @map("sheet_amount_minor")
-  amountSource     String           @map("amount_source") @db.VarChar(20)
-  overrideReason   String?          @map("override_reason") @db.VarChar(500)
-  kind             String           @db.VarChar(20)
-  notes            String?          @db.VarChar(1000)
+  id               String            @id @default(uuid(7)) @db.Uuid
+  tenantId         String            @map("tenant_id") @db.Uuid
+  versionId        String            @map("version_id") @db.Uuid
+  billId           String            @map("bill_id") @db.Uuid
+  sectionId        String?           @map("section_id") @db.Uuid
+  lineageId        String            @map("lineage_id") @db.Uuid
+  ref              String?           @db.VarChar(30)
+  description      String            @db.VarChar(4000)
+  unit             String?           @db.VarChar(10)
+  unitRaw          String?           @map("unit_raw") @db.VarChar(30)
+  quantity         Decimal?          @db.Decimal(20, 4)
+  rate             Decimal?          @db.Decimal(20, 4)
+  amountMinor      BigInt            @map("amount_minor")
+  sheetAmountMinor BigInt?           @map("sheet_amount_minor")
+  amountSource     String            @map("amount_source") @db.VarChar(20)
+  overrideReason   String?           @map("override_reason") @db.VarChar(500)
+  kind             String            @db.VarChar(20)
+  notes            String?           @db.VarChar(1000)
   // Null for items added by a variation (no spreadsheet row).
-  sourceSheet      String?          @map("source_sheet") @db.VarChar(100)
-  sourceRow        Int?             @map("source_row")
-  hasFormula       Boolean          @default(false) @map("has_formula")
-  sortOrder        Int              @map("sort_order")
-  bill             BqBill           @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
-  section          BqSection?       @relation(fields: [tenantId, versionId, sectionId], references: [tenantId, versionId, id], onDelete: Cascade)
+  sourceSheet      String?           @map("source_sheet") @db.VarChar(100)
+  sourceRow        Int?              @map("source_row")
+  hasFormula       Boolean           @default(false) @map("has_formula")
+  sortOrder        Int               @map("sort_order")
+  bill             BqBill            @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
+  section          BqSection?        @relation(fields: [tenantId, versionId, sectionId], references: [tenantId, versionId, id], onDelete: Cascade)
   variationLines   VariationLine[]
   rateLinks        BqItemRateLink[]
+  pieceRateOutputs PieceRateOutput[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, versionId, lineageId])
@@ -1075,4 +1106,1104 @@ model ProcurementSettings {
   tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("procurement_settings")
+}
+
+// Labour registry (D3.1, ARCHITECTURE §4.2). Identifiers are encrypted per field (AES-256-GCM,
+// `*_enc` = format byte, key version, nonce, ciphertext, tag) with keyed blind indexes (`*_bidx`,
+// HMAC-SHA-256) for exact matching; plaintext identifiers are never stored.
+
+// A company trade (brief §5.4: configurable list) with English and Kiswahili names.
+model Trade {
+  id         String             @id @default(uuid(7)) @db.Uuid
+  tenantId   String             @map("tenant_id") @db.Uuid
+  key        String             @db.VarChar(40)
+  nameEn     String             @map("name_en") @db.VarChar(80)
+  nameSw     String             @map("name_sw") @db.VarChar(80)
+  active     Boolean            @default(true)
+  sortOrder  Int                @default(0) @map("sort_order")
+  version    Int                @default(1)
+  createdBy  String             @map("created_by") @db.Uuid
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  labourers  Labourer[]
+  rates      LabourRate[]
+  allowances PayrollAllowance[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, key])
+  @@map("trades")
+}
+
+// A company skill level aligned to an NCA category (skilled, semi-skilled, unskilled, supervisor).
+model SkillLevel {
+  id                    String       @id @default(uuid(7)) @db.Uuid
+  tenantId              String       @map("tenant_id") @db.Uuid
+  key                   String       @db.VarChar(40)
+  nameEn                String       @map("name_en") @db.VarChar(80)
+  nameSw                String       @map("name_sw") @db.VarChar(80)
+  ncaCategory           String       @map("nca_category") @db.VarChar(20)
+  accreditationExpected Boolean      @default(false) @map("accreditation_expected")
+  active                Boolean      @default(true)
+  sortOrder             Int          @default(0) @map("sort_order")
+  version               Int          @default(1)
+  createdBy             String       @map("created_by") @db.Uuid
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant                Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  labourers             Labourer[]
+  rates                 LabourRate[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, key])
+  @@map("skill_levels")
+}
+
+// Company labour settings; no row means the defaults (alert lead time 30 days).
+model LabourSettings {
+  tenantId               String   @id @map("tenant_id") @db.Uuid
+  accreditationAlertDays Int      @default(30) @map("accreditation_alert_days")
+  version                Int      @default(1)
+  updatedBy              String   @map("updated_by") @db.Uuid
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("labour_settings")
+}
+
+// A registered worker. `id` is chosen by the API before insert because each ciphertext's associated
+// data binds it to (tenant, table, column, row). `registered_on` is set by the database (Africa/
+// Nairobi date) and the minimum-age CHECK uses it. Rows are never deleted by the runtime role.
+model Labourer {
+  id             String                  @id @db.Uuid
+  tenantId       String                  @map("tenant_id") @db.Uuid
+  workerNo       String                  @map("worker_no") @db.VarChar(20)
+  fullName       String                  @map("full_name") @db.VarChar(150)
+  dateOfBirth    DateTime                @map("date_of_birth") @db.Date
+  gender         String                  @db.VarChar(20)
+  homeCounty     String?                 @map("home_county") @db.VarChar(30)
+  tradeId        String                  @map("trade_id") @db.Uuid
+  skillLevelId   String                  @map("skill_level_id") @db.Uuid
+  engagementType String                  @map("engagement_type") @db.VarChar(20)
+  rateBasis      String                  @default("daily") @map("rate_basis") @db.VarChar(10)
+  status         String                  @default("active") @db.VarChar(20)
+  idType         String                  @map("id_type") @db.VarChar(20)
+  idNumberEnc    Bytes                   @map("id_number_enc")
+  idNumberBidx   String                  @map("id_number_bidx") @db.Char(64)
+  phoneEnc       Bytes?                  @map("phone_enc")
+  phoneBidx      String?                 @map("phone_bidx") @db.Char(64)
+  kraPinEnc      Bytes?                  @map("kra_pin_enc")
+  kraPinBidx     String?                 @map("kra_pin_bidx") @db.Char(64)
+  nssfNumberEnc  Bytes?                  @map("nssf_number_enc")
+  shaNumberEnc   Bytes?                  @map("sha_number_enc")
+  nextOfKinEnc   Bytes?                  @map("next_of_kin_enc")
+  registeredOn   DateTime                @map("registered_on") @db.Date
+  doNotRehire    Boolean                 @default(false) @map("do_not_rehire")
+  doNotRehireAt  DateTime?               @map("do_not_rehire_at") @db.Timestamptz
+  doNotRehireBy  String?                 @map("do_not_rehire_by") @db.Uuid
+  version        Int                     @default(1)
+  createdBy      String                  @map("created_by") @db.Uuid
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant         Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trade          Trade                   @relation(fields: [tenantId, tradeId], references: [tenantId, id], onDelete: NoAction)
+  skillLevel     SkillLevel              @relation(fields: [tenantId, skillLevelId], references: [tenantId, id], onDelete: NoAction)
+  engagements    LabourEngagement[]
+  consents       LabourerConsent[]
+  accreditations LabourerAccreditation[]
+  dnrEvents      DoNotRehireEvent[]      @relation("DnrSubject")
+  relatedDnr     DoNotRehireEvent[]      @relation("DnrRelated")
+  rates          LabourRate[]
+  ledGangs       Gang[]
+  gangMembers    GangMembership[]
+  attendance     AttendanceRecord[]
+  corrections    AttendanceCorrection[]
+  anomalies      AttendanceAnomaly[]
+  timesheetLines TimesheetLine[]
+  adjustments    TimesheetAdjustment[]
+  allowances     PayrollAllowance[]
+  outputs        PieceRateOutput[]
+  outputShares   PieceRateOutputShare[]
+  advances       SalaryAdvance[]
+  payrollLines   PayrollLine[]
+  dayClaims      PayrollDayClaim[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, workerNo])
+  @@unique([tenantId, idNumberBidx])
+  @@unique([tenantId, kraPinBidx])
+  @@index([tenantId, phoneBidx])
+  @@index([tenantId, status])
+  @@map("labourers")
+}
+
+// A labourer engaged on a project (start, optional end). At most one open engagement per labourer
+// and project (trigger); the worker must be 18 on the start date (trigger); engaging a
+// do-not-rehire labourer needs an override event in the same transaction (trigger).
+model LabourEngagement {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  labourerId String    @map("labourer_id") @db.Uuid
+  projectId  String    @map("project_id") @db.Uuid
+  startDate  DateTime  @map("start_date") @db.Date
+  endDate    DateTime? @map("end_date") @db.Date
+  endReason  String?   @map("end_reason") @db.VarChar(500)
+  createdBy  String    @map("created_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  endedBy    String?   @map("ended_by") @db.Uuid
+  endedAt    DateTime? @map("ended_at") @db.Timestamptz
+  labourer   Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+  project    Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId])
+  @@index([tenantId, projectId])
+  @@map("labour_engagements")
+}
+
+// Consent to process registration data (Kenya Data Protection Act 2019): which notice version and
+// digest was shown, in which language, how it was captured and by whom. Append-only apart from a
+// single withdrawal. Biometric consent kinds join in D3.4.
+model LabourerConsent {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  labourerId        String    @map("labourer_id") @db.Uuid
+  kind              String    @db.VarChar(30)
+  noticeVersion     String    @map("notice_version") @db.VarChar(60)
+  noticeDigest      String    @map("notice_digest") @db.Char(64)
+  language          String    @db.VarChar(5)
+  method            String    @db.VarChar(20)
+  witnessName       String?   @map("witness_name") @db.VarChar(120)
+  granted           Boolean
+  capturedBy        String    @map("captured_by") @db.Uuid
+  capturedAt        DateTime  @default(now()) @map("captured_at") @db.Timestamptz
+  withdrawnAt       DateTime? @map("withdrawn_at") @db.Timestamptz
+  withdrawnBy       String?   @map("withdrawn_by") @db.Uuid
+  withdrawalMethod  String?   @map("withdrawal_method") @db.VarChar(20)
+  withdrawalWitness String?   @map("withdrawal_witness") @db.VarChar(120)
+  labourer          Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId, capturedAt])
+  @@map("labourer_consents")
+}
+
+// NCA accreditation cards (category, number, expiry). Renewal adds a card; the latest expiry counts.
+model LabourerAccreditation {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  labourerId String    @map("labourer_id") @db.Uuid
+  category   String    @db.VarChar(30)
+  cardNumber String    @map("card_number") @db.VarChar(40)
+  issuedOn   DateTime? @map("issued_on") @db.Date
+  expiresOn  DateTime  @map("expires_on") @db.Date
+  version    Int       @default(1)
+  createdBy  String    @map("created_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  labourer   Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId])
+  @@index([tenantId, expiresOn])
+  @@map("labourer_accreditations")
+}
+
+// Append-only history of do-not-rehire decisions and overrides; the reason is encrypted free text.
+model DoNotRehireEvent {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  labourerId        String    @map("labourer_id") @db.Uuid
+  action            String    @db.VarChar(10)
+  context           String?   @db.VarChar(20)
+  projectId         String?   @map("project_id") @db.Uuid
+  relatedLabourerId String?   @map("related_labourer_id") @db.Uuid
+  reasonEnc         Bytes     @map("reason_enc")
+  actorId           String    @map("actor_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  labourer          Labourer  @relation("DnrSubject", fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+  related           Labourer? @relation("DnrRelated", fields: [tenantId, relatedLabourerId], references: [tenantId, id], onDelete: NoAction)
+  project           Project?  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId, createdAt])
+  @@map("do_not_rehire_events")
+}
+
+// Effective-dated rates in KES minor units. Rows are never updated (a new rate is a new row that
+// starts on or after today); only a rate that has not started yet can be deleted. `scope_key` is
+// set by the database from (project, labourer, trade, skill level, basis).
+model LabourRate {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  projectId       String?          @map("project_id") @db.Uuid
+  labourerId      String?          @map("labourer_id") @db.Uuid
+  tradeId         String?          @map("trade_id") @db.Uuid
+  skillLevelId    String?          @map("skill_level_id") @db.Uuid
+  basis           String           @db.VarChar(10)
+  rateMinor       BigInt           @map("rate_minor")
+  currency        String           @default("KES") @db.Char(3)
+  effectiveFrom   DateTime         @map("effective_from") @db.Date
+  scopeKey        String           @default("") @map("scope_key") @db.VarChar(200)
+  createdBy       String           @map("created_by") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  project         Project?         @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: NoAction)
+  labourer        Labourer?        @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  trade           Trade?           @relation(fields: [tenantId, tradeId], references: [tenantId, id], onDelete: NoAction)
+  skillLevel      SkillLevel?      @relation(fields: [tenantId, skillLevelId], references: [tenantId, id], onDelete: NoAction)
+  payrollEarnings PayrollEarning[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, scopeKey, effectiveFrom])
+  @@index([tenantId, tradeId])
+  @@index([tenantId, labourerId])
+  @@map("labour_rates")
+}
+
+// A named gang (crew) on a project, optionally tied to one of its sites, with a leader who is a
+// current member.
+model Gang {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  tenantId         String            @map("tenant_id") @db.Uuid
+  projectId        String            @map("project_id") @db.Uuid
+  siteId           String?           @map("site_id") @db.Uuid
+  name             String            @db.VarChar(80)
+  leaderLabourerId String?           @map("leader_labourer_id") @db.Uuid
+  status           String            @default("active") @db.VarChar(20)
+  version          Int               @default(1)
+  createdBy        String            @map("created_by") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project          Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  site             Site?             @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
+  leader           Labourer?         @relation(fields: [tenantId, leaderLabourerId], references: [tenantId, id], onDelete: NoAction)
+  members          GangMembership[]
+  outputs          PieceRateOutput[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, name])
+  @@map("gangs")
+}
+
+// Gang membership history (join and leave dates). One open membership per labourer and project
+// (trigger); the labourer must be engaged on the project on the join date (trigger).
+model GangMembership {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  projectId  String    @map("project_id") @db.Uuid
+  gangId     String    @map("gang_id") @db.Uuid
+  labourerId String    @map("labourer_id") @db.Uuid
+  joinedOn   DateTime  @map("joined_on") @db.Date
+  leftOn     DateTime? @map("left_on") @db.Date
+  addedBy    String    @map("added_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  removedBy  String?   @map("removed_by") @db.Uuid
+  gang       Gang      @relation(fields: [tenantId, projectId, gangId], references: [tenantId, projectId, id], onDelete: Cascade)
+  labourer   Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, gangId])
+  @@index([tenantId, labourerId])
+  @@map("gang_memberships")
+}
+
+// A user's saved registry view (filters only), private to that user in that company.
+model LabourSavedView {
+  id         String     @id @default(uuid(7)) @db.Uuid
+  tenantId   String     @map("tenant_id") @db.Uuid
+  userId     String     @map("user_id") @db.Uuid
+  name       String     @db.VarChar(60)
+  filters    Json       @default("{}")
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  membership Membership @relation(fields: [tenantId, userId], references: [tenantId, userId], onDelete: Cascade)
+
+  @@unique([tenantId, userId, name])
+  @@map("labour_saved_views")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Attendance and timesheets (D3.3, web-only slice; ARCHITECTURE §4.4). Business dates are
+// Africa/Nairobi calendar dates; times of day are minutes after midnight; durations are integer
+// minutes and day counts integer half days. Database triggers repeat the workflow rules (maker ≠
+// checker, period locks, engagement on the date) so a bypassed API check still cannot break them.
+
+// Company timesheet period settings (QUESTIONS Q-C4); no row means weekly, Thursday 18:00, Friday.
+model AttendanceSettings {
+  tenantId      String   @id @map("tenant_id") @db.Uuid
+  frequency     String   @default("weekly") @db.VarChar(20)
+  weekEndsOn    Int      @default(4) @map("week_ends_on") @db.SmallInt
+  cutoffMinutes Int      @default(1080) @map("cutoff_minutes") @db.SmallInt
+  paydayWeekday Int      @default(5) @map("payday_weekday") @db.SmallInt
+  version       Int      @default(1)
+  updatedBy     String   @map("updated_by") @db.Uuid
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("attendance_settings")
+}
+
+// Effective-dated timesheet rules: company default (project_id null) or a project override. Rows
+// are never updated; only a version that has not started can be deleted; a version cannot take
+// effect inside a submitted or approved period (trigger). `scope_key` is set by the database.
+model TimesheetRuleVersion {
+  id                      String           @id @default(uuid(7)) @db.Uuid
+  tenantId                String           @map("tenant_id") @db.Uuid
+  projectId               String?          @map("project_id") @db.Uuid
+  scopeKey                String           @default("") @map("scope_key") @db.VarChar(40)
+  effectiveFrom           DateTime         @map("effective_from") @db.Date
+  normalMinutes           Int              @map("normal_minutes") @db.SmallInt
+  defaultBreakMinutes     Int              @map("default_break_minutes") @db.SmallInt
+  breakAfterMinutes       Int              @map("break_after_minutes") @db.SmallInt
+  dayStartMinutes         Int              @map("day_start_minutes") @db.SmallInt
+  lateGraceMinutes        Int              @map("late_grace_minutes") @db.SmallInt
+  halfDayThresholdMinutes Int              @map("half_day_threshold_minutes") @db.SmallInt
+  maxPlausibleMinutes     Int              @map("max_plausible_minutes") @db.SmallInt
+  restDays                Int[]            @map("rest_days") @db.SmallInt
+  otWeekdayMultiplier     Decimal          @map("ot_weekday_multiplier") @db.Decimal(4, 2)
+  otRestDayMultiplier     Decimal          @map("ot_rest_day_multiplier") @db.Decimal(4, 2)
+  otHolidayMultiplier     Decimal          @map("ot_holiday_multiplier") @db.Decimal(4, 2)
+  complianceStatus        String           @default("unverified") @map("compliance_status") @db.VarChar(20)
+  sourceReference         String           @map("source_reference") @db.VarChar(300)
+  createdBy               String           @map("created_by") @db.Uuid
+  createdAt               DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  tenant                  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project                 Project?         @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: NoAction)
+  payrollEarnings         PayrollEarning[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, scopeKey, effectiveFrom])
+  @@map("timesheet_rule_versions")
+}
+
+// A company's public holiday calendar (seeded from packages/types KENYA_PUBLIC_HOLIDAYS). Holidays
+// inside a submitted or approved period cannot be added or removed (trigger); never updated.
+model PublicHoliday {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  holidayDate      DateTime @map("holiday_date") @db.Date
+  nameEn           String   @map("name_en") @db.VarChar(120)
+  nameSw           String   @map("name_sw") @db.VarChar(120)
+  kind             String   @db.VarChar(20)
+  source           String   @db.VarChar(400)
+  complianceStatus String   @default("unverified") @map("compliance_status") @db.VarChar(20)
+  createdBy        String   @map("created_by") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, holidayDate])
+  @@map("public_holidays")
+}
+
+// A project's timesheet period: open → submitted → approved (locked), or submitted → rejected →
+// open. The submitter cannot approve or reject (CHECK); approval snapshots timesheet_lines.
+model TimesheetPeriod {
+  id              String                @id @default(uuid(7)) @db.Uuid
+  tenantId        String                @map("tenant_id") @db.Uuid
+  projectId       String                @map("project_id") @db.Uuid
+  startDate       DateTime              @map("start_date") @db.Date
+  endDate         DateTime              @map("end_date") @db.Date
+  cutoffAt        DateTime              @map("cutoff_at") @db.Timestamptz
+  status          String                @default("open") @db.VarChar(20)
+  version         Int                   @default(1)
+  submittedBy     String?               @map("submitted_by") @db.Uuid
+  submittedAt     DateTime?             @map("submitted_at") @db.Timestamptz
+  submittedDigest String?               @map("submitted_digest") @db.Char(64)
+  approvedBy      String?               @map("approved_by") @db.Uuid
+  approvedAt      DateTime?             @map("approved_at") @db.Timestamptz
+  rejectedBy      String?               @map("rejected_by") @db.Uuid
+  rejectedAt      DateTime?             @map("rejected_at") @db.Timestamptz
+  rejectionReason String?               @map("rejection_reason") @db.VarChar(500)
+  createdBy       String                @map("created_by") @db.Uuid
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project         Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  days            AttendanceDay[]
+  lines           TimesheetLine[]       @relation("PeriodLines")
+  carriedLines    TimesheetLine[]       @relation("LineOriginalPeriod")
+  adjustments     TimesheetAdjustment[] @relation("AdjustmentOriginalPeriod")
+  landed          TimesheetAdjustment[] @relation("AdjustmentTargetPeriod")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, startDate])
+  @@index([tenantId, projectId, status])
+  @@map("timesheet_periods")
+}
+
+// A muster sheet: one project site on one date, draft → submitted → confirmed by someone who
+// neither submitted it nor recorded any of its records (trigger).
+model AttendanceDay {
+  id           String                 @id @default(uuid(7)) @db.Uuid
+  tenantId     String                 @map("tenant_id") @db.Uuid
+  projectId    String                 @map("project_id") @db.Uuid
+  siteId       String                 @map("site_id") @db.Uuid
+  workDate     DateTime               @map("work_date") @db.Date
+  periodId     String                 @map("period_id") @db.Uuid
+  status       String                 @default("draft") @db.VarChar(20)
+  version      Int                    @default(1)
+  submittedBy  String?                @map("submitted_by") @db.Uuid
+  submittedAt  DateTime?              @map("submitted_at") @db.Timestamptz
+  confirmedBy  String?                @map("confirmed_by") @db.Uuid
+  confirmedAt  DateTime?              @map("confirmed_at") @db.Timestamptz
+  returnedBy   String?                @map("returned_by") @db.Uuid
+  returnedAt   DateTime?              @map("returned_at") @db.Timestamptz
+  returnReason String?                @map("return_reason") @db.VarChar(500)
+  createdBy    String                 @map("created_by") @db.Uuid
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  site         Site                   @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Cascade)
+  period       TimesheetPeriod        @relation(fields: [tenantId, projectId, periodId], references: [tenantId, projectId, id], onDelete: NoAction)
+  records      AttendanceRecord[]
+  corrections  AttendanceCorrection[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, id, siteId, workDate])
+  @@unique([tenantId, siteId, workDate])
+  @@index([tenantId, periodId])
+  @@map("attendance_days")
+}
+
+// One labourer on one site on one date (unique). `capture_method` is the pluggable capture method:
+// only `web_manual` is implemented; the evidence columns are reserved for the site app, kiosk and
+// terminals and must stay empty for web entries (CHECK). Never deleted by the runtime role.
+model AttendanceRecord {
+  id               String                 @id @default(uuid(7)) @db.Uuid
+  tenantId         String                 @map("tenant_id") @db.Uuid
+  dayId            String                 @map("day_id") @db.Uuid
+  projectId        String                 @map("project_id") @db.Uuid
+  siteId           String                 @map("site_id") @db.Uuid
+  workDate         DateTime               @map("work_date") @db.Date
+  labourerId       String                 @map("labourer_id") @db.Uuid
+  status           String                 @db.VarChar(20)
+  checkInMinutes   Int?                   @map("check_in_minutes") @db.SmallInt
+  checkOutMinutes  Int?                   @map("check_out_minutes") @db.SmallInt
+  overnight        Boolean                @default(false)
+  breakMinutes     Int?                   @map("break_minutes") @db.SmallInt
+  notes            String?                @db.VarChar(500)
+  captureMethod    String                 @default("web_manual") @map("capture_method") @db.VarChar(20)
+  deviceId         String?                @map("device_id") @db.Uuid
+  deviceTime       DateTime?              @map("device_time") @db.Timestamptz
+  serverReceivedAt DateTime               @default(now()) @map("server_received_at") @db.Timestamptz
+  latitude         Decimal?               @db.Decimal(9, 6)
+  longitude        Decimal?               @db.Decimal(9, 6)
+  accuracyM        Decimal?               @map("accuracy_m") @db.Decimal(7, 1)
+  geofenceResult   String?                @map("geofence_result") @db.VarChar(10)
+  geofenceVersion  Int?                   @map("geofence_version")
+  matchConfidence  Decimal?               @map("match_confidence") @db.Decimal(5, 4)
+  photoFileId      String?                @map("photo_file_id") @db.Uuid
+  clientEventId    String?                @map("client_event_id") @db.Uuid
+  corrected        Boolean                @default(false)
+  version          Int                    @default(1)
+  createdBy        String                 @map("created_by") @db.Uuid
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy        String                 @map("updated_by") @db.Uuid
+  updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  day              AttendanceDay          @relation(fields: [tenantId, dayId, siteId, workDate], references: [tenantId, id, siteId, workDate], onDelete: Cascade)
+  site             Site                   @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
+  labourer         Labourer               @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  corrections      AttendanceCorrection[]
+  anomalies        AttendanceAnomaly[]
+  adjustments      TimesheetAdjustment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, siteId, labourerId, workDate])
+  @@index([tenantId, labourerId, workDate])
+  @@index([tenantId, projectId, workDate])
+  @@map("attendance_records")
+}
+
+// A manual correction of a submitted or confirmed day: proposed values with a reason, applied only
+// when someone other than the requester approves it (CHECK). Append-only apart from the decision.
+model AttendanceCorrection {
+  id           String              @id @default(uuid(7)) @db.Uuid
+  tenantId     String              @map("tenant_id") @db.Uuid
+  dayId        String              @map("day_id") @db.Uuid
+  siteId       String              @map("site_id") @db.Uuid
+  workDate     DateTime            @map("work_date") @db.Date
+  recordId     String?             @map("record_id") @db.Uuid
+  labourerId   String              @map("labourer_id") @db.Uuid
+  proposed     Json
+  previous     Json?
+  reason       String              @db.VarChar(500)
+  status       String              @default("pending") @db.VarChar(20)
+  version      Int                 @default(1)
+  requestedBy  String              @map("requested_by") @db.Uuid
+  requestedAt  DateTime            @default(now()) @map("requested_at") @db.Timestamptz
+  decidedBy    String?             @map("decided_by") @db.Uuid
+  decidedAt    DateTime?           @map("decided_at") @db.Timestamptz
+  decisionNote String?             @map("decision_note") @db.VarChar(500)
+  day          AttendanceDay       @relation(fields: [tenantId, dayId, siteId, workDate], references: [tenantId, id, siteId, workDate], onDelete: Cascade)
+  record       AttendanceRecord?   @relation(fields: [tenantId, recordId], references: [tenantId, id], onDelete: NoAction)
+  labourer     Labourer            @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  anomalies    AttendanceAnomaly[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, dayId])
+  @@map("attendance_corrections")
+}
+
+// A review signal on a record (brief §5.5 anti-fraud). `open_marker` keeps one open anomaly per
+// record and kind; closed anomalies are immutable.
+model AttendanceAnomaly {
+  id           String                @id @default(uuid(7)) @db.Uuid
+  tenantId     String                @map("tenant_id") @db.Uuid
+  projectId    String                @map("project_id") @db.Uuid
+  siteId       String                @map("site_id") @db.Uuid
+  recordId     String                @map("record_id") @db.Uuid
+  labourerId   String                @map("labourer_id") @db.Uuid
+  workDate     DateTime              @map("work_date") @db.Date
+  kind         String                @db.VarChar(30)
+  severity     String                @db.VarChar(10)
+  details      Json                  @default("{}")
+  status       String                @default("open") @db.VarChar(20)
+  openMarker   String?               @default("open") @map("open_marker") @db.VarChar(4)
+  correctionId String?               @map("correction_id") @db.Uuid
+  detectedAt   DateTime              @default(now()) @map("detected_at") @db.Timestamptz
+  reviewedBy   String?               @map("reviewed_by") @db.Uuid
+  reviewedAt   DateTime?             @map("reviewed_at") @db.Timestamptz
+  reviewNote   String?               @map("review_note") @db.VarChar(500)
+  version      Int                   @default(1)
+  record       AttendanceRecord      @relation(fields: [tenantId, recordId], references: [tenantId, id], onDelete: Cascade)
+  correction   AttendanceCorrection? @relation(fields: [tenantId, correctionId], references: [tenantId, id], onDelete: NoAction)
+  site         Site                  @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
+  labourer     Labourer              @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, recordId, kind, openMarker])
+  @@index([tenantId, projectId, status])
+  @@index([tenantId, labourerId, workDate])
+  @@map("attendance_anomalies")
+}
+
+// The approved, immutable timesheet (payroll-facing, D4.1): one line per labourer per approved
+// period (`attendance`) plus one per adjustment landing in it (`adjustment`). Inserted only in the
+// transaction that approves the period (trigger); never updated or deleted.
+model TimesheetLine {
+  id               String               @id @default(uuid(7)) @db.Uuid
+  tenantId         String               @map("tenant_id") @db.Uuid
+  projectId        String               @map("project_id") @db.Uuid
+  periodId         String               @map("period_id") @db.Uuid
+  labourerId       String               @map("labourer_id") @db.Uuid
+  lineKey          String               @map("line_key") @db.VarChar(60)
+  kind             String               @db.VarChar(20)
+  adjustmentId     String?              @map("adjustment_id") @db.Uuid
+  originalPeriodId String?              @map("original_period_id") @db.Uuid
+  halfDays         Int                  @map("half_days")
+  workedMinutes    Int                  @map("worked_minutes")
+  normalMinutes    Int                  @map("normal_minutes")
+  otWeekdayMinutes Int                  @map("ot_weekday_minutes")
+  otRestDayMinutes Int                  @map("ot_rest_day_minutes")
+  otHolidayMinutes Int                  @map("ot_holiday_minutes")
+  lateMinutes      Int                  @map("late_minutes")
+  presentCount     Int                  @map("present_count")
+  halfDayCount     Int                  @map("half_day_count")
+  absentCount      Int                  @map("absent_count")
+  leaveCount       Int                  @map("leave_count")
+  sickCount        Int                  @map("sick_count")
+  ruleVersionIds   String[]             @map("rule_version_ids") @db.Uuid
+  recordIds        String[]             @map("record_ids") @db.Uuid
+  days             Json
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  period           TimesheetPeriod      @relation("PeriodLines", fields: [tenantId, projectId, periodId], references: [tenantId, projectId, id], onDelete: Cascade)
+  originalPeriod   TimesheetPeriod?     @relation("LineOriginalPeriod", fields: [tenantId, projectId, originalPeriodId], references: [tenantId, projectId, id], onDelete: NoAction)
+  labourer         Labourer             @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  adjustment       TimesheetAdjustment? @relation(fields: [tenantId, adjustmentId], references: [tenantId, id], onDelete: NoAction)
+  payrollEarnings  PayrollEarning[]
+  consumptions     PayrollConsumption[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, periodId, labourerId, lineKey])
+  @@index([tenantId, labourerId])
+  @@map("timesheet_lines")
+}
+
+// A correction after approval: never changes the approved period. Approved by someone other than
+// the requester (CHECK); its delta lands in a later open period and appears there as an
+// `adjustment` timesheet line when that period is approved.
+model TimesheetAdjustment {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  tenantId         String            @map("tenant_id") @db.Uuid
+  projectId        String            @map("project_id") @db.Uuid
+  originalPeriodId String            @map("original_period_id") @db.Uuid
+  targetPeriodId   String?           @map("target_period_id") @db.Uuid
+  labourerId       String            @map("labourer_id") @db.Uuid
+  siteId           String            @map("site_id") @db.Uuid
+  workDate         DateTime          @map("work_date") @db.Date
+  recordId         String?           @map("record_id") @db.Uuid
+  proposed         Json
+  previous         Json?
+  reason           String            @db.VarChar(500)
+  status           String            @default("pending") @db.VarChar(20)
+  version          Int               @default(1)
+  delta            Json?
+  ruleVersionId    String?           @map("rule_version_id") @db.Uuid
+  requestedBy      String            @map("requested_by") @db.Uuid
+  requestedAt      DateTime          @default(now()) @map("requested_at") @db.Timestamptz
+  decidedBy        String?           @map("decided_by") @db.Uuid
+  decidedAt        DateTime?         @map("decided_at") @db.Timestamptz
+  decisionNote     String?           @map("decision_note") @db.VarChar(500)
+  originalPeriod   TimesheetPeriod   @relation("AdjustmentOriginalPeriod", fields: [tenantId, projectId, originalPeriodId], references: [tenantId, projectId, id], onDelete: NoAction)
+  targetPeriod     TimesheetPeriod?  @relation("AdjustmentTargetPeriod", fields: [tenantId, projectId, targetPeriodId], references: [tenantId, projectId, id], onDelete: NoAction)
+  site             Site              @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
+  labourer         Labourer          @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  record           AttendanceRecord? @relation(fields: [tenantId, recordId], references: [tenantId, id], onDelete: NoAction)
+  lines            TimesheetLine[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId, status])
+  @@index([tenantId, labourerId, workDate])
+  @@map("timesheet_adjustments")
+}
+
+// Idempotency keys for attendance commands (WORKFLOWS shared rules): the key binds the company,
+// operation and a fingerprint of caller and payload; a replay returns the stored response, a
+// changed payload is refused. Insert-only for the runtime role (purge job: OPERATIONS).
+model IdempotencyRecord {
+  tenantId       String   @map("tenant_id") @db.Uuid
+  operation      String   @db.VarChar(80)
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(128)
+  userId         String   @map("user_id") @db.Uuid
+  fingerprint    String   @db.Char(64)
+  response       Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, operation, idempotencyKey])
+  @@map("idempotency_records")
+}
+
+// Transactional outbox: domain events written in the same transaction as the change (relay to the
+// queue arrives with D4.2). Insert-only for the runtime role.
+model OutboxEvent {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  topic       String    @db.VarChar(80)
+  aggregateId String    @map("aggregate_id") @db.Uuid
+  payload     Json      @default("{}")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  publishedAt DateTime? @map("published_at") @db.Timestamptz
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Payroll engine (D4.1; ARCHITECTURE §4.5, ERD §7). Money is KES minor units (BIGINT); rates and
+// quantities are decimals; business dates are Africa/Nairobi calendar dates. Statutory values are
+// effective-dated rule versions (COMPLIANCE-REVIEW CR-PAY-*), never code. Triggers repeat every
+// workflow rule: drafts change freely, a submitted batch and its lines never change, each timesheet
+// line and output share is consumed by at most one non-cancelled batch, and attendance and piece
+// rate never pay the same labourer-day.
+
+// Company payroll settings (PRODUCT): advance limits and the recovery cap; no row = defaults.
+model PayrollSettings {
+  tenantId                   String   @id @map("tenant_id") @db.Uuid
+  advanceMaxMinor            BigInt   @map("advance_max_minor")
+  advanceMaxOutstandingMinor BigInt   @map("advance_max_outstanding_minor")
+  recoveryMaxPercent         Decimal  @map("recovery_max_percent") @db.Decimal(5, 2)
+  version                    Int      @default(1)
+  updatedBy                  String   @map("updated_by") @db.Uuid
+  updatedAt                  DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("payroll_settings")
+}
+
+// A project's pay calendar; no row = weekly periods following the timesheet weeks.
+model PayCalendar {
+  tenantId         String   @map("tenant_id") @db.Uuid
+  projectId        String   @map("project_id") @db.Uuid
+  frequency        String   @db.VarChar(20)
+  anchorDate       DateTime @map("anchor_date") @db.Date
+  paydayOffsetDays Int      @map("payday_offset_days") @db.SmallInt
+  minimumWageArea  String?  @map("minimum_wage_area") @db.VarChar(20)
+  version          Int      @default(1)
+  updatedBy        String   @map("updated_by") @db.Uuid
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  project          Project  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, projectId])
+  @@map("pay_calendars")
+}
+
+// An effective-dated statutory rule version (PAYE, NSSF, SHIF, AHL, NITA, the non-monthly method or
+// applicability per engagement type). Never edited: only unverified → verified (by someone other
+// than its author, with a note); a new version supersedes it.
+model StatutoryRuleVersion {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  kind             String             @db.VarChar(20)
+  effectiveFrom    DateTime           @map("effective_from") @db.Date
+  parameters       Json
+  status           String             @default("unverified") @db.VarChar(20)
+  sourceReference  String             @map("source_reference") @db.VarChar(2000)
+  notes            String             @default("") @db.VarChar(1000)
+  createdBy        String             @map("created_by") @db.Uuid
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  verifiedBy       String?            @map("verified_by") @db.Uuid
+  verifiedAt       DateTime?          @map("verified_at") @db.Timestamptz
+  verificationNote String?            @map("verification_note") @db.VarChar(500)
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deductions       PayrollDeduction[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, kind, effectiveFrom])
+  @@map("statutory_rule_versions")
+}
+
+// Minimum wages per area and occupation (a warning only; COMPLIANCE-REVIEW CR-PAY-09). Insert-only.
+model MinimumWageRate {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  effectiveFrom    DateTime @map("effective_from") @db.Date
+  area             String   @db.VarChar(20)
+  occupation       String   @db.VarChar(30)
+  monthlyMinor     BigInt   @map("monthly_minor")
+  dailyMinor       BigInt?  @map("daily_minor")
+  hourlyMinor      BigInt?  @map("hourly_minor")
+  source           String   @db.VarChar(2000)
+  complianceStatus String   @default("unverified") @map("compliance_status") @db.VarChar(20)
+  createdBy        String   @map("created_by") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, area, occupation, effectiveFrom])
+  @@map("minimum_wage_rates")
+}
+
+// An allowance on a project, optionally for one trade or one labourer (the most specific wins per
+// code). Never edited; it can only be ended once.
+model PayrollAllowance {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  projectId     String           @map("project_id") @db.Uuid
+  code          String           @db.VarChar(40)
+  nameEn        String           @map("name_en") @db.VarChar(80)
+  nameSw        String           @map("name_sw") @db.VarChar(80)
+  basis         String           @db.VarChar(20)
+  amountMinor   BigInt           @map("amount_minor")
+  taxable       Boolean
+  tradeId       String?          @map("trade_id") @db.Uuid
+  labourerId    String?          @map("labourer_id") @db.Uuid
+  effectiveFrom DateTime         @map("effective_from") @db.Date
+  endedOn       DateTime?        @map("ended_on") @db.Date
+  endedBy       String?          @map("ended_by") @db.Uuid
+  createdBy     String           @map("created_by") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  project       Project          @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  trade         Trade?           @relation(fields: [tenantId, tradeId], references: [tenantId, id], onDelete: NoAction)
+  labourer      Labourer?        @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  earnings      PayrollEarning[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId])
+  @@map("payroll_allowances")
+}
+
+// Piece-rate output for one labourer or one gang on one day (optionally against a BQ item):
+// quantity × rate per unit. Approved or rejected by someone other than the recorder; approval
+// writes the shares (a gang's output split equally between its members that day).
+model PieceRateOutput {
+  id           String                 @id @default(uuid(7)) @db.Uuid
+  tenantId     String                 @map("tenant_id") @db.Uuid
+  projectId    String                 @map("project_id") @db.Uuid
+  workDate     DateTime               @map("work_date") @db.Date
+  labourerId   String?                @map("labourer_id") @db.Uuid
+  gangId       String?                @map("gang_id") @db.Uuid
+  bqItemId     String?                @map("bq_item_id") @db.Uuid
+  description  String                 @db.VarChar(200)
+  unit         String                 @db.VarChar(20)
+  quantity     Decimal                @db.Decimal(12, 3)
+  rateMinor    BigInt                 @map("rate_minor")
+  amountMinor  BigInt                 @map("amount_minor")
+  status       String                 @default("pending") @db.VarChar(20)
+  version      Int                    @default(1)
+  recordedBy   String                 @map("recorded_by") @db.Uuid
+  recordedAt   DateTime               @default(now()) @map("recorded_at") @db.Timestamptz
+  decidedBy    String?                @map("decided_by") @db.Uuid
+  decidedAt    DateTime?              @map("decided_at") @db.Timestamptz
+  decisionNote String?                @map("decision_note") @db.VarChar(500)
+  project      Project                @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  labourer     Labourer?              @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  gang         Gang?                  @relation(fields: [tenantId, projectId, gangId], references: [tenantId, projectId, id], onDelete: NoAction)
+  bqItem       BqItem?                @relation(fields: [tenantId, bqItemId], references: [tenantId, id], onDelete: NoAction)
+  shares       PieceRateOutputShare[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@index([tenantId, projectId, workDate])
+  @@map("piece_rate_outputs")
+}
+
+// One labourer's share of an approved output. Written once at approval; never changed.
+model PieceRateOutputShare {
+  id           String               @id @default(uuid(7)) @db.Uuid
+  tenantId     String               @map("tenant_id") @db.Uuid
+  projectId    String               @map("project_id") @db.Uuid
+  outputId     String               @map("output_id") @db.Uuid
+  labourerId   String               @map("labourer_id") @db.Uuid
+  workDate     DateTime             @map("work_date") @db.Date
+  amountMinor  BigInt               @map("amount_minor")
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  output       PieceRateOutput      @relation(fields: [tenantId, projectId, outputId], references: [tenantId, projectId, id], onDelete: Cascade)
+  labourer     Labourer             @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  earnings     PayrollEarning[]
+  consumptions PayrollConsumption[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, outputId, labourerId])
+  @@index([tenantId, projectId, workDate])
+  @@map("piece_rate_output_shares")
+}
+
+// A salary advance: requested → approved (someone else, within the limits) → recorded as paid
+// outside PM-Buddy (D4.1; M-Pesa in D4.3) → recovered by later batches. Outstanding = amount −
+// recoveries of non-cancelled batches (never negative, enforced by trigger).
+model SalaryAdvance {
+  id                    String            @id @default(uuid(7)) @db.Uuid
+  tenantId              String            @map("tenant_id") @db.Uuid
+  projectId             String            @map("project_id") @db.Uuid
+  labourerId            String            @map("labourer_id") @db.Uuid
+  amountMinor           BigInt            @map("amount_minor")
+  reason                String            @db.VarChar(500)
+  instalmentMinor       BigInt?           @map("instalment_minor")
+  maxRecoveryPercent    Decimal?          @map("max_recovery_percent") @db.Decimal(5, 2)
+  status                String            @default("requested") @db.VarChar(20)
+  version               Int               @default(1)
+  requestedBy           String            @map("requested_by") @db.Uuid
+  requestedAt           DateTime          @default(now()) @map("requested_at") @db.Timestamptz
+  decidedBy             String?           @map("decided_by") @db.Uuid
+  decidedAt             DateTime?         @map("decided_at") @db.Timestamptz
+  decisionNote          String?           @map("decision_note") @db.VarChar(500)
+  disbursementMethod    String?           @map("disbursement_method") @db.VarChar(20)
+  disbursementReference String?           @map("disbursement_reference") @db.VarChar(60)
+  paidOn                DateTime?         @map("paid_on") @db.Date
+  evidenceNote          String?           @map("evidence_note") @db.VarChar(500)
+  disbursedBy           String?           @map("disbursed_by") @db.Uuid
+  disbursedAt           DateTime?         @map("disbursed_at") @db.Timestamptz
+  cancelledBy           String?           @map("cancelled_by") @db.Uuid
+  cancelledAt           DateTime?         @map("cancelled_at") @db.Timestamptz
+  cancellationReason    String?           @map("cancellation_reason") @db.VarChar(500)
+  project               Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  labourer              Labourer          @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  recoveries            AdvanceRecovery[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId])
+  @@index([tenantId, projectId, status])
+  @@map("salary_advances")
+}
+
+// A payroll batch: one project and one pay period. draft (recalculated freely) → submitted (the
+// immutable snapshot whose digest D4.3 approves) or cancelled. `active_marker` is NULL once
+// cancelled, so at most one live batch exists per project and period start.
+model PayrollBatch {
+  id                   String               @id @default(uuid(7)) @db.Uuid
+  tenantId             String               @map("tenant_id") @db.Uuid
+  projectId            String               @map("project_id") @db.Uuid
+  periodStart          DateTime             @map("period_start") @db.Date
+  periodEnd            DateTime             @map("period_end") @db.Date
+  payDate              DateTime             @map("pay_date") @db.Date
+  statutoryMonth       String               @map("statutory_month") @db.Char(7)
+  frequency            String               @db.VarChar(20)
+  status               String               @default("draft") @db.VarChar(20)
+  version              Int                  @default(1)
+  activeMarker         String?              @default("active") @map("active_marker") @db.VarChar(6)
+  unverifiedRules      Boolean              @map("unverified_rules")
+  lineCount            Int                  @map("line_count")
+  grossMinor           BigInt               @map("gross_minor")
+  totalDeductionsMinor BigInt               @map("total_deductions_minor")
+  netMinor             BigInt               @map("net_minor")
+  employerCostMinor    BigInt               @map("employer_cost_minor")
+  totals               Json
+  exclusions           Json
+  ruleVersionIds       String[]             @map("rule_version_ids") @db.Uuid
+  timesheetRuleIds     String[]             @map("timesheet_rule_ids") @db.Uuid
+  mtdBatchIds          String[]             @map("mtd_batch_ids") @db.Uuid
+  digest               String               @db.Char(64)
+  calculatedBy         String               @map("calculated_by") @db.Uuid
+  calculatedAt         DateTime             @default(now()) @map("calculated_at") @db.Timestamptz
+  createdBy            String               @map("created_by") @db.Uuid
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  submittedBy          String?              @map("submitted_by") @db.Uuid
+  submittedAt          DateTime?            @map("submitted_at") @db.Timestamptz
+  cancelledBy          String?              @map("cancelled_by") @db.Uuid
+  cancelledAt          DateTime?            @map("cancelled_at") @db.Timestamptz
+  cancellationReason   String?              @map("cancellation_reason") @db.VarChar(500)
+  project              Project              @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  lines                PayrollLine[]
+  consumptions         PayrollConsumption[]
+  claims               PayrollDayClaim[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, periodStart, activeMarker])
+  @@index([tenantId, statutoryMonth, status])
+  @@map("payroll_batches")
+}
+
+// One labourer's pay in a batch, with snapshots of the identity, engagement and month-to-date
+// figures it was computed with. Rewritten only while the batch is a draft.
+model PayrollLine {
+  id                     String             @id @default(uuid(7)) @db.Uuid
+  tenantId               String             @map("tenant_id") @db.Uuid
+  projectId              String             @map("project_id") @db.Uuid
+  batchId                String             @map("batch_id") @db.Uuid
+  labourerId             String             @map("labourer_id") @db.Uuid
+  workerNo               String             @map("worker_no") @db.VarChar(20)
+  fullName               String             @map("full_name") @db.VarChar(150)
+  tradeNameEn            String?            @map("trade_name_en") @db.VarChar(80)
+  tradeNameSw            String?            @map("trade_name_sw") @db.VarChar(80)
+  engagementType         String             @map("engagement_type") @db.VarChar(20)
+  rateBasis              String             @map("rate_basis") @db.VarChar(10)
+  halfDays               Int                @map("half_days")
+  normalMinutes          Int                @map("normal_minutes")
+  otWeekdayMinutes       Int                @map("ot_weekday_minutes")
+  otRestDayMinutes       Int                @map("ot_rest_day_minutes")
+  otHolidayMinutes       Int                @map("ot_holiday_minutes")
+  daysWorked             Int                @map("days_worked")
+  grossMinor             BigInt             @map("gross_minor")
+  statutoryBaseMinor     BigInt             @map("statutory_base_minor")
+  statutoryWithheldMinor BigInt             @map("statutory_withheld_minor")
+  advanceRecoveryMinor   BigInt             @map("advance_recovery_minor")
+  otherDeductionsMinor   BigInt             @map("other_deductions_minor")
+  netMinor               BigInt             @map("net_minor")
+  employerCostMinor      BigInt             @map("employer_cost_minor")
+  statutoryMonth         String             @map("statutory_month") @db.Char(7)
+  monthToDate            Json               @map("month_to_date")
+  warnings               Json
+  payeePhoneBidx         String?            @map("payee_phone_bidx") @db.Char(64)
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  batch                  PayrollBatch       @relation(fields: [tenantId, projectId, batchId], references: [tenantId, projectId, id], onDelete: Cascade)
+  labourer               Labourer           @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  earnings               PayrollEarning[]
+  deductions             PayrollDeduction[]
+  recoveries             AdvanceRecovery[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, batchId, id])
+  @@unique([tenantId, batchId, labourerId])
+  @@index([tenantId, labourerId, statutoryMonth])
+  @@map("payroll_lines")
+}
+
+// One earnings component of a line, with the rate, rule and source it came from.
+model PayrollEarning {
+  id              String                @id @default(uuid(7)) @db.Uuid
+  tenantId        String                @map("tenant_id") @db.Uuid
+  batchId         String                @map("batch_id") @db.Uuid
+  lineId          String                @map("line_id") @db.Uuid
+  position        Int
+  kind            String                @db.VarChar(20)
+  category        String?               @db.VarChar(20)
+  workDate        DateTime?             @map("work_date") @db.Date
+  quantity        Decimal               @db.Decimal(14, 3)
+  unit            String                @db.VarChar(20)
+  rateMinor       BigInt?               @map("rate_minor")
+  multiplier      Decimal?              @db.Decimal(6, 3)
+  description     String                @db.VarChar(200)
+  amountMinor     BigInt                @map("amount_minor")
+  taxable         Boolean
+  labourRateId    String?               @map("labour_rate_id") @db.Uuid
+  timesheetRuleId String?               @map("timesheet_rule_id") @db.Uuid
+  timesheetLineId String?               @map("timesheet_line_id") @db.Uuid
+  shareId         String?               @map("share_id") @db.Uuid
+  allowanceId     String?               @map("allowance_id") @db.Uuid
+  line            PayrollLine           @relation(fields: [tenantId, batchId, lineId], references: [tenantId, batchId, id], onDelete: Cascade)
+  labourRate      LabourRate?           @relation(fields: [tenantId, labourRateId], references: [tenantId, id], onDelete: NoAction)
+  timesheetRule   TimesheetRuleVersion? @relation(fields: [tenantId, timesheetRuleId], references: [tenantId, id], onDelete: NoAction)
+  timesheetLine   TimesheetLine?        @relation(fields: [tenantId, timesheetLineId], references: [tenantId, id], onDelete: NoAction)
+  share           PieceRateOutputShare? @relation(fields: [tenantId, shareId], references: [tenantId, id], onDelete: NoAction)
+  allowance       PayrollAllowance?     @relation(fields: [tenantId, allowanceId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, lineId, position])
+  @@map("payroll_earnings")
+}
+
+// Employee statutory deductions (due, withheld, shortfall) and employer on-costs of a line, with
+// the rule version used.
+model PayrollDeduction {
+  id             String               @id @default(uuid(7)) @db.Uuid
+  tenantId       String               @map("tenant_id") @db.Uuid
+  batchId        String               @map("batch_id") @db.Uuid
+  lineId         String               @map("line_id") @db.Uuid
+  party          String               @db.VarChar(10)
+  kind           String               @db.VarChar(20)
+  dueMinor       BigInt               @map("due_minor")
+  withheldMinor  BigInt               @map("withheld_minor")
+  shortfallMinor BigInt               @map("shortfall_minor")
+  ruleVersionId  String               @map("rule_version_id") @db.Uuid
+  line           PayrollLine          @relation(fields: [tenantId, batchId, lineId], references: [tenantId, batchId, id], onDelete: Cascade)
+  ruleVersion    StatutoryRuleVersion @relation(fields: [tenantId, ruleVersionId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, lineId, kind])
+  @@map("payroll_deductions")
+}
+
+// An advance recovery taken by a line (never more than the advance's outstanding balance).
+model AdvanceRecovery {
+  id                    String        @id @default(uuid(7)) @db.Uuid
+  tenantId              String        @map("tenant_id") @db.Uuid
+  batchId               String        @map("batch_id") @db.Uuid
+  lineId                String        @map("line_id") @db.Uuid
+  advanceId             String        @map("advance_id") @db.Uuid
+  amountMinor           BigInt        @map("amount_minor")
+  outstandingAfterMinor BigInt        @map("outstanding_after_minor")
+  line                  PayrollLine   @relation(fields: [tenantId, batchId, lineId], references: [tenantId, batchId, id], onDelete: Cascade)
+  advance               SalaryAdvance @relation(fields: [tenantId, advanceId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, lineId, advanceId])
+  @@index([tenantId, advanceId])
+  @@map("advance_recoveries")
+}
+
+// A source a batch pays: a timesheet line or an output share. Unique per source while active, so
+// no two non-cancelled batches consume the same line (the marker is NULL once released).
+model PayrollConsumption {
+  id              String                @id @default(uuid(7)) @db.Uuid
+  tenantId        String                @map("tenant_id") @db.Uuid
+  projectId       String                @map("project_id") @db.Uuid
+  batchId         String                @map("batch_id") @db.Uuid
+  sourceKind      String                @map("source_kind") @db.VarChar(20)
+  timesheetLineId String?               @map("timesheet_line_id") @db.Uuid
+  shareId         String?               @map("share_id") @db.Uuid
+  activeMarker    String?               @default("active") @map("active_marker") @db.VarChar(6)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  batch           PayrollBatch          @relation(fields: [tenantId, projectId, batchId], references: [tenantId, projectId, id], onDelete: Cascade)
+  timesheetLine   TimesheetLine?        @relation(fields: [tenantId, timesheetLineId], references: [tenantId, id], onDelete: NoAction)
+  share           PieceRateOutputShare? @relation(fields: [tenantId, shareId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, timesheetLineId, activeMarker])
+  @@unique([tenantId, shareId, activeMarker])
+  @@index([tenantId, batchId])
+  @@map("payroll_consumptions")
+}
+
+// The basis on which a batch pays a labourer-day (attendance or piece rate). A trigger refuses an
+// active claim of the other basis for the same labourer and date, company-wide.
+model PayrollDayClaim {
+  id           String       @id @default(uuid(7)) @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  projectId    String       @map("project_id") @db.Uuid
+  batchId      String       @map("batch_id") @db.Uuid
+  labourerId   String       @map("labourer_id") @db.Uuid
+  workDate     DateTime     @map("work_date") @db.Date
+  basis        String       @db.VarChar(20)
+  activeMarker String?      @default("active") @map("active_marker") @db.VarChar(6)
+  batch        PayrollBatch @relation(fields: [tenantId, projectId, batchId], references: [tenantId, projectId, id], onDelete: Cascade)
+  labourer     Labourer     @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, batchId, labourerId, workDate, basis])
+  @@index([tenantId, labourerId, workDate])
+  @@map("payroll_day_claims")
 }

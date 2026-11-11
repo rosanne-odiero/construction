@@ -7,6 +7,7 @@ const WEB_PORT = Number(process.env["PLAYWRIGHT_WEB_PORT"] ?? 3100);
 
 export default defineConfig({
   testDir: "./test",
+  globalSetup: "./test/global-setup.ts",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

@@ -1,4 +1,9 @@
-import { BadRequestException, HttpException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  NotFoundException,
+} from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { toProblem } from "./problem-details.filter.js";
@@ -71,5 +76,26 @@ describe("toProblem", () => {
         "bad-request",
       );
     }
+  });
+
+  it("names the record a conflict matched, keeping only short safe identifiers", () => {
+    const match = { labourerId: "50000000-0000-4000-8000-000000000001", workerNo: "WRK-0001" };
+    expect(
+      toProblem(new ConflictException({ code: "duplicate-identity", message: "m", match }), "/x")
+        .match,
+    ).toEqual(match);
+    for (const unsafe of [
+      { idNumber: "23456789" },
+      { workerNo: "WRK 0001" },
+      { labourerId: { nested: true } },
+      "WRK-0001",
+      {},
+    ])
+      expect(
+        toProblem(new ConflictException({ code: "c-x", message: "m", match: unsafe }), "/x").match,
+      ).toBeUndefined();
+    expect(
+      toProblem(new BadRequestException({ code: "c-x", message: "m", match }), "/x").match,
+    ).toBeUndefined();
   });
 });

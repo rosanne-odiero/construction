@@ -39,6 +39,29 @@ function customCode(response: string | object): string | undefined {
   return typeof code === "string" && /^[a-z][a-z0-9-]{1,62}$/.test(code) ? code : undefined;
 }
 
+const MATCH_KEYS = new Set(["labourerId", "workerNo", "matchedOn"]);
+
+/**
+ * An RFC 9457 extension naming the record a 409 collided with: only the allowlisted keys with short
+ * identifier values (never personal data). Anything else is dropped.
+ */
+function matchOf(response: string | object): Record<string, string> | undefined {
+  if (typeof response !== "object") return undefined;
+  const match = (response as { match?: unknown }).match;
+  if (typeof match !== "object" || match === null) return undefined;
+  const entries = Object.entries(match);
+  if (
+    entries.length === 0 ||
+    entries.length > 5 ||
+    !entries.every(
+      ([key, value]) =>
+        MATCH_KEYS.has(key) && typeof value === "string" && /^[A-Za-z0-9-]{1,64}$/.test(value),
+    )
+  )
+    return undefined;
+  return Object.fromEntries(entries) as Record<string, string>;
+}
+
 /** Maps any thrown value to an RFC 9457 problem. Unknown errors never leak internals. */
 export function toProblem(exception: unknown, instance: string, traceId?: string): ProblemDetails {
   if (exception instanceof ZodError) {
@@ -61,6 +84,7 @@ export function toProblem(exception: unknown, instance: string, traceId?: string
     const response = exception.getResponse();
     const code =
       customCode(response) ?? CODES[status] ?? (status >= 500 ? "internal-error" : "error");
+    const match = status === 409 ? matchOf(response) : undefined;
     return {
       type: problemType(code),
       title: STATUS_CODES[status] ?? "Error",
@@ -69,6 +93,7 @@ export function toProblem(exception: unknown, instance: string, traceId?: string
       detail: status >= 500 ? undefined : messageOf(response),
       instance,
       traceId,
+      ...(match ? { match } : {}),
     };
   }
 

@@ -90,7 +90,7 @@ export function CommandMenu() {
               <CommandItem
                 key={l.id}
                 value={`${l.name} ${l.workerNo}`}
-                onSelect={() => go(`/labour?worker=${l.id}`)}
+                onSelect={() => go(`/prototype/labour?worker=${l.id}`)}
               >
                 <HardHat aria-hidden />
                 <span>{l.name}</span>

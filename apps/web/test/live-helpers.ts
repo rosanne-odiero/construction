@@ -3,7 +3,9 @@ import AxeBuilder from "@axe-core/playwright";
 import type { BrowserContext, Page } from "@playwright/test";
 
 /** Shared helpers for the live (API-backed) page tests. IDs match test/mock-api.mts. */
-export const BASE_URL = "http://127.0.0.1:3100";
+// PLAYWRIGHT_WEB_PORT matches playwright.config.ts (overridable for a parallel checkout).
+export const WEB_PORT = Number(process.env["PLAYWRIGHT_WEB_PORT"] ?? 3100);
+export const BASE_URL = `http://127.0.0.1:${WEB_PORT}`;
 export const RUIRU_ID = "30000000-0000-4000-8000-000000000001";
 export const SYOKIMAU_ID = "30000000-0000-4000-8000-000000000002";
 export const MAIN_PLOT_ID = "31000000-0000-4000-8000-000000000001";
@@ -17,11 +19,22 @@ const BLANK_TILE = Buffer.from(
   "base64",
 );
 
+export type Persona = "owner" | "agent" | "pm";
+
 /** A session cookie the mock API recognises; each call gets a fresh copy of the fixture data. */
-export async function signInAs(context: BrowserContext, persona: "owner" | "agent") {
+export async function signInAs(context: BrowserContext, persona: Persona) {
   const token = `${persona}.${randomUUID()}`;
   await context.addCookies([{ name: "pmb_at", value: token, url: BASE_URL, httpOnly: true }]);
   return token;
+}
+
+/** Signs in as another persona on the same fixture data (the token's session part is shared). */
+export async function switchPersona(context: BrowserContext, persona: Persona, token: string) {
+  const session = token.split(".")[1]!;
+  await context.clearCookies({ name: "pmb_at" });
+  await context.addCookies([
+    { name: "pmb_at", value: `${persona}.${session}`, url: BASE_URL, httpOnly: true },
+  ]);
 }
 
 export async function preferences(

@@ -1411,7 +1411,21 @@
     "exportTooLarge": "This BQ is too large for PDF. Export Excel instead.",
     "payloadTooLarge": "The file is larger than 10 MB.",
     "sourceIntegrity": "The stored workbook does not match its checksum. Upload it again.",
-    "bqNotFound": "This project has no BQ yet."
+    "bqNotFound": "This project has no BQ yet.",
+    "baselineNotApproved": "Approve the original BQ as the contract baseline first.",
+    "makerChecker": "Someone other than the person who prepared this must approve it.",
+    "instructionNumberTaken": "Another instruction on this project already has this number.",
+    "instructionClosed": "This instruction is closed.",
+    "variationStale": "This variation changed or a newer BQ version was approved. Reload, review and try again.",
+    "variationNotStale": "This variation is already based on the newest approved version.",
+    "variationEmpty": "Add at least one line before submitting.",
+    "variationLineInvalid": "A line does not apply to the BQ version. Check the lines and try again.",
+    "lineNoChange": "A line no longer changes its item. Edit or remove it.",
+    "buildupCodeTaken": "Another build-up in your company uses this code.",
+    "unitMismatch": "The build-up is priced per a different unit from the item.",
+    "itemUnitMissing": "The item has no unit, so no build-up can be linked.",
+    "itemUnitUnknown": "The item's unit is not recognised, so no build-up can be linked.",
+    "bqNotApproved": "Approve the BQ baseline before linking items to build-ups."
   },
   "projectStatus": {
     "planning": "Planning",
@@ -1862,7 +1876,7 @@
     },
     "source": {
       "title": "Import and validation",
-      "draftNote": "A draft can still be replaced by a new import. Approval arrives with variations (D2.3).",
+      "draftNote": "A draft can still be replaced by a new import until it is approved as the contract baseline.",
       "file": "Source file",
       "committedLabel": "Committed",
       "committed": "{date} by {name}",
@@ -1877,7 +1891,10 @@
         "exclude": "Excluded"
       },
       "noOverrides": "No row needed a decision.",
-      "unavailable": "Source details are unavailable."
+      "unavailable": "Source details are unavailable.",
+      "approvedNote": "The original import of the approved contract baseline.",
+      "variationNote": "This version was created by approved variation {number}.",
+      "variationSource": "Created from the previous version by approved variation {number}; the original import stays with version 1."
     },
     "tree": {
       "title": "Bills, sections and items",
@@ -1904,7 +1921,9 @@
         "lump_sum": "Lump sum",
         "sheet_override": "Sheet amount (override)",
         "unpriced": "Unpriced",
-        "included": "Included"
+        "included": "Included",
+        "fixed": "Amount set by a variation",
+        "omitted": "Omitted by a variation"
       },
       "cols": {
         "ref": "Ref",
@@ -1913,7 +1932,14 @@
         "qty": "Qty",
         "rate": "Rate (KES)",
         "amount": "Amount"
-      }
+      },
+      "addedByVariation": "Added by a variation",
+      "buildUp": "Build-up {code} v{version}: {rate}",
+      "rateUnavailable": "rate unavailable",
+      "linkLabel": "Link build-up: {item}",
+      "changeLinkLabel": "Change build-up: {item}",
+      "link": "Link build-up",
+      "changeLink": "Change build-up"
     },
     "kinds": {
       "preliminaries": "Preliminaries",
@@ -2224,6 +2250,486 @@
       "control-characters-removed": "{count} hidden or control characters were removed from the text.",
       "contract-sum-unset": "Add the contract sum on the project to compare it with the BQ.",
       "no-summary": "Totals are computed from the items; there was no summary to compare."
+    }
+  },
+  "bqNav": {
+    "label": "BQ pages",
+    "projects": "Projects",
+    "bq": "BQ",
+    "variations": "Variations",
+    "instructions": "Instructions",
+    "versions": "Versions",
+    "buildups": "Rate build-ups"
+  },
+  "bqIndex": {
+    "title": "BQ and variations",
+    "description": "Each project's Bill of Quantities, variations, instructions and version history, and the company's rate build-up library.",
+    "projectLinks": "BQ pages for {name}",
+    "empty": "No projects yet."
+  },
+  "contractSum": {
+    "title": "Contract sum",
+    "description": "Original and revised contract sums, including VAT.",
+    "vatNote": "Grand totals including VAT at {rate}%.",
+    "noAccess": "The contract sums are unavailable right now.",
+    "noBq": "No BQ yet: the contract sums are unavailable until a BQ is imported and approved.",
+    "draftNote": "The BQ is still a draft ({total}). The original contract sum is fixed when it is approved as the contract baseline.",
+    "original": "Original contract sum",
+    "approvedVariations": "{count, plural, =0 {Approved variations} one {Approved variations (#)} other {Approved variations (#)}}",
+    "revised": "Revised contract sum",
+    "pending": "{count, plural, =0 {Pending variations} one {Pending variations (#)} other {Pending variations (#)}}",
+    "unavailable": "Unavailable",
+    "pendingNote": "Pending variations are submitted but not approved; they are not included in the revised sum.",
+    "currentVersion": "Current BQ: version {version}"
+  },
+  "baseline": {
+    "approve": "Approve as contract baseline",
+    "title": "Approve the contract baseline",
+    "description": "Version 1 becomes the original contract BQ with a grand total of {total}.",
+    "immutable": "Once approved, this version never changes: later changes need an approved variation, and re-importing is no longer possible.",
+    "cancel": "Cancel",
+    "confirm": "Approve baseline",
+    "approvedLine": "Version {version} was approved as the contract baseline on {date} by {name}. Approved versions never change.",
+    "variationLine": "Version {version} was created by approved variation {number} on {date} (approved by {name}).",
+    "pending": "This BQ is a draft. Someone with permission to approve variations, other than the person who imported it, approves it as the contract baseline.",
+    "refusal": {
+      "maker": "You imported this BQ, so someone else must approve it as the contract baseline.",
+      "permission": "This BQ is a draft. Approving it as the contract baseline needs permission to approve variations.",
+      "read-only": "This project is closed or cancelled, so its BQ can no longer be approved."
+    }
+  },
+  "variations": {
+    "title": "Variations",
+    "description": "Variation Orders raised against Architect's/Engineer's Instructions. Approval creates a new BQ version.",
+    "filterLabel": "Filter variations by status",
+    "all": "All",
+    "tableCaption": "Variation orders",
+    "status": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled"
+    },
+    "cols": {
+      "number": "No.",
+      "title": "Title",
+      "instruction": "Instruction",
+      "base": "Based on",
+      "status": "Status",
+      "net": "Net (excl. VAT)",
+      "effect": "Effect incl. VAT"
+    },
+    "versionNo": "Version {version}",
+    "stale": "Stale",
+    "empty": "No variations yet.",
+    "emptyFiltered": "No variations with this status.",
+    "createBlocker": {
+      "no-baseline": "Approve the original BQ as the contract baseline before raising variations.",
+      "permission": "You do not have permission to raise variations on this project.",
+      "read-only": "This project is closed or cancelled: variations cannot be raised."
+    },
+    "create": {
+      "open": "New variation",
+      "title": "New variation",
+      "description": "A variation starts as a draft against the newest approved BQ version.",
+      "instruction": "Instruction",
+      "titleLabel": "Title",
+      "descriptionLabel": "Description (optional)",
+      "baseVersion": "Based on version {version}, the newest approved BQ version (a variation always applies to the version in force).",
+      "baseNote": "Lines are added on the next page, from the BQ tree.",
+      "noInstructions": "Register an open Architect's or Engineer's Instruction first.",
+      "cancel": "Cancel",
+      "submit": "Create draft"
+    }
+  },
+  "variationDetail": {
+    "metaTitle": "Variation",
+    "staleNote": "This variation is based on version {base}, but version {latest} has since been approved. Rebase it onto version {latest}, review the lines and submit it again.",
+    "makerNote": "You raised or submitted this variation, so someone else must approve or reject it.",
+    "summary": {
+      "title": "Variation",
+      "instruction": "Instruction",
+      "base": "BQ version",
+      "raisedBy": "Raised by",
+      "snapshot": "Submitted proposal",
+      "submittedBy": "submitted by {name} on {date}",
+      "notSubmitted": "Not submitted yet",
+      "decision": "Decision",
+      "approved": "Approved by {name} on {date}",
+      "rejected": "Rejected by {name} on {date}",
+      "cancelled": "Cancelled"
+    },
+    "totals": {
+      "title": "Totals",
+      "additions": "Additions",
+      "omissions": "Omissions",
+      "net": "Net (excl. VAT)",
+      "base": "Grand total of version {version}",
+      "vat": "VAT at {rate}% on the new subtotal",
+      "projected": "New grand total",
+      "effect": "Change to the grand total",
+      "note": "Each line is quantity × rate rounded half-up to the cent; VAT is recomputed once on the new subtotal."
+    },
+    "history": {
+      "title": "History",
+      "by": "{name} · {date}",
+      "create": "Raised as {to}",
+      "submit": "Submitted",
+      "approve": "Approved",
+      "reject": "Rejected",
+      "reopen": "Reopened as {to}",
+      "cancel": "Cancelled",
+      "rebase": "Rebased onto the newest version ({to})"
+    },
+    "actions": {
+      "snapshot": "Snapshot {digest}…: the decision applies to exactly this proposal.",
+      "reason": "Reason",
+      "reasonHint": "At least three characters. Kept in the variation's history.",
+      "close": "Close",
+      "submit": {
+        "button": "Submit",
+        "title": "Submit {number}",
+        "description": "Submitting freezes the lines and their totals (net {net}). They cannot change unless the variation is rejected and reopened.",
+        "confirm": "Submit for approval"
+      },
+      "approve": {
+        "button": "Approve",
+        "title": "Approve {number}",
+        "description": "Approving creates BQ version {next} from these lines: a change of {effect} to the grand total, including VAT.",
+        "confirm": "Approve and create version {next}"
+      },
+      "reject": {
+        "button": "Reject",
+        "title": "Reject {number}",
+        "description": "The variation returns to its author, who can reopen and change it.",
+        "confirm": "Reject"
+      },
+      "reopen": {
+        "button": "Reopen",
+        "title": "Reopen {number}",
+        "description": "The variation returns to draft so its lines can be changed and submitted again.",
+        "confirm": "Reopen as draft"
+      },
+      "cancel": {
+        "button": "Cancel variation",
+        "title": "Cancel {number}",
+        "description": "A cancelled variation is kept for the record and can no longer change.",
+        "confirm": "Cancel variation"
+      },
+      "rebase": {
+        "button": "Rebase",
+        "title": "Rebase {number}",
+        "description": "Moves the variation onto version {version}, prices its lines again against it and returns it to draft for review.",
+        "confirm": "Rebase onto version {version}"
+      }
+    },
+    "lines": {
+      "title": "Lines",
+      "editable": "Change, omit or add items from the BQ below, then save the lines.",
+      "stale": "Rebase this variation before changing its lines.",
+      "frozen": "The lines cannot change in this state.",
+      "cols": {
+        "item": "Item",
+        "change": "Change",
+        "base": "Before",
+        "new": "After",
+        "delta": "Difference",
+        "actions": "Actions"
+      },
+      "where": "Bill {bill} · {section}",
+      "unsaved": "Save to price",
+      "remove": "Remove line {line}",
+      "empty": "No lines yet.",
+      "save": "Save lines",
+      "discard": "Discard changes",
+      "dirty": "Unsaved changes"
+    },
+    "actionLabels": {
+      "adjust": "Change",
+      "omit": "Omit",
+      "add": "Add"
+    },
+    "kinds": {
+      "measured": "Measured work",
+      "preliminary": "Preliminaries",
+      "provisional_sum": "Provisional sum",
+      "pc_sum": "Prime cost sum",
+      "contingency": "Contingency",
+      "daywork": "Dayworks"
+    },
+    "issues": {
+      "item-not-found": "The item is not in the base version.",
+      "bill-not-found": "The bill is not in the base version.",
+      "section-not-found": "The section is not in the base version.",
+      "section-not-in-bill": "The section belongs to another bill.",
+      "section-required": "Choose a section or name a new one.",
+      "description-required": "A description is required.",
+      "kind-required": "Choose the kind of item.",
+      "unit-required": "A unit is required for quantity × rate.",
+      "quantity-and-rate-required": "Give both a quantity and a rate, or an amount.",
+      "amount-or-rate": "Give either a rate or an amount, not both.",
+      "duplicate-target": "Another line already changes this item.",
+      "line-no-change": "This line no longer changes the item; edit or remove it."
+    },
+    "change": {
+      "omit": "Quantity and amount set to zero",
+      "addAmount": "Lump sum {amount}",
+      "addRate": "{quantity} {unit} × {rate}",
+      "quantity": "Qty {from} → {to}",
+      "rate": "Rate {from} → {to}",
+      "amount": "Amount {amount}"
+    },
+    "picker": {
+      "title": "Change the BQ",
+      "description": "Items of version {version}. Choose a bill, then change or omit an item, or add a new one.",
+      "bill": "Bill",
+      "choose": "Choose…",
+      "billOption": "Bill {number}: {title}",
+      "addItem": "Add a new item",
+      "loading": "Loading items…",
+      "cols": {
+        "item": "Item",
+        "qty": "Qty",
+        "rate": "Rate (KES)",
+        "amount": "Amount"
+      },
+      "omitted": "Omitted",
+      "changeLabel": "Change {item}",
+      "change": "Change",
+      "omitLabel": "Omit {item}",
+      "omit": "Omit"
+    },
+    "itemForm": {
+      "title": "Change quantity or rate",
+      "quantity": "New quantity ({unit})",
+      "rate": "New rate (KES)",
+      "amount": "New amount (KES)",
+      "amountHint": "For a lump sum without a rate: the new amount. Leave empty to give a quantity and rate instead.",
+      "hint": "Up to four decimals. The amount is quantity × rate, rounded half-up to the cent.",
+      "cancel": "Cancel",
+      "submit": "Add line"
+    },
+    "addForm": {
+      "title": "Add a new item",
+      "section": "Section",
+      "untitled": "Untitled section",
+      "newSection": "New section…",
+      "sectionCode": "New section code (optional)",
+      "sectionTitle": "New section title",
+      "ref": "Item reference (optional)",
+      "kind": "Kind",
+      "description": "Description",
+      "pricing": "Pricing",
+      "modes": {
+        "rate": "Quantity × rate",
+        "amount": "Lump sum or daywork amount"
+      },
+      "unit": "Unit",
+      "quantity": "Quantity",
+      "rate": "Rate (KES)",
+      "amount": "Amount (KES)",
+      "submit": "Add line"
+    }
+  },
+  "instructions": {
+    "title": "Instructions",
+    "description": "The register of Architect's and Engineer's Instructions. Each variation is raised against one.",
+    "cols": {
+      "number": "No.",
+      "issued": "Issued",
+      "issuer": "Issued by",
+      "subject": "Subject",
+      "variations": "Variations",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "roles": {
+      "architect": "Architect",
+      "engineer": "Engineer",
+      "quantity_surveyor": "Quantity surveyor",
+      "client": "Client",
+      "project_manager": "Project manager",
+      "other": "Other"
+    },
+    "statuses": {
+      "open": "Open",
+      "closed": "Closed"
+    },
+    "variationCounts": "{total} total · {approved} approved · {pending} pending",
+    "empty": "No instructions yet.",
+    "form": {
+      "create": "Register instruction",
+      "edit": "Edit",
+      "editLabel": "Edit instruction {number}",
+      "createTitle": "Register an instruction",
+      "editTitle": "Edit instruction",
+      "description": "Numbers are unique on this project. Attachments are recorded by name and reference only.",
+      "number": "Number (e.g. AI-007)",
+      "issuedOn": "Date issued",
+      "issuerName": "Issued by",
+      "issuerRole": "Role",
+      "subject": "Subject",
+      "details": "Details (optional)",
+      "attachmentName": "Attachment (optional)",
+      "attachmentReference": "Attachment reference",
+      "attachmentHint": "For example a drawing number. No file is uploaded.",
+      "status": "Status",
+      "statuses": {
+        "open": "Open",
+        "closed": "Closed"
+      },
+      "cancel": "Cancel",
+      "save": "Save",
+      "submit": "Register"
+    }
+  },
+  "bqVersions": {
+    "title": "BQ versions",
+    "description": "Every version of the BQ. Versions are never edited: each later version comes from one approved variation.",
+    "cols": {
+      "version": "Version",
+      "source": "Source",
+      "status": "Status",
+      "approved": "Approved",
+      "subtotal": "Subtotal",
+      "grand": "Grand total"
+    },
+    "versionNo": "Version {version}",
+    "current": "Current",
+    "fromVariation": "Variation {number}",
+    "fromImport": "Original import",
+    "createdBy": "Prepared by {name}",
+    "approvedBy": "{name} · {date}",
+    "notApproved": "Not approved",
+    "vat": "incl. VAT at {rate}%",
+    "empty": "No BQ yet.",
+    "compare": {
+      "title": "Compare versions",
+      "description": "Items added, removed and changed, bill subtotals and the overall difference.",
+      "from": "From",
+      "to": "To",
+      "submit": "Compare",
+      "result": "Comparison",
+      "totals": {
+        "subtotalMinor": "Subtotal",
+        "vatMinor": "VAT",
+        "grandTotalMinor": "Grand total"
+      },
+      "difference": "Difference {amount}",
+      "bills": "Bill subtotals",
+      "cols": {
+        "bill": "Bill",
+        "from": "Version {version}",
+        "to": "Version {version}",
+        "difference": "Difference",
+        "item": "Item",
+        "before": "Before",
+        "after": "After"
+      },
+      "bill": "Bill {number}: {title}",
+      "billShort": "Bill {number}",
+      "added": "{count, plural, =0 {No items added} one {# item added} other {# items added}}",
+      "changed": "{count, plural, =0 {No items changed} one {# item changed} other {# items changed}}",
+      "removed": "{count, plural, =0 {No items removed} one {# item removed} other {# items removed}}",
+      "fields": {
+        "quantity": "quantity",
+        "rate": "rate",
+        "amount": "amount",
+        "amountSource": "how the amount is obtained"
+      },
+      "same": "Choose two different versions to compare.",
+      "failed": "The comparison is unavailable right now."
+    }
+  },
+  "rateBuildUps": {
+    "title": "Rate build-ups",
+    "description": "The company's composite rates per unit of work, made of material, labour and plant resources. Editing creates a new version; BQ items keep the version they were linked to.",
+    "new": "New build-up",
+    "cols": {
+      "code": "Code",
+      "name": "Name",
+      "version": "Version",
+      "links": "Linked items",
+      "rate": "Rate"
+    },
+    "updated": "Updated {date}",
+    "versionNo": "Version {version}",
+    "linkCount": "{count, plural, =0 {No linked BQ items} one {# linked BQ item} other {# linked BQ items}}",
+    "unavailable": "{count, plural, one {Unavailable: # line without a unit cost} other {Unavailable: # lines without a unit cost}}",
+    "empty": "No build-ups yet.",
+    "perUnit": "Rate per {unit}",
+    "kinds": {
+      "material": "Material",
+      "labour": "Labour",
+      "plant": "Plant"
+    },
+    "assumptions": {
+      "title": "Assumptions",
+      "units": "Quantities are per unit of output. Resource units (bags, tonnes, hours) are as written; nothing is converted automatically.",
+      "density": "Conversions such as a 50 kg cement bag or the density of sand and ballast are assumptions recorded on the build-up, not facts.",
+      "lorry": "A lorry trip is not a universal mass or volume: record sand and ballast in tonnes or cubic metres, with a measured conversion if loads are counted.",
+      "estimates": "Theoretical consumption from build-ups (a later release) gives estimates, not proof of loss or theft.",
+      "versions": "Editing a build-up creates a new version; earlier versions and the BQ items linked to them never change."
+    },
+    "detail": {
+      "lines": "Resources (version {version})",
+      "noAssumptions": "No assumptions recorded.",
+      "cols": {
+        "resource": "Resource",
+        "quantity": "Quantity per {unit}",
+        "waste": "Waste",
+        "cost": "Unit cost",
+        "amount": "Amount"
+      },
+      "unpriced": "Not priced",
+      "rate": "Rate per {unit}",
+      "versions": "Versions",
+      "versionsNote": "Each edit is a new version; links keep their version.",
+      "by": "{name} · {date}"
+    },
+    "editor": {
+      "createTitle": "New build-up",
+      "editTitle": "Edit (saves version {version})",
+      "createDescription": "Name the unit of work and list its resources per unit.",
+      "editDescription": "Saving creates a new version. Linked BQ items keep the version they were linked to.",
+      "code": "Code",
+      "name": "Name",
+      "unit": "Rate per",
+      "assumptions": "Assumptions",
+      "assumptionsHint": "Record conversions and densities you rely on, e.g. cement bag 50 kg; sand in tonnes.",
+      "lines": "Resources per unit",
+      "cols": {
+        "kind": "Line {line}: kind",
+        "resource": "Resource",
+        "unit": "Unit",
+        "quantity": "Quantity",
+        "waste": "Waste %",
+        "cost": "Unit cost (KES)"
+      },
+      "unpriced": "Not priced",
+      "removeLine": "Remove line {line}",
+      "addLine": "Add resource",
+      "rate": "Rate per {unit}",
+      "rateUnavailable": "{count, plural, =0 {Rate unavailable} one {Unavailable (# line without a unit cost)} other {Unavailable (# lines without a unit cost)}}",
+      "rounding": "Each line is quantity × (1 + waste %) × unit cost, rounded half-up to the cent; the rate is the sum of the lines.",
+      "saveVersion": "Save new version",
+      "create": "Create build-up"
+    },
+    "link": {
+      "title": "Link to a rate build-up",
+      "description": "{item} (measured in {unit})",
+      "noUnit": "no unit",
+      "current": "Currently linked to {code}, version {version}.",
+      "loading": "Loading build-ups…",
+      "choose": "Build-up",
+      "placeholder": "Choose a build-up…",
+      "rateUnavailable": "rate unavailable",
+      "versionNote": "The link keeps the build-up's current version; later edits do not change it.",
+      "noneCompatible": "No build-up is priced per this item's unit.",
+      "cancel": "Cancel",
+      "unlink": "Unlink",
+      "submit": "Link"
     }
   }
 }

@@ -264,12 +264,44 @@ cent per line; VAT (`BQ_VAT_RATE_PERCENT`, default 16, COMPLIANCE-REVIEW) once o
 subtotal. Fixtures and their generator are in `test/fixtures/bq` (`node
 test/fixtures/bq/generate.mts` rewrites them; the content is synthetic).
 
+## BQ versions, instructions, variations and rate build-ups (D2.3)
+
+Design in [ARCHITECTURE §4.3](../../docs/ARCHITECTURE.md#43-bq-versions-variations-and-rate-build-ups-d23).
+Paths under `projects/:id/bq` need `bq.view` to read, `bq.edit` to change (closed and cancelled
+projects are read-only) and `bq.approve_variation` plus MFA verified within five minutes to
+approve. Changes send the record's `version` (409 `version-conflict`).
+
+| Method/path                                    | Body                                     | Response / notes                                                                   |
+| ---------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------- |
+| GET versions                                   | —                                        | `{versions}` newest first (source, parent, variation, approval, totals)            |
+| GET versions/compare?from=&to=                 | —                                        | items added/removed/changed, bill subtotals, overall difference                    |
+| GET versions/:versionId/bills/:billId          | —                                        | `{bill, items}` of any version of this BQ (a variation's base)                     |
+| POST versions/:versionId/approve               | `{version}`                              | approves the imported draft as the baseline; not the importer (403)                |
+| GET contract-sum                               | —                                        | original, approved variations, revised, pending (with VAT)                         |
+| GET/POST instructions, GET/PATCH …/:id         | instruction fields (`status` on PATCH)   | the AI/EI register; 409 `instruction-number-taken`                                 |
+| GET variations?status=, POST variations        | `{instructionId, title, description?}`   | 409 `baseline-not-approved`, `instruction-closed`                                  |
+| GET/PATCH variations/:id                       | `{title?, description?, instructionId?}` | detail: lines, totals, projection, snapshot, decision, history, actions            |
+| PUT variations/:id/lines                       | `{lines, version}`                       | adjust / omit / add lines priced against the base; 400 `variation-line-invalid`    |
+| POST variations/:id/submit                     | `{version}`                              | freezes the snapshot digest; 409 `variation-empty`, `variation-stale`              |
+| POST variations/:id/approve                    | `{version, snapshotDigest}`              | creates the next BQ version atomically; 409 `variation-stale`; 403 `maker-checker` |
+| POST variations/:id/reject                     | `{version, snapshotDigest, reason}`      | `bq.approve_variation`, not the maker                                              |
+| POST variations/:id/reopen, …/cancel, …/rebase | `{version}` (`reason` to cancel)         | rejected → draft; draft → cancelled; stale → draft on the newest version           |
+| GET/PUT/DELETE items/:lineageId/rate-buildup   | `{buildupVersionId}` on PUT              | link a current-version item to a build-up version; 422 `unit-mismatch`             |
+
+The company library is at `rate-buildups` (`GET`, `POST`), `rate-buildups/:id` (`GET`, `PUT`
+appends a version) and `rate-buildups/:id/versions/:n`. Reading needs `bq.view` and changing
+`bq.edit`, held company-wide or on at least one assigned project. Each line's amount is
+quantity × (1 + waste %) × unit cost rounded half-up to the cent; the rate is the sum of the
+lines and is `null` while any line has no unit cost. 409 `buildup-code-taken`.
+
 ## Development seed
 
 `npx pnpm@12.17.0 db:seed` (root; it builds the API first) creates the synthetic company
 "Jenga Bora Builders Ltd" with an owner (TOTP enrolled), a project manager and a site agent,
 and three projects (Ruiru Heights Apartments, Kitengela Bungalow, Syokimau Townhouses) with
-sites, geofences, WBS and milestones. It prints each account's identifier and, when it
+sites, geofences, WBS and milestones, plus one rate build-up example (`CONC-C25-SYN`, concrete
+class 25 per m³, clearly marked **synthetic** values: 50 kg cement bags, sand and ballast in
+tonnes). It prints each account's identifier and, when it
 creates the account, a generated password; for the owner also the TOTP secret and
 `otpauth://` URI. It is idempotent: a second run reports "already present" and leaves
 passwords unchanged. `npx pnpm@12.17.0 --filter @pm-buddy/api db:seed --reset-credentials`

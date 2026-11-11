@@ -1,7 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { Banknote, ChartPie, HardHat, TriangleAlert, Wallet } from "lucide-react";
 import { countyName, type County } from "@pm-buddy/types";
-import type { ProjectDetailResponse } from "@pm-buddy/validation";
+import type { BqContractSumResponse, ProjectDetailResponse } from "@pm-buddy/validation";
+import { ContractSumCard } from "@/components/bq/contract-sum-card";
 import { KpiCard } from "@/components/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCalendarDate, formatDateTime, formatKES } from "@/lib/format";
@@ -10,7 +11,14 @@ import { formatCalendarDate, formatDateTime, formatKES } from "@/lib/format";
  * The project dashboard shell. Every ratio and figure that needs data from a later module shows
  * "Unavailable" with the deliverable that provides it, never 0 or an estimate (brief §15 G).
  */
-export async function OverviewTab({ detail }: { detail: ProjectDetailResponse }) {
+export async function OverviewTab({
+  detail,
+  contractSums,
+}: {
+  detail: ProjectDetailResponse;
+  /** Undefined without bq.view (the card is hidden); null when the sums could not be loaded. */
+  contractSums?: BqContractSumResponse | null;
+}) {
   const t = await getTranslations("projectDetail");
   const tStatus = await getTranslations("projectStatus");
   const tTypes = await getTranslations("contractTypes");
@@ -111,6 +119,9 @@ export async function OverviewTab({ detail }: { detail: ProjectDetailResponse })
         </Card>
 
         <div className="space-y-4">
+          {contractSums !== undefined ? (
+            <ContractSumCard sums={contractSums} projectId={project.id} />
+          ) : null}
           {project.status === "planning" ? (
             <Card>
               <CardHeader>

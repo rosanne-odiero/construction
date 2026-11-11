@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { BASE_URL } from "./live-helpers";
 import { permissionCatalogue, type Role } from "@pm-buddy/validation";
 
 const userId = "10000000-0000-4000-8000-000000000001";
@@ -353,9 +354,7 @@ for (const locale of ["en", "sw"] as const) {
     page,
     context,
   }) => {
-    await context.addCookies([
-      { name: "NEXT_LOCALE", value: locale, url: "http://127.0.0.1:3100" },
-    ]);
+    await context.addCookies([{ name: "NEXT_LOCALE", value: locale, url: BASE_URL }]);
     await page.route("**/api/v1/auth/me", (route) =>
       route.fulfill({
         status: 401,
@@ -398,7 +397,7 @@ test("roles panel works in Kiswahili and offers a delegated manager only what th
   page,
   context,
 }) => {
-  await context.addCookies([{ name: "NEXT_LOCALE", value: "sw", url: "http://127.0.0.1:3100" }]);
+  await context.addCookies([{ name: "NEXT_LOCALE", value: "sw", url: BASE_URL }]);
   const held: Role["permissions"] = ["bq.view", "projects.view", "roles.manage", "users.invite"];
   const unexpected: string[] = [];
   await page.route("**/api/v1/**", async (route) => {

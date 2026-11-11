@@ -1178,6 +1178,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         milestones: await tx.milestone.count({ where: { tenantId } }),
         history: await tx.projectStatusChange.count({ where: { tenantId } }),
         assignments: await tx.projectMembership.count({ where: { tenantId } }),
+        buildups: await tx.rateBuildup.count({ where: { tenantId } }),
+        buildupLines: await tx.rateBuildupLine.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1194,6 +1196,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       milestones: 9,
       history: 2,
       assignments: 3,
+      buildups: 1,
+      buildupLines: 5,
     });
     const second = await seedDemo(app);
     expect(second.company).toEqual({ ...first.company, created: false });
@@ -1207,6 +1211,14 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       ["RUI-HTS", "active", false],
       ["KIT-BNG", "active", false],
       ["SYO-TWN", "planning", false],
+    ]);
+    expect(second.buildups).toEqual([
+      {
+        code: "CONC-C25-SYN",
+        name: "Concrete class 25 (1:2:4), per m³ (synthetic example)",
+        rateMinor: 1_328_525,
+        created: false,
+      },
     ]);
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
   });

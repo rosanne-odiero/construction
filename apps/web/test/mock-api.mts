@@ -5,7 +5,8 @@
  * /api calls that the Next.js rewrite forwards here.
  *
  * Each test signs in with its own `pmb_at=<persona>.<id>` cookie and gets its own copy of the
- * fixture data. Requests are validated with the shared request schemas and every response is
+ * fixture data; cookies with the same <id> share that copy, so a test can switch between the
+ * owner, the project manager and the site agent on the same data. Requests are validated with the shared request schemas and every response is
  * validated with the shared response schema before it is sent, so the suite also checks the wire
  * contract. Synthetic data only.
  */
@@ -68,6 +69,7 @@ import {
 } from "@pm-buddy/validation";
 
 import { handleBq, initialProjectBq, type BqState } from "./mock-bq.mts";
+import { handleBuildups, initialBuildups } from "./mock-buildups.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -81,7 +83,39 @@ const AGENT_ID = "21000000-0000-4000-8000-000000000003";
 const QS_ID = "21000000-0000-4000-8000-000000000004";
 const NOW = "2026-11-10T07:45:00.000Z";
 
-type Persona = "owner" | "agent";
+type Persona = "owner" | "agent" | "pm";
+const PERSONAS: Record<
+  Persona,
+  {
+    id: string;
+    identifier: string;
+    displayName: string;
+    role: "owner" | "site_agent" | "project_manager";
+    mfa: boolean;
+  }
+> = {
+  owner: {
+    id: OWNER_ID,
+    identifier: "owner@jenga-bora.example.test",
+    displayName: "Wanjiru Kamau",
+    role: "owner",
+    mfa: true,
+  },
+  agent: {
+    id: AGENT_ID,
+    identifier: "site.agent@jenga-bora.example.test",
+    displayName: "Kevin Kiprono",
+    role: "site_agent",
+    mfa: false,
+  },
+  pm: {
+    id: PM_ID,
+    identifier: "pm@jenga-bora.example.test",
+    displayName: "Brian Otieno",
+    role: "project_manager",
+    mfa: true,
+  },
+};
 type TeamEntry = {
   userId: string;
   displayName: string;
@@ -97,7 +131,8 @@ type ProjectState = {
 };
 type State = {
   persona: Persona;
-  stepUpAt: number;
+  /** When each persona last completed a step-up (each has its own session). */
+  stepUpAt: Map<Persona, number>;
   projects: ProjectState[];
   team: Map<string, TeamEntry[]>;
   bq: BqState;
@@ -288,13 +323,14 @@ function fixture(persona: Persona): State {
   );
   return {
     persona,
-    stepUpAt: 0,
+    stepUpAt: new Map(),
     bq: {
       projects: new Map([
         [RUIRU_ID, initialProjectBq(true, ruiru.project.contractSumMinor)],
         [SYOKIMAU_ID, initialProjectBq(false, null)],
       ]),
       templates: [],
+      buildups: initialBuildups(),
     },
     projects: [ruiru, syokimau],
     team: new Map([
@@ -359,48 +395,51 @@ const cookie = (req: IncomingMessage, name: string) =>
 
 function stateFor(req: IncomingMessage): State {
   const token = cookie(req, "pmb_at");
-  const persona = token?.split(".")[0];
-  if (!token || (persona !== "owner" && persona !== "agent"))
+  const [persona, session] = token?.split(".") ?? [];
+  if (!token || !session || (persona !== "owner" && persona !== "agent" && persona !== "pm"))
     throw new HttpError(401, "unauthorized");
-  let state = states.get(token);
+  let state = states.get(session);
   if (!state) {
     state = fixture(persona);
-    states.set(token, state);
+    states.set(session, state);
   }
+  state.persona = persona;
   return state;
 }
 
-const ownerAccount = (state: State) => ({
-  user: {
-    id: state.persona === "owner" ? OWNER_ID : AGENT_ID,
-    identifier:
-      state.persona === "owner"
-        ? "owner@jenga-bora.example.test"
-        : "site.agent@jenga-bora.example.test",
-    displayName: state.persona === "owner" ? "Wanjiru Kamau" : "Kevin Kiprono",
-    verified: true,
-    mfaEnabled: state.persona === "owner",
-    totpEnabled: state.persona === "owner",
-    passkeys: 0,
-  },
-  session: {
-    id: "22000000-0000-4000-8000-000000000001",
-    tenantId: TENANT_ID,
-    mfaVerified: state.persona === "owner",
-    expiresAt: "2026-11-11T07:45:00.000Z",
-  },
-  mfaRequired: false,
-});
+const ownerAccount = (state: State) => {
+  const user = PERSONAS[state.persona];
+  return {
+    user: {
+      id: user.id,
+      identifier: user.identifier,
+      displayName: user.displayName,
+      verified: true,
+      mfaEnabled: user.mfa,
+      totpEnabled: user.mfa,
+      passkeys: 0,
+    },
+    session: {
+      id: "22000000-0000-4000-8000-000000000001",
+      tenantId: TENANT_ID,
+      mfaVerified: user.mfa,
+      expiresAt: "2026-11-11T07:45:00.000Z",
+    },
+    mfaRequired: false,
+  };
+};
 
 const rolePermissions = (state: State): readonly Permission[] =>
-  state.persona === "owner" ? TENANT_PERMISSIONS : SYSTEM_ROLE_PERMISSIONS.site_agent;
+  state.persona === "owner"
+    ? TENANT_PERMISSIONS
+    : SYSTEM_ROLE_PERMISSIONS[PERSONAS[state.persona].role];
 
 function projectPermissions(state: State, entry: ProjectState): Permission[] {
   if (state.persona === "owner") return [...PROJECT_PERMISSIONS];
+  const user = PERSONAS[state.persona];
   const assignment =
-    state.team.get(entry.project.id)?.find((member) => member.userId === AGENT_ID)?.assignment ??
-    [];
-  return SYSTEM_ROLE_PERMISSIONS.site_agent.filter((key) => assignment.includes(key));
+    state.team.get(entry.project.id)?.find((member) => member.userId === user.id)?.assignment ?? [];
+  return SYSTEM_ROLE_PERMISSIONS[user.role].filter((key) => assignment.includes(key));
 }
 
 function find(state: State, projectId: string, permission: Permission): ProjectState {
@@ -418,7 +457,8 @@ function editable(state: State, projectId: string): ProjectState {
 }
 
 function requireStepUp(state: State) {
-  if (Date.now() - state.stepUpAt > 5 * 60_000) throw new HttpError(403, "step-up-required");
+  if (Date.now() - (state.stepUpAt.get(state.persona) ?? 0) > 5 * 60_000)
+    throw new HttpError(403, "step-up-required");
 }
 
 function parse<T>(schema: z.ZodType<T>, body: unknown): T {
@@ -528,7 +568,7 @@ async function handle(
   if (path === "/auth/mfa/step-up" && method === "POST") {
     if ((body as { code?: string }).code !== MOCK_STEP_UP_CODE)
       throw new HttpError(401, "unauthorized");
-    state.stepUpAt = Date.now();
+    state.stepUpAt.set(state.persona, Date.now());
     return { body: ownerAccount(state), schema: authResponseSchema };
   }
   if (path === "/tenants")
@@ -538,7 +578,7 @@ async function handle(
           {
             id: TENANT_ID,
             name: "Jenga Bora Builders Ltd",
-            role: state.persona === "owner" ? "owner" : "site_agent",
+            role: PERSONAS[state.persona].role,
             roleName: null,
             tenantWide: state.persona === "owner",
             permissions: [...rolePermissions(state)],
@@ -580,6 +620,21 @@ async function handle(
     ]);
     return { status: 201, body: { project }, schema: projectResponseSchema };
   }
+  const buildups = handleBuildups(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      somewhere: () => [
+        ...new Set(state.projects.flatMap((entry) => projectPermissions(state, entry))),
+      ],
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+    },
+    state.bq,
+    method,
+    path,
+    body,
+  );
+  if (buildups) return buildups;
   const match = /^\/projects\/([^/]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw new HttpError(404, "not-found");
   const [, projectId, rest = ""] = match;
@@ -591,6 +646,8 @@ async function handle(
         parse,
         project: (permission) => find(state, projectId!, permission).project,
         permissions: () => projectPermissions(state, entry),
+        actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+        requireStepUp: () => requireStepUp(state),
       },
       state.bq,
       method,

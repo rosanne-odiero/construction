@@ -193,6 +193,7 @@ export {
   bqImportVersionRequestSchema,
   bqIssueCodeSchema,
   bqIssueSchema,
+  bqItemRateLinkSchema,
   bqItemSchema,
   bqMappingSchema,
   bqOverrideSchema,
@@ -226,6 +227,7 @@ export {
   type BqImportsResponse,
   type BqImportSummary,
   type BqIssueWire,
+  type BqItemRateLink,
   type BqItemWire,
   type BqMappingInput,
   type BqPreviewResponse,
@@ -245,3 +247,4 @@ export {
   type SaveBqMappingRequest,
   type SaveBqResolutionsRequest,
 } from "./bq.js";
+export * from "./variations.js";

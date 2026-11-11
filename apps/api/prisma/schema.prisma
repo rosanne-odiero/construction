@@ -130,6 +130,7 @@ model Tenant {
   audit       AuditEvent[]
   roles       TenantRole[]
   bqTemplates BqMappingTemplate[]
+  buildups    RateBuildup[]
 
   @@map("tenants")
 }
@@ -206,6 +207,8 @@ model Project {
   milestones       Milestone[]
   bqs              Bq[]
   bqImports        BqImport[]
+  instructions     Instruction[]
+  variations       VariationOrder[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -403,14 +406,16 @@ model BqMappingTemplate {
 
 // A project's Bill of Quantities (one per project); its versions carry the history.
 model Bq {
-  id        String      @id @default(uuid(7)) @db.Uuid
-  tenantId  String      @map("tenant_id") @db.Uuid
-  projectId String      @map("project_id") @db.Uuid
-  name      String      @db.VarChar(150)
-  createdBy String      @map("created_by") @db.Uuid
-  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  project   Project     @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  versions  BqVersion[]
+  id         String           @id @default(uuid(7)) @db.Uuid
+  tenantId   String           @map("tenant_id") @db.Uuid
+  projectId  String           @map("project_id") @db.Uuid
+  name       String           @db.VarChar(150)
+  createdBy  String           @map("created_by") @db.Uuid
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  project    Project          @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  versions   BqVersion[]
+  variations VariationOrder[]
+  rateLinks  BqItemRateLink[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId])
@@ -418,76 +423,97 @@ model Bq {
   @@map("bqs")
 }
 
-// A BQ version. D2.2 creates version 1 (original contract) as a draft; totals are checked against
-// the bills and items when the transaction commits (app.check_bq_version_totals).
+// A BQ version. Version 1 (original contract) is imported as a draft and approved as the baseline;
+// every later version comes from one approved variation (linear: one child per parent). Approved
+// versions never change (app.guard_bq_version); totals are checked against the bills and items
+// when the transaction commits (app.check_bq_version_totals).
 model BqVersion {
-  id              String     @id @default(uuid(7)) @db.Uuid
-  tenantId        String     @map("tenant_id") @db.Uuid
-  projectId       String     @map("project_id") @db.Uuid
-  bqId            String     @map("bq_id") @db.Uuid
-  versionNo       Int        @map("version_no")
-  status          String     @default("draft") @db.VarChar(20)
-  source          String     @default("import") @db.VarChar(20)
-  vatRatePercent  Decimal    @map("vat_rate_percent") @db.Decimal(7, 4)
-  vatRuleKey      String     @map("vat_rule_key") @db.VarChar(40)
-  vatRuleStatus   String     @map("vat_rule_status") @db.VarChar(30)
-  rounding        String     @db.VarChar(20)
-  subtotalMinor   BigInt     @map("subtotal_minor")
-  vatMinor        BigInt     @map("vat_minor")
-  grandTotalMinor BigInt     @map("grand_total_minor")
-  billCount       Int        @map("bill_count")
-  itemCount       Int        @map("item_count")
-  createdBy       String     @map("created_by") @db.Uuid
-  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy       String     @map("updated_by") @db.Uuid
-  updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  version         Int        @default(1)
-  bq              Bq         @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Cascade)
+  id              String           @id @default(uuid(7)) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  projectId       String           @map("project_id") @db.Uuid
+  bqId            String           @map("bq_id") @db.Uuid
+  versionNo       Int              @map("version_no")
+  status          String           @default("draft") @db.VarChar(20)
+  source          String           @default("import") @db.VarChar(20)
+  vatRatePercent  Decimal          @map("vat_rate_percent") @db.Decimal(7, 4)
+  vatRuleKey      String           @map("vat_rule_key") @db.VarChar(40)
+  vatRuleStatus   String           @map("vat_rule_status") @db.VarChar(30)
+  rounding        String           @db.VarChar(20)
+  subtotalMinor   BigInt           @map("subtotal_minor")
+  vatMinor        BigInt           @map("vat_minor")
+  grandTotalMinor BigInt           @map("grand_total_minor")
+  billCount       Int              @map("bill_count")
+  itemCount       Int              @map("item_count")
+  createdBy       String           @map("created_by") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy       String           @map("updated_by") @db.Uuid
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  version         Int              @default(1)
+  parentVersionId String?          @map("parent_version_id") @db.Uuid
+  variationId     String?          @map("variation_id") @db.Uuid
+  approvedBy      String?          @map("approved_by") @db.Uuid
+  approvedAt      DateTime?        @map("approved_at") @db.Timestamptz
+  bq              Bq               @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Cascade)
+  parent          BqVersion?       @relation("BqVersionHistory", fields: [tenantId, bqId, parentVersionId], references: [tenantId, bqId, id], onDelete: Restrict)
+  children        BqVersion[]      @relation("BqVersionHistory")
+  variation       VariationOrder?  @relation("VariationResult", fields: [tenantId, bqId, variationId], references: [tenantId, bqId, id], onDelete: Restrict)
+  basedVariations VariationOrder[] @relation("VariationBase")
   bills           BqBill[]
   imports         BqImport[]
+  rateLinks       BqItemRateLink[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, bqId, versionNo])
+  @@unique([tenantId, bqId, id])
+  @@unique([tenantId, parentVersionId])
+  @@unique([tenantId, variationId])
   @@index([tenantId, projectId])
   @@map("bq_versions")
 }
 
 model BqBill {
-  id              String      @id @default(uuid(7)) @db.Uuid
-  tenantId        String      @map("tenant_id") @db.Uuid
-  versionId       String      @map("version_id") @db.Uuid
-  number          String      @db.VarChar(20)
-  title           String      @db.VarChar(200)
-  kind            String      @db.VarChar(20)
-  sortOrder       Int         @map("sort_order")
-  totalMinor      BigInt      @map("total_minor")
-  sheetTotalMinor BigInt?     @map("sheet_total_minor")
-  sourceSheet     String      @map("source_sheet") @db.VarChar(100)
-  version         BqVersion   @relation(fields: [tenantId, versionId], references: [tenantId, id], onDelete: Cascade)
+  id              String          @id @default(uuid(7)) @db.Uuid
+  tenantId        String          @map("tenant_id") @db.Uuid
+  versionId       String          @map("version_id") @db.Uuid
+  number          String          @db.VarChar(20)
+  title           String          @db.VarChar(200)
+  kind            String          @db.VarChar(20)
+  sortOrder       Int             @map("sort_order")
+  totalMinor      BigInt          @map("total_minor")
+  sheetTotalMinor BigInt?         @map("sheet_total_minor")
+  sourceSheet     String          @map("source_sheet") @db.VarChar(100)
+  // Stable across versions (D2.3): variation lines and comparisons refer to it.
+  lineageId       String          @map("lineage_id") @db.Uuid
+  version         BqVersion       @relation(fields: [tenantId, versionId], references: [tenantId, id], onDelete: Cascade)
   sections        BqSection[]
   items           BqItem[]
+  variationLines  VariationLine[]
 
   @@unique([tenantId, versionId, id])
   @@unique([tenantId, versionId, number])
+  @@unique([tenantId, versionId, lineageId])
   @@index([tenantId, versionId, sortOrder])
   @@map("bq_bills")
 }
 
 // A section/element heading within a bill; notes keep preamble text found under the heading.
 model BqSection {
-  id         String   @id @default(uuid(7)) @db.Uuid
-  tenantId   String   @map("tenant_id") @db.Uuid
-  versionId  String   @map("version_id") @db.Uuid
-  billId     String   @map("bill_id") @db.Uuid
-  code       String?  @db.VarChar(30)
-  title      String?  @db.VarChar(300)
-  notes      String?  @db.VarChar(4000)
-  sortOrder  Int      @map("sort_order")
-  totalMinor BigInt   @map("total_minor")
-  bill       BqBill   @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
-  items      BqItem[]
+  id             String          @id @default(uuid(7)) @db.Uuid
+  tenantId       String          @map("tenant_id") @db.Uuid
+  versionId      String          @map("version_id") @db.Uuid
+  billId         String          @map("bill_id") @db.Uuid
+  code           String?         @db.VarChar(30)
+  title          String?         @db.VarChar(300)
+  notes          String?         @db.VarChar(4000)
+  sortOrder      Int             @map("sort_order")
+  totalMinor     BigInt          @map("total_minor")
+  lineageId      String          @map("lineage_id") @db.Uuid
+  bill           BqBill          @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
+  items          BqItem[]
+  variationLines VariationLine[]
 
   @@unique([tenantId, versionId, id])
+  @@unique([tenantId, versionId, lineageId])
   @@index([tenantId, versionId, billId, sortOrder])
   @@map("bq_sections")
 }
@@ -495,32 +521,36 @@ model BqSection {
 // A BQ item. Quantity and rate are exact decimals; amounts are KES minor units. amountSource says
 // how the amount was obtained (CHECK bq_items_amount_rule_check); the sheet's amount is kept apart.
 model BqItem {
-  id               String     @id @default(uuid(7)) @db.Uuid
-  tenantId         String     @map("tenant_id") @db.Uuid
-  versionId        String     @map("version_id") @db.Uuid
-  billId           String     @map("bill_id") @db.Uuid
-  sectionId        String?    @map("section_id") @db.Uuid
-  lineageId        String     @map("lineage_id") @db.Uuid
-  ref              String?    @db.VarChar(30)
-  description      String     @db.VarChar(4000)
-  unit             String?    @db.VarChar(10)
-  unitRaw          String?    @map("unit_raw") @db.VarChar(30)
-  quantity         Decimal?   @db.Decimal(20, 4)
-  rate             Decimal?   @db.Decimal(20, 4)
-  amountMinor      BigInt     @map("amount_minor")
-  sheetAmountMinor BigInt?    @map("sheet_amount_minor")
-  amountSource     String     @map("amount_source") @db.VarChar(20)
-  overrideReason   String?    @map("override_reason") @db.VarChar(500)
-  kind             String     @db.VarChar(20)
-  notes            String?    @db.VarChar(1000)
-  sourceSheet      String     @map("source_sheet") @db.VarChar(100)
-  sourceRow        Int        @map("source_row")
-  hasFormula       Boolean    @default(false) @map("has_formula")
-  sortOrder        Int        @map("sort_order")
-  bill             BqBill     @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
-  section          BqSection? @relation(fields: [tenantId, versionId, sectionId], references: [tenantId, versionId, id], onDelete: Cascade)
+  id               String           @id @default(uuid(7)) @db.Uuid
+  tenantId         String           @map("tenant_id") @db.Uuid
+  versionId        String           @map("version_id") @db.Uuid
+  billId           String           @map("bill_id") @db.Uuid
+  sectionId        String?          @map("section_id") @db.Uuid
+  lineageId        String           @map("lineage_id") @db.Uuid
+  ref              String?          @db.VarChar(30)
+  description      String           @db.VarChar(4000)
+  unit             String?          @db.VarChar(10)
+  unitRaw          String?          @map("unit_raw") @db.VarChar(30)
+  quantity         Decimal?         @db.Decimal(20, 4)
+  rate             Decimal?         @db.Decimal(20, 4)
+  amountMinor      BigInt           @map("amount_minor")
+  sheetAmountMinor BigInt?          @map("sheet_amount_minor")
+  amountSource     String           @map("amount_source") @db.VarChar(20)
+  overrideReason   String?          @map("override_reason") @db.VarChar(500)
+  kind             String           @db.VarChar(20)
+  notes            String?          @db.VarChar(1000)
+  // Null for items added by a variation (no spreadsheet row).
+  sourceSheet      String?          @map("source_sheet") @db.VarChar(100)
+  sourceRow        Int?             @map("source_row")
+  hasFormula       Boolean          @default(false) @map("has_formula")
+  sortOrder        Int              @map("sort_order")
+  bill             BqBill           @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
+  section          BqSection?       @relation(fields: [tenantId, versionId, sectionId], references: [tenantId, versionId, id], onDelete: Cascade)
+  variationLines   VariationLine[]
+  rateLinks        BqItemRateLink[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, versionId, lineageId])
   @@index([tenantId, versionId, billId, sortOrder])
   @@index([tenantId, versionId, sectionId])
   @@map("bq_items")
@@ -552,6 +582,7 @@ model BqImport {
   bqVersionId   String?    @map("bq_version_id") @db.Uuid
   uploadedBy    String     @map("uploaded_by") @db.Uuid
   committedBy   String?    @map("committed_by") @db.Uuid
+  contributors  String[]   @default([]) @db.Uuid
   committedAt   DateTime?  @map("committed_at") @db.Timestamptz
   version       Int        @default(1)
   createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
@@ -563,4 +594,229 @@ model BqImport {
   @@index([tenantId, projectId, createdAt])
   @@index([tenantId, bqVersionId])
   @@map("bq_imports")
+}
+
+// An Architect's/Engineer's Instruction (D2.3): the register entry a variation is raised against.
+// Number unique per project; attachments are metadata only (name and reference).
+model Instruction {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  projectId   String           @map("project_id") @db.Uuid
+  number      String           @db.VarChar(30)
+  issuedOn    DateTime         @map("issued_on") @db.Date
+  issuerName  String           @map("issuer_name") @db.VarChar(150)
+  issuerRole  String           @map("issuer_role") @db.VarChar(30)
+  subject     String           @db.VarChar(200)
+  description String?          @db.VarChar(4000)
+  attachments Json             @default("[]")
+  status      String           @default("open") @db.VarChar(10)
+  version     Int              @default(1)
+  createdBy   String           @map("created_by") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy   String           @map("updated_by") @db.Uuid
+  updatedAt   DateTime         @default(now()) @map("updated_at") @db.Timestamptz
+  project     Project          @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  variations  VariationOrder[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@map("instructions")
+}
+
+// A Variation Order (D2.3). Status follows packages/domain VARIATION_TRANSITIONS, enforced by the
+// API and app.guard_variation_order; submission freezes a snapshot digest; a decision is made by
+// someone other than the creator or submitter; approval creates the next BQ version atomically.
+model VariationOrder {
+  id             String                  @id @default(uuid(7)) @db.Uuid
+  tenantId       String                  @map("tenant_id") @db.Uuid
+  projectId      String                  @map("project_id") @db.Uuid
+  bqId           String                  @map("bq_id") @db.Uuid
+  instructionId  String                  @map("instruction_id") @db.Uuid
+  baseVersionId  String                  @map("base_version_id") @db.Uuid
+  number         String                  @db.VarChar(30)
+  title          String                  @db.VarChar(200)
+  description    String?                 @db.VarChar(4000)
+  status         String                  @default("draft") @db.VarChar(20)
+  additionsMinor BigInt                  @default(0) @map("additions_minor")
+  omissionsMinor BigInt                  @default(0) @map("omissions_minor")
+  netMinor       BigInt                  @default(0) @map("net_minor")
+  lineCount      Int                     @default(0) @map("line_count")
+  snapshotDigest String?                 @map("snapshot_digest") @db.Char(64)
+  submittedBy    String?                 @map("submitted_by") @db.Uuid
+  submittedAt    DateTime?               @map("submitted_at") @db.Timestamptz
+  decidedBy      String?                 @map("decided_by") @db.Uuid
+  decidedAt      DateTime?               @map("decided_at") @db.Timestamptz
+  decisionReason String?                 @map("decision_reason") @db.VarChar(500)
+  cancelReason   String?                 @map("cancel_reason") @db.VarChar(500)
+  version        Int                     @default(1)
+  createdBy      String                  @map("created_by") @db.Uuid
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy      String                  @map("updated_by") @db.Uuid
+  updatedAt      DateTime                @default(now()) @map("updated_at") @db.Timestamptz
+  contributors   String[]                @default([]) @db.Uuid
+  project        Project                 @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  bq             Bq                      @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Cascade)
+  instruction    Instruction             @relation(fields: [tenantId, projectId, instructionId], references: [tenantId, projectId, id], onDelete: Restrict)
+  baseVersion    BqVersion               @relation("VariationBase", fields: [tenantId, bqId, baseVersionId], references: [tenantId, bqId, id], onDelete: Restrict)
+  resultVersions BqVersion[]             @relation("VariationResult")
+  lines          VariationLine[]
+  statusChanges  VariationStatusChange[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, bqId, id])
+  @@unique([tenantId, id, baseVersionId])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, status])
+  @@index([tenantId, instructionId])
+  @@map("variation_orders")
+}
+
+// One change in a variation, against the variation's base version (rebase cascades the version).
+model VariationLine {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  tenantId         String         @map("tenant_id") @db.Uuid
+  variationId      String         @map("variation_id") @db.Uuid
+  baseVersionId    String         @map("base_version_id") @db.Uuid
+  lineNo           Int            @map("line_no")
+  action           String         @db.VarChar(10)
+  itemLineageId    String?        @map("item_lineage_id") @db.Uuid
+  billLineageId    String?        @map("bill_lineage_id") @db.Uuid
+  sectionLineageId String?        @map("section_lineage_id") @db.Uuid
+  newSectionCode   String?        @map("new_section_code") @db.VarChar(30)
+  newSectionTitle  String?        @map("new_section_title") @db.VarChar(300)
+  newLineageId     String?        @map("new_lineage_id") @db.Uuid
+  ref              String?        @db.VarChar(30)
+  description      String?        @db.VarChar(4000)
+  unit             String?        @db.VarChar(10)
+  unitRaw          String?        @map("unit_raw") @db.VarChar(30)
+  kind             String?        @db.VarChar(20)
+  quantity         Decimal?       @db.Decimal(20, 4)
+  rate             Decimal?       @db.Decimal(20, 4)
+  amountMinor      BigInt?        @map("amount_minor")
+  note             String?        @db.VarChar(500)
+  baseAmountMinor  BigInt         @map("base_amount_minor")
+  newAmountMinor   BigInt         @map("new_amount_minor")
+  deltaMinor       BigInt         @map("delta_minor")
+  variation        VariationOrder @relation(fields: [tenantId, variationId, baseVersionId], references: [tenantId, id, baseVersionId], onDelete: Cascade)
+  item             BqItem?        @relation(fields: [tenantId, baseVersionId, itemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  bill             BqBill?        @relation(fields: [tenantId, baseVersionId, billLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  section          BqSection?     @relation(fields: [tenantId, baseVersionId, sectionLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict, map: "variation_lines_base_version_section_fkey")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, variationId, lineNo])
+  @@unique([tenantId, variationId, itemLineageId])
+  @@unique([tenantId, newLineageId])
+  @@map("variation_lines")
+}
+
+// Append-only status history of a variation (reasons are kept here, not in the audit log).
+model VariationStatusChange {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  tenantId       String         @map("tenant_id") @db.Uuid
+  variationId    String         @map("variation_id") @db.Uuid
+  fromStatus     String?        @map("from_status") @db.VarChar(20)
+  toStatus       String         @map("to_status") @db.VarChar(20)
+  action         String         @db.VarChar(20)
+  reason         String?        @db.VarChar(500)
+  snapshotDigest String?        @map("snapshot_digest") @db.Char(64)
+  changedBy      String         @map("changed_by") @db.Uuid
+  changedAt      DateTime       @default(now()) @map("changed_at") @db.Timestamptz
+  variation      VariationOrder @relation(fields: [tenantId, variationId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, variationId, changedAt])
+  @@map("variation_status_changes")
+}
+
+// A company's named composite rate per unit of work (D2.3). Editing appends a version; the header
+// mirrors the newest one (app.check_buildup_totals).
+model RateBuildup {
+  id               String               @id @default(uuid(7)) @db.Uuid
+  tenantId         String               @map("tenant_id") @db.Uuid
+  code             String               @db.VarChar(30)
+  name             String               @db.VarChar(150)
+  unit             String               @db.VarChar(10)
+  currentVersionNo Int                  @map("current_version_no")
+  version          Int                  @default(1)
+  createdBy        String               @map("created_by") @db.Uuid
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy        String               @map("updated_by") @db.Uuid
+  updatedAt        DateTime             @default(now()) @map("updated_at") @db.Timestamptz
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versions         RateBuildupVersion[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("rate_buildups")
+}
+
+// One immutable version of a build-up with its rate (null while any line is unpriced).
+model RateBuildupVersion {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  tenantId      String            @map("tenant_id") @db.Uuid
+  buildupId     String            @map("buildup_id") @db.Uuid
+  versionNo     Int               @map("version_no")
+  name          String            @db.VarChar(150)
+  unit          String            @db.VarChar(10)
+  assumptions   String?           @db.VarChar(2000)
+  rateMinor     BigInt?           @map("rate_minor")
+  pricedMinor   BigInt            @map("priced_minor")
+  unpricedLines Int               @map("unpriced_lines")
+  lineCount     Int               @map("line_count")
+  rounding      String            @db.VarChar(20)
+  createdBy     String            @map("created_by") @db.Uuid
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  buildup       RateBuildup       @relation(fields: [tenantId, buildupId], references: [tenantId, id], onDelete: Restrict)
+  lines         RateBuildupLine[]
+  links         BqItemRateLink[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, buildupId, id])
+  @@unique([tenantId, buildupId, versionNo])
+  @@map("rate_buildup_versions")
+}
+
+// A resource line: quantity per output unit, waste % and unit cost; amount rounded half-up per line.
+model RateBuildupLine {
+  id            String             @id @default(uuid(7)) @db.Uuid
+  tenantId      String             @map("tenant_id") @db.Uuid
+  versionId     String             @map("version_id") @db.Uuid
+  lineNo        Int                @map("line_no")
+  kind          String             @db.VarChar(10)
+  resourceName  String             @map("resource_name") @db.VarChar(120)
+  unit          String             @db.VarChar(30)
+  quantity      Decimal            @db.Decimal(15, 6)
+  wastePercent  Decimal?           @map("waste_percent") @db.Decimal(7, 4)
+  unitCostMinor BigInt?            @map("unit_cost_minor")
+  amountMinor   BigInt?            @map("amount_minor")
+  version       RateBuildupVersion @relation(fields: [tenantId, versionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, versionId, lineNo])
+  @@map("rate_buildup_lines")
+}
+
+// A BQ item (by lineage) linked to a build-up version; unlinking stamps unlinked_at, never deletes.
+model BqItemRateLink {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  projectId        String             @map("project_id") @db.Uuid
+  bqId             String             @map("bq_id") @db.Uuid
+  versionId        String             @map("version_id") @db.Uuid
+  itemLineageId    String             @map("item_lineage_id") @db.Uuid
+  buildupId        String             @map("buildup_id") @db.Uuid
+  buildupVersionId String             @map("buildup_version_id") @db.Uuid
+  linkedBy         String             @map("linked_by") @db.Uuid
+  linkedAt         DateTime           @default(now()) @map("linked_at") @db.Timestamptz
+  unlinkedBy       String?            @map("unlinked_by") @db.Uuid
+  unlinkedAt       DateTime?          @map("unlinked_at") @db.Timestamptz
+  bq               Bq                 @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Cascade)
+  version          BqVersion          @relation(fields: [tenantId, bqId, versionId], references: [tenantId, bqId, id], onDelete: Restrict)
+  item             BqItem             @relation(fields: [tenantId, versionId, itemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  buildupVersion   RateBuildupVersion @relation(fields: [tenantId, buildupId, buildupVersionId], references: [tenantId, buildupId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, bqId, itemLineageId])
+  @@index([tenantId, buildupId])
+  @@map("bq_item_rate_links")
 }

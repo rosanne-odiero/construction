@@ -87,6 +87,32 @@ export class AccessPolicy {
     return effective;
   }
 
+  /** MFA verified within the last five minutes (403 step-up-required otherwise). */
+  stepUp(scope: Scope): void {
+    this.auth.requireMfa(scope.principal, true);
+  }
+
+  /**
+   * For company-wide resources governed by a project-scoped permission (the rate build-up
+   * library): a company-wide role holding it, or a role holding it with an assignment that grants
+   * it on at least one project (role ∩ assignment). Returns whether the caller holds it.
+   */
+  async holdsSomewhere(scope: Scope, permission: Permission): Promise<boolean> {
+    const { tx, access } = scope;
+    if (!access.permissions.has(permission)) return false;
+    if (access.tenantWide) return true;
+    const assigned = await tx.projectMembership.count({
+      where: { tenantId: access.tenantId, userId: access.userId, permissions: { has: permission } },
+    });
+    return assigned > 0;
+  }
+
+  /** Throws 403 unless holdsSomewhere(permission). */
+  async requireSomewhere(scope: Scope, permission: Permission): Promise<void> {
+    if (!(await this.holdsSomewhere(scope, permission)))
+      throw new ForbiddenException(`Permission required: ${permission}`);
+  }
+
   /** A filter for the projects on which the caller holds `permission`. */
   projectWhere(scope: Scope, permission: Permission): Prisma.ProjectWhereInput {
     const { access } = scope;

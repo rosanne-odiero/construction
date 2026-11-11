@@ -57,7 +57,7 @@ export const navGroups: {
   {
     key: "commercial",
     items: [
-      { key: "bq", href: "/prototype/projects/ruiru-heights/bq", icon: FileSpreadsheet },
+      { key: "bq", href: "/bq", icon: FileSpreadsheet },
       { key: "valuations", href: "/soon/valuations", icon: Calculator, phase: 6 },
     ],
   },
@@ -112,6 +112,9 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
  * project's BQ viewer and import wizard (D2.2).
  */
 export function isLiveRoute(pathname: string): boolean {
-  if (pathname === "/projects") return true;
-  return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/import)?)?$/.test(pathname);
+  if (pathname === "/projects" || pathname === "/bq") return true;
+  if (/^\/rate-buildups(\/(new|[0-9a-f-]{36}))?$/.test(pathname)) return true;
+  return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/(import|instructions|versions|variations(\/[0-9a-f-]{36})?))?)?$/.test(
+    pathname,
+  );
 }

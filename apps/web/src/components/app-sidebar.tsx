@@ -43,7 +43,9 @@ export function AppSidebar({ companyName }: { companyName?: string }) {
         /^\/projects\/[^/]+(\/.*)?$/.test(pathname) ||
         (/^\/prototype\/projects\/[^/]+(\/sites(\/.*)?)?$/.test(pathname) &&
           !pathname.includes("/bq"))
-      : pathname.startsWith(href);
+      : href === "/bq"
+        ? pathname.startsWith("/bq") || pathname.startsWith("/rate-buildups")
+        : pathname.startsWith(href);
 
   return (
     <Sidebar collapsible="icon">

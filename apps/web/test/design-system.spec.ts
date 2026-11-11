@@ -1,12 +1,11 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { BASE_URL } from "./live-helpers";
 
 for (const locale of ["en", "sw"] as const) {
   for (const theme of ["light", "dark"] as const) {
     test(`gallery is accessible in ${locale}, ${theme}`, async ({ page, context }) => {
-      await context.addCookies([
-        { name: "NEXT_LOCALE", value: locale, url: "http://127.0.0.1:3100" },
-      ]);
+      await context.addCookies([{ name: "NEXT_LOCALE", value: locale, url: BASE_URL }]);
       await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
       await page.goto("/design-system");
       await expect(page.locator("html")).toHaveAttribute("lang", locale);

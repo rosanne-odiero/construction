@@ -7,6 +7,18 @@ import { expect } from "vitest";
 import { z } from "zod";
 import {
   bqBillResponseSchema,
+  bqCompareResponseSchema,
+  bqContractSumResponseSchema,
+  bqItemLinkResponseSchema,
+  bqVersionResponseSchema,
+  bqVersionsResponseSchema,
+  buildupResponseSchema,
+  buildupsResponseSchema,
+  buildupVersionResponseSchema,
+  instructionResponseSchema,
+  instructionsResponseSchema,
+  variationResponseSchema,
+  variationsResponseSchema,
   bqImportResponseSchema,
   bqImportsResponseSchema,
   bqPreviewResponseSchema,
@@ -125,7 +137,24 @@ export function responseContract(method: string, target: string) {
       return bqImportResponseSchema;
     if (bq === "/templates")
       return method === "get" ? bqTemplatesResponseSchema : bqTemplateResponseSchema;
+    if (bq === "/versions") return bqVersionsResponseSchema;
+    if (bq === "/versions/compare") return bqCompareResponseSchema;
+    if (/^\/versions\/[^/]+\/bills\/[^/]+$/.test(bq)) return bqBillResponseSchema;
+    if (/^\/versions\/[^/]+\/approve$/.test(bq)) return bqVersionResponseSchema;
+    if (bq === "/contract-sum") return bqContractSumResponseSchema;
+    if (bq === "/instructions")
+      return method === "get" ? instructionsResponseSchema : instructionResponseSchema;
+    if (/^\/instructions\/[^/]+$/.test(bq)) return instructionResponseSchema;
+    if (bq === "/variations")
+      return method === "get" ? variationsResponseSchema : variationResponseSchema;
+    if (/^\/variations\/[^/]+(\/(lines|submit|approve|reject|reopen|cancel|rebase))?$/.test(bq))
+      return variationResponseSchema;
+    if (/^\/items\/[^/]+\/rate-buildup$/.test(bq)) return bqItemLinkResponseSchema;
   }
+  if (path === "rate-buildups")
+    return method === "get" ? buildupsResponseSchema : buildupResponseSchema;
+  if (/^rate-buildups\/[^/]+$/.test(path)) return buildupResponseSchema;
+  if (/^rate-buildups\/[^/]+\/versions\/\d+$/.test(path)) return buildupVersionResponseSchema;
   return messageResponseSchema;
 }
 

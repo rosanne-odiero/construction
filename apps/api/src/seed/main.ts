@@ -44,6 +44,13 @@ function print(summary: SeedSummary) {
     `  ${attendance.records} attendance records; ${attendance.periods} timesheet periods (${attendance.approvedPeriods} approved)`,
     `  ${attendance.openAnomalies} open anomalies; ${attendance.adjustments} adjustment(s); ${attendance.holidays} public holidays`,
   );
+  const { payroll } = summary;
+  lines.push(
+    "",
+    `Payroll (synthetic; statutory rules unverified, not for filing; ${payroll.created ? "created" : "already present"}):`,
+    `  ${payroll.ruleVersions} statutory rule versions; ${payroll.minimumWages} minimum wages; ${payroll.allowances} allowances`,
+    `  ${payroll.outputs} piece-rate outputs; ${payroll.advances} advances; ${payroll.submittedBatches} submitted and ${payroll.draftBatches} draft batches (${payroll.lines} lines)`,
+  );
   console.log(lines.join("\n"));
 }
 

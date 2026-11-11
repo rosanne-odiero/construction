@@ -141,6 +141,7 @@
       "labour": "Wafanyakazi",
       "attendance": "Mahudhurio",
       "payroll": "Mishahara",
+      "advances": "Malipo ya awali",
       "payments": "Malipo",
       "procurement": "Ununuzi",
       "stores": "Stoo",
@@ -198,9 +199,17 @@
         "confirm": "Kuthibitisha siku za mahudhurio"
       },
       "payroll": {
+        "view": "Kuona mishahara",
         "prepare": "Kuandaa mishahara",
         "review": "Kukagua mishahara",
-        "approve": "Kuidhinisha mishahara"
+        "approve": "Kuidhinisha mishahara",
+        "manage_rules": "Kusimamia kanuni za makato ya kisheria",
+        "verify_rules": "Kuthibitisha kanuni za makato ya kisheria",
+        "export": "Kutoa ripoti za makato ya kisheria"
+      },
+      "advances": {
+        "request": "Kuomba malipo ya awali",
+        "approve": "Kuidhinisha malipo ya awali"
       },
       "payments": {
         "view": "Kuona malipo",

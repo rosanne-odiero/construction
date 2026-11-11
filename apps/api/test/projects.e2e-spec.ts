@@ -3,7 +3,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { PROJECT_ASSIGNABLE_PERMISSIONS } from "@pm-buddy/types";
+import { KENYA_STATUTORY_SEED, PROJECT_ASSIGNABLE_PERMISSIONS } from "@pm-buddy/types";
 import {
   auditEventsResponseSchema,
   geofenceHistoryResponseSchema,
@@ -24,6 +24,7 @@ import {
 import { AppModule } from "../src/app.module.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { configureApp } from "../src/app.setup.js";
+import { BatchBuilder } from "../src/modules/payroll/batch-builder.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
@@ -1284,6 +1285,36 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     ]);
     expect(second.labour).toMatchObject({ labourersCreated: 0, labourersTotal: 40, rates: 0 });
     expect(second.attendance).toEqual({ ...first.attendance, created: false });
+    // Payroll (D4.1): unverified statutory rules, minimum wages, allowances, piece-rate output,
+    // two advances, one submitted and three draft batches; the submitted snapshot matches its digest.
+    expect(first.payroll).toMatchObject({
+      ruleVersions: KENYA_STATUTORY_SEED.length,
+      minimumWages: 18,
+      allowances: 3,
+      outputs: 2,
+      advances: 2,
+      submittedBatches: 1,
+      draftBatches: 3,
+    });
+    expect(second.payroll).toEqual({ ...first.payroll, created: false });
+    await db.run(
+      { tenantId: first.company.id, userId: ownerId, requestId: "seed-payroll" },
+      async (tx) => {
+        expect(
+          await tx.statutoryRuleVersion.count({
+            where: { tenantId: first.company.id, status: { not: "unverified" } },
+          }),
+        ).toBe(0);
+        const submitted = await tx.payrollBatch.findFirstOrThrow({
+          where: { tenantId: first.company.id, status: "submitted" },
+        });
+        expect(submitted.unverifiedRules).toBe(true);
+        const stored = await app
+          .get(BatchBuilder)
+          .storedSnapshot(tx, first.company.id, submitted.id);
+        expect(stored.digest).toBe(submitted.digest);
+      },
+    );
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
   });
 });

@@ -62,6 +62,12 @@ export type DemoLabourer = {
   doNotRehire?: string;
 };
 
+/**
+ * Opening rates start this many days before the first seed run: before the nine weeks of synthetic
+ * attendance (D3.3), so the demonstration payroll (D4.1) can price every seeded day.
+ */
+export const RATES_FROM_DAYS_AGO = 70;
+
 /** Company day rates in KES (demo values; minimum-wage check: COMPLIANCE-REVIEW CR-PAY-09). */
 export const DEMO_DAY_RATES_KES: Readonly<Record<DemoTrade, number>> = {
   mason: 1_500,
@@ -339,7 +345,9 @@ export async function seedLabour(
     levels.set(entry.key, row.id);
   }
 
-  // Company day rates (first run: effective today; rates are never backdated or overwritten).
+  // Company day rates (first run: opening rates from RATES_FROM_DAYS_AGO, so the synthetic
+  // attendance history can be priced by payroll; later rates are never backdated or overwritten).
+  const ratesFrom = addCalendarDays(today, -RATES_FROM_DAYS_AGO);
   let rates = 0;
   for (const [key, kes] of Object.entries(DEMO_DAY_RATES_KES)) {
     const tradeId = trades.get(key)!;
@@ -353,7 +361,7 @@ export async function seedLabour(
         tradeId,
         basis: "daily",
         rateMinor: BigInt(kes * 100),
-        effectiveFrom: calendar(today),
+        effectiveFrom: calendar(ratesFrom),
         createdBy: ownerId,
       },
     });
@@ -362,7 +370,8 @@ export async function seedLabour(
       ...SOURCE,
       tradeId,
       basis: "daily",
-      effectiveFrom: today,
+      effectiveFrom: ratesFrom,
+      opening: true,
     });
   }
   const ruiru = projects.get("RUI-HTS");
@@ -379,7 +388,7 @@ export async function seedLabour(
           skillLevelId: levels.get("skilled")!,
           basis: "daily",
           rateMinor: 160_000n,
-          effectiveFrom: calendar(today),
+          effectiveFrom: calendar(ratesFrom),
           createdBy: ownerId,
         },
       });
@@ -388,7 +397,8 @@ export async function seedLabour(
         ...SOURCE,
         projectId: ruiru.id,
         basis: "daily",
-        effectiveFrom: today,
+        effectiveFrom: ratesFrom,
+        opening: true,
       });
     }
   }

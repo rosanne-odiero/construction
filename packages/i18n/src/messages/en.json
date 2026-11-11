@@ -141,6 +141,7 @@
       "labour": "Labour",
       "attendance": "Attendance",
       "payroll": "Payroll",
+      "advances": "Salary advances",
       "payments": "Payments",
       "procurement": "Procurement",
       "stores": "Stores",
@@ -198,9 +199,17 @@
         "confirm": "Confirm muster days"
       },
       "payroll": {
+        "view": "View payroll",
         "prepare": "Prepare payroll",
         "review": "Review payroll",
-        "approve": "Approve payroll"
+        "approve": "Approve payroll",
+        "manage_rules": "Manage statutory payroll rules",
+        "verify_rules": "Verify statutory payroll rules",
+        "export": "Export statutory returns"
+      },
+      "advances": {
+        "request": "Request salary advances",
+        "approve": "Approve salary advances"
       },
       "payments": {
         "view": "View payments",

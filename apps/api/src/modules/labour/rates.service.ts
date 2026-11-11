@@ -84,11 +84,27 @@ export class LabourRatesService {
           const { tx, access } = scope;
           const projectId = input.projectId ?? null;
           await this.requireWriter(scope, projectId);
-          if (input.effectiveFrom < nairobiDate())
-            throw labourBadRequest(
-              "rate-backdated",
-              "A new rate starts today or later; past days keep the rate they had.",
-            );
+          if (input.effectiveFrom < nairobiDate()) {
+            // An opening rate (the first of its kind) may start in the past so that work recorded
+            // before any rate existed can be paid (D4.1); the database refuses it when it reaches
+            // into submitted payroll. Later rates start today or later.
+            const earlier = await tx.labourRate.findFirst({
+              where: {
+                tenantId: access.tenantId,
+                projectId,
+                labourerId: input.labourerId ?? null,
+                tradeId: input.tradeId ?? null,
+                skillLevelId: input.skillLevelId ?? null,
+                basis: input.basis,
+              },
+              select: { id: true },
+            });
+            if (earlier)
+              throw labourBadRequest(
+                "rate-backdated",
+                "A new rate starts today or later; past days keep the rate they had.",
+              );
+          }
           if (input.tradeId) await this.exists(tx, "trade", access.tenantId, input.tradeId);
           if (input.skillLevelId)
             await this.exists(tx, "skillLevel", access.tenantId, input.skillLevelId);

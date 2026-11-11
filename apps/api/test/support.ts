@@ -73,6 +73,23 @@ import {
   periodsResponseSchema,
   timesheetLinesResponseSchema,
   timesheetRuleResponseSchema,
+  advanceResponseSchema,
+  advancesResponseSchema,
+  allowanceResponseSchema,
+  allowancesResponseSchema,
+  batchDetailResponseSchema,
+  batchSnapshotResponseSchema,
+  exportSummaryResponseSchema,
+  minimumWageResponseSchema,
+  outputResponseSchema,
+  outputsResponseSchema,
+  payCalendarResponseSchema,
+  payrollOverviewResponseSchema,
+  payrollRulesResponseSchema,
+  payrollSettingsResponseSchema,
+  payslipResponseSchema,
+  projectPayrollResponseSchema,
+  statutoryRuleResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -159,7 +176,42 @@ export function responseContract(method: string, target: string) {
   if (labour) return labour;
   const attendance = attendanceContract(path);
   if (attendance) return attendance;
+  const payroll = payrollContract(method, path);
+  if (payroll) return payroll;
   return messageResponseSchema;
+}
+
+/** The D4.1 payroll endpoints' success contracts. */
+function payrollContract(method: string, path: string) {
+  if (!path.startsWith("payroll/")) return null;
+  const get = method === "get";
+  if (path === "payroll/overview") return payrollOverviewResponseSchema;
+  if (path === "payroll/settings") return payrollSettingsResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/calendar$/.test(path)) return payCalendarResponseSchema;
+  if (path === "payroll/rules")
+    return get ? payrollRulesResponseSchema : statutoryRuleResponseSchema;
+  if (path === "payroll/rules/defaults") return payrollRulesResponseSchema;
+  if (/^payroll\/rules\/[^/]+\/verify$/.test(path)) return statutoryRuleResponseSchema;
+  if (/^payroll\/rules\/[^/]+$/.test(path)) return messageResponseSchema;
+  if (path === "payroll/minimum-wages") return minimumWageResponseSchema;
+  if (/^payroll\/projects\/[^/]+$/.test(path)) return projectPayrollResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/batches$/.test(path)) return batchDetailResponseSchema;
+  if (/^payroll\/batches\/[^/]+(\/(recalculate|submit|cancel))?$/.test(path))
+    return batchDetailResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/lines\/[^/]+$/.test(path)) return payslipResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/snapshot$/.test(path)) return batchSnapshotResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/allowances$/.test(path))
+    return get ? allowancesResponseSchema : allowanceResponseSchema;
+  if (/^payroll\/allowances\/[^/]+\/end$/.test(path)) return allowanceResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/outputs$/.test(path))
+    return get ? outputsResponseSchema : outputResponseSchema;
+  if (/^payroll\/outputs\/[^/]+\/(approve|reject)$/.test(path)) return outputResponseSchema;
+  if (path === "payroll/advances") return advancesResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/advances$/.test(path)) return advanceResponseSchema;
+  if (/^payroll\/advances\/[^/]+\/(approve|reject|disburse|cancel)$/.test(path))
+    return advanceResponseSchema;
+  if (path === "payroll/exports") return get ? exportSummaryResponseSchema : z.unknown();
+  return null;
 }
 
 /** The D3.3 attendance and timesheet endpoints' success contracts. */

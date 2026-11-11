@@ -23,6 +23,7 @@ import { TenantDatabase } from "../modules/identity/tenant-database.service.js";
 import { LabourCrypto } from "../modules/labour/labour-support.js";
 import { seedAttendance, type AttendanceSeedSummary } from "./attendance-seed.js";
 import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
+import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -266,6 +267,7 @@ export type SeedSummary = {
   projects: { code: string; name: string; status: string; created: boolean }[];
   labour: LabourSeedSummary;
   attendance: AttendanceSeedSummary;
+  payroll: PayrollSeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -432,6 +434,11 @@ export async function seedDemo(
     },
     audit,
   );
+  const payroll = await seedPayroll(app, tenantId, {
+    ownerId: owner.id,
+    pmId: userOf("projectManager").id,
+    agentId: userOf("siteAgent").id,
+  });
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
@@ -439,6 +446,7 @@ export async function seedDemo(
     projects,
     labour,
     attendance,
+    payroll,
   };
 }
 

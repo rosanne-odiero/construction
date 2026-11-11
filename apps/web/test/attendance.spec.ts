@@ -197,6 +197,10 @@ test("decides adjustments to an approved period with distinct people", async ({
   await expect(page.getByText("Adjustment approved.")).toBeVisible();
   await expect(peter).toContainText("Approved");
   await expect(peter).toContainText("Change: 1 days, 8:00 h worked");
+  // A share the system proposes to move (review fix 3) shows a translated explanation.
+  await expect(
+    adjustments.getByRole("listitem").filter({ hasText: "Joseph Mwangi Kariuki" }),
+  ).toContainText("Proposed automatically: another record of this worker’s day changed");
 
   await page.getByRole("button", { name: "Request an adjustment" }).click();
   const dialog = page.getByRole("dialog", { name: "Request an adjustment" });
@@ -232,6 +236,9 @@ test("reviews anomalies with a note and keeps the history", async ({ page, conte
   const table = page.getByRole("table", { name: "Anomaly review" });
   await expect(table.getByRole("row", { name: /Two sites the same day/ }).first()).toContainText(
     "Recorded at 2 sites that day",
+  );
+  await expect(table.getByRole("row", { name: /Approved share changed/ })).toContainText(
+    "paid 1 days, 6:00 h normal and 2:00 h overtime; now 1 days, 8:00 h normal and 0:00 h overtime",
   );
   const excess = table.getByRole("row", { name: /Hours above the maximum/ });
   await expect(excess).toContainText("14:00 h worked; maximum 12:00 h");

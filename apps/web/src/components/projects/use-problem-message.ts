@@ -104,6 +104,7 @@ const codes: Record<string, ProblemKey> = {
   "no-changes": "noChanges",
   "correction-pending": "correctionPending",
   "correction-not-needed": "correctionNotNeeded",
+  "correction-outdated": "correctionOutdated",
   "pending-corrections": "pendingCorrections",
   "period-not-due": "periodNotDue",
   "unconfirmed-days": "unconfirmedDays",

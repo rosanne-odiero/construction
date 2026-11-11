@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { formatHalfDays } from "@pm-buddy/domain";
 import { ANOMALY_KINDS, ANOMALY_STATUSES } from "@pm-buddy/types";
 import {
   anomaliesResponseSchema,
@@ -103,6 +104,15 @@ export default async function AnomaliesPage({
         });
       case "manual_override":
         return t("anomalies.details.manual_override");
+      case "locked_share_changed":
+        return t("anomalies.details.locked_share_changed", {
+          paidDays: formatHalfDays(Number(value.paidHalfDays ?? 0)),
+          paidNormal: hours(Number(value.paidNormalMinutes ?? 0)),
+          paidOvertime: hours(Number(value.paidOvertimeMinutes ?? 0)),
+          idealDays: formatHalfDays(Number(value.idealHalfDays ?? 0)),
+          idealNormal: hours(Number(value.idealNormalMinutes ?? 0)),
+          idealOvertime: hours(Number(value.idealOvertimeMinutes ?? 0)),
+        });
       default:
         return null;
     }

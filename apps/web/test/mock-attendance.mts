@@ -29,6 +29,7 @@ import {
 } from "@pm-buddy/domain";
 import {
   ANOMALY_SEVERITY,
+  AUTOMATIC_ADJUSTMENT_REASON,
   DEMO_TIMESHEET_RULE,
   KENYA_PUBLIC_HOLIDAYS,
   PROJECT_STATUSES,
@@ -407,6 +408,57 @@ export function attendanceFixture(materialsYardId: string, labour: LabourState):
     status: "pending",
     requestedBy: PM.id,
     requestedAt: "2026-11-09T07:00:00.000Z",
+    decidedBy: null,
+    decidedAt: null,
+    decisionNote: null,
+    delta: null,
+    version: 1,
+  });
+  // Review fix 3 as the API shows it: an approved share that no longer matches the day is a
+  // blocking anomaly on the open record, and the system proposes an adjustment (same values).
+  const josephYard = state.records.find(
+    (record) =>
+      record.labourerId === joseph && record.date === "2026-11-06" && record.siteId !== MAIN_PLOT,
+  )!;
+  state.anomalies.push({
+    id: id(),
+    recordId: josephYard.id,
+    kind: "locked_share_changed",
+    status: "open",
+    details: {
+      lockedRecordIds: [josephYard.id],
+      paidHalfDays: 2,
+      idealHalfDays: 2,
+      paidNormalMinutes: 360,
+      idealNormalMinutes: 480,
+      paidOvertimeMinutes: 120,
+      idealOvertimeMinutes: 0,
+    },
+    correctionId: null,
+    detectedAt: MOCK_NOW.toISOString(),
+    reviewedBy: null,
+    reviewedAt: null,
+    reviewNote: null,
+    version: 1,
+  });
+  const josephOn27 = state.records.find(
+    (record) => record.labourerId === joseph && record.date === "2026-10-27",
+  )!;
+  state.adjustments.push({
+    id: id(),
+    projectId: RUIRU,
+    originalPeriodId: approved.id,
+    targetPeriodId: null,
+    labourerId: joseph,
+    siteId: MAIN_PLOT,
+    date: "2026-10-27",
+    recordId: josephOn27.id,
+    proposed: valuesOf(josephOn27),
+    previous: valuesOf(josephOn27),
+    reason: AUTOMATIC_ADJUSTMENT_REASON,
+    status: "pending",
+    requestedBy: AGENT.id,
+    requestedAt: "2026-11-09T08:00:00.000Z",
     decidedBy: null,
     decidedAt: null,
     decisionNote: null,
@@ -1476,6 +1528,13 @@ export function handleAttendance(
         if (day.status !== "submitted") return conflict(ctx, "invalid-transition");
         if (day.submittedBy === ctx.user.id) return conflict(ctx, "same-person");
         if (
+          action === "return" &&
+          state.corrections.some(
+            (correction) => correction.dayId === day.id && correction.status === "pending",
+          )
+        )
+          return conflict(ctx, "pending-corrections");
+        if (
           action === "confirm" &&
           state.records.some(
             (record) =>
@@ -1543,6 +1602,16 @@ export function handleAttendance(
         if (correction.version !== input.version) return conflict(ctx, "version-conflict");
         if (correction.status !== "pending") return conflict(ctx, "invalid-transition");
         if (correction.requestedBy === ctx.user.id) return conflict(ctx, "same-person");
+        if (decision === "approve") {
+          const current = state.records.find(
+            (entry) => entry.dayId === day.id && entry.labourerId === correction.labourerId,
+          );
+          const unchanged = correction.previous
+            ? current !== undefined &&
+              JSON.stringify(valuesOf(current)) === JSON.stringify(correction.previous)
+            : current === undefined;
+          if (day.status === "draft" || !unchanged) return conflict(ctx, "correction-outdated");
+        }
         Object.assign(correction, {
           status: decision === "approve" ? "approved" : "rejected",
           decidedBy: ctx.user.id,

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { CheckCircle2, RotateCcw, Send, XCircle } from "lucide-react";
 import { addCalendarDays } from "@pm-buddy/domain";
+import { AUTOMATIC_ADJUSTMENT_REASON } from "@pm-buddy/types";
 import {
   adjustmentResponseSchema,
   periodDetailResponseSchema,
@@ -167,7 +168,10 @@ export function PeriodActions({
                     {t("adjustments.requested", {
                       name: adjustment.requestedBy.displayName,
                       at: formatDateTime(adjustment.requestedAt),
-                      reason: adjustment.reason,
+                      reason:
+                        adjustment.reason === AUTOMATIC_ADJUSTMENT_REASON
+                          ? t("adjustments.automatic")
+                          : adjustment.reason,
                     })}
                   </p>
                   {adjustment.delta ? (

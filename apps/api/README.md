@@ -364,7 +364,9 @@ Design notes: [ARCHITECTURE §4.4](../../docs/ARCHITECTURE.md#44-attendance-and-
 
 Attendance problem codes (409 unless noted): `not-engaged`, `period-locked`, `period-overlap`,
 `day-not-draft`, `day-empty`, `invalid-transition`, `same-person`, `no-changes`,
-`correction-pending`, `correction-not-needed`, `pending-corrections`, `period-not-due`,
+`correction-pending`, `correction-not-needed`, `correction-outdated` (the day or record changed
+since the correction was asked for), `pending-corrections` (also when returning a day that has
+one), `period-not-due`,
 `unconfirmed-days`, `open-anomalies`, `rules-not-configured`, `rules-unverified` (production
 only), `period-changed`, `period-not-approved`, `date-outside-period`, `adjustment-pending`,
 `no-target-period`, `use-correction`, `rule-exists`, `rule-in-force`, `holiday-exists`,
@@ -372,6 +374,21 @@ only), `period-changed`, `period-not-approved`, `date-outside-period`, `adjustme
 `date-in-future`, `site-not-in-project`, `invalid-idempotency-key`; 403 `step-up-required`, `mfa-required`. Database
 triggers and CHECKs repeat every rule (engagement on the date, maker ≠ checker, period locks,
 one record per labourer/site/day, insert-only snapshots).
+
+**Review fixes (follow-up migration `20261112120000_attendance_review_fixes`).** (1) Maker ≠
+checker binds the current submission: after a rejected period is reopened, the person who
+rejected it may submit it again for someone else to approve (the last rejection stays on the
+period; every rejection is audited). (2) Half days: each `half_day` record is worth one half, at
+most two a day; the threshold applies only with a `present` record. (3) When another record of a
+labourer's day changes after one project's period was approved, the day is recomputed with
+nothing locked; a differing approved share opens a blocking `locked_share_changed` anomaly on
+the day's open records and the system proposes a pending adjustment with unchanged values
+(`proposed = previous`, `reason` = `AUTOMATIC_ADJUSTMENT_REASON` from `packages/types`,
+requested by whoever made the change, audited with `automatic: true`); approving it (someone
+else) clears the anomaly. A manual adjustment with unchanged values is accepted only while such a
+difference exists. (4) A day cannot be returned while a correction is pending, and a correction
+is applied only while its day is submitted or confirmed and the record still holds its
+`previous` values.
 
 ### Payroll-facing timesheet contract
 
@@ -408,7 +425,11 @@ D4.1 payroll reads **approved** periods only, and never recomputes them:
   leave or sick days are paid is payroll policy.
 - **Adjustments.** `timesheet_adjustments` (status `approved`, `delta`, `target_period_id`)
   explain each adjustment line; `GET projects/:projectId/adjustments` lists them with the reason,
-  requester and decider.
+  requester and decider. Some adjustment lines are reallocations proposed by the system
+  (`reason` = `AUTOMATIC_ADJUSTMENT_REASON`): another record of the labourer's day changed after
+  approval, so the delta moves this project's share to the recomputed one (for example overtime
+  becoming normal time, or a half day becoming a full day). Payroll treats them like any other
+  signed delta; the original period is never reopened.
 
 ## Development seed
 

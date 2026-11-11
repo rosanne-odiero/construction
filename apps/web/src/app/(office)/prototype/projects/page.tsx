@@ -107,7 +107,7 @@ export default async function ProjectsPage() {
               </Button>
               {p.id === "ruiru-heights" ? (
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/projects/${p.id}/bq`}>{t("openBq")}</Link>
+                  <Link href={`/prototype/projects/${p.id}/bq`}>{t("openBq")}</Link>
                 </Button>
               ) : (
                 <Button asChild size="sm" variant="outline">

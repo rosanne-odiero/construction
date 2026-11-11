@@ -47,10 +47,11 @@ test("lists live projects, filters them and opens every detail tab", async ({ pa
   await expect(page.getByText("KES 86,400,000")).toBeVisible();
   await expect(page.getByText("02/03/2026 – 30/04/2027")).toBeVisible();
   await expect(page.getByText("Contract signed and site handed over")).toBeVisible();
-  await expect(page.getByRole("link", { name: /BQ\s*Prototype/ })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "BQ", exact: true })).toHaveAttribute(
     "href",
-    "/projects/ruiru-heights/bq",
+    `/projects/${RUIRU_ID}/bq`,
   );
+  await expect(page.getByText("Prototype", { exact: true })).toHaveCount(0);
   expect(await axeViolations(page)).toEqual([]);
 
   await page.getByRole("link", { name: "Sites", exact: true }).click();
@@ -64,7 +65,7 @@ test("lists live projects, filters them and opens every detail tab", async ({ pa
   const team = page.getByRole("table", { name: "Project members" });
   await expect(team.getByRole("row")).toHaveCount(4);
   await expect(team.getByRole("row", { name: /Wanjiru Kamau/ })).toContainText("Company-wide");
-  await expect(team.getByRole("row", { name: /Kevin Kiprono/ })).toContainText("2 permissions");
+  await expect(team.getByRole("row", { name: /Kevin Kiprono/ })).toContainText("3 permissions");
   expect(await axeViolations(page)).toEqual([]);
 
   await page.getByRole("link", { name: "WBS & milestones", exact: true }).click();

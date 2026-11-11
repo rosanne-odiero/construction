@@ -33,6 +33,7 @@
     "@opentelemetry/instrumentation-nestjs-core": "^0.71.0",
     "@opentelemetry/sdk-node": "^0.300.0",
     "@pm-buddy/domain": "workspace:*",
+    "@pm-buddy/i18n": "workspace:*",
     "@pm-buddy/types": "workspace:*",
     "@pm-buddy/validation": "workspace:*",
     "@prisma/adapter-pg": "^7.10.1",
@@ -46,10 +47,12 @@
     "jose": "6.2.15",
     "nestjs-pino": "^5.3.1",
     "otpauth": "9.6.0",
+    "pdfmake": "0.3.13",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "catalog:"
   },
   "devDependencies": {

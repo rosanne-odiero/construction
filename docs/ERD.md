@@ -613,6 +613,18 @@ erDiagram
   }
 ```
 
+**Implemented in D2.2** (migration `20261110110000_bq_import`; [ARCHITECTURE §4.2](./ARCHITECTURE.md#42-bq-module-and-excel-import-d22)). Only the BQ tables and the import pipeline exist so far; instructions, variations, rate build-ups, valuations and subcontracts come later (D2.3, D6.3). Every table has `tenant_id`, forced RLS with `WITH CHECK` on `app.current_tenant_id()`, and composite `(tenant_id, …)` foreign keys, including to the project.
+
+| Entity | Implemented as | Difference from the target model |
+|---|---|---|
+| Bq | `bqs` | One per project (unique `(tenant_id, project_id)`); `name` defaults to "Bill of Quantities". No `current_version_id`: the current version is the highest `version_no` (D2.3 may add the pointer with approval). |
+| BqVersion | `bq_versions` | Carries `project_id` (composite key to the project). `status` `draft, approved, superseded` and `source` `import, variation, manual` as designed; D2.2 only creates version 1 as a `draft` from an import. Instead of `contract_sum_minor` and `approved_by` (D2.3) it stores the totals snapshot: `vat_rate_percent numeric(7,4)` with `vat_rule_key` and `vat_rule_status` (the configuration snapshot), `rounding` (`half_up_line`), `subtotal_minor`, `vat_minor`, `grand_total_minor`, `bill_count`, `item_count`, plus `version` (optimistic concurrency) and `updated_by/at`. A CHECK enforces `grand = subtotal + vat` and `vat = round(subtotal × rate / 100)`; a deferred constraint trigger re-adds items, sections and bills at commit. Content can change only while the version is a draft. |
+| BqBill | `bq_bills` | `kind` is `preliminaries, measured, provisional, dayworks, contingency` (PC and provisional sums share `provisional`); adds `total_minor` (sum of its items), `sheet_total_minor` (the sheet's own bill total, for reconciliation only) and `source_sheet`. `sort_order` for `sort`. |
+| BqSection | `bq_sections` | No `parent_section_id` yet: sections are one level (nested elements are flattened in order). `code` and `title` are optional (items before the first heading sit in an untitled section); adds `notes` (unpriced explanatory text) and `total_minor`. |
+| BqItem | `bq_items` | `ref`, `description`, `unit` (normalised code: `m3, m2, m, kg, t, nr, item, ls, pct, hr, day, week, month, l, set, pair, other`) with `unit_raw` (original spelling) instead of a unit FK; **`quantity` and `rate` are `numeric(20,4)`** (the rate is an exact decimal, not `rate_minor`); `amount_minor` is the computed line amount and `sheet_amount_minor` the sheet's own amount; `amount_source` is `computed, percentage, lump_sum, sheet_override` (`override_reason` required for an override); `kind` is `measured, preliminary, provisional_sum, pc_sum, pc_attendance, pc_profit, contingency, daywork`; adds `notes`, `source_sheet`, `source_row`, `has_formula`, `lineage_id` (stable across versions, D2.3) and `bill_id`. A CHECK enforces the amount rule per `amount_source`. `rate_buildup_id` waits for D2.3. |
+| BqImportJob | `bq_imports` | Named `bq_imports`. Keeps the source and its checks rather than a `file_id` (the files module does not exist yet): `file_name` (sanitised), `file_type` (`xlsx, xls`), `file_size_bytes`, `file_sha256`, `source_key` and `parsed_key` (private bucket keys, format CHECKed, never user-supplied), `scan_status`, `scan_engine`, `scanned_at`, `uploaded_by`. One import covers the whole workbook: `sheets` (summaries and the detection), `mapping` (per-sheet columns, header and data rows, bill number and name, included sheets, template used), `resolutions` (row actions and accepted warnings with reasons), `report` and `report_digest` (the stored validation report), `failure_code`, `bq_version_id`, `committed_by/at`, `version`. `status` is `uploaded, parsed, mapped, validated, committed, superseded, failed, abandoned` with transitions and immutable source columns enforced by `app.guard_bq_import`. Rows are never deleted by the runtime role. |
+| BqMappingTemplate | `bq_mapping_templates` | Per company: `name` (unique per company), `signature` (normalised header texts), `columns` (field → column offsets relative to the first mapped column), `data_offset` (first data row below the header), `created_by`. Imports record the template used inside `mapping` rather than through a foreign key, so deleting a template does not touch import history. |
+
 ## 5. Materials, procurement and stores
 
 ```mermaid
@@ -1783,7 +1795,7 @@ erDiagram
 | Project / Site / Geofence | `Project`, `Site`, `Geofence`, `Client` | Trade / SkillLevel | `Trade`, `Labourer.skill_level` enum |
 | Phase/WBS / Milestone | `WbsNode`, `Milestone` | Accreditation | `Accreditation` |
 | ScheduleActivity | `ScheduleActivity`, `ActivityDependency`, `ScheduleBaseline`, `DelayEvent` | Gang / GangAssignment | `Gang`, `GangAssignment` |
-| BQ / BQVersion | `Bq`, `BqVersion`, `BqImportJob`, `BqMappingTemplate` | BiometricEnrolment | `BiometricEnrolment`, `BiometricTemplate` |
+| BQ / BQVersion | `Bq`, `BqVersion`, `BqImportJob` (implemented as `bq_imports`), `BqMappingTemplate` | BiometricEnrolment | `BiometricEnrolment`, `BiometricTemplate` |
 | BQBill / BQSection / BQItem | `BqBill`, `BqSection`, `BqItem` | Consent | `Consent` |
 | RateBuildUp | `RateBuildUp`, `RateBuildUpComponent` | AttendanceDevice / AttendanceEvent | `AttendanceDevice`, `AttendanceEvent`, `AttendanceAnomaly` |
 | VariationOrder / Instruction | `VariationOrder`, `VariationLine`, `Instruction`, `Consultant` | Timesheet | `Timesheet`, `TimesheetLine` |

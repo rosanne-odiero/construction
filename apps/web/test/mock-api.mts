@@ -67,6 +67,8 @@ import {
   type WbsNode,
 } from "@pm-buddy/validation";
 
+import { handleBq, initialProjectBq, type BqState } from "./mock-bq.mts";
+
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
 export const RUIRU_ID = "30000000-0000-4000-8000-000000000001";
@@ -98,6 +100,7 @@ type State = {
   stepUpAt: number;
   projects: ProjectState[];
   team: Map<string, TeamEntry[]>;
+  bq: BqState;
 };
 
 const states = new Map<string, State>();
@@ -286,6 +289,13 @@ function fixture(persona: Persona): State {
   return {
     persona,
     stepUpAt: 0,
+    bq: {
+      projects: new Map([
+        [RUIRU_ID, initialProjectBq(true, ruiru.project.contractSumMinor)],
+        [SYOKIMAU_ID, initialProjectBq(false, null)],
+      ]),
+      templates: [],
+    },
     projects: [ruiru, syokimau],
     team: new Map([
       [
@@ -302,7 +312,7 @@ function fixture(persona: Persona): State {
             userId: AGENT_ID,
             displayName: "Kevin Kiprono",
             role: "site_agent",
-            assignment: ["projects.view", "site.diary"],
+            assignment: ["projects.view", "site.diary", "bq.view"],
           },
           {
             userId: QS_ID,
@@ -505,6 +515,7 @@ async function handle(
   query: URLSearchParams,
   req: IncomingMessage,
   body: unknown,
+  raw: Buffer,
 ): Promise<Reply> {
   if (path === "/auth/csrf") return { body: { csrfToken: MOCK_CSRF }, schema: csrfResponseSchema };
   if (path === "/auth/refresh") throw new HttpError(401, "unauthorized");
@@ -572,6 +583,23 @@ async function handle(
   const match = /^\/projects\/([^/]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw new HttpError(404, "not-found");
   const [, projectId, rest = ""] = match;
+  if (rest === "bq" || rest.startsWith("bq/")) {
+    const entry = find(state, projectId!, "projects.view");
+    return handleBq(
+      {
+        fail: (status, code) => new HttpError(status, code),
+        parse,
+        project: (permission) => find(state, projectId!, permission).project,
+        permissions: () => projectPermissions(state, entry),
+      },
+      state.bq,
+      method,
+      rest,
+      query,
+      body,
+      raw,
+    );
+  }
   if (rest === "" && method === "GET")
     return {
       body: detail(state, find(state, projectId!, "projects.view")),
@@ -801,11 +829,13 @@ async function handle(
   throw new HttpError(404, "not-found");
 }
 
-async function readBody(req: IncomingMessage): Promise<unknown> {
+async function readBody(req: IncomingMessage): Promise<{ json: unknown; raw: Buffer }> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
-  if (!chunks.length) return undefined;
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+  const raw = Buffer.concat(chunks);
+  if (!raw.length || !(req.headers["content-type"] ?? "").includes("application/json"))
+    return { json: undefined, raw };
+  return { json: JSON.parse(raw.toString("utf8")) as unknown, raw };
 }
 
 function send(res: ServerResponse, status: number, body: unknown, problem = false) {
@@ -822,13 +852,8 @@ const server = createServer((req, res) => {
     if (url.pathname === "/health") return send(res, 200, { status: "ok" });
     const path = url.pathname.replace(/^\/api\/v1/, "");
     try {
-      const reply = await handle(
-        req.method ?? "GET",
-        path,
-        url.searchParams,
-        req,
-        await readBody(req),
-      );
+      const { json, raw } = await readBody(req);
+      const reply = await handle(req.method ?? "GET", path, url.searchParams, req, json, raw);
       const checked = reply.schema.safeParse(reply.body);
       if (!checked.success) {
         console.error(

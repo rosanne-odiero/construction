@@ -59,6 +59,7 @@ export default async function ProjectPage({
   const { project } = detail;
   const t = await getTranslations("projectDetail");
   const canManage = detail.permissions.includes("projects.manage");
+  const canViewBq = detail.permissions.includes("bq.view");
   const readOnly = isProjectReadOnly(project.status);
 
   return (
@@ -107,16 +108,17 @@ export default async function ProjectPage({
               </Link>
             </li>
           ))}
-          <li>
-            <Link
-              href="/projects/ruiru-heights/bq"
-              className="-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground hover:text-foreground"
-            >
-              <FileSpreadsheet className="size-4" aria-hidden />
-              {t("tabs.bq")}
-              <span className="rounded border px-1 text-xs">{t("prototypeBadge")}</span>
-            </Link>
-          </li>
+          {canViewBq ? (
+            <li>
+              <Link
+                href={`/projects/${project.id}/bq`}
+                className="-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground hover:text-foreground"
+              >
+                <FileSpreadsheet className="size-4" aria-hidden />
+                {t("tabs.bq")}
+              </Link>
+            </li>
+          ) : null}
         </ul>
       </nav>
       {tab === "overview" ? <OverviewTab detail={detail} /> : null}

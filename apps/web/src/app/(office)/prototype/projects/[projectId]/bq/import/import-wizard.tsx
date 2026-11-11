@@ -379,7 +379,7 @@ export function ImportWizard({ projectId }: { projectId: string }) {
         <CardFooter className="justify-between gap-2">
           {step === 0 ? (
             <Button asChild variant="ghost">
-              <Link href={`/projects/${projectId}/bq`}>
+              <Link href={`/prototype/projects/${projectId}/bq`}>
                 <ArrowLeft aria-hidden /> {t("cancel")}
               </Link>
             </Button>

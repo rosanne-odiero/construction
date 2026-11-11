@@ -16,9 +16,11 @@ export class TenantDatabase {
     return value;
   }
 
+  /** `timeoutMs` (default 10 s) bounds long writes such as a BQ commit. */
   async run<T>(
     context: Context,
     operation: (tx: Prisma.TransactionClient) => Promise<T>,
+    timeoutMs = 10_000,
   ): Promise<T> {
     return this.context.run(context, () =>
       this.prisma.$transaction(
@@ -29,7 +31,7 @@ export class TenantDatabase {
         set_config('app.request_id', ${current.requestId}, true)`;
           return operation(tx);
         },
-        { timeout: 10_000 },
+        { timeout: timeoutMs },
       ),
     );
   }

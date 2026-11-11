@@ -222,6 +222,48 @@ Errors use the existing RFC 9457 `application/problem+json` envelope. Invalid in
 carry a more specific `code`: `password-too-weak`, `password-breached` and `passkey-invalid`
 (a registration response that failed verification).
 
+## BQ import, viewer and exports (D2.2)
+
+Design in [ARCHITECTURE §4.2](../../docs/ARCHITECTURE.md#42-bq-module-and-excel-import-d22).
+All paths are under `projects/:id/bq`. Reading and exporting need `bq.view` on the project;
+everything about imports and templates needs `bq.import` (role ∩ assignment for project-scoped
+users). Changes send the import `version` they read (409 `version-conflict` otherwise).
+
+| Method/path                           | Body                                             | Response                                                                 |
+| ------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------ |
+| GET                                   | —                                                | `{bq}`: version, bills, summary, latest import status and overrides      |
+| GET bills/:billId                     | —                                                | `{bill, items}` (sections and items of one bill)                         |
+| GET search?q=                         | —                                                | `{items, truncated}` (matches by description or reference)               |
+| GET export/xlsx?locale=en\|sw         | —                                                | `.xlsx` attachment (summary sheet plus one sheet per bill)               |
+| GET export/pdf?locale=en\|sw          | —                                                | PDF attachment (A4, page numbers, "Draft" watermark while a draft)       |
+| GET imports                           | —                                                | `{imports}` (summaries, newest first)                                    |
+| POST imports                          | multipart `file` (`.xlsx`/`.xls`, at most 10 MB) | 201 `{import}` (`parsed`, or `failed` with `failureCode`)                |
+| GET imports/:importId                 | —                                                | `{import}` with sheets, mapping, resolutions and report                  |
+| POST imports/:importId/parse          | `{version}`                                      | `{import}` (retries reading an `uploaded` import)                        |
+| GET imports/:importId/sheets/:n/rows  | `?from=&count=` (at most 200 rows)               | rows as text, with the formula cells marked                              |
+| PUT imports/:importId/mapping         | `{mapping, version}`                             | `{import}` (`mapped`; clears the report and resolutions)                 |
+| POST imports/:importId/apply-template | `{templateId, version}`                          | `{import}` with the template applied to sheets whose headers match       |
+| POST imports/:importId/validate       | `{version}`                                      | `{import}` (`validated`, with the stored report)                         |
+| PUT imports/:importId/resolutions     | `{resolutions:{rows, accepted}, version}`        | `{import}` with the report recomputed                                    |
+| GET imports/:importId/preview         | —                                                | bills, totals, readiness, the existing draft and the differences from it |
+| POST imports/:importId/commit         | `{version}`                                      | `{import}` (`committed`); one transaction; see the 409 codes below       |
+| POST imports/:importId/abandon        | `{version}`                                      | `{import}` (`abandoned`)                                                 |
+| GET imports/:importId/source          | —                                                | the original workbook (attachment)                                       |
+| GET templates / POST templates        | — / `{name, importId, sheetIndex}`               | `{templates}` / 201 `{template}`                                         |
+| DELETE templates/:templateId          | —                                                | `{message}`                                                              |
+
+Upload refusals are problems with stable codes: 413 `payload-too-large`, 415
+`unsupported-file-type` / `macro-workbook`, 422 `unsafe-archive` (ZIP bomb, ZIP64, encrypted),
+400 `empty-file`, 503 `malware-scanner-unavailable` (`MALWARE_SCANNER=disabled`, the default)
+and 503 `parser-busy`. Other BQ codes: 409 `invalid-import-state`, `commit-blocked`,
+`validation-stale`, `bq-not-draft`, `project-read-only`, `template-name-taken`,
+`template-not-applicable`; 422
+`export-too-large` (PDF over 10,000 items). Quantities and rates are decimal strings; amounts
+are integer minor units (`…Minor`). Line amounts are quantity × rate rounded half-up to the
+cent per line; VAT (`BQ_VAT_RATE_PERCENT`, default 16, COMPLIANCE-REVIEW) once on the
+subtotal. Fixtures and their generator are in `test/fixtures/bq` (`node
+test/fixtures/bq/generate.mts` rewrites them; the content is synthetic).
+
 ## Development seed
 
 `npx pnpm@12.17.0 db:seed` (root; it builds the API first) creates the synthetic company

@@ -107,9 +107,11 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 
 | Key | Scope | Seed / default | Source | Status | Used from |
 |---|---|---|---|---|---|
-| `bq.vat.rate` | platform/project | 16% | Brief §5.2 | COMPLIANCE-REVIEW (CR-TAX-01) | D2.2 |
-| `bq.rounding` | tenant | Half-up to cents | Proposal | PRODUCT | D2.2 |
-| `bq.import.max_file_mb` | platform | 20 | Proposal | SECURITY | D2.2 |
+| `bq.vat.rate` | platform/project | 16% (`BQ_VAT_RATE_PERCENT`, §8, until the effective-dated rules engine holds it) | Brief §5.2 | COMPLIANCE-REVIEW (CR-TAX-01) | D2.2 (snapshot onto each BQ version with this key and status) |
+| `bq.rounding` | tenant | Half-up to the cent per line (`half_up_line`): each item's quantity × rate is rounded once; VAT once on the subtotal. Fixed in code for D2.2 and snapshot onto each version | FINANCIAL_MODEL; ARCHITECTURE §4.2 | PRODUCT | D2.2 |
+| `bq.import.amount_tolerance_minor` | platform | 100 (KES 1.00): a sheet amount further than this from quantity × rate is an `amount-mismatch` error; totals use the same tolerance | Proposal | PRODUCT | D2.2 (constant `BQ_AMOUNT_TOLERANCE_MINOR`) |
+| `bq.import.max_file_mb` | platform | 10 (was 20 in the design) | Brief §15 F; D2.2 | SECURITY | D2.2 (constant `BQ_IMPORT_LIMITS`) |
+| `bq.import.limits` | platform | 100 MB uncompressed, 100:1 ratio, 10,000 ZIP entries; 50 sheets, 20,000 rows and 100 columns per sheet, 200,000 cells, 4,000 characters per cell; 30 s and 384 MB heap per parse; 2 parses at a time (8 waiting) | ARCHITECTURE §4.2 | SECURITY | D2.2 (constant `BQ_IMPORT_LIMITS`) |
 | `valuations.retention.rate` / `.cap_pct` | project | From the contract (for example 10% / 5%) | Contract terms | PRODUCT (CR-TAX-04) | D6.3 |
 | `procurement.min_quotes` | tenant | 3 | Brief §5.3 ("configurable") | PRODUCT | D5.2 |
 | `procurement.three_way_match.qty_tolerance_pct` / `.price_tolerance_pct` | tenant | 0% / 0% | Proposal | PRODUCT | D5.2 |
@@ -135,7 +137,7 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `auth.refresh.idle_days` / `.absolute_days` | platform/role | 14 / 30; privileged roles 7 / 14 | Proposal | SECURITY | D1.3 |
 | `auth.step_up.max_age` | platform | 300 seconds | ARCHITECTURE §7 | SECURITY | D1.3 |
 | `auth.mfa.required_permissions` (was `auth.mfa.required_roles`) | platform | `payroll.approve`, `payments.approve`, `payments.disburse`, `payments.reverse`, `finance.manage`, `config.manage_statutory`, `roles.manage`, `tenancy.manage`, `platform.admin`; so Owner/Director, Finance and Admin by default. A code and database constant (`MFA_REQUIRED_PERMISSIONS`, `app.permissions_require_mfa`), not runtime-configurable: it may only grow, through a migration | Brief §7; ARCHITECTURE §8 | SECURITY | D1.4 |
-| `files.max_upload_mb` / `files.allowed_types` | platform | 20 / images, PDF, XLSX | Proposal | SECURITY | D2.2 |
+| `files.max_upload_mb` / `files.allowed_types` | platform | 20 / images, PDF, XLSX (BQ workbooks: 10 MB, `.xlsx`/`.xls` by content signature, see `bq.import.max_file_mb`) | Proposal | SECURITY | D2.2 (BQ only); general files later |
 | `backup.rpo_minutes` / `backup.rto_hours` | platform | 15 / 4 | Brief §8 | OPS | D9.3 |
 | `backup.retention_days` | platform | 35 | Proposal | OPS | D9.3 |
 
@@ -174,5 +176,7 @@ These are not business rules: they tell each process where its dependencies are.
 | `AUTH_SIGNING_PRIVATE_KEY` | api | ephemeral in development | Base64 Ed25519 PKCS8 PEM that signs access tokens; required in production | SECURITY |
 | `AUTH_NOTIFICATION_TRANSPORT` / `AUTH_MAILPIT_PORT` | api | `disabled` (`development` in `.env.example`) / `8025` | Selects the `NotificationProvider`. `development` delivers every channel (email, SMS, WhatsApp) to loopback Mailpit only, phone channels to `phone-<number>@development.invalid` with a `[DEVELOPMENT ONLY][SMS]` / `[WHATSAPP]` subject prefix, and is refused in production; `disabled` makes every send fail explicitly. Delivery runs after the response, so it never reveals whether an account exists. Real SMS/WhatsApp (Africa's Talking) arrives in D7.3 | SECURITY |
 | `AUTH_BREACHED_PASSWORD_CHECK` | api | `off` (`off` in `.env.example`) | `hibp` checks new passwords (registration, reset) against the Have I Been Pwned range API: only the first five hex characters of the password's SHA-1 leave the server, with `Add-Padding: true` and a two-second timeout. On a timeout or error it **fails open**: the password is accepted and a warning is logged without the password or any part of its hash. Needs outbound HTTPS to `api.pwnedpasswords.com`. Strength checks (`auth.password.min_strength`) apply either way | SECURITY |
+| `MALWARE_SCANNER` | api | `disabled` (`development` in `.env.example`) | Selects the `MalwareScanner` for uploads (ARCHITECTURE §17). `development` is a no-op that records `not_scanned` / `development-noop` on each import and is refused in production; `disabled` refuses BQ uploads with 503 `malware-scanner-unavailable`. ClamAV is a TODO before any pilot | SECURITY |
+| `BQ_VAT_RATE_PERCENT` | api | `16` | Interim source of `bq.vat.rate` (decimal string, 0–100, up to 4 decimals). Snapshot onto each BQ version at commit; changing it never changes committed versions. COMPLIANCE-REVIEW (CR-TAX-01) | COMPLIANCE-REVIEW |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_SERVICE_NAME` | api | unset / `pm-buddy-api` | Tracing starts only when the endpoint is set; needs `pnpm start`, which preloads `telemetry.js` | OPS |
 | `API_INTERNAL_URL` | web | `http://localhost:4000` | Where the web server reaches the API. Also the target of the same-origin `/api/*` rewrite, which is **fixed at build time** (D-16) | OPS |

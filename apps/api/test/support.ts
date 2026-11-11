@@ -4,7 +4,17 @@ import { Secret, TOTP } from "otpauth";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { expect } from "vitest";
+import { z } from "zod";
 import {
+  bqBillResponseSchema,
+  bqImportResponseSchema,
+  bqImportsResponseSchema,
+  bqPreviewResponseSchema,
+  bqResponseSchema,
+  bqSearchResponseSchema,
+  bqSheetRowsResponseSchema,
+  bqTemplateResponseSchema,
+  bqTemplatesResponseSchema,
   auditEventsResponseSchema,
   authResponseSchema,
   csrfResponseSchema,
@@ -95,6 +105,27 @@ export function responseContract(method: string, target: string) {
   if (/^projects\/[^/]+\/milestones\/[^/]+(\/status)?$/.test(path) && method !== "delete")
     return milestoneResponseSchema;
   if (/^projects\/[^/]+\/team$/.test(path)) return projectTeamResponseSchema;
+  const bqMatch = /^projects\/[^/]+\/bq(\/.*)?$/.exec(path);
+  if (bqMatch) {
+    const bq = bqMatch[1] ?? "";
+    if (bq === "") return bqResponseSchema;
+    if (/^\/bills\/[^/]+$/.test(bq)) return bqBillResponseSchema;
+    if (bq === "/search") return bqSearchResponseSchema;
+    if (/^\/export\/(xlsx|pdf)$/.test(bq) || /^\/imports\/[^/]+\/source$/.test(bq))
+      return z.unknown();
+    if (bq === "/imports")
+      return method === "get" ? bqImportsResponseSchema : bqImportResponseSchema;
+    if (/^\/imports\/[^/]+\/sheets\/\d+\/rows$/.test(bq)) return bqSheetRowsResponseSchema;
+    if (/^\/imports\/[^/]+\/preview$/.test(bq)) return bqPreviewResponseSchema;
+    if (
+      /^\/imports\/[^/]+(\/(parse|mapping|apply-template|validate|resolutions|commit|abandon))?$/.test(
+        bq,
+      )
+    )
+      return bqImportResponseSchema;
+    if (bq === "/templates")
+      return method === "get" ? bqTemplatesResponseSchema : bqTemplateResponseSchema;
+  }
   return messageResponseSchema;
 }
 
@@ -131,6 +162,34 @@ export class Browser {
       this.cookies.set(pair.slice(0, position), pair.slice(position + 1));
     }
     return res;
+  }
+
+  /** A multipart upload of one file as the `file` field (as the web app sends it). */
+  async upload(path: string, content: Buffer, fileName: string): Promise<request.Response> {
+    const operation = request(this.app.getHttpServer()).post(`/api/v1/${path}`);
+    operation.set("Cookie", [...this.cookies].map(([key, value]) => `${key}=${value}`).join("; "));
+    operation.set("Origin", origin);
+    operation.set("X-CSRF-Token", this.csrf);
+    const res = await operation.attach("file", content, fileName);
+    if (res.status >= 200 && res.status < 300)
+      expect(
+        responseContract("post", path).safeParse(res.body).success,
+        `Wire contract mismatch for upload ${path}: ${JSON.stringify(res.body)}`,
+      ).toBe(true);
+    return res;
+  }
+
+  /** A GET whose body is a file (exports, sources). */
+  async download(path: string): Promise<request.Response> {
+    return request(this.app.getHttpServer())
+      .get(`/api/v1/${path}`)
+      .set("Cookie", [...this.cookies].map(([key, value]) => `${key}=${value}`).join("; "))
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => callback(null, Buffer.concat(chunks)));
+      });
   }
 
   async initialize() {

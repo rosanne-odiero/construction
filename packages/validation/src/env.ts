@@ -48,6 +48,20 @@ export const apiEnvSchema = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
   OTEL_SERVICE_NAME: z.string().min(1).default("pm-buddy-api"),
 
+  // Malware scanning of uploads (ARCHITECTURE §17). `development` is a no-op that records
+  // "not_scanned" and is refused in production; `disabled` (the default) refuses uploads until a
+  // real scanner (ClamAV, TODO) is configured.
+  MALWARE_SCANNER: z.enum(["development", "disabled"]).default("disabled"),
+  // VAT on BQ grand summaries in percent (`bq.vat.rate`, COMPLIANCE-REVIEW CR-TAX-01). Each BQ
+  // version stores the rate it was built with.
+  BQ_VAT_RATE_PERCENT: z
+    .string()
+    .regex(
+      /^(100(\.0{1,4})?|\d{1,2}(\.\d{1,4})?)$/,
+      "A percentage between 0 and 100 with up to 4 decimals",
+    )
+    .default("16"),
+
   API_DOCS_ENABLED: z.stringbool().default(true),
   HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
 });

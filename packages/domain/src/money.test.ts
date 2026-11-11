@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { fromMinor, lineAmountMinor, percentOfMinor, sumMinor, toMinor } from "./money.js";
+import {
+  decimalToMinor,
+  fromMinor,
+  lineAmountFromRate,
+  lineAmountMinor,
+  percentOfMinor,
+  sumMinor,
+  toMinor,
+} from "./money.js";
 
 describe("toMinor / fromMinor", () => {
   it("converts decimal strings to integer cents and back", () => {
@@ -51,5 +59,31 @@ describe("sumMinor", () => {
 
   it("throws instead of losing precision", () => {
     expect(() => sumMinor([Number.MAX_SAFE_INTEGER, 1])).toThrow(RangeError);
+  });
+});
+
+describe("lineAmountFromRate / decimalToMinor (D2.2 BQ lines)", () => {
+  it("multiplies decimal quantity and rate exactly, rounding half-up per line", () => {
+    expect(lineAmountFromRate("58", "16800")).toBe(97_440_000);
+    // 1.5 × 4.75 = 7.125 → 7.13 half-up (7.12 half-even)
+    expect(lineAmountFromRate("1.5", "4.75")).toBe(713);
+    expect(lineAmountFromRate("1.5", "4.75", "half_even")).toBe(712);
+    // 12.345 × 1,234.50 = 15,239.9025 → 15,239.90
+    expect(lineAmountFromRate("12.345", "1234.5")).toBe(1_523_990);
+    // 42.75 × 15,850.50 = 677,608.875 → 677,608.88
+    expect(lineAmountFromRate("42.75", "15850.5")).toBe(67_760_888);
+    // Floating point would give 0.30000000000000004 here; decimals do not.
+    expect(lineAmountFromRate("0.1", "3")).toBe(30);
+  });
+
+  it("rounds a tie away from zero (as PostgreSQL round(numeric) does)", () => {
+    expect(lineAmountFromRate("0.5", "-0.25")).toBe(-13);
+  });
+
+  it("converts a spreadsheet amount with any number of decimals to cents", () => {
+    expect(decimalToMinor("974400")).toBe(97_440_000);
+    expect(decimalToMinor("7.125")).toBe(713);
+    expect(decimalToMinor("0.004999")).toBe(0);
+    expect(() => decimalToMinor("1,000")).toThrow(TypeError);
   });
 });

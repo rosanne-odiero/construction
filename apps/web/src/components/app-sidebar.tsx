@@ -35,10 +35,13 @@ export function AppSidebar({ companyName }: { companyName?: string }) {
   const pathname = usePathname();
   const t = useTranslations("nav");
 
+  // Live project pages (including a project's BQ) belong to Projects; the BQ entry opens the D0
+  // prototype BQ.
   const isActive = (href: string) =>
     href === "/projects"
       ? pathname === "/projects" ||
-        (/^\/(prototype\/)?projects\/[^/]+(\/sites(\/.*)?)?$/.test(pathname) &&
+        /^\/projects\/[^/]+(\/.*)?$/.test(pathname) ||
+        (/^\/prototype\/projects\/[^/]+(\/sites(\/.*)?)?$/.test(pathname) &&
           !pathname.includes("/bq"))
       : pathname.startsWith(href);
 

@@ -12,6 +12,6 @@ import { WbsService } from "./wbs.service.js";
   imports: [IdentityModule],
   controllers: [ProjectsController],
   providers: [ProjectAccess, ProjectsService, SitesService, TeamService, WbsService],
-  exports: [ProjectsService, SitesService],
+  exports: [ProjectAccess, ProjectsService, SitesService],
 })
 export class ProjectsModule {}

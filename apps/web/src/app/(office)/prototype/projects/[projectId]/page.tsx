@@ -82,7 +82,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           <Link href={`/prototype/projects/${project.id}`}>{t("tabs.overview")}</Link>
         </Button>
         <Button asChild size="sm" variant="outline">
-          <Link href={isRuiru ? `/projects/${project.id}/bq` : "/soon/valuations"}>
+          <Link href={isRuiru ? `/prototype/projects/${project.id}/bq` : "/soon/valuations"}>
             <FileSpreadsheet aria-hidden /> {t("tabs.bq")}
           </Link>
         </Button>

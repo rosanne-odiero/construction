@@ -120,15 +120,16 @@ model RecoveryCode {
 }
 
 model Tenant {
-  id        String       @id @default(uuid()) @map("tenant_id") @db.Uuid
-  name      String       @db.VarChar(150)
-  createdBy String       @map("created_by") @db.Uuid
-  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  members   Membership[]
-  projects  Project[]
-  invites   Invitation[]
-  audit     AuditEvent[]
-  roles     TenantRole[]
+  id          String              @id @default(uuid()) @map("tenant_id") @db.Uuid
+  name        String              @db.VarChar(150)
+  createdBy   String              @map("created_by") @db.Uuid
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  members     Membership[]
+  projects    Project[]
+  invites     Invitation[]
+  audit       AuditEvent[]
+  roles       TenantRole[]
+  bqTemplates BqMappingTemplate[]
 
   @@map("tenants")
 }
@@ -203,6 +204,8 @@ model Project {
   sites            Site[]
   wbsNodes         WbsNode[]
   milestones       Milestone[]
+  bqs              Bq[]
+  bqImports        BqImport[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -377,4 +380,187 @@ model AuditEvent {
 
   @@unique([tenantId, sequence])
   @@map("audit_events")
+}
+
+// A saved BQ column mapping (D2.2), matched to a sheet by its header signature. Columns are offsets
+// from the first header cell; dataOffset is firstDataRow − headerRow.
+model BqMappingTemplate {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  name       String   @db.VarChar(100)
+  signature  String   @db.VarChar(500)
+  columns    Json
+  dataOffset Int      @map("data_offset")
+  createdBy  String   @map("created_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, name])
+  @@index([tenantId, signature])
+  @@map("bq_mapping_templates")
+}
+
+// A project's Bill of Quantities (one per project); its versions carry the history.
+model Bq {
+  id        String      @id @default(uuid(7)) @db.Uuid
+  tenantId  String      @map("tenant_id") @db.Uuid
+  projectId String      @map("project_id") @db.Uuid
+  name      String      @db.VarChar(150)
+  createdBy String      @map("created_by") @db.Uuid
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  project   Project     @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  versions  BqVersion[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId])
+  @@unique([tenantId, projectId, id])
+  @@map("bqs")
+}
+
+// A BQ version. D2.2 creates version 1 (original contract) as a draft; totals are checked against
+// the bills and items when the transaction commits (app.check_bq_version_totals).
+model BqVersion {
+  id              String     @id @default(uuid(7)) @db.Uuid
+  tenantId        String     @map("tenant_id") @db.Uuid
+  projectId       String     @map("project_id") @db.Uuid
+  bqId            String     @map("bq_id") @db.Uuid
+  versionNo       Int        @map("version_no")
+  status          String     @default("draft") @db.VarChar(20)
+  source          String     @default("import") @db.VarChar(20)
+  vatRatePercent  Decimal    @map("vat_rate_percent") @db.Decimal(7, 4)
+  vatRuleKey      String     @map("vat_rule_key") @db.VarChar(40)
+  vatRuleStatus   String     @map("vat_rule_status") @db.VarChar(30)
+  rounding        String     @db.VarChar(20)
+  subtotalMinor   BigInt     @map("subtotal_minor")
+  vatMinor        BigInt     @map("vat_minor")
+  grandTotalMinor BigInt     @map("grand_total_minor")
+  billCount       Int        @map("bill_count")
+  itemCount       Int        @map("item_count")
+  createdBy       String     @map("created_by") @db.Uuid
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy       String     @map("updated_by") @db.Uuid
+  updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  version         Int        @default(1)
+  bq              Bq         @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Cascade)
+  bills           BqBill[]
+  imports         BqImport[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, bqId, versionNo])
+  @@index([tenantId, projectId])
+  @@map("bq_versions")
+}
+
+model BqBill {
+  id              String      @id @default(uuid(7)) @db.Uuid
+  tenantId        String      @map("tenant_id") @db.Uuid
+  versionId       String      @map("version_id") @db.Uuid
+  number          String      @db.VarChar(20)
+  title           String      @db.VarChar(200)
+  kind            String      @db.VarChar(20)
+  sortOrder       Int         @map("sort_order")
+  totalMinor      BigInt      @map("total_minor")
+  sheetTotalMinor BigInt?     @map("sheet_total_minor")
+  sourceSheet     String      @map("source_sheet") @db.VarChar(100)
+  version         BqVersion   @relation(fields: [tenantId, versionId], references: [tenantId, id], onDelete: Cascade)
+  sections        BqSection[]
+  items           BqItem[]
+
+  @@unique([tenantId, versionId, id])
+  @@unique([tenantId, versionId, number])
+  @@index([tenantId, versionId, sortOrder])
+  @@map("bq_bills")
+}
+
+// A section/element heading within a bill; notes keep preamble text found under the heading.
+model BqSection {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  versionId  String   @map("version_id") @db.Uuid
+  billId     String   @map("bill_id") @db.Uuid
+  code       String?  @db.VarChar(30)
+  title      String?  @db.VarChar(300)
+  notes      String?  @db.VarChar(4000)
+  sortOrder  Int      @map("sort_order")
+  totalMinor BigInt   @map("total_minor")
+  bill       BqBill   @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
+  items      BqItem[]
+
+  @@unique([tenantId, versionId, id])
+  @@index([tenantId, versionId, billId, sortOrder])
+  @@map("bq_sections")
+}
+
+// A BQ item. Quantity and rate are exact decimals; amounts are KES minor units. amountSource says
+// how the amount was obtained (CHECK bq_items_amount_rule_check); the sheet's amount is kept apart.
+model BqItem {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  tenantId         String     @map("tenant_id") @db.Uuid
+  versionId        String     @map("version_id") @db.Uuid
+  billId           String     @map("bill_id") @db.Uuid
+  sectionId        String?    @map("section_id") @db.Uuid
+  lineageId        String     @map("lineage_id") @db.Uuid
+  ref              String?    @db.VarChar(30)
+  description      String     @db.VarChar(4000)
+  unit             String?    @db.VarChar(10)
+  unitRaw          String?    @map("unit_raw") @db.VarChar(30)
+  quantity         Decimal?   @db.Decimal(20, 4)
+  rate             Decimal?   @db.Decimal(20, 4)
+  amountMinor      BigInt     @map("amount_minor")
+  sheetAmountMinor BigInt?    @map("sheet_amount_minor")
+  amountSource     String     @map("amount_source") @db.VarChar(20)
+  overrideReason   String?    @map("override_reason") @db.VarChar(500)
+  kind             String     @db.VarChar(20)
+  notes            String?    @db.VarChar(1000)
+  sourceSheet      String     @map("source_sheet") @db.VarChar(100)
+  sourceRow        Int        @map("source_row")
+  hasFormula       Boolean    @default(false) @map("has_formula")
+  sortOrder        Int        @map("sort_order")
+  bill             BqBill     @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
+  section          BqSection? @relation(fields: [tenantId, versionId, sectionId], references: [tenantId, versionId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, versionId, billId, sortOrder])
+  @@index([tenantId, versionId, sectionId])
+  @@map("bq_items")
+}
+
+// An uploaded BQ workbook and its import state (uploaded → parsed → mapped → validated →
+// committed, or failed/abandoned; superseded when a later import replaces the draft). Source
+// columns never change (app.guard_bq_import); imports are never deleted.
+model BqImport {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  tenantId      String     @map("tenant_id") @db.Uuid
+  projectId     String     @map("project_id") @db.Uuid
+  status        String     @default("uploaded") @db.VarChar(20)
+  fileName      String     @map("file_name") @db.VarChar(150)
+  fileType      String     @map("file_type") @db.VarChar(4)
+  fileSizeBytes Int        @map("file_size_bytes")
+  fileSha256    String     @map("file_sha256") @db.Char(64)
+  sourceKey     String     @map("source_key") @db.VarChar(300)
+  parsedKey     String?    @map("parsed_key") @db.VarChar(300)
+  scanStatus    String     @map("scan_status") @db.VarChar(20)
+  scanEngine    String     @map("scan_engine") @db.VarChar(60)
+  scannedAt     DateTime   @map("scanned_at") @db.Timestamptz
+  failureCode   String?    @map("failure_code") @db.VarChar(40)
+  sheets        Json?
+  mapping       Json?
+  resolutions   Json       @default("{\"rows\": [], \"accepted\": []}")
+  report        Json?
+  reportDigest  String?    @map("report_digest") @db.Char(64)
+  bqVersionId   String?    @map("bq_version_id") @db.Uuid
+  uploadedBy    String     @map("uploaded_by") @db.Uuid
+  committedBy   String?    @map("committed_by") @db.Uuid
+  committedAt   DateTime?  @map("committed_at") @db.Timestamptz
+  version       Int        @default(1)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project       Project    @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  bqVersion     BqVersion? @relation(fields: [tenantId, bqVersionId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId, createdAt])
+  @@index([tenantId, bqVersionId])
+  @@map("bq_imports")
 }

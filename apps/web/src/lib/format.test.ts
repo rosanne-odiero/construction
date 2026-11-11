@@ -60,3 +60,25 @@ describe("project and geofence formats", () => {
     expect(formatBasisPoints(10_000)).toBe("100%");
   });
 });
+
+describe("BQ decimal strings", () => {
+  it("groups quantities and rates from the API without converting them to floats", async () => {
+    const { formatDecimalString } = await import("./format");
+    expect(formatDecimalString("1250000")).toBe("1,250,000");
+    expect(formatDecimalString("1234.5678")).toBe("1,234.5678");
+    expect(formatDecimalString("0.0001")).toBe("0.0001");
+    expect(formatDecimalString("-12.5")).toBe("\u221212.5");
+    expect(formatDecimalString("123456789012345.25")).toBe("123,456,789,012,345.25");
+  });
+
+  it("turns report amounts in KES into exact minor units, or nothing", async () => {
+    const { decimalKesToMinor } = await import("./format");
+    expect(decimalKesToMinor("947400.00")).toBe(94_740_000);
+    expect(decimalKesToMinor("974400")).toBe(97_440_000);
+    expect(decimalKesToMinor("7.1")).toBe(710);
+    expect(decimalKesToMinor("-0.05")).toBe(-5);
+    expect(decimalKesToMinor("1.005")).toBeNull();
+    expect(decimalKesToMinor("1e3")).toBeNull();
+    expect(decimalKesToMinor("")).toBeNull();
+  });
+});

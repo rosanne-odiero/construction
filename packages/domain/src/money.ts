@@ -62,3 +62,23 @@ export function percentOfMinor(
 export function sumMinor(values: readonly MinorUnits[]): MinorUnits {
   return toSafeMinor(values.reduce((acc, v) => acc.plus(v), new Decimal(0)));
 }
+
+/**
+ * BQ line amount from decimal strings (D2.2): quantity × rate (rate in KES, up to four decimals),
+ * rounded per line to the cent with `mode` (default half-up, which rounds a tie away from zero,
+ * like PostgreSQL `round(numeric)`). A bill total is the sum of its rounded lines.
+ */
+export function lineAmountFromRate(
+  quantity: string,
+  rate: string,
+  mode: RoundingMode = "half_up",
+): MinorUnits {
+  const qty = parseDecimal(quantity, "quantity");
+  const unitRate = parseDecimal(rate, "rate");
+  return toSafeMinor(qty.times(unitRate).times(100).toDecimalPlaces(0, rounding(mode)));
+}
+
+/** A decimal KES amount with any number of decimals → minor units rounded to the cent. */
+export function decimalToMinor(amount: string, mode: RoundingMode = "half_up"): MinorUnits {
+  return toSafeMinor(parseDecimal(amount, "amount").times(100).toDecimalPlaces(0, rounding(mode)));
+}

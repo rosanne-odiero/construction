@@ -22,29 +22,40 @@ export class TenantScope {
     return { userId: principal.user.id, tenantId, requestId: requestId(req) };
   }
 
-  /** `mutation` serialises changes per company by locking the tenant row first. */
+  /**
+   * `mutation` serialises changes per company by locking the tenant row first; `timeoutMs`
+   * extends the transaction limit (default 10 s) for long writes.
+   */
   async run<T>(
     principal: Principal,
     req: Request,
     operation: (scope: Scope) => Promise<T>,
     mutation = false,
+    timeoutMs?: number,
   ): Promise<T> {
     this.auth.requireMfa(principal);
     const tenantId = principal.session.activeTenantId;
     if (!tenantId) throw new ForbiddenException("Select a tenant first");
-    return this.db.run(this.context(principal, req), async (tx) => {
-      if (mutation) {
-        await tx.$queryRaw`SELECT tenant_id FROM tenants WHERE tenant_id = ${tenantId}::uuid FOR UPDATE`;
-      }
-      await tx.$queryRaw`SELECT user_id FROM memberships WHERE tenant_id = ${tenantId}::uuid
+    return this.db.run(
+      this.context(principal, req),
+      async (tx) => {
+        if (mutation) {
+          await tx.$queryRaw`SELECT tenant_id FROM tenants WHERE tenant_id = ${tenantId}::uuid FOR UPDATE`;
+        }
+        await tx.$queryRaw`SELECT user_id FROM memberships WHERE tenant_id = ${tenantId}::uuid
         AND user_id = ${principal.user.id}::uuid FOR SHARE`;
-      const access = await this.policy.load(tx, tenantId, principal.user.id);
-      if (!access) throw new ForbiddenException("Tenant membership required");
-      if (requiresMfa(access) && (!principal.user.mfaEnabled || !principal.session.mfaVerifiedAt)) {
-        throw new ForbiddenException("This role requires MFA");
-      }
-      return operation({ tx, principal, access });
-    });
+        const access = await this.policy.load(tx, tenantId, principal.user.id);
+        if (!access) throw new ForbiddenException("Tenant membership required");
+        if (
+          requiresMfa(access) &&
+          (!principal.user.mfaEnabled || !principal.session.mfaVerifiedAt)
+        ) {
+          throw new ForbiddenException("This role requires MFA");
+        }
+        return operation({ tx, principal, access });
+      },
+      timeoutMs,
+    );
   }
 
   /** Appends an audit event. Metadata must hold safe summaries only, never secrets. */

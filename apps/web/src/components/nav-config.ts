@@ -57,7 +57,7 @@ export const navGroups: {
   {
     key: "commercial",
     items: [
-      { key: "bq", href: "/projects/ruiru-heights/bq", icon: FileSpreadsheet },
+      { key: "bq", href: "/prototype/projects/ruiru-heights/bq", icon: FileSpreadsheet },
       { key: "valuations", href: "/soon/valuations", icon: Calculator, phase: 6 },
     ],
   },
@@ -108,10 +108,10 @@ export const comingSoonSections = {
 export type ComingSoonSection = keyof typeof comingSoonSections;
 
 /**
- * Routes backed by the real API (D2.1): the projects list, project pages and site editors. The BQ
- * screens under a project stay prototype until D2.2.
+ * Routes backed by the real API: the projects list, project pages and site editors (D2.1), and a
+ * project's BQ viewer and import wizard (D2.2).
  */
 export function isLiveRoute(pathname: string): boolean {
   if (pathname === "/projects") return true;
-  return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?)?$/.test(pathname);
+  return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/import)?)?$/.test(pathname);
 }

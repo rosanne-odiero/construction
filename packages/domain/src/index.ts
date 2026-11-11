@@ -32,6 +32,8 @@ export {
   lineAmountMinor,
   percentOfMinor,
   sumMinor,
+  lineAmountFromRate,
+  decimalToMinor,
   toMinor,
   type MinorUnits,
   type RoundingMode,
@@ -72,3 +74,4 @@ export {
   type WbsWeightGroup,
   type WbsWeightNode,
 } from "./wbs.js";
+export * from "./bq/index.js";

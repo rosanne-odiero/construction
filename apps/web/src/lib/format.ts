@@ -43,6 +43,22 @@ export function formatForeign(
   }).format(amountMinorKES / 100 / kesPerUnit);
 }
 
+/** A decimal string (quantity or rate) with thousands separators, digits unchanged. */
+export function formatDecimalString(value: string): string {
+  const negative = value.startsWith("-");
+  const [whole = "0", fraction] = value.replace(/^-/, "").split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${negative ? MINUS : ""}${grouped}${fraction ? `.${fraction}` : ""}`;
+}
+
+/** "947400.00" (a report value in KES) → integer minor units, without floating point. */
+export function decimalKesToMinor(value: string): number | null {
+  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value);
+  if (!match) return null;
+  const minor = Number(match[2]) * 100 + Number((match[3] ?? "").padEnd(2, "0"));
+  return match[1] ? -minor : minor;
+}
+
 export function formatNumber(value: number): string {
   return plainNumber.format(value);
 }

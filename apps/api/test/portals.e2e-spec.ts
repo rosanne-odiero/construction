@@ -13,11 +13,13 @@ import {
   siteResponseSchema,
   tenantCreatedResponseSchema,
   workerPortalResponseSchema,
+  roleResponseSchema,
 } from "@pm-buddy/validation";
 import { AppModule } from "../src/app.module.js";
 import { configureApp } from "../src/app.setup.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
+import { PIN_DAILY_FAILURES } from "../src/modules/identity/pin.service.js";
 import { Browser, notifications, password } from "./support.js";
 
 const PIN = "274915";
@@ -300,6 +302,114 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     expect((await login(PIN)).status).toBe(401);
     expect((await login("530718")).status).toBe(200);
     expect((await reset("648203")).status).toBe(401); // single use
+  });
+
+  it("counts only wrong PINs against the daily budget, which a PIN reset clears", async () => {
+    // Invited by the owner: the project manager's invitation limit is left to the other tests.
+    const number = phone();
+    const invited = await owner.call("post", `projects/${p1}/labourers/invitations`, {
+      identifier: number,
+    });
+    expect(invited.status, JSON.stringify(invited.body)).toBe(201);
+    const joined = await (
+      await browser()
+    ).call("post", "auth/pin/join", {
+      identifier: number,
+      token: linkToken(number),
+      displayName: "Njeri Kibarua",
+      pin: PIN,
+    });
+    expect(joined.status, JSON.stringify(joined.body)).toBe(200);
+    const security = app.get(AuthSecurity);
+    const key = `pin-day:key:${number}`;
+    const signIn = async (pin: string) =>
+      (await browser()).call("post", "auth/pin/login", { identifier: number, pin });
+    for (let count = 0; count < PIN_DAILY_FAILURES - 1; count++)
+      await security.increment(key, 86_400);
+    // A correct PIN is never blocked by an unspent budget and does not spend it.
+    expect((await signIn(PIN)).status).toBe(200);
+    expect(await security.counted(key)).toBe(PIN_DAILY_FAILURES - 1);
+    expect((await signIn("802461")).status).toBe(401);
+    expect(await security.counted(key)).toBe(PIN_DAILY_FAILURES);
+    // Spent: even the right PIN needs a reset first, and the reset clears the budget.
+    const blocked = await signIn(PIN);
+    expect([blocked.status, code(blocked)]).toEqual([429, "pin-reset-required"]);
+    const forgot = await (
+      await browser()
+    ).call("post", "auth/password/forgot", { identifier: number });
+    expect(forgot.status).toBe(200);
+    await vi.waitFor(() => expect(lastText(number)).toContain("/worker/pin?token="));
+    const reset = await (
+      await browser()
+    ).call("post", "auth/pin/reset", { token: linkToken(number), pin: "530718" });
+    expect(reset.status, JSON.stringify(reset.body)).toBe(200);
+    expect(await security.counted(key)).toBe(0);
+    expect((await signIn("530718")).status).toBe(200);
+  });
+
+  it("keeps PIN sessions to roles that hold only the labourer portal", async () => {
+    await fresh(owner);
+    const role = roleResponseSchema.parse(
+      (
+        await owner.call("post", "tenants/current/roles", {
+          name: "Senior labourer",
+          permissions: ["portal.worker", "projects.view", "bq.view"],
+        })
+      ).body,
+    ).role;
+    const number = phone();
+    await fresh(owner);
+    const invited = await owner.call("post", "tenants/current/invitations", {
+      identifier: number,
+      role: role.id,
+      projectIds: [p1],
+    });
+    expect(invited.status, JSON.stringify(invited.body)).toBe(201);
+    const token = lastText(number).match(/Invitation token: ([A-Za-z0-9_-]+)/)?.[1];
+    const joined = await (
+      await browser()
+    ).call("post", "auth/pin/join", { identifier: number, token, displayName: "Wekesa", pin: PIN });
+    expect(code(joined)).toBe("pin-session-limited");
+
+    // A PIN session whose role later gains view permissions loses access too.
+    const plain = roleResponseSchema.parse(
+      (
+        await owner.call("post", "tenants/current/roles", {
+          name: "Site labourer",
+          permissions: ["portal.worker"],
+        })
+      ).body,
+    ).role;
+    const second = phone();
+    await fresh(owner);
+    expect(
+      (
+        await owner.call("post", "tenants/current/invitations", {
+          identifier: second,
+          role: plain.id,
+          projectIds: [p1],
+        })
+      ).status,
+    ).toBe(201);
+    const labourer = await browser();
+    const res = await labourer.call("post", "auth/pin/join", {
+      identifier: second,
+      token: lastText(second).match(/Invitation token: ([A-Za-z0-9_-]+)/)?.[1],
+      displayName: "Chebet",
+      pin: PIN,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect((await labourer.call("get", "portal/worker")).status).toBe(200);
+    await fresh(owner);
+    expect(
+      (
+        await owner.call("patch", `tenants/current/roles/${plain.id}`, {
+          permissions: ["portal.worker", "projects.view", "bq.view"],
+        })
+      ).status,
+    ).toBe(200);
+    expect(code(await labourer.call("get", "projects"))).toBe("pin-session-limited");
+    expect(code(await labourer.call("get", `projects/${p1}`))).toBe("pin-session-limited");
   });
 
   it("asks existing accounts to sign in and accept, and never lets a PIN session accept staff roles", async () => {

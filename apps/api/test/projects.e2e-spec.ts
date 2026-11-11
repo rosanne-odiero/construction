@@ -1180,6 +1180,18 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         assignments: await tx.projectMembership.count({ where: { tenantId } }),
         buildups: await tx.rateBuildup.count({ where: { tenantId } }),
         buildupLines: await tx.rateBuildupLine.count({ where: { tenantId } }),
+        materials: await tx.material.count({ where: { tenantId } }),
+        conversions: await tx.unitConversion.count({ where: { tenantId } }),
+        suppliers: await tx.supplier.count({ where: { tenantId } }),
+        prices: await tx.materialPrice.count({ where: { tenantId } }),
+        alerts: await tx.materialPrice.count({
+          where: { tenantId, alertState: "above_threshold" },
+        }),
+        payouts: await tx.supplierPayoutVersion.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { status: "asc" },
+        }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1188,7 +1200,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     ).id;
     const afterFirst = await counts(first.company.id, ownerId);
     expect(afterFirst).toEqual({
-      members: 3,
+      members: 4,
       projects: 3,
       sites: 3,
       geofences: 3,
@@ -1198,6 +1210,15 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       assignments: 3,
       buildups: 1,
       buildupLines: 5,
+      // D5.1: the starter catalogue (21 materials, 6 factors) plus 2 supplier trip factors; three
+      // suppliers; 8 prices with one alert (cement KES 800 → 900: +12.5 %); one Paybill
+      // verified by the finance user and one Till/bank proposal pending.
+      materials: 21,
+      conversions: 8,
+      suppliers: 3,
+      prices: 8,
+      alerts: 1,
+      payouts: [{ status: "pending" }, { status: "verified" }],
     });
     const second = await seedDemo(app);
     expect(second.company).toEqual({ ...first.company, created: false });
@@ -1220,6 +1241,14 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         created: false,
       },
     ]);
+    expect(second.procurement).toEqual({
+      materials: { created: 0, existing: 21 },
+      suppliers: [
+        { code: "SUP-0001", name: "Mlolongo Quarry (synthetic)", created: false },
+        { code: "SUP-0002", name: "Athi River Steel (synthetic)", created: false },
+        { code: "SUP-0003", name: "Kitengela Hardware (synthetic)", created: false },
+      ],
+    });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
   });
 });

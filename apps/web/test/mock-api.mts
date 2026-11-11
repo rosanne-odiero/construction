@@ -70,6 +70,11 @@ import {
 
 import { handleBq, initialProjectBq, type BqState } from "./mock-bq.mts";
 import { handleBuildups, initialBuildups } from "./mock-buildups.mts";
+import {
+  handleProcurement,
+  initialProcurement,
+  type ProcurementState,
+} from "./mock-procurement.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -81,16 +86,17 @@ const OWNER_ID = "21000000-0000-4000-8000-000000000001";
 const PM_ID = "21000000-0000-4000-8000-000000000002";
 const AGENT_ID = "21000000-0000-4000-8000-000000000003";
 const QS_ID = "21000000-0000-4000-8000-000000000004";
+const FINANCE_ID = "21000000-0000-4000-8000-000000000005";
 const NOW = "2026-11-10T07:45:00.000Z";
 
-type Persona = "owner" | "agent" | "pm";
+type Persona = "owner" | "agent" | "pm" | "finance";
 const PERSONAS: Record<
   Persona,
   {
     id: string;
     identifier: string;
     displayName: string;
-    role: "owner" | "site_agent" | "project_manager";
+    role: "owner" | "site_agent" | "project_manager" | "finance";
     mfa: boolean;
   }
 > = {
@@ -115,7 +121,16 @@ const PERSONAS: Record<
     role: "project_manager",
     mfa: true,
   },
+  finance: {
+    id: FINANCE_ID,
+    identifier: "finance@jenga-bora.example.test",
+    displayName: "Daniel Mwangi",
+    role: "finance",
+    mfa: true,
+  },
 };
+/** Company-wide memberships (the others are limited to their project assignments). */
+const isTenantWide = (persona: Persona) => persona === "owner" || persona === "finance";
 type TeamEntry = {
   userId: string;
   displayName: string;
@@ -136,6 +151,7 @@ type State = {
   projects: ProjectState[];
   team: Map<string, TeamEntry[]>;
   bq: BqState;
+  procurement: ProcurementState;
 };
 
 const states = new Map<string, State>();
@@ -332,6 +348,7 @@ function fixture(persona: Persona): State {
       templates: [],
       buildups: initialBuildups(),
     },
+    procurement: initialProcurement(),
     projects: [ruiru, syokimau],
     team: new Map([
       [
@@ -395,9 +412,10 @@ const cookie = (req: IncomingMessage, name: string) =>
 
 function stateFor(req: IncomingMessage): State {
   const token = cookie(req, "pmb_at");
-  const [persona, session] = token?.split(".") ?? [];
-  if (!token || !session || (persona !== "owner" && persona !== "agent" && persona !== "pm"))
+  const [name, session] = token?.split(".") ?? [];
+  if (!token || !session || !name || !Object.hasOwn(PERSONAS, name))
     throw new HttpError(401, "unauthorized");
+  const persona = name as Persona;
   let state = states.get(session);
   if (!state) {
     state = fixture(persona);
@@ -580,7 +598,7 @@ async function handle(
             name: "Jenga Bora Builders Ltd",
             role: PERSONAS[state.persona].role,
             roleName: null,
-            tenantWide: state.persona === "owner",
+            tenantWide: isTenantWide(state.persona),
             permissions: [...rolePermissions(state)],
           },
         ],
@@ -620,6 +638,31 @@ async function handle(
     ]);
     return { status: 201, body: { project }, schema: projectResponseSchema };
   }
+  const procurement = handleProcurement(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      // Company-wide members hold their role; others hold company-level keys plus what a
+      // project assignment grants somewhere (the API's AccessPolicy).
+      permissions: isTenantWide(state.persona)
+        ? rolePermissions(state)
+        : [
+            ...new Set([
+              ...rolePermissions(state).filter((key) => !isProjectPermission(key)),
+              ...state.projects.flatMap((entry) => projectPermissions(state, entry)),
+            ]),
+          ],
+      tenantWide: isTenantWide(state.persona),
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      requireStepUp: () => requireStepUp(state),
+    },
+    state.procurement,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (procurement) return procurement;
   const buildups = handleBuildups(
     {
       fail: (status, code) => new HttpError(status, code),

@@ -120,17 +120,21 @@ model RecoveryCode {
 }
 
 model Tenant {
-  id          String              @id @default(uuid()) @map("tenant_id") @db.Uuid
-  name        String              @db.VarChar(150)
-  createdBy   String              @map("created_by") @db.Uuid
-  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
-  members     Membership[]
-  projects    Project[]
-  invites     Invitation[]
-  audit       AuditEvent[]
-  roles       TenantRole[]
-  bqTemplates BqMappingTemplate[]
-  buildups    RateBuildup[]
+  id                  String               @id @default(uuid()) @map("tenant_id") @db.Uuid
+  name                String               @db.VarChar(150)
+  createdBy           String               @map("created_by") @db.Uuid
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  members             Membership[]
+  projects            Project[]
+  invites             Invitation[]
+  audit               AuditEvent[]
+  roles               TenantRole[]
+  bqTemplates         BqMappingTemplate[]
+  buildups            RateBuildup[]
+  units               Unit[]
+  materials           Material[]
+  suppliers           Supplier[]
+  procurementSettings ProcurementSettings?
 
   @@map("tenants")
 }
@@ -819,4 +823,256 @@ model BqItemRateLink {
   @@index([tenantId, bqId, itemLineageId])
   @@index([tenantId, buildupId])
   @@map("bq_item_rate_links")
+}
+
+// D5.1 procurement catalogue (ARCHITECTURE §4.4). Standard units live in code
+// (packages/domain STANDARD_UNITS); a company adds its own units here (immutable, only archived).
+model Unit {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  code           String   @db.VarChar(20)
+  name           String   @db.VarChar(60)
+  nameSw         String?  @map("name_sw") @db.VarChar(60)
+  dimension      String   @db.VarChar(10)
+  equalsQuantity Decimal? @map("equals_quantity") @db.Decimal(20, 6)
+  equalsUnit     String?  @map("equals_unit") @db.VarChar(20)
+  status         String   @default("active") @db.VarChar(10)
+  version        Int      @default(1)
+  createdBy      String   @map("created_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy      String   @map("updated_by") @db.Uuid
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("units")
+}
+
+// A catalogue material with its base unit and category attributes (bar diameter, gauge…).
+model Material {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  code        String           @db.VarChar(20)
+  name        String           @db.Citext
+  nameSw      String?          @map("name_sw") @db.VarChar(150)
+  category    String           @db.VarChar(20)
+  baseUnit    String           @map("base_unit") @db.VarChar(20)
+  spec        String?          @db.VarChar(200)
+  attributes  Json             @default("{}")
+  notes       String?          @db.VarChar(2000)
+  status      String           @default("active") @db.VarChar(10)
+  version     Int              @default(1)
+  createdBy   String           @map("created_by") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy   String           @map("updated_by") @db.Uuid
+  updatedAt   DateTime         @default(now()) @map("updated_at") @db.Timestamptz
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversions UnitConversion[]
+  prices      MaterialPrice[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@unique([tenantId, name])
+  @@index([tenantId, category])
+  @@map("materials")
+}
+
+// An explicit, effective-dated factor for one material (optionally one supplier):
+// from_quantity from_unit = to_quantity to_unit. Never edited; only ended.
+model UnitConversion {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  materialId    String    @map("material_id") @db.Uuid
+  supplierId    String?   @map("supplier_id") @db.Uuid
+  fromUnit      String    @map("from_unit") @db.VarChar(20)
+  fromQuantity  Decimal   @map("from_quantity") @db.Decimal(20, 6)
+  toUnit        String    @map("to_unit") @db.VarChar(20)
+  toQuantity    Decimal   @map("to_quantity") @db.Decimal(20, 6)
+  pairKey       String    @map("pair_key") @db.VarChar(60)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  note          String?   @db.VarChar(300)
+  createdBy     String    @map("created_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  endedBy       String?   @map("ended_by") @db.Uuid
+  endedAt       DateTime? @map("ended_at") @db.Timestamptz
+  material      Material  @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Restrict)
+  supplier      Supplier? @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, materialId])
+  @@map("unit_conversions")
+}
+
+// A supplier: the KRA PIN is stored encrypted with a blind index (unique per company) and a mask.
+model Supplier {
+  id               String                  @id @default(uuid(7)) @db.Uuid
+  tenantId         String                  @map("tenant_id") @db.Uuid
+  code             String                  @db.VarChar(20)
+  legalName        String                  @map("legal_name") @db.VarChar(200)
+  tradingName      String?                 @map("trading_name") @db.VarChar(200)
+  kraPinEnc        Bytes?                  @map("kra_pin_enc")
+  kraPinBidx       String?                 @map("kra_pin_bidx") @db.Char(64)
+  kraPinMasked     String?                 @map("kra_pin_masked") @db.VarChar(16)
+  etimsStatus      String                  @default("unknown") @map("etims_status") @db.VarChar(20)
+  etimsCheckedOn   DateTime?               @map("etims_checked_on") @db.Date
+  status           String                  @default("active") @db.VarChar(10)
+  statusReason     String?                 @map("status_reason") @db.VarChar(500)
+  creditDays       Int                     @default(0) @map("credit_days")
+  creditLimitMinor BigInt?                 @map("credit_limit_minor")
+  notes            String?                 @db.VarChar(2000)
+  version          Int                     @default(1)
+  createdBy        String                  @map("created_by") @db.Uuid
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy        String                  @map("updated_by") @db.Uuid
+  updatedAt        DateTime                @default(now()) @map("updated_at") @db.Timestamptz
+  tenant           Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contacts         SupplierContact[]
+  phoneChanges     SupplierPhoneChange[]
+  payoutVersions   SupplierPayoutVersion[]
+  conversions      UnitConversion[]
+  prices           MaterialPrice[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@unique([tenantId, kraPinBidx])
+  @@map("suppliers")
+}
+
+// A supplier contact; the phone is encrypted with a blind index; phone_changed_* are set by the
+// database (app.record_contact_phone_change). At most one primary contact (partial index in SQL).
+model SupplierContact {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  supplierId     String    @map("supplier_id") @db.Uuid
+  name           String    @db.VarChar(100)
+  role           String?   @db.VarChar(60)
+  phoneEnc       Bytes?    @map("phone_enc")
+  phoneBidx      String?   @map("phone_bidx") @db.Char(64)
+  phoneMasked    String?   @map("phone_masked") @db.VarChar(20)
+  phoneChangedBy String?   @map("phone_changed_by") @db.Uuid
+  phoneChangedAt DateTime? @map("phone_changed_at") @db.Timestamptz
+  email          String?   @db.VarChar(254)
+  isPrimary      Boolean   @default(false) @map("is_primary")
+  sortOrder      Int       @default(0) @map("sort_order")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+  supplier       Supplier  @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, supplierId])
+  @@index([tenantId, phoneBidx])
+  @@map("supplier_contacts")
+}
+
+// Every change to a supplier contact's phone (append-only, written by a trigger).
+model SupplierPhoneChange {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  supplierId String   @map("supplier_id") @db.Uuid
+  contactId  String   @map("contact_id") @db.Uuid
+  action     String   @db.VarChar(10)
+  changedBy  String?  @map("changed_by") @db.Uuid
+  changedAt  DateTime @default(now()) @map("changed_at") @db.Timestamptz
+  supplier   Supplier @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, supplierId, changedAt])
+  @@map("supplier_phone_changes")
+}
+
+// One immutable version of a supplier's payout details (maker-checker): pending until a person
+// who is not a contributor verifies it; a newer proposal supersedes it. One current version per
+// supplier (partial unique index in SQL).
+model SupplierPayoutVersion {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  supplierId           String    @map("supplier_id") @db.Uuid
+  versionNo            Int       @map("version_no")
+  status               String    @default("pending") @db.VarChar(12)
+  mpesaKind            String    @map("mpesa_kind") @db.VarChar(10)
+  paybillNumber        String?   @map("paybill_number") @db.VarChar(7)
+  accountReference     String?   @map("account_reference") @db.VarChar(20)
+  tillNumber           String?   @map("till_number") @db.VarChar(7)
+  bankName             String?   @map("bank_name") @db.VarChar(100)
+  bankBranch           String?   @map("bank_branch") @db.VarChar(100)
+  accountName          String?   @map("account_name") @db.VarChar(150)
+  accountNumberEnc     Bytes?    @map("account_number_enc")
+  accountNumberMasked  String?   @map("account_number_masked") @db.VarChar(10)
+  proposedBy           String    @map("proposed_by") @db.Uuid
+  proposedAt           DateTime  @default(now()) @map("proposed_at") @db.Timestamptz
+  contributors         String[]  @default([]) @db.Uuid
+  contactChangeWarning Boolean   @default(false) @map("contact_change_warning")
+  verifiedBy           String?   @map("verified_by") @db.Uuid
+  verifiedAt           DateTime? @map("verified_at") @db.Timestamptz
+  verificationMethod   String?   @map("verification_method") @db.VarChar(30)
+  verificationNote     String?   @map("verification_note") @db.VarChar(500)
+  rejectedBy           String?   @map("rejected_by") @db.Uuid
+  rejectedAt           DateTime? @map("rejected_at") @db.Timestamptz
+  rejectionReason      String?   @map("rejection_reason") @db.VarChar(500)
+  supersededBy         String?   @map("superseded_by") @db.Uuid
+  supersededAt         DateTime? @map("superseded_at") @db.Timestamptz
+  supplier             Supplier  @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, supplierId, versionNo])
+  @@map("supplier_payout_versions")
+}
+
+// Append-only price history: corrections are new rows (corrects_price_id); net/gross per VAT
+// treatment and the comparable price per base unit are snapshotted with the conversion used.
+model MaterialPrice {
+  id                       String          @id @default(uuid(7)) @db.Uuid
+  tenantId                 String          @map("tenant_id") @db.Uuid
+  materialId               String          @map("material_id") @db.Uuid
+  supplierId               String          @map("supplier_id") @db.Uuid
+  unit                     String          @db.VarChar(20)
+  unitPriceMinor           BigInt          @map("unit_price_minor")
+  currency                 String          @default("KES") @db.Char(3)
+  vatTreatment             String          @map("vat_treatment") @db.VarChar(15)
+  vatRatePercent           Decimal?        @map("vat_rate_percent") @db.Decimal(7, 4)
+  vatRuleStatus            String?         @map("vat_rule_status") @db.VarChar(20)
+  netUnitPriceMinor        BigInt          @map("net_unit_price_minor")
+  grossUnitPriceMinor      BigInt          @map("gross_unit_price_minor")
+  effectiveOn              DateTime        @map("effective_on") @db.Date
+  source                   String          @db.VarChar(10)
+  sourceReference          String?         @map("source_reference") @db.VarChar(100)
+  note                     String?         @db.VarChar(500)
+  comparableUnit           String?         @map("comparable_unit") @db.VarChar(20)
+  comparableUnitPriceMinor Decimal?        @map("comparable_unit_price_minor") @db.Decimal(30, 6)
+  conversionSnapshot       Json?           @map("conversion_snapshot")
+  previousPriceId          String?         @map("previous_price_id") @db.Uuid
+  changePercent            Decimal?        @map("change_percent") @db.Decimal(14, 4)
+  alertState               String          @map("alert_state") @db.VarChar(20)
+  alertThresholdPercent    Decimal         @map("alert_threshold_percent") @db.Decimal(8, 4)
+  correctsPriceId          String?         @map("corrects_price_id") @db.Uuid
+  correctionReason         String?         @map("correction_reason") @db.VarChar(500)
+  recordedBy               String          @map("recorded_by") @db.Uuid
+  recordedAt               DateTime        @default(now()) @map("recorded_at") @db.Timestamptz
+  material                 Material        @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Restrict)
+  supplier                 Supplier        @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  previous                 MaterialPrice?  @relation("PricePrevious", fields: [tenantId, materialId, previousPriceId], references: [tenantId, materialId, id], onDelete: Restrict, map: "material_prices_previous_fkey")
+  followers                MaterialPrice[] @relation("PricePrevious")
+  corrects                 MaterialPrice?  @relation("PriceCorrection", fields: [tenantId, materialId, correctsPriceId], references: [tenantId, materialId, id], onDelete: Restrict, map: "material_prices_corrects_fkey")
+  correctedBy              MaterialPrice[] @relation("PriceCorrection")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, materialId, id])
+  @@unique([tenantId, correctsPriceId])
+  @@index([tenantId, materialId, supplierId, effectiveOn], map: "material_prices_history_idx")
+  @@index([tenantId, alertState])
+  @@index([tenantId, supplierId])
+  @@map("material_prices")
+}
+
+// Company procurement settings (absent row = defaults, e.g. a 10 % price-change alert).
+model ProcurementSettings {
+  tenantId                String   @id @map("tenant_id") @db.Uuid
+  priceChangeAlertPercent Decimal  @map("price_change_alert_percent") @db.Decimal(8, 4)
+  version                 Int      @default(1)
+  updatedBy               String   @map("updated_by") @db.Uuid
+  updatedAt               DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("procurement_settings")
 }

@@ -44,6 +44,20 @@ import {
   sessionsResponseSchema,
   tenantCreatedResponseSchema,
   tenantsResponseSchema,
+  accreditationAlertsResponseSchema,
+  gangDetailResponseSchema,
+  gangsResponseSchema,
+  labourerResponseSchema,
+  labourersResponseSchema,
+  labourRateResponseSchema,
+  labourRatesResponseSchema,
+  labourSetupResponseSchema,
+  labourViewResponseSchema,
+  labourViewsResponseSchema,
+  resolvedRateResponseSchema,
+  revealResponseSchema,
+  skillLevelResponseSchema,
+  tradeResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -126,7 +140,32 @@ export function responseContract(method: string, target: string) {
     if (bq === "/templates")
       return method === "get" ? bqTemplatesResponseSchema : bqTemplateResponseSchema;
   }
+  const labour = labourContract(method, path);
+  if (labour) return labour;
   return messageResponseSchema;
+}
+
+/** The D3.1 labour endpoints' success contracts. */
+function labourContract(method: string, path: string) {
+  if (!path.startsWith("labour/")) return null;
+  if (["labour/setup", "labour/setup/defaults", "labour/settings"].includes(path))
+    return labourSetupResponseSchema;
+  if (/^labour\/trades(\/[^/]+)?$/.test(path)) return tradeResponseSchema;
+  if (/^labour\/skill-levels(\/[^/]+)?$/.test(path)) return skillLevelResponseSchema;
+  if (path === "labour/rates")
+    return method === "get" ? labourRatesResponseSchema : labourRateResponseSchema;
+  if (path === "labour/labourers")
+    return method === "get" ? labourersResponseSchema : labourerResponseSchema;
+  if (/^labour\/labourers\/[^/]+\/reveal$/.test(path)) return revealResponseSchema;
+  if (/^labour\/labourers\/[^/]+\/rate$/.test(path)) return resolvedRateResponseSchema;
+  if (/^labour\/labourers\/[^/]+(\/.*)?$/.test(path)) return labourerResponseSchema;
+  if (path === "labour/accreditation-alerts") return accreditationAlertsResponseSchema;
+  if (path === "labour/views")
+    return method === "get" ? labourViewsResponseSchema : labourViewResponseSchema;
+  if (path === "labour/gangs")
+    return method === "get" ? gangsResponseSchema : gangDetailResponseSchema;
+  if (/^labour\/gangs\/[^/]+(\/.*)?$/.test(path)) return gangDetailResponseSchema;
+  return null;
 }
 
 export class Browser {

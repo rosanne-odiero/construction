@@ -120,16 +120,20 @@ model RecoveryCode {
 }
 
 model Tenant {
-  id          String              @id @default(uuid()) @map("tenant_id") @db.Uuid
-  name        String              @db.VarChar(150)
-  createdBy   String              @map("created_by") @db.Uuid
-  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
-  members     Membership[]
-  projects    Project[]
-  invites     Invitation[]
-  audit       AuditEvent[]
-  roles       TenantRole[]
-  bqTemplates BqMappingTemplate[]
+  id             String              @id @default(uuid()) @map("tenant_id") @db.Uuid
+  name           String              @db.VarChar(150)
+  createdBy      String              @map("created_by") @db.Uuid
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  members        Membership[]
+  projects       Project[]
+  invites        Invitation[]
+  audit          AuditEvent[]
+  roles          TenantRole[]
+  bqTemplates    BqMappingTemplate[]
+  trades         Trade[]
+  skillLevels    SkillLevel[]
+  labourSettings LabourSettings?
+  labourers      Labourer[]
 
   @@map("tenants")
 }
@@ -165,6 +169,7 @@ model Membership {
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   customRole   TenantRole?         @relation(fields: [tenantId, customRoleId], references: [tenantId, id], onDelete: Restrict)
   projects     ProjectMembership[]
+  labourViews  LabourSavedView[]
 
   @@id([tenantId, userId])
   @@index([userId])
@@ -206,6 +211,10 @@ model Project {
   milestones       Milestone[]
   bqs              Bq[]
   bqImports        BqImport[]
+  engagements      LabourEngagement[]
+  labourRates      LabourRate[]
+  gangs            Gang[]
+  dnrEvents        DoNotRehireEvent[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -241,8 +250,10 @@ model Site {
   updatedAt DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   project   Project        @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
   geofences SiteGeofence[]
+  gangs     Gang[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, name])
   @@map("sites")
 }
@@ -563,4 +574,304 @@ model BqImport {
   @@index([tenantId, projectId, createdAt])
   @@index([tenantId, bqVersionId])
   @@map("bq_imports")
+}
+
+// Labour registry (D3.1, ARCHITECTURE §4.2). Identifiers are encrypted per field (AES-256-GCM,
+// `*_enc` = format byte, key version, nonce, ciphertext, tag) with keyed blind indexes (`*_bidx`,
+// HMAC-SHA-256) for exact matching; plaintext identifiers are never stored.
+
+// A company trade (brief §5.4: configurable list) with English and Kiswahili names.
+model Trade {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  tenantId  String       @map("tenant_id") @db.Uuid
+  key       String       @db.VarChar(40)
+  nameEn    String       @map("name_en") @db.VarChar(80)
+  nameSw    String       @map("name_sw") @db.VarChar(80)
+  active    Boolean      @default(true)
+  sortOrder Int          @default(0) @map("sort_order")
+  version   Int          @default(1)
+  createdBy String       @map("created_by") @db.Uuid
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  labourers Labourer[]
+  rates     LabourRate[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, key])
+  @@map("trades")
+}
+
+// A company skill level aligned to an NCA category (skilled, semi-skilled, unskilled, supervisor).
+model SkillLevel {
+  id                    String       @id @default(uuid(7)) @db.Uuid
+  tenantId              String       @map("tenant_id") @db.Uuid
+  key                   String       @db.VarChar(40)
+  nameEn                String       @map("name_en") @db.VarChar(80)
+  nameSw                String       @map("name_sw") @db.VarChar(80)
+  ncaCategory           String       @map("nca_category") @db.VarChar(20)
+  accreditationExpected Boolean      @default(false) @map("accreditation_expected")
+  active                Boolean      @default(true)
+  sortOrder             Int          @default(0) @map("sort_order")
+  version               Int          @default(1)
+  createdBy             String       @map("created_by") @db.Uuid
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant                Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  labourers             Labourer[]
+  rates                 LabourRate[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, key])
+  @@map("skill_levels")
+}
+
+// Company labour settings; no row means the defaults (alert lead time 30 days).
+model LabourSettings {
+  tenantId               String   @id @map("tenant_id") @db.Uuid
+  accreditationAlertDays Int      @default(30) @map("accreditation_alert_days")
+  version                Int      @default(1)
+  updatedBy              String   @map("updated_by") @db.Uuid
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("labour_settings")
+}
+
+// A registered worker. `id` is chosen by the API before insert because each ciphertext's associated
+// data binds it to (tenant, table, column, row). `registered_on` is set by the database (Africa/
+// Nairobi date) and the minimum-age CHECK uses it. Rows are never deleted by the runtime role.
+model Labourer {
+  id             String                  @id @db.Uuid
+  tenantId       String                  @map("tenant_id") @db.Uuid
+  workerNo       String                  @map("worker_no") @db.VarChar(20)
+  fullName       String                  @map("full_name") @db.VarChar(150)
+  dateOfBirth    DateTime                @map("date_of_birth") @db.Date
+  gender         String                  @db.VarChar(20)
+  homeCounty     String?                 @map("home_county") @db.VarChar(30)
+  tradeId        String                  @map("trade_id") @db.Uuid
+  skillLevelId   String                  @map("skill_level_id") @db.Uuid
+  engagementType String                  @map("engagement_type") @db.VarChar(20)
+  rateBasis      String                  @default("daily") @map("rate_basis") @db.VarChar(10)
+  status         String                  @default("active") @db.VarChar(20)
+  idType         String                  @map("id_type") @db.VarChar(20)
+  idNumberEnc    Bytes                   @map("id_number_enc")
+  idNumberBidx   String                  @map("id_number_bidx") @db.Char(64)
+  phoneEnc       Bytes?                  @map("phone_enc")
+  phoneBidx      String?                 @map("phone_bidx") @db.Char(64)
+  kraPinEnc      Bytes?                  @map("kra_pin_enc")
+  kraPinBidx     String?                 @map("kra_pin_bidx") @db.Char(64)
+  nssfNumberEnc  Bytes?                  @map("nssf_number_enc")
+  shaNumberEnc   Bytes?                  @map("sha_number_enc")
+  nextOfKinEnc   Bytes?                  @map("next_of_kin_enc")
+  registeredOn   DateTime                @map("registered_on") @db.Date
+  doNotRehire    Boolean                 @default(false) @map("do_not_rehire")
+  doNotRehireAt  DateTime?               @map("do_not_rehire_at") @db.Timestamptz
+  doNotRehireBy  String?                 @map("do_not_rehire_by") @db.Uuid
+  version        Int                     @default(1)
+  createdBy      String                  @map("created_by") @db.Uuid
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant         Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trade          Trade                   @relation(fields: [tenantId, tradeId], references: [tenantId, id], onDelete: NoAction)
+  skillLevel     SkillLevel              @relation(fields: [tenantId, skillLevelId], references: [tenantId, id], onDelete: NoAction)
+  engagements    LabourEngagement[]
+  consents       LabourerConsent[]
+  accreditations LabourerAccreditation[]
+  dnrEvents      DoNotRehireEvent[]      @relation("DnrSubject")
+  relatedDnr     DoNotRehireEvent[]      @relation("DnrRelated")
+  rates          LabourRate[]
+  ledGangs       Gang[]
+  gangMembers    GangMembership[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, workerNo])
+  @@unique([tenantId, idNumberBidx])
+  @@unique([tenantId, kraPinBidx])
+  @@index([tenantId, phoneBidx])
+  @@index([tenantId, status])
+  @@map("labourers")
+}
+
+// A labourer engaged on a project (start, optional end). At most one open engagement per labourer
+// and project (trigger); the worker must be 18 on the start date (trigger); engaging a
+// do-not-rehire labourer needs an override event in the same transaction (trigger).
+model LabourEngagement {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  labourerId String    @map("labourer_id") @db.Uuid
+  projectId  String    @map("project_id") @db.Uuid
+  startDate  DateTime  @map("start_date") @db.Date
+  endDate    DateTime? @map("end_date") @db.Date
+  endReason  String?   @map("end_reason") @db.VarChar(500)
+  createdBy  String    @map("created_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  endedBy    String?   @map("ended_by") @db.Uuid
+  endedAt    DateTime? @map("ended_at") @db.Timestamptz
+  labourer   Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+  project    Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId])
+  @@index([tenantId, projectId])
+  @@map("labour_engagements")
+}
+
+// Consent to process registration data (Kenya Data Protection Act 2019): which notice version and
+// digest was shown, in which language, how it was captured and by whom. Append-only apart from a
+// single withdrawal. Biometric consent kinds join in D3.4.
+model LabourerConsent {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  labourerId        String    @map("labourer_id") @db.Uuid
+  kind              String    @db.VarChar(30)
+  noticeVersion     String    @map("notice_version") @db.VarChar(60)
+  noticeDigest      String    @map("notice_digest") @db.Char(64)
+  language          String    @db.VarChar(5)
+  method            String    @db.VarChar(20)
+  witnessName       String?   @map("witness_name") @db.VarChar(120)
+  granted           Boolean
+  capturedBy        String    @map("captured_by") @db.Uuid
+  capturedAt        DateTime  @default(now()) @map("captured_at") @db.Timestamptz
+  withdrawnAt       DateTime? @map("withdrawn_at") @db.Timestamptz
+  withdrawnBy       String?   @map("withdrawn_by") @db.Uuid
+  withdrawalMethod  String?   @map("withdrawal_method") @db.VarChar(20)
+  withdrawalWitness String?   @map("withdrawal_witness") @db.VarChar(120)
+  labourer          Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId, capturedAt])
+  @@map("labourer_consents")
+}
+
+// NCA accreditation cards (category, number, expiry). Renewal adds a card; the latest expiry counts.
+model LabourerAccreditation {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  labourerId String    @map("labourer_id") @db.Uuid
+  category   String    @db.VarChar(30)
+  cardNumber String    @map("card_number") @db.VarChar(40)
+  issuedOn   DateTime? @map("issued_on") @db.Date
+  expiresOn  DateTime  @map("expires_on") @db.Date
+  version    Int       @default(1)
+  createdBy  String    @map("created_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  labourer   Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId])
+  @@index([tenantId, expiresOn])
+  @@map("labourer_accreditations")
+}
+
+// Append-only history of do-not-rehire decisions and overrides; the reason is encrypted free text.
+model DoNotRehireEvent {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  labourerId        String    @map("labourer_id") @db.Uuid
+  action            String    @db.VarChar(10)
+  context           String?   @db.VarChar(20)
+  projectId         String?   @map("project_id") @db.Uuid
+  relatedLabourerId String?   @map("related_labourer_id") @db.Uuid
+  reasonEnc         Bytes     @map("reason_enc")
+  actorId           String    @map("actor_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  labourer          Labourer  @relation("DnrSubject", fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+  related           Labourer? @relation("DnrRelated", fields: [tenantId, relatedLabourerId], references: [tenantId, id], onDelete: NoAction)
+  project           Project?  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId, createdAt])
+  @@map("do_not_rehire_events")
+}
+
+// Effective-dated rates in KES minor units. Rows are never updated (a new rate is a new row that
+// starts on or after today); only a rate that has not started yet can be deleted. `scope_key` is
+// set by the database from (project, labourer, trade, skill level, basis).
+model LabourRate {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  tenantId      String      @map("tenant_id") @db.Uuid
+  projectId     String?     @map("project_id") @db.Uuid
+  labourerId    String?     @map("labourer_id") @db.Uuid
+  tradeId       String?     @map("trade_id") @db.Uuid
+  skillLevelId  String?     @map("skill_level_id") @db.Uuid
+  basis         String      @db.VarChar(10)
+  rateMinor     BigInt      @map("rate_minor")
+  currency      String      @default("KES") @db.Char(3)
+  effectiveFrom DateTime    @map("effective_from") @db.Date
+  scopeKey      String      @default("") @map("scope_key") @db.VarChar(200)
+  createdBy     String      @map("created_by") @db.Uuid
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  project       Project?    @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: NoAction)
+  labourer      Labourer?   @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  trade         Trade?      @relation(fields: [tenantId, tradeId], references: [tenantId, id], onDelete: NoAction)
+  skillLevel    SkillLevel? @relation(fields: [tenantId, skillLevelId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, scopeKey, effectiveFrom])
+  @@index([tenantId, tradeId])
+  @@index([tenantId, labourerId])
+  @@map("labour_rates")
+}
+
+// A named gang (crew) on a project, optionally tied to one of its sites, with a leader who is a
+// current member.
+model Gang {
+  id               String           @id @default(uuid(7)) @db.Uuid
+  tenantId         String           @map("tenant_id") @db.Uuid
+  projectId        String           @map("project_id") @db.Uuid
+  siteId           String?          @map("site_id") @db.Uuid
+  name             String           @db.VarChar(80)
+  leaderLabourerId String?          @map("leader_labourer_id") @db.Uuid
+  status           String           @default("active") @db.VarChar(20)
+  version          Int              @default(1)
+  createdBy        String           @map("created_by") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project          Project          @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  site             Site?            @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
+  leader           Labourer?        @relation(fields: [tenantId, leaderLabourerId], references: [tenantId, id], onDelete: NoAction)
+  members          GangMembership[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, name])
+  @@map("gangs")
+}
+
+// Gang membership history (join and leave dates). One open membership per labourer and project
+// (trigger); the labourer must be engaged on the project on the join date (trigger).
+model GangMembership {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  projectId  String    @map("project_id") @db.Uuid
+  gangId     String    @map("gang_id") @db.Uuid
+  labourerId String    @map("labourer_id") @db.Uuid
+  joinedOn   DateTime  @map("joined_on") @db.Date
+  leftOn     DateTime? @map("left_on") @db.Date
+  addedBy    String    @map("added_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  removedBy  String?   @map("removed_by") @db.Uuid
+  gang       Gang      @relation(fields: [tenantId, projectId, gangId], references: [tenantId, projectId, id], onDelete: Cascade)
+  labourer   Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, gangId])
+  @@index([tenantId, labourerId])
+  @@map("gang_memberships")
+}
+
+// A user's saved registry view (filters only), private to that user in that company.
+model LabourSavedView {
+  id         String     @id @default(uuid(7)) @db.Uuid
+  tenantId   String     @map("tenant_id") @db.Uuid
+  userId     String     @map("user_id") @db.Uuid
+  name       String     @db.VarChar(60)
+  filters    Json       @default("{}")
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  membership Membership @relation(fields: [tenantId, userId], references: [tenantId, userId], onDelete: Cascade)
+
+  @@unique([tenantId, userId, name])
+  @@map("labour_saved_views")
 }

@@ -34,6 +34,20 @@ export const apiEnvSchema = z.object({
   // (k-anonymity: only the first five hex characters of the SHA-1 leave the server). It fails
   // open, with a warning, when the service is slow or unreachable.
   AUTH_BREACHED_PASSWORD_CHECK: z.enum(["off", "hibp"]).default("off"),
+  // Field-level encryption of labourer identifiers (D3.1, ARCHITECTURE §10): comma-separated
+  // `<version>:<64 hex characters>` keys (AES-256-GCM). New values use the active version (default:
+  // the highest); older versions stay listed until every value is re-encrypted. The blind-index key
+  // (HMAC-SHA-256) is separate. Secrets manager outside local development.
+  FIELD_ENCRYPTION_KEYS: z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}:[0-9a-fA-F]{64}(,\s*\d{1,3}:[0-9a-fA-F]{64})*$/, "version:hexkey list")
+    .optional(),
+  FIELD_ENCRYPTION_ACTIVE_KEY_VERSION: z.coerce.number().int().min(1).max(255).optional(),
+  FIELD_BLIND_INDEX_KEY: z
+    .string()
+    .regex(/^[a-fA-F0-9]{64}$/)
+    .optional(),
 
   REDIS_URL: z.url(),
 

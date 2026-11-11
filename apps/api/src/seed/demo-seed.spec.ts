@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { normaliseGeofence, validateGeofence } from "@pm-buddy/domain";
+import {
+  isOldEnoughToRegister,
+  normaliseGeofence,
+  normaliseIdNumber,
+  normaliseKraPin,
+  normalizeKenyanPhone,
+  validateGeofence,
+} from "@pm-buddy/domain";
 import { assertSeedAllowed, DEMO_ACCOUNTS, DEMO_PROJECTS } from "./demo-seed.js";
+import { DEMO_DAY_RATES_KES, DEMO_GANGS, DEMO_LABOURERS, demoIdentifiers } from "./labour-seed.js";
 
 describe("development seed", () => {
   it("refuses to run in production", () => {
@@ -28,5 +36,35 @@ describe("development seed", () => {
       for (const node of project.wbs)
         if (node.children) expect(sum(node.children), node.code).toBe(10_000);
     }
+  });
+
+  it("seeds 40 synthetic adult labourers with synthetic identifiers", () => {
+    expect(DEMO_LABOURERS).toHaveLength(40);
+    expect(new Set(DEMO_LABOURERS.map((labourer) => labourer.fullName)).size).toBe(40);
+    const projects = new Set(DEMO_PROJECTS.map((project) => project.code));
+    const gangs = new Set<string>(DEMO_GANGS.map((gang) => gang.name));
+    for (const [index, labourer] of DEMO_LABOURERS.entries()) {
+      expect(isOldEnoughToRegister(labourer.dateOfBirth, "2026-11-11"), labourer.fullName).toBe(
+        true,
+      );
+      for (const code of labourer.projects) expect(projects.has(code)).toBe(true);
+      if (labourer.gang) expect(gangs.has(labourer.gang)).toBe(true);
+      const ids = demoIdentifiers(index + 1);
+      expect(normaliseIdNumber("national_id", ids.idNumber)).toMatch(/^9000\d{4}$/);
+      expect(normalizeKenyanPhone(ids.phone)).toMatch(/^2547000000\d{2}$/);
+      expect(normaliseKraPin(ids.kraPin)).toBe(ids.kraPin);
+    }
+    expect(DEMO_LABOURERS.filter((labourer) => labourer.doNotRehire)).toHaveLength(1);
+    const expiries = DEMO_LABOURERS.flatMap((labourer) =>
+      labourer.ncaExpiresInDays === undefined ? [] : [labourer.ncaExpiresInDays],
+    );
+    expect(expiries.filter((days) => days < 0).length).toBeGreaterThanOrEqual(2);
+    expect(expiries.filter((days) => days >= 0 && days <= 30).length).toBeGreaterThanOrEqual(3);
+    // Every gang has exactly one leader.
+    for (const gang of DEMO_GANGS)
+      expect(
+        DEMO_LABOURERS.filter((labourer) => labourer.gang === gang.name && labourer.leads),
+      ).toHaveLength(1);
+    for (const kes of Object.values(DEMO_DAY_RATES_KES)) expect(Number.isInteger(kes)).toBe(true);
   });
 });

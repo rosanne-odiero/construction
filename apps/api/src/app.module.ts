@@ -7,6 +7,7 @@ import { InfraModule } from "./infra/infra.module.js";
 import { BqModule } from "./modules/bq/bq.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
+import { LabourModule } from "./modules/labour/labour.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
 
 @Module({
@@ -23,6 +24,7 @@ import { ProjectsModule } from "./modules/projects/projects.module.js";
     IdentityModule,
     ProjectsModule,
     BqModule,
+    LabourModule,
   ],
 })
 export class AppModule {}

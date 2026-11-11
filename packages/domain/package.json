@@ -2,7 +2,7 @@
   "name": "@pm-buddy/domain",
   "version": "0.0.0",
   "private": true,
-  "description": "Pure PM-Buddy business rules (no I/O): phone numbers, money, age, geofences, project lifecycle, WBS weights, BQ import",
+  "description": "Pure PM-Buddy business rules (no I/O): phone numbers, money, age, geofences, project lifecycle, WBS weights, BQ import, labour registry",
   "type": "module",
   "sideEffects": false,
   "exports": {

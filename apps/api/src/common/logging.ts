@@ -27,6 +27,11 @@ export const REDACT_PATHS = [
   "*.phone",
   "*.idNumber",
   "*.kraPin",
+  "*.nssfNumber",
+  "*.shaNumber",
+  "*.nextOfKin",
+  "*.dateOfBirth",
+  "*.witnessName",
 ];
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9-]{8,64}$/;

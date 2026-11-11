@@ -75,3 +75,24 @@ export {
   type WbsWeightNode,
 } from "./wbs.js";
 export * from "./bq/index.js";
+export {
+  accreditationStatus,
+  addCalendarDays,
+  calendarDaysBetween,
+  isOldEnoughToRegister,
+  latestAllowedBirthDate,
+  maskIdentifier,
+  normaliseIdNumber,
+  normaliseKraPin,
+  normaliseStatutoryNumber,
+  RATE_SCOPES,
+  rateEffectiveTo,
+  rateKey,
+  rateScopeOf,
+  resolveRate,
+  summariseAccreditation,
+  type AccreditationSummary,
+  type RateCandidate,
+  type RateQuery,
+  type RateScope,
+} from "./labour.js";

@@ -30,6 +30,13 @@ function print(summary: SeedSummary) {
     lines.push(
       `  ${project.code}  ${project.name} — ${project.status} (${project.created ? "created" : "already present"})`,
     );
+  const { labour } = summary;
+  lines.push(
+    "",
+    "Labour registry (synthetic people and identifiers):",
+    `  ${labour.trades} trades; ${labour.gangs} gangs; ${labour.rates} new rates this run`,
+    `  ${labour.labourersTotal} labourers (${labour.labourersCreated} created this run)`,
+  );
   console.log(lines.join("\n"));
 }
 

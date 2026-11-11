@@ -1167,7 +1167,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     ).rejects.toThrow();
   });
 
-  it("seeds the demo company idempotently", async () => {
+  it("seeds the demo company and labour registry idempotently", async () => {
     const counts = async (tenantId: string, userId: string) =>
       db.run({ tenantId, userId, requestId: "seed-counts" }, async (tx) => ({
         members: await tx.membership.count({ where: { tenantId } }),
@@ -1178,6 +1178,14 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         milestones: await tx.milestone.count({ where: { tenantId } }),
         history: await tx.projectStatusChange.count({ where: { tenantId } }),
         assignments: await tx.projectMembership.count({ where: { tenantId } }),
+        labourers: await tx.labourer.count({ where: { tenantId } }),
+        consents: await tx.labourerConsent.count({ where: { tenantId } }),
+        engagements: await tx.labourEngagement.count({ where: { tenantId } }),
+        accreditations: await tx.labourerAccreditation.count({ where: { tenantId } }),
+        gangs: await tx.gang.count({ where: { tenantId } }),
+        gangMembers: await tx.gangMembership.count({ where: { tenantId } }),
+        doNotRehire: await tx.labourer.count({ where: { tenantId, doNotRehire: true } }),
+        trades: await tx.trade.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1194,6 +1202,14 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       milestones: 9,
       history: 2,
       assignments: 3,
+      labourers: 40,
+      consents: 40,
+      engagements: 40,
+      accreditations: 18,
+      gangs: 6,
+      gangMembers: 39,
+      doNotRehire: 1,
+      trades: 15,
     });
     const second = await seedDemo(app);
     expect(second.company).toEqual({ ...first.company, created: false });
@@ -1208,6 +1224,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       ["KIT-BNG", "active", false],
       ["SYO-TWN", "planning", false],
     ]);
+    expect(second.labour).toMatchObject({ labourersCreated: 0, labourersTotal: 40, rates: 0 });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
   });
 });

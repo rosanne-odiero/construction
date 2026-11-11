@@ -10,6 +10,11 @@ export interface ProblemDetails {
   /** Request ID, also returned in the `X-Request-Id` header. */
   traceId?: string;
   errors?: { path: string; message: string }[];
+  /**
+   * An existing record the request collided with, e.g. the labourer a duplicate registration
+   * matched (`{ labourerId, workerNo, matchedOn }`). Identifiers only, never personal data.
+   */
+  match?: Record<string, string>;
 }
 
 export const PROBLEM_TYPE_BASE = "https://pm-buddy.dev/problems/";

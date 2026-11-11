@@ -35,7 +35,12 @@ export function formatScaled(value: bigint, scale: number, trim = true): string 
   const digits = (negative ? -value : value).toString().padStart(scale + 1, "0");
   const whole = scale ? digits.slice(0, -scale) : digits;
   let fraction = scale ? digits.slice(-scale) : "";
-  if (trim) fraction = fraction.replace(/0+$/, "");
+  if (trim) {
+    // A loop rather than /0+$/, which backtracks polynomially on long runs of zeros.
+    let end = fraction.length;
+    while (end > 0 && fraction.charCodeAt(end - 1) === 48) end -= 1;
+    fraction = fraction.slice(0, end);
+  }
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 

@@ -6,6 +6,7 @@ import {
   defineCustomUnit,
   divideHalfUp,
   findUnit,
+  formatScaled,
   KENYAN_STARTER_CATALOGUE,
   Ratio,
   resolveConversion,
@@ -78,6 +79,22 @@ const randomQuantity = (next: () => number) => {
 };
 
 describe("exact ratios", () => {
+  it("formats scaled integers, trimming trailing zeros in linear time", () => {
+    expect(formatScaled(1200n, 2)).toBe("12");
+    expect(formatScaled(1205n, 3)).toBe("1.205");
+    expect(formatScaled(-1500n, 3)).toBe("-1.5");
+    expect(formatScaled(1500n, 3, false)).toBe("1.500");
+    expect(formatScaled(0n, 4)).toBe("0");
+    expect(formatScaled(7n, 0)).toBe("7");
+    // 1 at the 50,000th decimal place: zeros everywhere but the end (a backtracking /0+$/ is
+    // quadratic here).
+    const started = Date.now();
+    const tiny = formatScaled(1n, 50_000);
+    expect(tiny.endsWith("01")).toBe(true);
+    expect(tiny).toHaveLength(50_002);
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+
   it("parses decimals exactly and keeps fractions reduced", () => {
     expect(Ratio.fromDecimal("0.3048").toString()).toBe("381/1250");
     expect(Ratio.fromDecimal("12").toString()).toBe("12/1");

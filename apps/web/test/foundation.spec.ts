@@ -62,7 +62,29 @@ test("live UI uses CSRF, validates MFA and wires tenant/project permissions with
     },
     mfaRequired: false,
   });
-  const project = { id: projectId, name: "Synthetic site", createdAt: timestamp };
+  // The D2.1 project shape: a new project starts in planning with its commercial fields unset.
+  const project = {
+    id: projectId,
+    code: "PRJ-001",
+    name: "Synthetic site",
+    description: null,
+    clientName: null,
+    clientEmail: null,
+    clientPhone: null,
+    contractSumMinor: null,
+    currency: "KES",
+    contractType: null,
+    startDate: null,
+    endDate: null,
+    county: null,
+    town: null,
+    latitude: null,
+    longitude: null,
+    status: "planning",
+    version: 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
 
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();

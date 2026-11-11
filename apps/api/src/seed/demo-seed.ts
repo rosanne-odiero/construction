@@ -1,0 +1,556 @@
+import { randomBytes, randomUUID } from "node:crypto";
+import type { INestApplicationContext } from "@nestjs/common";
+import { Secret, TOTP } from "otpauth";
+import {
+  geofenceMetrics,
+  normaliseGeofence,
+  validateGeofence,
+  type Geofence,
+} from "@pm-buddy/domain";
+import {
+  PROJECT_ASSIGNABLE_PERMISSIONS,
+  SYSTEM_ROLE_PERMISSIONS,
+  type ContractType,
+  type County,
+  type MilestoneStatus,
+  type TenantSystemRole,
+} from "@pm-buddy/types";
+import { AppConfig } from "../config/app-config.js";
+import type { Prisma } from "../generated/prisma/client.js";
+import { PrismaService } from "../infra/prisma.service.js";
+import { AuthSecurity, hashPassword } from "../modules/identity/auth-security.service.js";
+import { TenantDatabase } from "../modules/identity/tenant-database.service.js";
+
+/**
+ * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
+ * (password + TOTP), a project manager and a site agent, and three projects with Kenyan sites,
+ * geofences, WBS and milestones. Idempotent: existing records are kept as they are. Never runs in
+ * production. All identities are synthetic (example.test addresses; the only phone number is in
+ * Ofcom's 07700 900xxx range reserved for fiction).
+ */
+
+export const DEMO_COMPANY = "Jenga Bora Builders Ltd";
+const SOURCE = { source: "seed" } as const;
+
+type Tx = Prisma.TransactionClient;
+type Audit = (
+  tx: Tx,
+  action: string,
+  resourceId: string,
+  metadata?: Prisma.InputJsonValue,
+) => Promise<unknown>;
+
+type DemoAccount = {
+  key: "owner" | "projectManager" | "siteAgent";
+  role: TenantSystemRole;
+  identifier: string;
+  displayName: string;
+  totp: boolean;
+};
+export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
+  {
+    key: "owner",
+    role: "owner",
+    identifier: "owner@jenga-bora.example.test",
+    displayName: "Wanjiru Kamau",
+    totp: true,
+  },
+  {
+    key: "projectManager",
+    role: "project_manager",
+    identifier: "pm@jenga-bora.example.test",
+    displayName: "Brian Otieno",
+    totp: false,
+  },
+  {
+    key: "siteAgent",
+    role: "site_agent",
+    identifier: "site.agent@jenga-bora.example.test",
+    displayName: "Kevin Kiprono",
+    totp: false,
+  },
+];
+
+type DemoSite = { name: string; address: string; geofence: Geofence };
+type DemoWbs = { code: string; name: string; weight: number; children?: DemoWbs[] };
+type DemoMilestone = {
+  name: string;
+  dueDate: string;
+  wbs?: string;
+  status?: MilestoneStatus;
+  actualDate?: string;
+};
+type DemoProject = {
+  code: string;
+  name: string;
+  description: string;
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
+  /** KES minor units; null while a tender is open. */
+  contractSumMinor: number | null;
+  contractType: ContractType;
+  startDate: string;
+  endDate: string;
+  county: County;
+  town: string;
+  latitude: number | null;
+  longitude: number | null;
+  activate: boolean;
+  sites: DemoSite[];
+  wbs: DemoWbs[];
+  milestones: DemoMilestone[];
+  team: DemoAccount["key"][];
+};
+
+export const DEMO_PROJECTS: readonly DemoProject[] = [
+  {
+    code: "RUI-HTS",
+    name: "Ruiru Heights Apartments",
+    description: "4-storey apartment block, 16 units",
+    clientName: "Mavuno Homes Ltd",
+    clientEmail: "projects@mavuno-homes.example.test",
+    clientPhone: null,
+    contractSumMinor: 8_640_000_000,
+    contractType: "lump_sum",
+    startDate: "2026-03-02",
+    endDate: "2027-04-30",
+    county: "kiambu",
+    town: "Ruiru",
+    latitude: -1.1489,
+    longitude: 36.9612,
+    activate: true,
+    sites: [
+      {
+        name: "Main plot",
+        address: "Off Kamiti Road, near the Ruiru Kimbo stage",
+        geofence: {
+          kind: "polygon",
+          vertices: [
+            { lat: -1.1487, lng: 36.96093 },
+            { lat: -1.1487, lng: 36.96147 },
+            { lat: -1.14888, lng: 36.96156 },
+            { lat: -1.149105, lng: 36.96147 },
+            { lat: -1.149105, lng: 36.96093 },
+          ],
+        },
+      },
+      {
+        name: "Materials yard",
+        address: "Fenced yard behind the main plot",
+        geofence: { kind: "radius", center: { lat: -1.1494, lng: 36.9612 }, radiusM: 40 },
+      },
+    ],
+    wbs: [
+      { code: "1", name: "Preliminaries", weight: 1_000 },
+      { code: "2", name: "Substructure", weight: 2_000 },
+      {
+        code: "3",
+        name: "Superstructure",
+        weight: 4_500,
+        children: [
+          { code: "3.1", name: "Ground floor", weight: 2_500 },
+          { code: "3.2", name: "First floor", weight: 2_500 },
+          { code: "3.3", name: "Second floor", weight: 2_500 },
+          { code: "3.4", name: "Third floor and roof", weight: 2_500 },
+        ],
+      },
+      { code: "4", name: "Finishes", weight: 1_500 },
+      { code: "5", name: "Services", weight: 1_000 },
+    ],
+    milestones: [
+      {
+        name: "Substructure complete",
+        dueDate: "2026-06-15",
+        wbs: "2",
+        status: "achieved",
+        actualDate: "2026-06-26",
+      },
+      {
+        name: "First floor slab cast",
+        dueDate: "2026-08-31",
+        wbs: "3.2",
+        status: "achieved",
+        actualDate: "2026-09-18",
+      },
+      { name: "Roof beam cast", dueDate: "2026-11-30", wbs: "3.4", status: "in_progress" },
+      { name: "Roof covered", dueDate: "2027-01-31", wbs: "3.4" },
+      { name: "Practical completion", dueDate: "2027-04-30" },
+    ],
+    team: ["projectManager", "siteAgent"],
+  },
+  {
+    code: "KIT-BNG",
+    name: "Kitengela Bungalow",
+    description: "3-bedroom bungalow for a diaspora client",
+    clientName: "Dr. Grace Wambui (London, UK)",
+    clientEmail: "grace.wambui@example.test",
+    clientPhone: "+447700900123",
+    contractSumMinor: 984_640_000,
+    contractType: "lump_sum",
+    startDate: "2026-05-12",
+    endDate: "2027-02-15",
+    county: "kajiado",
+    town: "Kitengela",
+    latitude: -1.4772,
+    longitude: 36.9589,
+    activate: true,
+    sites: [
+      {
+        name: "Bungalow plot",
+        address: "Kitengela, off Namanga Road",
+        geofence: { kind: "radius", center: { lat: -1.4772, lng: 36.9589 }, radiusM: 60 },
+      },
+    ],
+    wbs: [
+      { code: "1", name: "Foundation", weight: 2_500 },
+      { code: "2", name: "Walling to ring beam", weight: 3_000 },
+      { code: "3", name: "Roofing", weight: 2_000 },
+      { code: "4", name: "Finishes and handover", weight: 2_500 },
+    ],
+    milestones: [
+      {
+        name: "Foundation complete",
+        dueDate: "2026-07-10",
+        wbs: "1",
+        status: "achieved",
+        actualDate: "2026-07-08",
+      },
+      { name: "Ring beam cast", dueDate: "2026-10-05", wbs: "2", status: "in_progress" },
+      { name: "Plastering complete", dueDate: "2026-12-15", wbs: "4" },
+      { name: "Handover", dueDate: "2027-02-15" },
+    ],
+    team: ["projectManager"],
+  },
+  {
+    code: "SYO-TWN",
+    name: "Syokimau Townhouses",
+    description: "Tender stage: 8 townhouses, awaiting the signed contract and site survey",
+    clientName: "Kilima Developers Ltd",
+    clientEmail: null,
+    clientPhone: null,
+    contractSumMinor: null,
+    contractType: "design_and_build",
+    startDate: "2027-01-11",
+    endDate: "2028-03-31",
+    county: "machakos",
+    town: "Syokimau",
+    latitude: null,
+    longitude: null,
+    activate: false,
+    sites: [],
+    wbs: [],
+    milestones: [],
+    team: [],
+  },
+];
+
+export type SeededAccount = {
+  role: TenantSystemRole;
+  identifier: string;
+  displayName: string;
+  /** Set when this run created the account or reset its credentials; otherwise unchanged. */
+  password: string | null;
+  totp: { secret: string; uri: string } | null;
+  created: boolean;
+};
+export type SeedSummary = {
+  company: { id: string; name: string; created: boolean };
+  accounts: SeededAccount[];
+  projects: { code: string; name: string; status: string; created: boolean }[];
+};
+
+/** Refuses production: demo accounts and data must never reach a live environment. */
+export function assertSeedAllowed(nodeEnv: string | undefined): void {
+  if (nodeEnv === "production")
+    throw new Error("Refusing to seed demo data: NODE_ENV is production.");
+}
+
+/** A random password (144 bits of entropy), printed once for local use. */
+const newPassword = () => `Demo-${randomBytes(18).toString("base64url")}`;
+const calendar = (value: string) => new Date(`${value}T00:00:00.000Z`);
+
+export async function seedDemo(
+  app: INestApplicationContext,
+  options: { resetCredentials?: boolean } = {},
+): Promise<SeedSummary> {
+  assertSeedAllowed(process.env["NODE_ENV"]);
+  assertSeedAllowed(app.get(AppConfig).get("NODE_ENV"));
+  const prisma = app.get(PrismaService);
+  const security = app.get(AuthSecurity);
+  const db = app.get(TenantDatabase);
+
+  const accounts: (SeededAccount & { id: string; key: DemoAccount["key"] })[] = [];
+  for (const demo of DEMO_ACCOUNTS) {
+    const existing = await prisma.user.findUnique({ where: { identifier: demo.identifier } });
+    const reset = !existing || options.resetCredentials === true;
+    const password = reset ? newPassword() : null;
+    const user =
+      existing ??
+      (await prisma.user.create({
+        data: {
+          id: randomUUID(),
+          identifier: demo.identifier,
+          displayName: demo.displayName,
+          passwordHash: await hashPassword(password!),
+          verifiedAt: new Date(),
+        },
+      }));
+    if (existing && password) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: await hashPassword(password),
+          failedLogins: 0,
+          lockedUntil: null,
+          mfaFailedAttempts: 0,
+          mfaLockedUntil: null,
+        },
+      });
+      await prisma.session.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    let totp: SeededAccount["totp"] = null;
+    if (demo.totp) {
+      const stored = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      // A secret encrypted under a previous AUTH_MFA_ENCRYPTION_KEY can no longer be read (the
+      // account could not sign in), so it is re-issued like a reset.
+      let base32 =
+        reset || !stored.mfaSecret
+          ? null
+          : await security.decrypt(stored.mfaSecret, `totp:${user.id}`).catch(() => null);
+      if (!base32) {
+        base32 = new Secret({ size: 20 }).base32;
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            mfaSecret: await security.encrypt(base32, `totp:${user.id}`),
+            mfaCounter: -1,
+            mfaPending: null,
+            mfaPendingUntil: null,
+            mfaPendingSessionId: null,
+          },
+        });
+      }
+      const label = { issuer: "PM-Buddy", label: demo.identifier };
+      totp = {
+        secret: base32,
+        uri: new TOTP({ ...label, secret: Secret.fromBase32(base32) }).toString(),
+      };
+    }
+    accounts.push({
+      id: user.id,
+      key: demo.key,
+      role: demo.role,
+      identifier: demo.identifier,
+      displayName: demo.displayName,
+      password,
+      totp,
+      created: !existing,
+    });
+  }
+  const owner = accounts.find((account) => account.key === "owner")!;
+  const userOf = (key: DemoAccount["key"]) => accounts.find((account) => account.key === key)!;
+
+  // The owner discovers their own memberships before a company is selected (memberships_read).
+  const memberships = await db.run({ userId: owner.id, tenantId: null, requestId: "seed" }, (tx) =>
+    tx.membership.findMany({
+      where: { userId: owner.id, role: "owner" },
+      select: { tenant: { select: { id: true, name: true } } },
+    }),
+  );
+  const found = memberships.find((membership) => membership.tenant.name === DEMO_COMPANY);
+  const tenantId = found?.tenant.id ?? randomUUID();
+  const audit: Audit = (tx, action, resourceId, metadata = {}) =>
+    tx.auditEvent.create({
+      data: { tenantId, actorId: owner.id, requestId: "seed", action, resourceId, metadata },
+    });
+
+  const projects: SeedSummary["projects"] = [];
+  await db.run({ userId: owner.id, tenantId, requestId: "seed" }, async (tx) => {
+    if (!found) {
+      await tx.tenant.create({ data: { id: tenantId, name: DEMO_COMPANY, createdBy: owner.id } });
+      await tx.membership.create({ data: { tenantId, userId: owner.id, role: "owner" } });
+      await audit(tx, "tenant.created", tenantId, SOURCE);
+    }
+    await tx.$queryRaw`SELECT tenant_id FROM tenants WHERE tenant_id = ${tenantId}::uuid FOR UPDATE`;
+    for (const account of accounts.filter((entry) => entry.key !== "owner")) {
+      const member = await tx.membership.findUnique({
+        where: { tenantId_userId: { tenantId, userId: account.id } },
+      });
+      if (!member) {
+        await tx.membership.create({ data: { tenantId, userId: account.id, role: account.role } });
+        await audit(tx, "membership.joined", account.id, { ...SOURCE, role: account.role });
+      }
+    }
+    for (const demo of DEMO_PROJECTS)
+      projects.push(await seedProject(tx, tenantId, owner.id, demo, userOf, audit));
+  });
+
+  return {
+    company: { id: tenantId, name: DEMO_COMPANY, created: !found },
+    accounts: accounts.map(({ id: _id, key: _key, ...account }) => account),
+    projects,
+  };
+}
+
+async function seedProject(
+  tx: Tx,
+  tenantId: string,
+  ownerId: string,
+  demo: DemoProject,
+  userOf: (key: DemoAccount["key"]) => { id: string; role: TenantSystemRole },
+  audit: Audit,
+) {
+  const existing = await tx.project.findUnique({
+    where: { tenantId_code: { tenantId, code: demo.code } },
+  });
+  if (existing)
+    return { code: demo.code, name: existing.name, status: existing.status, created: false };
+
+  const project = await tx.project.create({
+    data: {
+      tenantId,
+      code: demo.code,
+      name: demo.name,
+      description: demo.description,
+      clientName: demo.clientName,
+      clientEmail: demo.clientEmail,
+      clientPhone: demo.clientPhone,
+      contractSumMinor: demo.contractSumMinor === null ? null : BigInt(demo.contractSumMinor),
+      contractType: demo.contractType,
+      startDate: calendar(demo.startDate),
+      endDate: calendar(demo.endDate),
+      county: demo.county,
+      town: demo.town,
+      latitude: demo.latitude,
+      longitude: demo.longitude,
+      createdBy: ownerId,
+    },
+  });
+  await audit(tx, "project.created", project.id, { ...SOURCE, code: demo.code });
+
+  for (const site of demo.sites) {
+    const geofence = normaliseGeofence(site.geofence);
+    const issues = validateGeofence(geofence);
+    if (issues.length)
+      throw new Error(`Seed geofence for ${site.name} is invalid: ${issues.join(", ")}`);
+    const metrics = geofenceMetrics(geofence);
+    const row = await tx.site.create({
+      data: {
+        tenantId,
+        projectId: project.id,
+        name: site.name,
+        address: site.address,
+        createdBy: ownerId,
+      },
+    });
+    await tx.siteGeofence.create({
+      data: {
+        tenantId,
+        siteId: row.id,
+        createdBy: ownerId,
+        areaM2: Math.round(metrics.areaM2 * 10) / 10,
+        perimeterM: Math.round(metrics.perimeterM * 10) / 10,
+        ...(geofence.kind === "radius"
+          ? {
+              kind: "radius",
+              centerLat: geofence.center.lat,
+              centerLng: geofence.center.lng,
+              radiusM: geofence.radiusM,
+            }
+          : { kind: "polygon", polygon: geofence.vertices.map(({ lat, lng }) => ({ lat, lng })) }),
+      },
+    });
+    await audit(tx, "site.created", row.id, {
+      ...SOURCE,
+      projectId: project.id,
+      geofence: { version: 1, kind: geofence.kind },
+    });
+  }
+
+  const nodeIds = new Map<string, string>();
+  const addNodes = async (nodes: DemoWbs[], parentId: string | null) => {
+    for (const [index, node] of nodes.entries()) {
+      const row = await tx.wbsNode.create({
+        data: {
+          tenantId,
+          projectId: project.id,
+          parentId,
+          code: node.code,
+          name: node.name,
+          sortOrder: index,
+          weightBasisPoints: node.weight,
+          createdBy: ownerId,
+        },
+      });
+      nodeIds.set(node.code, row.id);
+      if (node.children) await addNodes(node.children, row.id);
+    }
+  };
+  await addNodes(demo.wbs, null);
+
+  for (const milestone of demo.milestones) {
+    const row = await tx.milestone.create({
+      data: {
+        tenantId,
+        projectId: project.id,
+        wbsNodeId: milestone.wbs ? (nodeIds.get(milestone.wbs) ?? null) : null,
+        name: milestone.name,
+        dueDate: calendar(milestone.dueDate),
+        createdBy: ownerId,
+      },
+    });
+    if (milestone.status && milestone.status !== "planned")
+      await tx.milestone.update({
+        where: { tenantId_id: { tenantId, id: row.id } },
+        data: {
+          status: milestone.status,
+          actualDate: milestone.actualDate ? calendar(milestone.actualDate) : null,
+          version: { increment: 1 },
+        },
+      });
+  }
+
+  for (const key of demo.team) {
+    const member = userOf(key);
+    const permissions = PROJECT_ASSIGNABLE_PERMISSIONS.filter((permission) =>
+      SYSTEM_ROLE_PERMISSIONS[member.role].includes(permission),
+    );
+    await tx.projectMembership.create({
+      data: { tenantId, projectId: project.id, userId: member.id, permissions },
+    });
+    await audit(tx, "project.permissions.changed", project.id, {
+      ...SOURCE,
+      userId: member.id,
+      permissions,
+    });
+  }
+
+  if (!demo.activate)
+    return { code: demo.code, name: demo.name, status: project.status, created: true };
+  await tx.project.update({
+    where: { tenantId_id: { tenantId, id: project.id } },
+    data: { status: "active", version: { increment: 1 } },
+  });
+  await tx.projectStatusChange.create({
+    data: {
+      tenantId,
+      projectId: project.id,
+      fromStatus: "planning",
+      toStatus: "active",
+      reason: "Contract signed and site handed over (demo data)",
+      changedBy: ownerId,
+    },
+  });
+  await audit(tx, "project.status_changed", project.id, {
+    ...SOURCE,
+    from: "planning",
+    to: "active",
+    action: "activate",
+    reasonGiven: true,
+  });
+  return { code: demo.code, name: demo.name, status: "active", created: true };
+}

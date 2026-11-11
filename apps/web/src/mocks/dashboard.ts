@@ -69,7 +69,7 @@ export const alerts: DashboardAlert[] = [
     key: "budgetThreshold",
     severity: "warning",
     project: "Ruiru Heights",
-    href: "/projects/ruiru-heights",
+    href: "/prototype/projects/ruiru-heights",
     params: { pct: 85, bill: "3" },
   },
   {

@@ -18,8 +18,17 @@ import {
   passkeyRegistrationResponseSchema,
   passkeysResponseSchema,
   permissionCatalogueResponseSchema,
+  geofenceHistoryResponseSchema,
+  milestoneResponseSchema,
+  milestonesResponseSchema,
+  projectDetailResponseSchema,
   projectResponseSchema,
   projectsResponseSchema,
+  projectTeamResponseSchema,
+  siteResponseSchema,
+  sitesResponseSchema,
+  wbsNodeResponseSchema,
+  wbsResponseSchema,
   roleResponseSchema,
   rolesResponseSchema,
   sessionsResponseSchema,
@@ -36,7 +45,8 @@ export const password = "Unique construction foundation! 918";
 export const origin = "http://localhost:3000";
 export const notifications = new Map<string, { subject: string; text: string }[]>();
 
-export function responseContract(method: string, path: string) {
+export function responseContract(method: string, target: string) {
+  const path = target.split("?")[0]!;
   if (path === "auth/csrf") return csrfResponseSchema;
   if (path === "auth/mfa/enroll") return mfaEnrollmentResponseSchema;
   if (path === "auth/mfa/verify") return mfaVerificationResponseSchema;
@@ -69,7 +79,22 @@ export function responseContract(method: string, path: string) {
   if (/^tenants\/current\/roles\/[^/]+$/.test(path) && method === "patch")
     return roleResponseSchema;
   if (path === "projects") return method === "get" ? projectsResponseSchema : projectResponseSchema;
-  if (/^projects\/[^/]+$/.test(path) && method === "patch") return projectResponseSchema;
+  if (/^projects\/[^/]+$/.test(path))
+    return method === "get" ? projectDetailResponseSchema : projectResponseSchema;
+  if (/^projects\/[^/]+\/status$/.test(path)) return projectResponseSchema;
+  if (/^projects\/[^/]+\/sites$/.test(path))
+    return method === "get" ? sitesResponseSchema : siteResponseSchema;
+  if (/^projects\/[^/]+\/sites\/[^/]+(\/geofence)?$/.test(path)) return siteResponseSchema;
+  if (/^projects\/[^/]+\/sites\/[^/]+\/geofences$/.test(path)) return geofenceHistoryResponseSchema;
+  if (/^projects\/[^/]+\/wbs$/.test(path))
+    return method === "get" ? wbsResponseSchema : wbsNodeResponseSchema;
+  if (/^projects\/[^/]+\/wbs\/[^/]+$/.test(path) && method === "patch" && !path.endsWith("/order"))
+    return wbsNodeResponseSchema;
+  if (/^projects\/[^/]+\/milestones$/.test(path))
+    return method === "get" ? milestonesResponseSchema : milestoneResponseSchema;
+  if (/^projects\/[^/]+\/milestones\/[^/]+(\/status)?$/.test(path) && method !== "delete")
+    return milestoneResponseSchema;
+  if (/^projects\/[^/]+\/team$/.test(path)) return projectTeamResponseSchema;
   return messageResponseSchema;
 }
 

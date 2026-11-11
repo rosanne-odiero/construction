@@ -1,0 +1,50 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { FoundationApiError } from "@/lib/foundation-api";
+import type { Messages } from "@pm-buddy/i18n";
+
+type ProblemKey = keyof Messages["apiErrors"];
+
+const codes: Record<string, ProblemKey> = {
+  network: "network",
+  invalidResponse: "invalidResponse",
+  "validation-error": "validation",
+  "bad-request": "validation",
+  unauthorized: "unauthorized",
+  forbidden: "forbidden",
+  "step-up-required": "stepUp",
+  "passkey-cancelled": "passkeyCancelled",
+  "not-found": "notFound",
+  conflict: "conflict",
+  "rate-limited": "rateLimited",
+  "version-conflict": "versionConflict",
+  "project-read-only": "projectReadOnly",
+  "project-code-taken": "projectCodeTaken",
+  "project-code-fixed": "projectCodeFixed",
+  "invalid-transition": "invalidTransition",
+  "reason-required": "reasonRequired",
+  "activation-incomplete": "activationIncomplete",
+  "activation-details-required": "activationDetailsRequired",
+  "end-before-start": "endBeforeStart",
+  "site-name-taken": "siteNameTaken",
+  "wbs-code-taken": "wbsCodeTaken",
+  "wbs-cycle": "wbsCycle",
+  "wbs-too-deep": "wbsTooDeep",
+  "wbs-has-children": "wbsHasChildren",
+  "wbs-in-use": "wbsInUse",
+  "wbs-order-mismatch": "wbsOrderMismatch",
+  "milestone-name-taken": "milestoneNameTaken",
+  "milestone-not-planned": "milestoneNotPlanned",
+  "actual-date-required": "actualDateRequired",
+  "actual-date-future": "actualDateFuture",
+};
+
+/** EN/SW text for an API problem code; anything unknown is "unexpected" (never a success). */
+export function useProblemMessage() {
+  const t = useTranslations("apiErrors");
+  return (error: unknown): string => {
+    if (!(error instanceof FoundationApiError)) return t("unexpected");
+    return t(codes[error.code] ?? (error.status === 409 ? "conflict" : "unexpected"));
+  };
+}

@@ -99,3 +99,29 @@ export function initials(fullName: string): string {
   const parts = fullName.trim().split(/\s+/);
   return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
 }
+
+/** A business calendar date (YYYY-MM-DD) as DD/MM/YYYY, without any time-zone conversion. */
+export function formatCalendarDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+}
+
+const areaFmt = new Intl.NumberFormat("en-KE", { maximumFractionDigits: 0 });
+const hectareFmt = new Intl.NumberFormat("en-KE", { maximumFractionDigits: 2 });
+
+/** Square metres below one hectare, then hectares: "2,925 m²", "3.14 ha". */
+export function formatArea(squareMetres: number): string {
+  return squareMetres < 10_000
+    ? `${areaFmt.format(squareMetres)} m²`
+    : `${hectareFmt.format(squareMetres / 10_000)} ha`;
+}
+
+/** Metres below one kilometre, then kilometres: "234 m", "1.26 km". */
+export function formatLength(metres: number): string {
+  return metres < 1_000 ? `${areaFmt.format(metres)} m` : `${hectareFmt.format(metres / 1_000)} km`;
+}
+
+/** Basis points as a percentage with up to two decimals: 2550 → "25.5%". */
+export function formatBasisPoints(basisPoints: number): string {
+  return `${hectareFmt.format(basisPoints / 100)}%`;
+}

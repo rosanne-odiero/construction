@@ -181,7 +181,7 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
     expect(await prisma.invitation.findMany()).toEqual([]);
     expect(await prisma.auditEvent.findMany()).toEqual([]);
     await expect(
-      prisma.project.create({ data: { tenantId: tenantA, name: "Forbidden" } }),
+      prisma.project.create({ data: { tenantId: tenantA, code: "FORBIDDEN", name: "Forbidden" } }),
     ).rejects.toThrow();
     const tables = await prisma.$queryRaw<{ table_name: string }[]>`
       SELECT table_name FROM information_schema.columns
@@ -203,7 +203,10 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
     ]);
     const forged = await ownerA.call("post", "projects", { name: "Forged", tenantId: tenantB });
     expect(forged.status).toBe(400);
-    const invisible = await ownerA.call("patch", `projects/${projectB}`, { name: "No" });
+    const invisible = await ownerA.call("patch", `projects/${projectB}`, {
+      name: "No",
+      version: 1,
+    });
     expect(invisible.status).toBe(404);
     expect((await ownerA.call("post", `tenants/${tenantB}/select`, {})).status).toBe(404);
   });
@@ -220,7 +223,7 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
     );
     await expect(
       db.run({ userId: ownerA.auth.user.id, tenantId: tenantA, requestId: "rls-write" }, (tx) =>
-        tx.project.create({ data: { tenantId: tenantB, name: "Cross" } }),
+        tx.project.create({ data: { tenantId: tenantB, code: "CROSS", name: "Cross" } }),
       ),
     ).rejects.toThrow();
     await expect(
@@ -278,7 +281,9 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
       db.run(
         { userId: ownerA.auth.user.id, tenantId: tenantA, requestId: "rollback" },
         async (tx) => {
-          await tx.project.create({ data: { tenantId: tenantA, name: "Must roll back" } });
+          await tx.project.create({
+            data: { tenantId: tenantA, code: "ROLLBACK", name: "Must roll back" },
+          });
           throw new Error("Intentional rollback");
         },
       ),
@@ -431,9 +436,9 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
       (list.body as { projects: { id: string }[] }).projects.map((project) => project.id),
     ).toEqual([projectA]);
     expect((await client.call("post", "projects", { name: "Denied" })).status).toBe(403);
-    expect((await client.call("patch", `projects/${projectA}`, { name: "Denied" })).status).toBe(
-      403,
-    );
+    expect(
+      (await client.call("patch", `projects/${projectA}`, { name: "Denied", version: 1 })).status,
+    ).toBe(403);
     expect((await client.call("get", "tenants/current/members")).status).toBe(403);
     expect(
       (
@@ -445,10 +450,12 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
     // Effective project permissions are role ∩ assignment: a client's role has no
     // projects.manage, so the assignment cannot widen it (the positive path is in roles.e2e-spec).
     expect(
-      (await client.call("patch", `projects/${projectA}`, { name: "Denied edit" })).status,
+      (await client.call("patch", `projects/${projectA}`, { name: "Denied edit", version: 1 }))
+        .status,
     ).toBe(403);
     expect(
-      (await client.call("patch", `projects/${projectB}`, { name: "Other tenant" })).status,
+      (await client.call("patch", `projects/${projectB}`, { name: "Other tenant", version: 1 }))
+        .status,
     ).toBe(404);
     expect(
       (

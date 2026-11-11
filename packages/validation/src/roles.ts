@@ -3,6 +3,7 @@ import {
   MFA_REQUIRED_PERMISSIONS,
   PERMISSION_AREAS,
   PERMISSIONS,
+  PROJECT_ASSIGNABLE_PERMISSIONS,
   SYSTEM_ROLES,
   TENANT_PERMISSIONS,
   type Permission,
@@ -17,10 +18,8 @@ export const tenantRoleSchema = z.enum(SYSTEM_ROLES.filter((role) => role !== "p
 export const permissionSchema = z.enum(PERMISSIONS);
 /** Permissions a tenant role may contain. `platform.admin` can never be granted by a tenant. */
 export const tenantPermissionSchema = permissionSchema.exclude(["platform.admin"]);
-export const projectPermissionSchema = permissionSchema.extract([
-  "projects.view",
-  "projects.manage",
-]);
+/** Permissions a project assignment may carry (packages/types PROJECT_ASSIGNABLE_PERMISSIONS). */
+export const projectPermissionSchema = permissionSchema.extract(PROJECT_ASSIGNABLE_PERMISSIONS);
 
 /** A role reference: a system role key (`project_manager`) or a tenant custom role ID. */
 export const roleReferenceSchema = z.union([tenantRoleSchema, uuid]);

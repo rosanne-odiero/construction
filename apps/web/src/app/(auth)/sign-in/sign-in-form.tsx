@@ -1,18 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { toast } from "sonner";
+import { startAuthentication } from "@simplewebauthn/browser";
+import type { z } from "zod";
+import { Building2, Eye, EyeOff, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
 import {
-  ArrowLeft,
-  Eye,
-  EyeOff,
-  KeyRound,
-  LoaderCircle,
-  MessageSquareText,
-  ShieldCheck,
-} from "lucide-react";
+  authResponseSchema,
+  csrfResponseSchema,
+  messageResponseSchema,
+  passkeyAuthenticationOptionsResponseSchema,
+  tenantsResponseSchema,
+  type AuthResponse,
+  type TenantsResponse,
+} from "@pm-buddy/validation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,37 +33,207 @@ import {
   InputOTPSeparator,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { maskPhone, normalizeKenyanPhone } from "@/lib/format";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FoundationApiError, foundationRequest } from "@/lib/foundation-api";
+import { refreshSession } from "@/lib/live-api";
+import { normalizeKenyanPhone } from "@/lib/format";
 
-export function SignInForm() {
-  const t = useTranslations("auth");
+type Step = "checking" | "credentials" | "mfa" | "enrol" | "company" | "noCompany" | "done";
+type Company = TenantsResponse["tenants"][number];
+type ErrorKey =
+  | "invalidCredentials"
+  | "invalidCode"
+  | "rateLimited"
+  | "network"
+  | "invalidResponse"
+  | "passkeyCancelled"
+  | "unexpected";
+
+function errorKey(error: unknown, credentials: boolean): ErrorKey {
+  if (!(error instanceof FoundationApiError)) return "unexpected";
+  if (error.code === "passkey-cancelled") return "passkeyCancelled";
+  if (error.status === 401 || error.status === 400)
+    return credentials ? "invalidCredentials" : "invalidCode";
+  if (error.status === 429) return "rateLimited";
+  if (error.code === "network") return "network";
+  if (error.code === "invalidResponse") return "invalidResponse";
+  return "unexpected";
+}
+
+async function post<T>(path: string, schema: z.ZodType<T>, body: Record<string, unknown> = {}) {
+  const { csrfToken } = await foundationRequest("/auth/csrf", csrfResponseSchema);
+  return foundationRequest(path, schema, {
+    method: "POST",
+    body,
+    headers: { "X-CSRF-Token": csrfToken },
+  });
+}
+
+/**
+ * Real sign-in for the office app: password, then TOTP, passkey or recovery-code verification
+ * when required, then company selection. Tokens stay in httpOnly cookies set by the API; this
+ * component only sees the parsed account summary. `next` is already a safe relative path.
+ */
+export function SignInForm({ next }: { next: string }) {
+  const t = useTranslations("signIn");
   const router = useRouter();
-  const [step, setStep] = useState<"credentials" | "mfa">("credentials");
+  const [step, setStep] = useState<Step>("checking");
   const [method, setMethod] = useState<"email" | "phone">("email");
-  const [identifier, setIdentifier] = useState("wanjiru@jengabora.example");
-  const [phone, setPhone] = useState("0712 345 678");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
+  const [recovery, setRecovery] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [account, setAccount] = useState<AuthResponse | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [busy, setBusy] = useState(false);
-
+  const [failure, setFailure] = useState<ErrorKey | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const normalised = normalizeKenyanPhone(phone);
 
-  const submitCredentials = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (method === "phone" && !normalised) {
-      toast.error(t("phoneInvalid"));
-      return;
-    }
-    setStep("mfa");
-  };
+  const finish = useCallback(() => {
+    setStep("done");
+    router.replace(next);
+    router.refresh();
+  }, [next, router]);
 
-  const verify = (event: React.FormEvent) => {
-    event.preventDefault();
+  const selectCompany = useCallback(
+    async (company: Company) => {
+      try {
+        setAccount(
+          await post(`/tenants/${encodeURIComponent(company.id)}/select`, authResponseSchema),
+        );
+        finish();
+      } catch (error) {
+        // Companies whose role requires MFA need a verification within the last five minutes.
+        if (error instanceof FoundationApiError && error.status === 403) setStep("mfa");
+        else throw error;
+      }
+    },
+    [finish],
+  );
+
+  const afterAuthentication = useCallback(
+    async (current: AuthResponse) => {
+      setAccount(current);
+      if (current.mfaRequired) {
+        setStep(current.user.mfaEnabled ? "mfa" : "enrol");
+        return;
+      }
+      const { tenants } = await foundationRequest("/tenants", tenantsResponseSchema);
+      setCompanies(tenants);
+      if (
+        current.session.tenantId &&
+        tenants.some((tenant) => tenant.id === current.session.tenantId)
+      ) {
+        finish();
+      } else if (tenants.length === 1) {
+        await selectCompany(tenants[0]!);
+      } else {
+        setStep(tenants.length ? "company" : "noCompany");
+      }
+    },
+    [finish, selectCompany],
+  );
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const current = await foundationRequest("/auth/me", authResponseSchema).catch(
+          async (error: unknown) => {
+            // An expired access token with a live refresh credential resumes the session.
+            if (
+              error instanceof FoundationApiError &&
+              error.status === 401 &&
+              (await refreshSession())
+            )
+              return foundationRequest("/auth/me", authResponseSchema);
+            throw error;
+          },
+        );
+        if (active) await afterAuthentication(current);
+      } catch (error) {
+        if (!active) return;
+        setStep("credentials");
+        if (!(error instanceof FoundationApiError && error.status === 401))
+          setFailure(errorKey(error, true));
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [afterAuthentication]);
+
+  useEffect(() => {
+    if (step !== "checking") heading.current?.focus();
+  }, [step]);
+
+  async function run(operation: () => Promise<void>, credentials = false) {
+    if (busy) return;
     setBusy(true);
-    setTimeout(() => router.push("/dashboard"), 600);
-  };
+    setFailure(null);
+    try {
+      await operation();
+    } catch (error) {
+      setFailure(errorKey(error, credentials));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const identifier = method === "email" ? email.trim() : (normalised ?? "");
+  const status = (
+    <div aria-live="polite" className="min-h-0">
+      {busy ? (
+        <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" aria-hidden /> {t("working")}
+        </p>
+      ) : null}
+    </div>
+  );
+  const alert = failure ? (
+    <p
+      role="alert"
+      className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+    >
+      {t(`errors.${failure}`)}
+    </p>
+  ) : null;
+  const restart = (
+    <Button
+      type="button"
+      variant="link"
+      className="h-auto px-0"
+      disabled={busy}
+      onClick={() =>
+        void run(async () => {
+          await post("/auth/logout", messageResponseSchema);
+          setAccount(null);
+          setCode("");
+          setRecoveryCode("");
+          setStep("credentials");
+        })
+      }
+    >
+      {t("useAnotherAccount")}
+    </Button>
+  );
+
+  if (step === "checking" || step === "done") {
+    return (
+      <Card className="w-full max-w-sm">
+        <CardContent>
+          <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+            <LoaderCircle className="size-4 animate-spin" aria-hidden />
+            {step === "done" ? t("redirecting") : t("checking")}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (step === "mfa") {
     return (
@@ -69,64 +242,195 @@ export function SignInForm() {
           <span className="mb-2 flex size-10 items-center justify-center rounded-full bg-accent text-accent-foreground">
             <ShieldCheck className="size-5" aria-hidden />
           </span>
-          <CardTitle className="text-xl">{t("mfaTitle")}</CardTitle>
-          <CardDescription>{t("mfaDescription")}</CardDescription>
+          <CardTitle className="text-xl">
+            <h2 ref={heading} tabIndex={-1} className="outline-none">
+              {t("mfaTitle")}
+            </h2>
+          </CardTitle>
+          <CardDescription>
+            {t("mfaDescription", { name: account?.user.displayName ?? "" })}
+          </CardDescription>
         </CardHeader>
-        <form onSubmit={verify}>
-          <CardContent className="space-y-4">
-            <Field>
-              <FieldLabel htmlFor="otp">{t("codeLabel")}</FieldLabel>
-              <InputOTP id="otp" maxLength={6} value={code} onChange={setCode} autoFocus>
-                <InputOTPGroup>
-                  <InputOTPSlot index={0} />
-                  <InputOTPSlot index={1} />
-                  <InputOTPSlot index={2} />
-                </InputOTPGroup>
-                <InputOTPSeparator />
-                <InputOTPGroup>
-                  <InputOTPSlot index={3} />
-                  <InputOTPSlot index={4} />
-                  <InputOTPSlot index={5} />
-                </InputOTPGroup>
-              </InputOTP>
-              <FieldDescription>{t("codeHint")}</FieldDescription>
-            </Field>
-            <Button type="submit" className="w-full" disabled={code.length < 6 || busy}>
-              {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
-              {t("verify")}
-            </Button>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <Separator className="flex-1" />
-              {t("or")}
-              <Separator className="flex-1" />
-            </div>
-            <div className="grid gap-2">
-              <Button type="button" variant="outline" onClick={() => toast.info(t("passkeyToast"))}>
-                <KeyRound aria-hidden /> {t("usePasskey")}
+        <CardContent className="space-y-4">
+          {alert}
+          {status}
+          {recovery ? (
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run(async () => {
+                  await afterAuthentication(
+                    await post("/auth/mfa/recover", authResponseSchema, {
+                      code: recoveryCode.trim(),
+                    }),
+                  );
+                });
+              }}
+            >
+              <Field>
+                <FieldLabel htmlFor="recovery-code">{t("recoveryLabel")}</FieldLabel>
+                <Input
+                  id="recovery-code"
+                  autoComplete="one-time-code"
+                  value={recoveryCode}
+                  onChange={(event) => setRecoveryCode(event.target.value)}
+                  minLength={16}
+                  maxLength={64}
+                  required
+                />
+                <FieldDescription>{t("recoveryHint")}</FieldDescription>
+              </Field>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={busy || recoveryCode.trim().length < 16}
+              >
+                {t("verify")}
               </Button>
+            </form>
+          ) : account?.user.totpEnabled !== false ? (
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run(async () => {
+                  await afterAuthentication(
+                    await post("/auth/mfa/step-up", authResponseSchema, { code }),
+                  );
+                });
+              }}
+            >
+              <Field>
+                <FieldLabel htmlFor="otp">{t("codeLabel")}</FieldLabel>
+                <InputOTP
+                  id="otp"
+                  maxLength={6}
+                  value={code}
+                  onChange={setCode}
+                  pattern="^[0-9]*$"
+                  autoFocus
+                >
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                  </InputOTPGroup>
+                  <InputOTPSeparator />
+                  <InputOTPGroup>
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+                <FieldDescription>{t("codeHint")}</FieldDescription>
+              </Field>
+              <Button type="submit" className="w-full" disabled={busy || code.length < 6}>
+                {t("verify")}
+              </Button>
+            </form>
+          ) : null}
+          <div className="grid gap-2">
+            {account && account.user.passkeys > 0 ? (
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
+                disabled={busy}
                 onClick={() =>
-                  toast.success(t("smsToast", { phone: maskPhone(normalised ?? "254712345678") }))
+                  void run(async () => {
+                    const { options } = await post(
+                      "/auth/passkeys/step-up/options",
+                      passkeyAuthenticationOptionsResponseSchema,
+                    );
+                    let credential;
+                    try {
+                      credential = await startAuthentication({ optionsJSON: options });
+                    } catch {
+                      throw new FoundationApiError(0, "passkey-cancelled");
+                    }
+                    await afterAuthentication(
+                      await post("/auth/passkeys/step-up", authResponseSchema, { credential }),
+                    );
+                  })
                 }
               >
-                <MessageSquareText aria-hidden /> {t("useSms")}
+                <KeyRound aria-hidden /> {t("usePasskey")}
               </Button>
-            </div>
-          </CardContent>
-        </form>
-        <CardFooter className="justify-between">
-          <Button
-            type="button"
-            variant="link"
-            className="px-0"
-            onClick={() => setStep("credentials")}
-          >
-            <ArrowLeft aria-hidden /> {t("back")}
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setFailure(null);
+                setRecovery((value) => !value);
+              }}
+            >
+              {recovery ? t("useCode") : t("useRecovery")}
+            </Button>
+          </div>
+        </CardContent>
+        <CardFooter>{restart}</CardFooter>
+      </Card>
+    );
+  }
+
+  if (step === "enrol" || step === "noCompany") {
+    return (
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="text-xl">
+            <h2 ref={heading} tabIndex={-1} className="outline-none">
+              {step === "enrol" ? t("enrolTitle") : t("noCompanyTitle")}
+            </h2>
+          </CardTitle>
+          <CardDescription>
+            {step === "enrol" ? t("enrolDescription") : t("noCompanyDescription")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {alert}
+          <Button asChild className="w-full">
+            <Link href="/foundation">{t("consoleLink")}</Link>
           </Button>
-          <span className="text-xs text-muted-foreground">{t("mfaRequiredNote")}</span>
-        </CardFooter>
+        </CardContent>
+        <CardFooter>{restart}</CardFooter>
+      </Card>
+    );
+  }
+
+  if (step === "company") {
+    return (
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="text-xl">
+            <h2 ref={heading} tabIndex={-1} className="outline-none">
+              {t("companyTitle")}
+            </h2>
+          </CardTitle>
+          <CardDescription>{t("companyDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {alert}
+          {status}
+          <ul className="space-y-2" aria-label={t("companyTitle")}>
+            {companies.map((company) => (
+              <li key={company.id}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto w-full justify-start gap-3 py-3 text-left"
+                  disabled={busy}
+                  onClick={() => void run(() => selectCompany(company))}
+                >
+                  <Building2 className="size-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 truncate">{company.name}</span>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+        <CardFooter>{restart}</CardFooter>
       </Card>
     );
   }
@@ -134,68 +438,93 @@ export function SignInForm() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle className="text-xl">{t("title")}</CardTitle>
+        <CardTitle className="text-xl">
+          <h2 ref={heading} tabIndex={-1} className="outline-none">
+            {t("title")}
+          </h2>
+        </CardTitle>
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
-      <form onSubmit={submitCredentials}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!identifier) {
+            setFailure("invalidCredentials");
+            return;
+          }
+          void run(async () => {
+            const result = await post("/auth/login", authResponseSchema, { identifier, password });
+            setPassword("");
+            await afterAuthentication(result);
+          }, true);
+        }}
+      >
         <CardContent>
           <FieldGroup>
-            <Tabs value={method} onValueChange={(v) => setMethod(v as "email" | "phone")}>
+            {alert}
+            <Tabs value={method} onValueChange={(value) => setMethod(value as "email" | "phone")}>
               <TabsList className="w-full">
                 <TabsTrigger value="email">{t("emailTab")}</TabsTrigger>
                 <TabsTrigger value="phone">{t("phoneTab")}</TabsTrigger>
               </TabsList>
+              {/* Both panels stay mounted so each tab's aria-controls points at a real panel. */}
+              <TabsContent value="email" forceMount hidden={method !== "email"}>
+                {method === "email" ? (
+                  <Field>
+                    <FieldLabel htmlFor="email">{t("email")}</FieldLabel>
+                    <Input
+                      id="email"
+                      type="email"
+                      autoComplete="username"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      maxLength={254}
+                      required
+                    />
+                  </Field>
+                ) : null}
+              </TabsContent>
+              <TabsContent value="phone" forceMount hidden={method !== "phone"}>
+                {method === "phone" ? (
+                  <Field>
+                    <FieldLabel htmlFor="phone">{t("phone")}</FieldLabel>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="username"
+                      value={phone}
+                      onChange={(event) => setPhone(event.target.value)}
+                      aria-invalid={phone.length > 0 && !normalised}
+                      aria-describedby="phone-hint"
+                      required
+                    />
+                    <FieldDescription id="phone-hint">
+                      {normalised ? t("phoneNormalised", { phone: normalised }) : t("phoneHint")}
+                    </FieldDescription>
+                  </Field>
+                ) : null}
+              </TabsContent>
             </Tabs>
-            {method === "email" ? (
-              <Field>
-                <FieldLabel htmlFor="email">{t("email")}</FieldLabel>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="username"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  required
-                />
-              </Field>
-            ) : (
-              <Field>
-                <FieldLabel htmlFor="phone">{t("phone")}</FieldLabel>
-                <Input
-                  id="phone"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="username"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  aria-invalid={!normalised}
-                  required
-                />
-                <FieldDescription>
-                  {normalised ? t("phoneNormalised", { phone: normalised }) : t("phoneInvalid")}
-                </FieldDescription>
-              </Field>
-            )}
             <Field>
               <div className="flex items-center justify-between">
                 <FieldLabel htmlFor="password">{t("password")}</FieldLabel>
-                <Button
-                  type="button"
-                  variant="link"
-                  size="sm"
-                  className="h-auto px-0 text-xs"
-                  onClick={() => toast.info(t("resetToast"))}
+                <Link
+                  href="/foundation"
+                  className="text-xs font-medium text-primary underline-offset-4 hover:underline"
                 >
                   {t("forgot")}
-                </Button>
+                </Link>
               </div>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
-                  defaultValue="correct-horse-battery"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                   className="pr-10"
+                  maxLength={128}
                   required
                 />
                 <Button
@@ -204,20 +533,33 @@ export function SignInForm() {
                   size="icon-sm"
                   className="absolute top-1/2 right-1 -translate-y-1/2"
                   aria-label={showPassword ? t("hidePassword") : t("showPassword")}
-                  onClick={() => setShowPassword((v) => !v)}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((value) => !value)}
                 >
                   {showPassword ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
                 </Button>
               </div>
             </Field>
-            <Button type="submit" className="w-full">
-              {t("continue")}
+            {status}
+            <Button type="submit" className="w-full" disabled={busy}>
+              {t("submit")}
             </Button>
           </FieldGroup>
         </CardContent>
       </form>
       <CardFooter>
-        <p className="text-xs text-muted-foreground">{t("prototypeNote")}</p>
+        <p className="text-xs text-muted-foreground">
+          {t.rich("consoleNote", {
+            link: (chunks) => (
+              <Link
+                href="/foundation"
+                className="font-medium text-primary underline underline-offset-4"
+              >
+                {chunks}
+              </Link>
+            ),
+          })}
+        </p>
       </CardFooter>
     </Card>
   );

@@ -18,6 +18,8 @@
 | `/design-system` | Shared tokens/controls, KES/Nairobi formats, explicit pending/conflict/failure/loading/offline examples; EN/SW and light/dark |
 | Web manifest | Same-origin installation metadata and icon; no service worker or sensitive-data cache; no offline business-sync claim |
 | `/foundation` | API-backed registration/verification/login/reset, TOTP enrollment/step-up/recovery, passkey registration/listing/removal and passkey step-up (D1.3, branch `phase-1/d1-passkeys`), password-policy refusals, session refresh/revocation, companies/projects, invitations, membership/project access, roles and permissions (custom roles, member role changes; D1.4) and redacted audit summaries |
+| `/sign-in` and office shell (D2.1) | Real API sign-in (password, TOTP/passkey/recovery-code step-up, company selection), signed-in user and company in the shell, sign-out; live pages redirect to `/sign-in?next=…` without a session |
+| `/projects` (D2.1) | Live project list and detail (overview KPI shell with "unavailable" figures, sites with versioned geofences and a map editor, team, WBS and milestones); other business screens stay prototype, now also under `/prototype/projects` |
 | CI | Existing lint/type/test/build/API/security workflows retained; browser/a11y job added |
 
 ## Executed evidence (this session)
@@ -103,7 +105,7 @@ Also fixed: the primary button's hover colour blended into the page and fell to 
 
 Open items carried forward (not blockers for building Phase 2): real SMS/WhatsApp/email providers (D7.3); passwordless passkey sign-in; human review of Kiswahili wording and field accessibility (§15 H); passkey events in the company audit log.
 
-Next: **Phase 2**, starting with D2.1 (projects, sites and geofences), then D2.2 (BQ import). See the [Phase 1 demo](./demos/phase-1.md).
+Next: **Phase 2**. D2.1 (projects, sites and geofences) is built on `phase-2/d2.1-projects-sites` and awaits review (last section); D2.2 (BQ import) follows. See the [Phase 1 demo](./demos/phase-1.md) and the [Phase 2 demo](./demos/phase-2.md).
 
 ## D1.4 permission-based RBAC and D1.2 shared i18n (branch `phase-1/d1-rbac-i18n`)
 
@@ -199,3 +201,79 @@ Note: the first development `prisma migrate deploy` of the new migration failed 
 - axe flags the shared primary button's **hover** colour (`hover:bg-primary/80`, 4.38:1) when the pointer rests on it; the new browser tests scan at rest like the existing ones. Pre-existing design-system issue to fix separately.
 - Kiswahili passkey and password wording needs a human language review. Nothing was committed or pushed; no GitHub CI run is claimed.
 
+## Independent review of D2.1
+
+A separate reviewer found four issues; all are fixed with regression tests (API e2e 85/85, web 30/30 three runs in a row):
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Medium | Open redirect: `?next=/.//evil.example` (or `/..//`, `/%2e%2e//`) normalised to `//evil.example` after the raw-string checks, sending a signed-in user to another site | The normalised path is checked too (no leading `//`, no backslash); five new unit cases |
+| 2 | Medium | Invitations skipped the project-level escalation guard: acceptance grants the role's project permissions, but the inviter only needed `projects.manage` there | The inviter must hold every permission the invitee would get on each invited project (role ∩ their assignment), as for direct assignment; e2e test |
+| 3 | Low | A code like `PRJ-9999999999999999` made the next automatic code overflow `VARCHAR(20)`, so every later create without a code failed with a 500 | Only `PRJ-` + up to 12 digits counts towards automatic numbering; e2e test |
+| 4 | Low | An optional reason of 1–2 characters failed the database check with a 500 | The shared schema and the lifecycle rules require at least 3 characters whenever a reason is given; the dialogs disable submit; unit and e2e tests |
+
+Also: the site honours "reduce motion" (WCAG 2.3.3), and the browser tests run with it on, removing a flaky accessibility scan of a button mid-fade.
+
+**Local toolchain note.** On 11/11/2026 this Mac's `/usr/local/bin/node` pointed to Bun and Homebrew's Node was an x86_64 build, which can't load the arm64 native modules. Verification used the official Node 24.22.2 darwin-arm64 build (SHA-256 checked against nodejs.org) via PATH only; nothing on the system was changed.
+
+## D2.1 projects, sites and geofences (branch `phase-2/d2.1-projects-sites`)
+
+Status: built and verified locally; committed and pushed for CI and independent review. Design: [ARCHITECTURE §4.1](./ARCHITECTURE.md#41-projects-module-d21), §8 (wider project assignments), §18 (sign-in wiring, maps) and decisions D-27–D-29; implemented-model differences in [ERD §3](./ERD.md#3-projects-sites-and-schedule); walkthrough in the [Phase 2 demo](./demos/phase-2.md).
+
+**What changed**
+
+- **Shared packages.** `types`: Kenya's 47 counties, contract types, project/milestone statuses, geofence kinds and `PROJECT_ASSIGNABLE_PERMISSIONS` (26 project-scoped catalogue permissions). `domain` (now depends on `types`): `geofence.ts` (normalisation, validation with stable issue codes, area, perimeter, point-in-fence), `project-lifecycle.ts` (project and milestone transitions, activation checklist), `wbs.ts` (sibling weight groups, progress). `validation`: `projects.ts` with every D2.1 request and response schema (`projectSchema` moved here from `identity.ts`; `projectPermissionSchema` now uses `PROJECT_ASSIGNABLE_PERMISSIONS`).
+- **Database.** Migration `20261110100000_projects_sites_geofences` (no existing migration edited): project fields, lifecycle trigger `app.guard_project`, `projects_active_details_check`, code unique per company (existing rows backfilled to `PRJ-001…` per company under NO FORCE/FORCE with a count assertion); new `project_status_changes`, `sites`, `site_geofences` (append-only versions, shape CHECKs, version/`effective_from` trigger), `wbs_nodes` (composite parent key, cycle trigger) and `milestones` (lifecycle trigger); forced RLS with WITH CHECK on every new table; composite `(tenant_id, …)` foreign keys; UPDATE/DELETE revoked from `pmb_app` on history tables and DELETE on `sites`; `project_permissions_check` widened to the 26 permissions.
+- **API.** New `projects` module (23 operations, OpenAPI-annotated; table in §4.1) replacing the identity module's four project endpoints (list, create, rename, assign). All through `AccessPolicy`, the tenant transaction and the hash-chained audit log (field names only, plus `reasonGiven`). New helpers `src/common/openapi.ts` and `src/common/database-errors.ts`. `db:seed` (API and root; turbo task depends on the build, uncached, passes `NODE_ENV` through).
+- **Web.** `/sign-in` wired to the API (`lib/live-api.ts` for browser calls with CSRF and single-flight refresh; `lib/server-api.ts` for server components through `API_INTERNAL_URL`, forwarding only the Cookie header; `lib/safe-next.ts` for relative `next` paths). The office layout reads the session: the top bar shows the user, role and company and offers sign-out; live pages redirect to sign-in without a session. Live `/projects`, `/projects/[projectId]` (Overview, Sites, Team, WBS & milestones tabs, BQ tab linking to the labelled prototype), `/projects/[projectId]/sites/new` and `/sites/[siteId]`. Components in `components/projects/*` and `components/maps/*` (custom react-leaflet editor; no new map dependency). The D0 project screens moved to `/prototype/projects/…` and are labelled. 13 new EN/SW namespaces (`i18n:check`: 1,409 keys in each).
+- **Dependencies.** None from the registry. Workspace links only: `@pm-buddy/types` added to `apps/web` and `packages/domain` (lockfile +6 lines, importer entries only).
+
+**Behaviour changes to note (existing code and tests)**
+
+- `POST/GET/PATCH /projects` return the full D2.1 project shape, and `PATCH /projects/:id` requires the `version` the client read. Existing e2e tests in `identity.e2e-spec.ts` and `roles.e2e-spec.ts` now send `version` on PATCH and include `code` in direct Prisma creates; their assertions are unchanged. `test/support.ts` response contracts cover the new routes. The web `foundation.spec.ts` mocked project now has the D2.1 shape (it failed with "unexpected response" until updated, because the console parses responses with the shared schema).
+- A stale-MFA refusal (`AuthService.requireMfa`) is still 403 but now carries `code: "step-up-required"`, so the office app can offer the step-up dialog; the foundation console treats that code like its existing "forbidden" message.
+- An invitation's default project assignment is now the invited role's permissions within `PROJECT_ASSIGNABLE_PERMISSIONS` (previously only `projects.view`/`projects.manage`); role ∩ assignment still applies.
+- `apps/api/src/modules/identity/identity.schemas.spec.ts` now checks `projectAssignmentRequestSchema` (the assignment schema moved to `projects.ts`).
+
+**Commands run (from the repository root unless noted) and actual results**
+
+| Command | Actual result |
+|---|---|
+| `git switch -c phase-2/d2.1-projects-sites main` | Branch created from clean `main` (`ac692fc`) |
+| `npx pnpm@12.17.0 install` (after adding the workspace links) | Lockfile diff +6 lines, importer entries only |
+| `npx pnpm@12.17.0 format:check` | "All matched files use Prettier code style!" |
+| `npx pnpm@12.17.0 turbo run lint typecheck test i18n:check build` | Passed: 26 successful, 4 cached (the `types`/`domain`/`validation` builds and `db:generate`, replayed with unchanged inputs; every lint, typecheck, test, i18n and the web/API builds executed). oxlint "Found 0 warnings and 0 errors" in `i18n`, `types`, `domain`, `validation` and `api`; ESLint clean in web. Unit tests: types 15, domain 64, i18n 3, validation 52, web 18, API 77 (229). `i18n OK: 1409 keys in en and sw, all ICU messages compile.` `next build` passed with the new routes |
+| `npx pnpm@12.17.0 db:migrate` | "12 migrations found in prisma/migrations", "No pending migrations to apply." (the D2.1 migration had been applied to the development database earlier in this session) |
+| `npx pnpm@12.17.0 db:seed` (run 1 of this verification) | Exit 0. "Demo company: Jenga Bora Builders Ltd (already present)"; three accounts with "password: unchanged"; the owner's existing TOTP secret/URI; "RUI-HTS … active (already present)", "KIT-BNG … active (already present)", "SYO-TWN … planning (already present)". The data had been created by the first ever run earlier in this session, which printed "(created)" and generated passwords |
+| `npx pnpm@12.17.0 db:seed` (run 2) | Exit 0; output identical to run 1 (no duplicates; idempotence is also asserted by the e2e seed test) |
+| `NODE_ENV=production npx pnpm@12.17.0 db:seed` | Exit 1: "Refusing to seed demo data: NODE_ENV is production." |
+| `npx pnpm@12.17.0 --filter @pm-buddy/api db:seed --reset-credentials` | Exit 0; new passwords printed for all three accounts (checks the documented flag) |
+| `PATH=/tmp/pnpm-shim:$PATH npx pnpm@12.17.0 turbo run test:e2e` | Passed: 7 tasks (both `test:e2e` tasks executed; 5 cached build/generate dependencies). API: 6 files, **82 tests** against `pmb_test` under `pmb_app` (projects 12, identity 34, plus health, roles, passkeys and passwords). Web: **30** Playwright tests in 1.1 min (16 new: sign-in 4, projects 9 including the EN/SW × light/dark axe matrix and the 360 px check, site editor 3) |
+| `cd apps/api && npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` | "No difference detected.", exit code 0 |
+| `grep -c 'integrity: sha1-' pnpm-lock.yaml`; `grep -c tarball: pnpm-lock.yaml` | 0; 0 |
+| `npx pnpm@12.17.0 install --frozen-lockfile` | Passed: "Lockfile is up to date, resolution step is skipped" |
+
+**API e2e coverage (`apps/api/test/projects.e2e-spec.ts`, real `pmb_app` role):** OpenAPI documents every operation; planning projects with chosen or automatic codes, unique per company (409), step-up required; list by status and search limited to viewable projects; optimistic-version updates with audit metadata limited to field names; geofence validation (self-intersection, repeated closing vertex, out-of-bounds, tiny and huge areas, radius range), a new version per change with earlier versions unchanged (deep-equal before and after), the version in force at a given time, stale `currentVersion` refused, and direct UPDATE/DELETE of versions or sites by the runtime role refused; the lifecycle with every invalid transition refused (API and trigger), reasons required, activation checklist, read-only closed/cancelled projects and a fixed code; a site agent can view an assigned project but not manage it or see others; WBS weights (incomplete groups keep progress null, cycles and depth refused, reorder); milestone transitions; team assignment and removal within the escalation guard (unheld permissions and assignments by members without `users.invite`/`projects.manage` refused, role ∩ assignment applied); company B cannot read, change or reference company A's projects, sites, geofences, WBS nodes or milestones by guessed IDs or composite keys; the seed run twice creates nothing new.
+
+**Issues found by the checks and fixed (no check was disabled or weakened)**
+
+- axe `label-content-name-mismatch`: the account-menu button and the "Open project"/"Edit site and geofence" links had `aria-label`s that did not contain their visible text; they now use visible text plus screen-reader-only context, and the Kiswahili "remove member" label now starts with the visible word ("Ondoa").
+- axe `aria-valid-attr-value`: the sign-in Email/Phone tabs pointed `aria-controls` at panels that were never rendered (also true of the D0 prototype); both panels now stay mounted (inactive one hidden).
+- The 360 px check found horizontal scrolling on the Team tab: a screen-reader-only header inside the scrollable table escaped its container; scroll containers are now positioned.
+- `next dev` logged "window is not defined" while server-rendering the site editor (it imported a Leaflet module for one constant); the constant moved to a Leaflet-free module.
+- "Clear filters" kept the old search text in the uncontrolled field; the filter form is now keyed by the query.
+- The first full web run had one failure in the existing `foundation.spec.ts` roles test (axe colour contrast of a primary button measured mid-transition, 2.4:1) while the dev server was compiling; it passed when rerun alone and in both later full runs. Not reproduced since; noted as a possible timing flake in that existing test.
+
+**Incidents and notes**
+
+- While checking the migration's backfill by hand, `ALTER TABLE projects NO FORCE ROW LEVEL SECURITY` was run once against the **development** database through psql; FORCE was restored immediately and every tenant table was re-checked as forced. No test or production database was involved. The migration itself lifts FORCE only inside its transaction and restores it.
+- `identity.e2e-spec.ts` prints Node's `MaxListenersExceededWarning` (11 listeners on the supertest server) when run alone or in the full suite; it comes from that file's existing parallel requests (`Promise.all`), which this branch did not change. `projects.e2e-spec.ts` alone prints no warning.
+- A real-API browser smoke (real sign-in with the seeded owner and TOTP, then list, overview, sites, team, WBS and the editor) was run earlier in this session with a scripted Playwright browser against the development API; the screens rendered correctly. The scratch script and screenshots were deleted.
+
+**Limitations and follow-ups**
+
+- Sites cannot be deleted yet (attendance will reference them). Progress and every KPI are "unavailable" until their modules exist (D2.2–D6.x). No passwordless passkey sign-in. Server components cannot refresh an expired access token (the refresh cookie is scoped to `/api/v1/auth`), so the user passes through `/sign-in`, which refreshes silently and returns.
+- Production map tiles are still undecided (D-10, Q-T4); the editor's coordinate list works without tiles.
+- Client details are plain fields until the client portal (D7.1); practical completion, the defects liability period and payment-linked milestones arrive with valuations (D6.x).
+- Kiswahili strings need review by a native speaker (§15 H). GitHub CI has not run on this branch.
+- Once during development a single server-side fetch from `next dev` to the API hung for about ten seconds (likely a stale socket after a crashed browser run); it did not recur.

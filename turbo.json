@@ -50,6 +50,11 @@
     "i18n:check": {},
     "db:migrate": {
       "cache": false
+    },
+    "db:seed": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "passThroughEnv": ["NODE_ENV"]
     }
   }
 }

@@ -2,7 +2,7 @@
   "name": "@pm-buddy/domain",
   "version": "0.0.0",
   "private": true,
-  "description": "Pure PM-Buddy business rules (no I/O): phone numbers, money, age, geofences",
+  "description": "Pure PM-Buddy business rules (no I/O): phone numbers, money, age, geofences, project lifecycle, WBS weights",
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -22,6 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@pm-buddy/types": "workspace:*",
     "decimal.js": "catalog:"
   },
   "devDependencies": {

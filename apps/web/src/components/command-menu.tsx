@@ -74,7 +74,11 @@ export function CommandMenu() {
           <CommandSeparator />
           <CommandGroup heading={t("projects")}>
             {projects.map((p) => (
-              <CommandItem key={p.id} value={p.name} onSelect={() => go(`/projects/${p.id}`)}>
+              <CommandItem
+                key={p.id}
+                value={p.name}
+                onSelect={() => go(`/prototype/projects/${p.id}`)}
+              >
                 <Building aria-hidden />
                 {p.name}
               </CommandItem>

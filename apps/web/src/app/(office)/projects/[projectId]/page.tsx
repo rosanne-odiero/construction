@@ -1,262 +1,132 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import {
-  CircleCheck,
-  Clock,
-  FileSpreadsheet,
-  HardHat,
-  ScanFace,
-  TriangleAlert,
-  Wallet,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BudgetByBillChart } from "@/components/charts/budget-by-bill-chart";
-import { SCurveChart } from "@/components/charts/s-curve-chart";
-import { KpiCard } from "@/components/kpi-card";
-import { SitesMap } from "@/components/maps/sites-map";
+import { FileSpreadsheet } from "lucide-react";
+import { isProjectReadOnly } from "@pm-buddy/domain";
+import { projectDetailResponseSchema } from "@pm-buddy/validation";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge, type Tone } from "@/components/status-badge";
-import { formatDate, formatDateTime, formatKES, formatPercent } from "@/lib/format";
-import { ruiruSummary } from "@/mocks/bq";
-import {
-  getProject,
-  ruiruActivity,
-  ruiruBudgetByBill,
-  sCurveFor,
-  type Milestone,
-  type ProjectHealth,
-} from "@/mocks/projects";
+import { EditProjectButton } from "@/components/projects/project-form";
+import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
+import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
+import { StatusChangeButton } from "@/components/projects/status-change";
+import { StatusBadge } from "@/components/status-badge";
+import { cn } from "@/lib/utils";
+import { serverApi, requireSession } from "@/lib/server-api";
+import { signInHref } from "@/lib/safe-next";
+import { OverviewTab } from "./overview-tab";
+import { SitesTab } from "./sites-tab";
+import { TeamTab } from "./team-tab";
+import { WbsTab } from "./wbs-tab";
 
-const healthTone: Record<ProjectHealth, Tone> = {
-  on_track: "success",
-  at_risk: "warning",
-  behind: "danger",
-};
-const milestoneTone: Record<Milestone["state"], Tone> = {
-  done: "success",
-  at_risk: "warning",
-  upcoming: "neutral",
-  in_progress: "info",
-};
+const TABS = ["overview", "sites", "team", "wbs"] as const;
+type Tab = (typeof TABS)[number];
+const PROTOTYPE_IDS = new Set(["ruiru-heights", "kitengela-bungalow"]);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function generateMetadata({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  return { title: getProject(projectId)?.name ?? "Project" };
+  const t = await getTranslations("projectDetail");
+  if (!UUID.test(projectId)) return { title: t("title") };
+  const detail = await serverApi(`/projects/${projectId}`, projectDetailResponseSchema);
+  return { title: detail.ok ? detail.data.project.name : t("title") };
 }
 
-export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function ProjectPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { projectId } = await params;
-  const project = getProject(projectId);
-  if (!project) notFound();
+  // The D0 prototype detail moved to /prototype/projects/…; keep its old links working.
+  if (PROTOTYPE_IDS.has(projectId)) redirect(`/prototype/projects/${projectId}`);
+  if (!UUID.test(projectId)) notFound();
+  const { tab: rawTab } = await searchParams;
+  const tab: Tab = TABS.find((candidate) => candidate === rawTab) ?? "overview";
+  const path = `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}`;
 
-  const t = await getTranslations("project");
-  const tHealth = await getTranslations("health");
-  const tMilestones = await getTranslations("milestones");
-  const isRuiru = project.id === "ruiru-heights";
-  const valueDoneMinor = isRuiru
-    ? ruiruSummary.doneMinor
-    : Math.round(project.revisedSumMinor * project.progress);
+  const session = await requireSession(path);
+  if (!session) return <LiveUnavailable retryHref={path} />;
+  const result = await serverApi(`/projects/${projectId}`, projectDetailResponseSchema);
+  if (!result.ok) {
+    if (result.status === 401) redirect(signInHref(path));
+    if (result.status === 404) notFound();
+    if (result.status === 403) return <LiveForbidden />;
+    return <LiveUnavailable retryHref={path} />;
+  }
+  const detail = result.data;
+  const { project } = detail;
+  const t = await getTranslations("projectDetail");
+  const canManage = detail.permissions.includes("projects.manage");
+  const readOnly = isProjectReadOnly(project.status);
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow={
-          <Link href="/projects" className="hover:underline">
-            {t("breadcrumb")}
-          </Link>
+          <span className="flex flex-wrap items-center gap-2">
+            <Link href="/projects" className="hover:underline">
+              {t("breadcrumb")}
+            </Link>
+            <span aria-hidden>/</span>
+            <span className="font-mono">{project.code}</span>
+            <StatusBadge tone="info">{t("live")}</StatusBadge>
+          </span>
         }
         title={project.name}
-        description={`${project.description} · ${project.town}, ${project.county} · ${t("client")}: ${project.client}`}
+        description={project.description ?? undefined}
         actions={
           <>
-            <StatusBadge tone={healthTone[project.health]}>{tHealth(project.health)}</StatusBadge>
-            <StatusBadge tone="neutral">{project.contractType}</StatusBadge>
+            <ProjectStatusBadge status={project.status} />
+            {canManage && !readOnly ? <EditProjectButton project={project} /> : null}
+            {canManage ? <StatusChangeButton project={project} /> : null}
           </>
         }
       />
-
-      <nav aria-label={t("sectionsLabel")} className="flex flex-wrap gap-2">
-        <Button asChild size="sm" variant="secondary">
-          <Link href={`/projects/${project.id}`}>{t("tabs.overview")}</Link>
-        </Button>
-        <Button asChild size="sm" variant="outline">
-          <Link href={isRuiru ? `/projects/${project.id}/bq` : "/soon/valuations"}>
-            <FileSpreadsheet aria-hidden /> {t("tabs.bq")}
-          </Link>
-        </Button>
-        <Button asChild size="sm" variant="outline">
-          <Link href="/labour">
-            <HardHat aria-hidden /> {t("tabs.labour")}
-          </Link>
-        </Button>
-        <Button asChild size="sm" variant="outline">
-          <Link href="/attendance">
-            <ScanFace aria-hidden /> {t("tabs.attendance")}
-          </Link>
-        </Button>
-        <Button asChild size="sm" variant="outline">
-          <Link href="/payroll">
-            <Wallet aria-hidden /> {t("tabs.payroll")}
-          </Link>
-        </Button>
+      {readOnly ? (
+        <p role="status" className="rounded-md border bg-muted p-3 text-sm">
+          {t("readOnly")}
+        </p>
+      ) : null}
+      <nav aria-label={t("sectionsLabel")} className="relative -mx-1 overflow-x-auto">
+        <ul className="flex min-w-max gap-1 border-b px-1">
+          {TABS.map((key) => (
+            <li key={key}>
+              <Link
+                href={`/projects/${project.id}${key === "overview" ? "" : `?tab=${key}`}`}
+                aria-current={key === tab ? "page" : undefined}
+                className={cn(
+                  "-mb-px inline-flex h-10 items-center border-b-2 px-3 text-sm font-medium",
+                  key === tab
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t(`tabs.${key}`)}
+              </Link>
+            </li>
+          ))}
+          <li>
+            <Link
+              href="/projects/ruiru-heights/bq"
+              className="-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              <FileSpreadsheet className="size-4" aria-hidden />
+              {t("tabs.bq")}
+              <span className="rounded border px-1 text-xs">{t("prototypeBadge")}</span>
+            </Link>
+          </li>
+        </ul>
       </nav>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          label={t("kpi.progress")}
-          value={formatPercent(project.progress)}
-          hint={t("kpi.progressHint", {
-            planned: formatPercent(project.plannedProgress),
-            spi: project.spi.toFixed(2),
-          })}
-          tone={project.spi < 0.95 ? "warning" : "success"}
-        />
-        <KpiCard
-          label={t("kpi.valueDone")}
-          value={formatKES(valueDoneMinor)}
-          hint={t("kpi.valueDoneHint", { cpi: project.cpi.toFixed(2) })}
-          tone={project.cpi < 1 ? "warning" : "success"}
-        />
-        <KpiCard
-          label={t("kpi.contractSum")}
-          value={formatKES(project.revisedSumMinor)}
-          hint={t("kpi.contractSumHint", { original: formatKES(project.originalSumMinor) })}
-        />
-        <KpiCard
-          label={t("kpi.workers")}
-          value={`${project.workersToday}/${project.workersRostered}`}
-          hint={t("kpi.workersHint", { issues: project.openIssues })}
-        />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("sCurveTitle")}</CardTitle>
-            <CardDescription>{t("sCurveDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SCurveChart
-              data={sCurveFor(project.id)}
-              labels={{ planned: t("planned"), actual: t("actual") }}
-            />
-          </CardContent>
-        </Card>
-        {isRuiru ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("budgetTitle")}</CardTitle>
-              <CardDescription>{t("budgetDescription")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BudgetByBillChart
-                data={ruiruBudgetByBill}
-                labels={{
-                  budget: t("budget"),
-                  earned: t("earned"),
-                  actual: t("actualCost"),
-                  bill: t("bill"),
-                }}
-              />
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("budgetTitle")}</CardTitle>
-              <CardDescription>{t("budgetKitengela")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild variant="outline">
-                <Link href="/portal">{t("openPortal")}</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("milestonesTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="relative space-y-4 border-l pl-5">
-              {project.milestones.map((m) => (
-                <li key={m.key} className="relative">
-                  <span
-                    className={`absolute top-1 -left-[27px] flex size-3.5 items-center justify-center rounded-full ring-4 ring-background ${m.state === "done" ? "bg-success" : m.state === "at_risk" ? "bg-warning" : m.state === "in_progress" ? "bg-info" : "bg-muted-foreground/40"}`}
-                    aria-hidden
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium">{tMilestones(m.key)}</span>
-                    <StatusBadge tone={milestoneTone[m.state]}>
-                      {t(`milestoneStates.${m.state}`)}
-                    </StatusBadge>
-                  </div>
-                  <p className="text-xs text-muted-foreground tabular-nums">
-                    {t("plannedDate", { date: formatDate(m.planned) })}
-                    {m.actual ? ` · ${t("actualDate", { date: formatDate(m.actual) })}` : ""}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("siteTitle")}</CardTitle>
-            <CardDescription>{t("siteDescription", { radius: project.radiusM })}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SitesMap
-              label={t("siteTitle")}
-              sites={[
-                {
-                  id: project.id,
-                  name: project.name,
-                  center: project.center,
-                  radiusM: project.radiusM,
-                },
-              ]}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("activityTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isRuiru ? (
-              <ul className="space-y-4">
-                {ruiruActivity.map((item) => (
-                  <li key={item.key} className="flex gap-3 text-sm">
-                    {item.key === "inspectionPassed" || item.key === "voApproved" ? (
-                      <CircleCheck className="mt-0.5 size-4 shrink-0 text-success" aria-hidden />
-                    ) : item.key === "payrollReviewed" ? (
-                      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-                    ) : (
-                      <Clock className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    )}
-                    <div>
-                      <p className="leading-snug">{t(`activity.${item.key}`, item.params)}</p>
-                      <p className="text-xs text-muted-foreground tabular-nums">
-                        {formatDateTime(item.at)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("activityEmpty")}</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {tab === "overview" ? <OverviewTab detail={detail} /> : null}
+      {tab === "sites" ? (
+        <SitesTab project={project} canManage={canManage && !readOnly} returnTo={path} />
+      ) : null}
+      {tab === "team" ? <TeamTab project={project} returnTo={path} /> : null}
+      {tab === "wbs" ? (
+        <WbsTab project={project} canManage={canManage && !readOnly} returnTo={path} />
+      ) : null}
     </div>
   );
 }

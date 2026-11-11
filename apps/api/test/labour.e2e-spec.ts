@@ -87,6 +87,11 @@ describe("Labour registry (real runtime role)", () => {
   const level = (key: string, from = setup) =>
     from.skillLevels.find((entry) => entry.key === key)!.id;
   const labourer = (res: request.Response) => labourerResponseSchema.parse(res.body).labourer;
+  const lookup = async (browser: Browser, identifier: string) => {
+    const res = await browser.call("post", "labour/labourers/lookup", { identifier });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    return labourersResponseSchema.parse(res.body).labourers.map((row) => row.id);
+  };
   const auditEvents = async () => {
     await fresh(owner);
     const res = await owner.call("get", "tenants/current/audit");
@@ -224,6 +229,7 @@ describe("Labour registry (real runtime role)", () => {
       "createLabourRate",
       "cancelLabourRate",
       "listLabourers",
+      "lookupLabourers",
       "registerLabourer",
       "getLabourer",
       "updateLabourer",
@@ -687,18 +693,37 @@ describe("Labour registry (real runtime role)", () => {
 
   it("finds exact identifiers through blind indexes and refuses duplicates", async () => {
     const target = registered["WRK-0001"]!;
-    for (const search of ["98000001", "0799 000 001", "A980000001Z"]) {
-      const found = labourersResponseSchema.parse(
-        (await owner.call("get", `labour/labourers?search=${encodeURIComponent(search)}`)).body,
-      );
-      expect(
-        found.labourers.map((row) => row.id),
-        search,
-      ).toEqual([target.id]);
-    }
+    // The lookup takes the identifier in the body; an ID matches across types and leading zeros.
+    for (const identifier of ["98000001", "098000001", "0799 000 001", "A980000001Z"])
+      expect(await lookup(owner, identifier), identifier).toEqual([target.id]);
+    expect(await lookup(owner, "11112222")).toEqual([]);
     const sameId = await register(owner, person({ idNumber: "98000001" }));
     expect([sameId.status, problem(sameId)]).toEqual([409, "duplicate-identity"]);
     expect(match(sameId)).toEqual({ labourerId: target.id, workerNo: "WRK-0001", matchedOn: "id" });
+    // Review finding: the same number under another document type is the same person.
+    for (const [idType, idNumber] of [
+      ["passport", "98000001"],
+      ["alien_id", "098000001"],
+      ["national_id", "098000001"],
+    ] as const) {
+      const crossType = await register(owner, person({ idType, idNumber }));
+      expect([crossType.status, problem(crossType)], idType).toEqual([409, "duplicate-identity"]);
+      expect(match(crossType)).toEqual({
+        labourerId: target.id,
+        workerNo: "WRK-0001",
+        matchedOn: "id",
+      });
+    }
+    // The per-company unique index holds across types too, even when the API is bypassed.
+    const other = labourer(await register(owner, person()));
+    await expect(
+      db.run(as(owner, tenantA, "cross-type-unique"), (tx) =>
+        tx.labourer.update({
+          where: { tenantId_id: { tenantId: tenantA, id: other.id } },
+          data: { idType: "passport", idNumberBidx: crypto.idIndex(tenantA, "98000001") },
+        }),
+      ),
+    ).rejects.toThrow();
     const sameKra = await register(owner, person({ kraPin: "A980000001Z" }));
     expect([sameKra.status, problem(sameKra)]).toEqual([409, "kra-pin-taken"]);
     const sharedPhone = await register(owner, person({ phone: "0799000001" }));
@@ -775,6 +800,19 @@ describe("Labour registry (real runtime role)", () => {
     const sameId = await register(pm, person({ idNumber: flaggedId }));
     expect([sameId.status, problem(sameId)]).toEqual([409, "do-not-rehire-match"]);
     expect(match(sameId)).toMatchObject({ labourerId: flagged.id, matchedOn: "id" });
+    // Review finding: resubmitting the same digits as a passport or alien ID is still a match.
+    for (const [idType, idNumber] of [
+      ["passport", flaggedId],
+      ["alien_id", flaggedId],
+      ["alien_id", `0${flaggedId}`],
+    ] as const) {
+      const resubmitted = await register(pm, person({ idType, idNumber }));
+      expect([resubmitted.status, problem(resubmitted)], idType).toEqual([
+        409,
+        "do-not-rehire-match",
+      ]);
+      expect(match(resubmitted)).toMatchObject({ labourerId: flagged.id, matchedOn: "id" });
+    }
     // A new registration with the flagged person's phone: blocked unless overridden with a reason.
     const samePhone = person({ phone: flaggedPhoneNumber, kraPin: null });
     const blocked = await register(pm, samePhone);
@@ -1284,10 +1322,7 @@ describe("Labour registry (real runtime role)", () => {
       phoneMasked: null,
       version: worker.version + 1,
     });
-    const found = labourersResponseSchema.parse(
-      (await pm.call("get", "labour/labourers?search=AK9900001")).body,
-    );
-    expect(found.labourers.map((row) => row.id)).toEqual([worker.id]);
+    expect(await lookup(pm, "AK9900001")).toEqual([worker.id]);
     const stalePatch = await pm.call("patch", `labour/labourers/${worker.id}`, {
       version: worker.version,
       fullName: "Stale",
@@ -1299,6 +1334,18 @@ describe("Labour registry (real runtime role)", () => {
       idNumber: "98000001",
     });
     expect([duplicate.status, problem(duplicate)]).toEqual([409, "duplicate-identity"]);
+    // Review finding: a correction cannot take another worker's number under another type.
+    for (const [idType, idNumber] of [
+      ["passport", "98000001"],
+      ["alien_id", "098000001"],
+    ] as const) {
+      const crossType = await pm.call("patch", `labour/labourers/${worker.id}`, {
+        version: worker.version + 1,
+        idType,
+        idNumber,
+      });
+      expect([crossType.status, problem(crossType)], idType).toEqual([409, "duplicate-identity"]);
+    }
     const event = (await auditEvents()).find(
       (entry) => entry.action === "labourer.updated" && entry.resourceId === worker.id,
     );
@@ -1327,6 +1374,47 @@ describe("Labour registry (real runtime role)", () => {
       version: labourer(back).version,
     });
     expect([same.status, problem(same)]).toEqual([409, "invalid-status-change"]);
+  });
+
+  it("keeps identifiers out of URLs, saved views and their responses", async () => {
+    const target = registered["WRK-0001"]!;
+    // Registry URLs search names and worker numbers only; anything with digits is refused.
+    for (const search of ["98000001", "0799000001", "A980000001Z", "Worker 1"]) {
+      const res = await owner.call("get", `labour/labourers?search=${encodeURIComponent(search)}`);
+      expect([res.status, problem(res)], search).toEqual([400, "validation-error"]);
+    }
+    const byName = labourersResponseSchema.parse(
+      (await owner.call("get", `labour/labourers?search=${encodeURIComponent("mtihani")}`)).body,
+    );
+    expect(byName.total).toBeGreaterThan(0);
+    const byWorkerNo = labourersResponseSchema.parse(
+      (await owner.call("get", "labour/labourers?search=WRK-0001")).body,
+    );
+    expect(byWorkerNo.labourers.map((row) => row.id)).toEqual([target.id]);
+    // A saved view never stores search text, identifier or not.
+    for (const search of ["98000001", "Mtihani"]) {
+      const res = await owner.call("post", "labour/views", {
+        name: `Search ${search}`,
+        filters: { search },
+      });
+      expect([res.status, problem(res)], search).toEqual([400, "validation-error"]);
+    }
+    // The database refuses search text in a saved view even when the API is bypassed.
+    await expect(
+      db.run(as(owner, tenantA, "view-with-search"), (tx) =>
+        tx.labourSavedView.create({
+          data: {
+            tenantId: tenantA,
+            userId: owner.auth.user.id,
+            name: "Identifier view",
+            filters: { search: "98000001" },
+          },
+        }),
+      ),
+    ).rejects.toThrow();
+    const views = await owner.call("get", "labour/views");
+    expect(views.status).toBe(200);
+    expect(JSON.stringify(views.body)).not.toContain("98000001");
   });
 
   it("keeps saved views private per user and hides the do-not-rehire view from non-managers", async () => {
@@ -1466,11 +1554,7 @@ describe("Labour registry (real runtime role)", () => {
       (await ownerB.call("get", "labour/labourers")).body,
     );
     expect(bList.labourers.map((row) => row.id)).not.toContain(worker.id);
-    expect(
-      labourersResponseSchema.parse(
-        (await ownerB.call("get", "labour/labourers?search=98000001")).body,
-      ).labourers,
-    ).toEqual([]);
+    expect(await lookup(ownerB, "98000001")).toEqual([]);
     expect(
       gangsResponseSchema.parse((await ownerB.call("get", "labour/gangs")).body).gangs,
     ).toEqual([]);

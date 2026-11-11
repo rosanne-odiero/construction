@@ -2309,7 +2309,7 @@
       "doNotRehire": "Asiajiriwe tena",
       "save": "Hifadhi mwonekano",
       "saveTitle": "Hifadhi vichujio hivi kama mwonekano",
-      "saveHint": "Mionekano iliyohifadhiwa ni yako binafsi katika kampuni hii.",
+      "saveHint": "Mionekano iliyohifadhiwa ni yako binafsi katika kampuni hii. Inahifadhi vichujio, si maandishi ya utafutaji.",
       "name": "Jina la mwonekano",
       "nameHint": "Herufi 2 hadi 60.",
       "cancel": "Ghairi",
@@ -2319,6 +2319,7 @@
     "filters": {
       "search": "Tafuta",
       "searchPlaceholder": "Jina, nambari ya mfanyakazi, kitambulisho kamili au simu",
+      "identifierHint": "Kitambulisho kamili, simu au PIN ya KRA hutafutwa kwa faragha na haiwekwi kamwe kwenye anwani ya ukurasa.",
       "status": "Hali",
       "anyStatus": "Hali yoyote",
       "trade": "Fani",
@@ -2340,6 +2341,12 @@
       "anyConsent": "Hali yoyote ya ridhaa",
       "apply": "Tumia vichujio",
       "clear": "Ondoa vichujio"
+    },
+    "lookup": {
+      "title": "Utafutaji wa utambulisho",
+      "count": "{count, plural, one {Mfanyakazi # ana kitambulisho, simu au PIN ya KRA hii hasa} other {Wafanyakazi # wana kitambulisho, simu au PIN ya KRA hii hasa}}",
+      "none": "Hakuna mfanyakazi unayeweza kumwona mwenye kitambulisho, simu au PIN ya KRA hii hasa.",
+      "clear": "Futa utafutaji"
     },
     "status": {
       "active": "Kazini",

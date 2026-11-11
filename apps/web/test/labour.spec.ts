@@ -49,14 +49,42 @@ test("lists workers with masked identifiers, built-in and saved views", async ({
   await page.getByRole("link", { name: "Do not rehire" }).click();
   await expect(page.getByText("1 worker", { exact: true })).toBeVisible();
 
-  // A full ID number finds the worker (blind index in the real API); names match partially.
+  // A full ID number is looked up in a request body: it never reaches the address bar.
   await page.getByRole("link", { name: "All workers" }).click();
   await expect(page).toHaveURL(/\/labour$/);
   await expect(page.getByText("6 workers")).toBeVisible();
+  const lookupRequest = page.waitForRequest((request) =>
+    request.url().endsWith("/api/v1/labour/labourers/lookup"),
+  );
   await page.getByLabel("Search").fill("34567812");
   await page.getByRole("button", { name: "Apply filters" }).click();
+  expect((await lookupRequest).postDataJSON()).toEqual({ identifier: "34567812" });
+  const matches = page.getByRole("region", { name: "Identifier lookup" });
+  await expect(matches.getByText("1 worker has exactly this ID, phone or KRA PIN")).toBeVisible();
+  expect(page.url()).not.toContain("34567812");
+  expect(await axeViolations(page)).toEqual([]);
+  await matches.getByRole("link", { name: "Grace Atieno Odhiambo" }).click();
+  await expect(page.getByRole("dialog", { name: "Grace Atieno Odhiambo" })).toBeVisible();
+  expect(page.url()).not.toContain("34567812");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  for (const [search, expected] of [
+    ["0700000103", "1 worker has exactly"],
+    ["99999999", "No worker you can see has exactly"],
+  ] as const) {
+    await page.getByLabel("Search").fill(search);
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(matches.getByText(expected)).toBeVisible();
+    expect(page.url()).not.toContain(search);
+  }
+  // An identifier pasted into the address bar is dropped from the URL.
+  await page.goto("/labour?search=34567812&status=active");
+  await expect(page).toHaveURL(/\/labour\?status=active$/);
+  // Names stay searchable through the URL.
+  await page.getByLabel("Search").fill("Grace");
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page).toHaveURL(/search=Grace/);
   await expect(page.getByText("1 worker", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Grace Atieno Odhiambo" })).toBeVisible();
 
   await page.getByRole("link", { name: "Clear filters" }).click();
   await expect(page).toHaveURL(/\/labour$/);
@@ -65,6 +93,7 @@ test("lists workers with masked identifiers, built-in and saved views", async ({
   await expect(page.getByText("2 workers")).toBeVisible();
   await page.getByRole("button", { name: "Save view" }).click();
   const save = page.getByRole("dialog", { name: "Save these filters as a view" });
+  await expect(save.getByText("They keep the filters, not the search text.")).toBeVisible();
   await save.getByLabel("View name").fill("Carpenters");
   expect(await axeViolations(page)).toEqual([]);
   await save.getByRole("button", { name: "Save", exact: true }).click();
@@ -158,8 +187,10 @@ test("registration needs consent, refuses under-18s and explains duplicates", as
   ).toBeVisible();
   expect(await axeViolations(page)).toEqual([]);
 
-  // The 18th birthday today is old enough; the ID belongs to an existing worker.
+  // The 18th birthday today is old enough; the same digits entered as a passport still belong
+  // to an existing worker registered with a national ID (matching ignores the document type).
   await page.getByLabel("Date of birth").fill(ddmmyyyy(eighteenToday));
+  await page.getByRole("combobox", { name: "ID document", exact: true }).selectOption("passport");
   await page.getByRole("button", { name: "Register worker" }).click();
   const duplicate = page.getByRole("alert").filter({ hasText: "already registered as WRK-0002" });
   await expect(duplicate).toBeVisible();

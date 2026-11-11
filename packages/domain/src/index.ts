@@ -79,6 +79,8 @@ export {
   accreditationStatus,
   addCalendarDays,
   calendarDaysBetween,
+  identityIndexValue,
+  isIdentifierSearch,
   isOldEnoughToRegister,
   latestAllowedBirthDate,
   maskIdentifier,

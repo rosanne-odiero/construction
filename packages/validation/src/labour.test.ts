@@ -3,7 +3,9 @@ import {
   apiEnvSchema,
   createLabourRateRequestSchema,
   labourerListQuerySchema,
+  labourerLookupRequestSchema,
   labourerSummarySchema,
+  labourRegistryFiltersSchema,
   labourViewFiltersSchema,
   registerLabourerRequestSchema,
   revealResponseSchema,
@@ -156,6 +158,21 @@ describe("registry queries and responses", () => {
     expect(labourViewFiltersSchema.parse({ accreditation: "attention" })).toEqual({
       accreditation: "attention",
     });
+  });
+
+  it("keeps identifiers out of URLs and saved views", () => {
+    // Names and worker numbers may travel in the registry URL; anything with digits may not.
+    expect(labourerListQuerySchema.parse({ search: "Grace" }).search).toBe("Grace");
+    expect(labourerListQuerySchema.parse({ search: "WRK-0012" }).search).toBe("WRK-0012");
+    for (const search of ["23456789", "0712345678", "A012345678Z"])
+      expect(labourerListQuerySchema.safeParse({ search }).success, search).toBe(false);
+    expect(labourRegistryFiltersSchema.safeParse({ search: "23456789" }).success).toBe(false);
+    // A saved view never stores search text at all.
+    expect(labourViewFiltersSchema.safeParse({ search: "Grace" }).success).toBe(false);
+    expect(labourerLookupRequestSchema.parse({ identifier: " 2345 6789 " })).toEqual({
+      identifier: "2345 6789",
+    });
+    expect(labourerLookupRequestSchema.safeParse({ identifier: "1" }).success).toBe(false);
   });
 
   it("accepts only masked identifiers in a registry row", () => {

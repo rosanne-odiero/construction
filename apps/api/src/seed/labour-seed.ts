@@ -443,7 +443,7 @@ export async function seedLabour(
         rateBasis: "daily",
         idType: "national_id",
         idNumberEnc: crypto.seal(tenantId, id, "id_number_enc", ids.idNumber),
-        idNumberBidx: crypto.idIndex(tenantId, "national_id", ids.idNumber),
+        idNumberBidx: crypto.idIndex(tenantId, ids.idNumber),
         ...(demo.phone
           ? {
               phoneEnc: crypto.seal(tenantId, id, "phone_enc", ids.phone),

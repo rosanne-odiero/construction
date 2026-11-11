@@ -1,4 +1,5 @@
 import {
+  isIdentifierSearch,
   normalizeKenyanPhone,
   normaliseIdNumber,
   normaliseKraPin,
@@ -583,13 +584,29 @@ export const labourerListQuerySchema = z
     doNotRehire: z.enum(["true"]).optional(),
     /** `withdrawn`: no active consent; `outdated`: consent to an older notice version. */
     consent: z.enum(["withdrawn", "outdated"]).optional(),
-    /** Name or worker number; a full ID or phone number also matches (blind index). */
-    search: z.string().trim().max(100).optional(),
+    /**
+     * Name or worker number only. Terms with digits (other than worker numbers) could be ID, phone
+     * or KRA PIN numbers, which must never travel in a URL: use the identifier lookup instead.
+     */
+    search: z
+      .string()
+      .trim()
+      .max(100)
+      .refine((value) => !isIdentifierSearch(value), "identifier_search_not_allowed")
+      .optional(),
     limit: z.coerce.number().int().min(1).max(500).default(200),
     offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
   })
   .strict();
 export type LabourerListQuery = z.infer<typeof labourerListQuerySchema>;
+
+/**
+ * Exact lookup of a full ID/passport number, phone number or KRA PIN through the blind indexes. The
+ * identifier travels only in this request body (never in a URL, log line or saved view).
+ */
+export const labourerLookupRequestSchema = z
+  .object({ identifier: z.string().trim().min(4).max(40) })
+  .strict();
 
 export const labourersResponseSchema = z
   .object({
@@ -823,9 +840,16 @@ export const leaveGangRequestSchema = z.object({ leftOn: calendarDate.optional()
 // Saved views ------------------------------------------------------------------------------------
 
 /** The registry filters a saved view stores (the list query without paging). */
-export const labourViewFiltersSchema = labourerListQuerySchema
+/** The registry's filters as they appear in the page URL (the list query without paging). */
+export const labourRegistryFiltersSchema = labourerListQuerySchema
   .omit({ limit: true, offset: true })
   .strict();
+
+/**
+ * The filters a saved view stores. Search text is never saved (review finding): a view stores
+ * structured filters only, so no identifier can end up in `labour_saved_views` or its responses.
+ */
+export const labourViewFiltersSchema = labourRegistryFiltersSchema.omit({ search: true }).strict();
 
 export const labourViewSchema = z
   .object({
@@ -887,5 +911,7 @@ export type GangDetailResponse = z.infer<typeof gangDetailResponseSchema>;
 export type CreateGangRequest = z.input<typeof createGangRequestSchema>;
 export type UpdateGangRequest = z.input<typeof updateGangRequestSchema>;
 export type LabourViewFilters = z.infer<typeof labourViewFiltersSchema>;
+export type LabourRegistryFilters = z.infer<typeof labourRegistryFiltersSchema>;
+export type LabourerLookupRequest = z.input<typeof labourerLookupRequestSchema>;
 export type LabourView = z.infer<typeof labourViewSchema>;
 export type LabourViewsResponse = z.infer<typeof labourViewsResponseSchema>;

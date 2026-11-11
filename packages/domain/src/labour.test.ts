@@ -6,6 +6,8 @@ import {
   calendarDaysBetween,
   isOldEnoughToRegister,
   latestAllowedBirthDate,
+  identityIndexValue,
+  isIdentifierSearch,
   maskIdentifier,
   normaliseIdNumber,
   normaliseKraPin,
@@ -107,6 +109,27 @@ describe("identifier normalisation and masking", () => {
     expect(normaliseKraPin("B012345678Z")).toBeNull();
     expect(normaliseStatutoryNumber("nssf 2001 9934")).toBe("NSSF20019934");
     expect(normaliseStatutoryNumber("ABC")).toBeNull();
+  });
+
+  it("indexes an identity number independently of its document type", () => {
+    // Review finding: the same digits under another document type must be the same identity.
+    for (const type of ["national_id", "alien_id", "passport"] as const)
+      expect(identityIndexValue(normaliseIdNumber(type, "23456789")!)).toBe("23456789");
+    expect(identityIndexValue("023456789")).toBe("23456789");
+    expect(identityIndexValue("0-2345-6789")).toBe("23456789");
+    expect(identityIndexValue("ak 0123456")).toBe("AK0123456");
+    expect(identityIndexValue("12")).toBeNull();
+    expect(identityIndexValue("ABCDEFGH")).toBeNull();
+  });
+
+  it("treats any search term with a digit, except a worker number, as an identifier", () => {
+    expect(isIdentifierSearch("23456789")).toBe(true);
+    expect(isIdentifierSearch("0712 345 678")).toBe(true);
+    expect(isIdentifierSearch("A012345678Z")).toBe(true);
+    expect(isIdentifierSearch("Grace 2")).toBe(true);
+    expect(isIdentifierSearch("WRK-0012")).toBe(false);
+    expect(isIdentifierSearch("wrk 12")).toBe(false);
+    expect(isIdentifierSearch("Grace Atieno")).toBe(false);
   });
 
   it("masks all but the last three characters", () => {

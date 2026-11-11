@@ -1,4 +1,5 @@
 import {
+  ID_DOCUMENT_TYPES,
   MINIMUM_LABOURER_AGE_YEARS,
   type AccreditationStatus,
   type IdDocumentType,
@@ -119,6 +120,21 @@ export function normaliseIdNumber(type: IdDocumentType, value: string): string |
   return candidate;
 }
 
+/**
+ * The document-type-independent form of an identity number used for its blind index: the same
+ * number entered as a national ID, an alien ID or a passport is one identity, so duplicate and
+ * do-not-rehire checks (and the database's uniqueness per company) hold across document types.
+ * All-digit numbers also lose leading zeros ("012345678" ≡ "12345678"). Null when the value is
+ * not a valid number for any document type.
+ */
+export function identityIndexValue(value: string): string | null {
+  const candidate = ID_DOCUMENT_TYPES.map((type) => normaliseIdNumber(type, value)).find(
+    (normalised) => normalised !== null,
+  );
+  if (!candidate) return null;
+  return /^\d+$/.test(candidate) ? candidate.replace(/^0+(?=\d)/, "") : candidate;
+}
+
 /** KRA PINs: a letter (A for individuals), nine digits and a check letter, e.g. A012345678Z. */
 export function normaliseKraPin(value: string): string | null {
   const candidate = compact(value);
@@ -129,6 +145,17 @@ export function normaliseKraPin(value: string): string | null {
 export function normaliseStatutoryNumber(value: string): string | null {
   const candidate = compact(value);
   return /^[A-Z0-9]{4,20}$/.test(candidate) && /\d/.test(candidate) ? candidate : null;
+}
+
+const WORKER_NUMBER = /^\s*WRK[-\s]?\d+\s*$/i;
+
+/**
+ * Whether a registry search term could be (part of) an identifier: anything with a digit except a
+ * worker number such as `WRK-0012`. Such terms are never sent in a URL or stored in a saved view;
+ * they go to the identifier lookup in a request body and match only through blind indexes.
+ */
+export function isIdentifierSearch(term: string): boolean {
+  return /\d/.test(term) && !WORKER_NUMBER.test(term);
 }
 
 /** Default display of an identifier: only the last three characters, e.g. "•••••678". */

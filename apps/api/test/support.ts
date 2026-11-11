@@ -156,6 +156,7 @@ function labourContract(method: string, path: string) {
     return method === "get" ? labourRatesResponseSchema : labourRateResponseSchema;
   if (path === "labour/labourers")
     return method === "get" ? labourersResponseSchema : labourerResponseSchema;
+  if (path === "labour/labourers/lookup") return labourersResponseSchema;
   if (/^labour\/labourers\/[^/]+\/reveal$/.test(path)) return revealResponseSchema;
   if (/^labour\/labourers\/[^/]+\/rate$/.test(path)) return resolvedRateResponseSchema;
   if (/^labour\/labourers\/[^/]+(\/.*)?$/.test(path)) return labourerResponseSchema;

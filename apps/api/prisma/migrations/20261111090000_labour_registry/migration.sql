@@ -822,8 +822,11 @@ CREATE TRIGGER gang_membership_guard BEFORE INSERT OR UPDATE ON "gang_membership
   FOR EACH ROW EXECUTE FUNCTION app.guard_gang_membership();
 
 -- Saved views ------------------------------------------------------------------------------------
+-- A saved view stores structured filters only: never search text, which could hold an ID, phone
+-- or KRA PIN in plaintext (identifiers are looked up through blind indexes instead).
 ALTER TABLE "labour_saved_views" ADD CONSTRAINT "labour_saved_views_check" CHECK (
   char_length(name) >= 2 AND name = btrim(name) AND jsonb_typeof(filters) = 'object'
+  AND NOT (filters ? 'search')
 );
 
 -- The catalogue gains labour.do_not_rehire and labour.consent (packages/types PERMISSIONS and

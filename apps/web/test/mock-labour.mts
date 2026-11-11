@@ -10,10 +10,13 @@ import {
   accreditationStatus,
   addCalendarDays,
   calendarDaysBetween,
+  identityIndexValue,
   isOldEnoughToRegister,
   maskIdentifier,
   maskPhone,
   nairobiDate,
+  normaliseKraPin,
+  normalizeKenyanPhone,
   rateEffectiveTo,
   rateScopeOf,
   summariseAccreditation,
@@ -34,6 +37,7 @@ import {
   gangDetailResponseSchema,
   gangsResponseSchema,
   labourerListQuerySchema,
+  labourerLookupRequestSchema,
   labourerResponseSchema,
   labourersResponseSchema,
   labourerStatusRequestSchema,
@@ -747,15 +751,13 @@ export function handleLabour(
           if (filters.accreditation !== "attention" && state !== filters.accreditation)
             return false;
         }
-        if (search) {
-          const digits = search.replace(/\D/g, "");
-          const matches =
-            row.fullName.toLowerCase().includes(search) ||
-            row.workerNo.toLowerCase().includes(search) ||
-            row.idNumber === search.toUpperCase() ||
-            (digits.length >= 9 && row.phone?.endsWith(digits.slice(-9)));
-          if (!matches) return false;
-        }
+        // Names and worker numbers only: identifiers go through POST /labour/labourers/lookup.
+        if (
+          search &&
+          !row.fullName.toLowerCase().includes(search) &&
+          !row.workerNo.toLowerCase().includes(search)
+        )
+          return false;
         return true;
       })
       .map(({ view }) => view);
@@ -770,14 +772,39 @@ export function handleLabour(
       schema: labourersResponseSchema,
     };
   }
+  if (path === "/labour/labourers/lookup" && method === "POST") {
+    const { identifier } = parse(ctx, labourerLookupRequestSchema, body);
+    const id = identityIndexValue(identifier);
+    const phone = normalizeKenyanPhone(identifier);
+    const kraPin = normaliseKraPin(identifier);
+    const labourers = labour.labourers
+      .filter(
+        (row) =>
+          (id !== null && identityIndexValue(row.idNumber) === id) ||
+          (phone !== null && row.phone === phone) ||
+          (kraPin !== null && row.kraPin === kraPin),
+      )
+      .map((row) => summary(labour, row));
+    return {
+      body: {
+        labourers,
+        total: labourers.length,
+        today,
+        alertDays: labour.settings.accreditationAlertDays,
+        permissions: { canRegister: true, canFlag: true, canConfigure: true },
+      },
+      schema: labourersResponseSchema,
+    };
+  }
   if (path === "/labour/labourers" && method === "POST") {
     const input = parse(ctx, registerLabourerRequestSchema, body);
     if (input.projectId) project(input.projectId);
     if (!isOldEnoughToRegister(input.dateOfBirth, today)) ctx.fail(400, "under-minimum-age");
     if (input.consent.noticeVersion !== CURRENT_CONSENT_NOTICE.version)
       ctx.fail(400, "notice-not-current");
+    // The ID matches across document types (as the API's type-independent blind index does).
     const same = labour.labourers.find(
-      (entry) => entry.idType === input.idType && entry.idNumber === input.idNumber,
+      (entry) => identityIndexValue(entry.idNumber) === identityIndexValue(input.idNumber),
     );
     if (same)
       ctx.fail(409, same.flag.flagged ? "do-not-rehire-match" : "duplicate-identity", {

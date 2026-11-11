@@ -1,22 +1,19 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Request } from "express";
 import {
+  identityIndexValue,
   isOldEnoughToRegister,
   nairobiDate,
-  normaliseIdNumber,
   normaliseKraPin,
   normalizeKenyanPhone,
   summariseAccreditation,
 } from "@pm-buddy/domain";
-import {
-  CURRENT_CONSENT_NOTICE,
-  ID_DOCUMENT_TYPES,
-  type SensitiveLabourField,
-} from "@pm-buddy/types";
+import { CURRENT_CONSENT_NOTICE, type SensitiveLabourField } from "@pm-buddy/types";
 import {
   labourersResponseSchema,
   revealResponseSchema,
   type LabourerListQuery,
+  type LabourerLookupRequest,
   type LabourerWarning,
   type RegisterLabourerInput,
   type UpdateLabourerInput,
@@ -108,13 +105,7 @@ export class LabourersService {
       await this.access.requireSomewhere(scope, "labour.view");
       const visibility = await this.reader.visibility(scope);
       const { visible, flags } = visibility;
-      const manage = await this.access.projectsWith(scope, "labour.manage");
-      const dnr = await this.access.projectsWith(scope, "labour.do_not_rehire");
-      const permissions = {
-        canRegister: !isEmpty(manage),
-        canFlag: !isEmpty(dnr),
-        canConfigure: access.permissions.has("config.manage"),
-      };
+      const permissions = await this.registryPermissions(scope);
       const context = await this.reader.context(scope, visibility);
       const empty = () =>
         labourersResponseSchema.parse({
@@ -156,7 +147,7 @@ export class LabourersService {
             },
           },
         });
-      if (query.search) filters.push({ OR: this.searchFilters(access.tenantId, query.search) });
+      if (query.search) filters.push({ OR: this.searchFilters(query.search) });
 
       const rows = await loadLabourers(tx, access.tenantId, { AND: filters });
       // Accreditation states depend on today's date and the alert lead time, so that filter runs
@@ -184,6 +175,57 @@ export class LabourersService {
 
   get(principal: Principal, labourerId: string, req: Request) {
     return this.scope.run(principal, req, (scope) => this.reader.detail(scope, labourerId));
+  }
+
+  /**
+   * Exact lookup of a full ID/passport number, phone or KRA PIN through the blind indexes, among the
+   * labourers the caller can view. The identifier arrives only in the request body, so it never
+   * appears in a URL, a log line or a saved view (review finding); the registry's GET search covers
+   * names and worker numbers only.
+   */
+  lookup(principal: Principal, input: LabourerLookupRequest, req: Request) {
+    return this.scope.run(principal, req, async (scope) => {
+      const { tx, access } = scope;
+      const tenantId = access.tenantId;
+      await this.access.requireSomewhere(scope, "labour.view");
+      const visibility = await this.reader.visibility(scope);
+      const { visible, flags } = visibility;
+      const permissions = await this.registryPermissions(scope);
+      const context = await this.reader.context(scope, visibility);
+      const matches: Prisma.LabourerWhereInput[] = [];
+      if (identityIndexValue(input.identifier))
+        matches.push({ idNumberBidx: this.crypto.idIndex(tenantId, input.identifier) });
+      const phone = normalizeKenyanPhone(input.identifier);
+      if (phone) matches.push({ phoneBidx: this.crypto.index(tenantId, "phone", phone) });
+      const kraPin = normaliseKraPin(input.identifier);
+      if (kraPin) matches.push({ kraPinBidx: this.crypto.index(tenantId, "kra_pin", kraPin) });
+      const filters: Prisma.LabourerWhereInput[] = [{ tenantId }];
+      if (visible !== "all")
+        filters.push({ engagements: { some: { projectId: { in: [...visible] } } } });
+      const rows = matches.length
+        ? await loadLabourers(tx, tenantId, { AND: [...filters, { OR: matches }] })
+        : [];
+      const labourers = rows.map((row) =>
+        toSummary(row, { ...context, canSeeFlag: LabourerReader.canSeeFlag(row, flags) }),
+      );
+      return labourersResponseSchema.parse({
+        labourers,
+        total: labourers.length,
+        today: context.today,
+        alertDays: context.alertDays,
+        permissions,
+      });
+    });
+  }
+
+  private async registryPermissions(scope: Scope) {
+    const manage = await this.access.projectsWith(scope, "labour.manage");
+    const dnr = await this.access.projectsWith(scope, "labour.do_not_rehire");
+    return {
+      canRegister: !isEmpty(manage),
+      canFlag: !isEmpty(dnr),
+      canConfigure: scope.access.permissions.has("config.manage"),
+    };
   }
 
   register(principal: Principal, input: RegisterLabourerInput, req: Request) {
@@ -219,7 +261,7 @@ export class LabourersService {
           );
 
           // Duplicate and do-not-rehire checks run on blind indexes only.
-          const idIndex = this.crypto.idIndex(tenantId, input.idType, input.idNumber);
+          const idIndex = this.crypto.idIndex(tenantId, input.idNumber);
           const phoneIndex = input.phone ? this.crypto.index(tenantId, "phone", input.phone) : null;
           const kraIndex = input.kraPin
             ? this.crypto.index(tenantId, "kra_pin", input.kraPin)
@@ -439,7 +481,7 @@ export class LabourersService {
             data.dateOfBirth = fromCalendarDate(input.dateOfBirth);
           }
           if (input.idType && input.idNumber) {
-            const idIndex = this.crypto.idIndex(tenantId, input.idType, input.idNumber);
+            const idIndex = this.crypto.idIndex(tenantId, input.idNumber);
             const other = await tx.labourer.findFirst({
               where: { tenantId, idNumberBidx: idIndex, id: { not: labourerId } },
               select: { id: true, workerNo: true },
@@ -959,19 +1001,12 @@ export class LabourersService {
     return this.reader.detail(scope, labourerId, warnings);
   }
 
-  /** Exact-match search on blind indexes (full ID, phone or KRA PIN), plus name and worker no. */
-  private searchFilters(tenantId: string, search: string): Prisma.LabourerWhereInput[] {
+  /**
+   * Name and worker-number search for the registry URL. Identifiers are never searched here: they
+   * go through `lookup`, in a request body, so they stay out of URLs, logs and saved views.
+   */
+  private searchFilters(search: string): Prisma.LabourerWhereInput[] {
     const contains = { contains: search, mode: "insensitive" as const };
-    const filters: Prisma.LabourerWhereInput[] = [{ fullName: contains }, { workerNo: contains }];
-    const ids = ID_DOCUMENT_TYPES.flatMap((type) => {
-      const normalised = normaliseIdNumber(type, search);
-      return normalised ? [this.crypto.idIndex(tenantId, type, normalised)] : [];
-    });
-    if (ids.length) filters.push({ idNumberBidx: { in: ids } });
-    const phone = normalizeKenyanPhone(search);
-    if (phone) filters.push({ phoneBidx: this.crypto.index(tenantId, "phone", phone) });
-    const kra = normaliseKraPin(search);
-    if (kra) filters.push({ kraPinBidx: this.crypto.index(tenantId, "kra_pin", kra) });
-    return filters;
+    return [{ fullName: contains }, { workerNo: contains }];
   }
 }

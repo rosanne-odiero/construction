@@ -39,6 +39,7 @@ import {
   gangListQuerySchema,
   gangsResponseSchema,
   labourerListQuerySchema,
+  labourerLookupRequestSchema,
   labourerResponseSchema,
   labourersResponseSchema,
   labourerStatusRequestSchema,
@@ -260,7 +261,7 @@ export class LabourController {
   @ApiOperation({
     summary: "The registry: labourers the caller can see, with masked identifiers",
     description:
-      "Requires labour.view (company-wide roles see everyone; others see labourers engaged on their projects). Filters: status, tradeId, skillLevelId, projectId, gangId, accreditation (valid|expiring|expired|missing|attention), doNotRehire=true (managers), consent (withdrawn|outdated), search (name, worker number, or an exact full ID/phone/KRA PIN via blind index).",
+      "Requires labour.view (company-wide roles see everyone; others see labourers engaged on their projects). Filters: status, tradeId, skillLevelId, projectId, gangId, accreditation (valid|expiring|expired|missing|attention), doNotRehire=true (managers), consent (withdrawn|outdated), search (name or worker number only; terms with digits are refused: look identifiers up with POST labourers/lookup so they never appear in a URL).",
     operationId: "listLabourers",
   })
   @ApiOkResponse({ schema: openApi(labourersResponseSchema) })
@@ -268,6 +269,24 @@ export class LabourController {
     return this.labourers.list(
       await this.auth.principal(req),
       labourerListQuerySchema.parse(query),
+      req,
+    );
+  }
+
+  @Post("labourers/lookup")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Find labourers by a full ID/passport number, phone or KRA PIN",
+    description:
+      "Requires labour.view; returns only labourers the caller can see. Exact match through the blind indexes (an ID matches across document types). The identifier is sent in the body so it never appears in a URL, log line or saved view.",
+    operationId: "lookupLabourers",
+  })
+  @ApiBody({ schema: openApi(labourerLookupRequestSchema) })
+  @ApiOkResponse({ schema: openApi(labourersResponseSchema) })
+  async lookup(@Body() body: unknown, @Req() req: Request) {
+    return this.labourers.lookup(
+      await this.auth.principal(req),
+      labourerLookupRequestSchema.parse(body),
       req,
     );
   }

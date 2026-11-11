@@ -2309,7 +2309,7 @@
       "doNotRehire": "Do not rehire",
       "save": "Save view",
       "saveTitle": "Save these filters as a view",
-      "saveHint": "Saved views are private to you in this company.",
+      "saveHint": "Saved views are private to you in this company. They keep the filters, not the search text.",
       "name": "View name",
       "nameHint": "2 to 60 characters.",
       "cancel": "Cancel",
@@ -2319,6 +2319,7 @@
     "filters": {
       "search": "Search",
       "searchPlaceholder": "Name, worker number, full ID or phone",
+      "identifierHint": "A full ID, phone or KRA PIN is looked up privately and never put in the page address.",
       "status": "Status",
       "anyStatus": "Any status",
       "trade": "Trade",
@@ -2340,6 +2341,12 @@
       "anyConsent": "Any consent state",
       "apply": "Apply filters",
       "clear": "Clear filters"
+    },
+    "lookup": {
+      "title": "Identifier lookup",
+      "count": "{count, plural, one {# worker has exactly this ID, phone or KRA PIN} other {# workers have exactly this ID, phone or KRA PIN}}",
+      "none": "No worker you can see has exactly this ID, phone or KRA PIN.",
+      "clear": "Clear lookup"
     },
     "status": {
       "active": "Active",

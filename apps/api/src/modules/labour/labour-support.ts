@@ -6,6 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { identityIndexValue } from "@pm-buddy/domain";
 import { isProjectPermission, type Permission } from "@pm-buddy/types";
 import type { LabourerMatch } from "@pm-buddy/validation";
 import {
@@ -164,8 +165,13 @@ export class LabourCrypto {
     return this.cipher.blindIndex(tenantId, purpose, canonical);
   }
 
-  idIndex(tenantId: string, idType: string, idNumber: string): string {
-    return this.index(tenantId, "id", `${idType}:${idNumber}`);
+  /**
+   * The ID blind index ignores the document type (review finding): the same number submitted as a
+   * national ID, alien ID or passport, with or without leading zeros, gets the same index, so the
+   * per-company unique index and the duplicate and do-not-rehire checks hold across types.
+   */
+  idIndex(tenantId: string, idNumber: string): string {
+    return this.index(tenantId, "id", identityIndexValue(idNumber) ?? idNumber);
   }
 }
 

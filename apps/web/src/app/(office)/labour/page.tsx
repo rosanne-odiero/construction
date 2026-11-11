@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
-import { Search, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { LABOURER_STATUSES } from "@pm-buddy/types";
 import {
   accreditationAlertsResponseSchema,
@@ -20,11 +21,11 @@ import {
   localName,
 } from "@/components/labour/labour-badges";
 import { LabourNav } from "@/components/labour/labour-nav";
+import { RegistryFilterForm } from "@/components/labour/registry-filter-form";
 import { DeleteViewButton, SaveViewButton } from "@/components/labour/saved-views";
 import { WorkerPanel } from "@/components/labour/worker-panel";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -41,6 +42,7 @@ import {
   LABOUR_PAGE_SIZE,
   labourQuery,
   registryHref,
+  viewFilters,
 } from "@/lib/labour";
 import { loadLive, requireSession, serverApi } from "@/lib/server-api";
 
@@ -64,6 +66,9 @@ export default async function LabourPage({
   const offset = Number.isInteger(offsetValue) && offsetValue > 0 ? offsetValue : 0;
   const worker = typeof raw.worker === "string" && UUID.test(raw.worker) ? raw.worker : undefined;
   const path = registryHref(filters, { offset: offset || undefined, worker });
+  // An identifier typed into the address bar is dropped and removed from the URL, so it is not
+  // forwarded to the API, kept in sign-in redirects or left on screen (review finding).
+  if (typeof raw.search === "string" && raw.search.trim() && !filters.search) redirect(path);
 
   const session = await requireSession(path);
   if (!session) return <LiveUnavailable retryHref={path} />;
@@ -89,6 +94,8 @@ export default async function LabourPage({
   const viewList = views.ok ? views.data.views : [];
   const current = activeView(viewList, filters);
   const filtered = labourQuery(filters) !== "";
+  // Saved views keep structured filters only, never search text.
+  const savable = labourQuery(viewFilters(filters)) !== "";
   const projects = new Map<string, string>();
   for (const row of labourers)
     for (const project of row.projects) projects.set(project.projectId, project.code);
@@ -138,41 +145,16 @@ export default async function LabourPage({
               </li>
             );
           })}
-          {filtered && !current ? (
+          {savable && !current ? (
             <li>
-              <SaveViewButton filters={filters} />
+              <SaveViewButton filters={viewFilters(filters)} />
             </li>
           ) : null}
         </ul>
       </section>
 
       {/* Keyed by the query so uncontrolled fields reset after "Clear filters" or back/forward. */}
-      <form
-        key={labourQuery(filters)}
-        method="get"
-        action="/labour"
-        role="search"
-        className="flex flex-wrap items-end gap-3"
-      >
-        <div className="min-w-0 flex-1 space-y-1.5 sm:max-w-xs">
-          <label htmlFor="labour-search" className="text-sm font-medium">
-            {t("filters.search")}
-          </label>
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              id="labour-search"
-              name="search"
-              defaultValue={filters.search ?? ""}
-              placeholder={t("filters.searchPlaceholder")}
-              maxLength={100}
-              className="pl-8"
-            />
-          </div>
-        </div>
+      <RegistryFilterForm key={labourQuery(filters)} filters={filters} filtered={filtered}>
         <FilterSelect
           id="labour-status"
           name="status"
@@ -254,15 +236,7 @@ export default async function LabourPage({
           <input type="hidden" name="projectId" value={filters.projectId} />
         ) : null}
         {filters.doNotRehire ? <input type="hidden" name="doNotRehire" value="true" /> : null}
-        <Button type="submit" variant="secondary">
-          {t("filters.apply")}
-        </Button>
-        {filtered ? (
-          <Button asChild variant="ghost">
-            <Link href="/labour">{t("filters.clear")}</Link>
-          </Button>
-        ) : null}
-      </form>
+      </RegistryFilterForm>
 
       <p className="text-sm text-muted-foreground" role="status">
         {t("count", { count: total })}

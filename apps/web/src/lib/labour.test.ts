@@ -6,6 +6,7 @@ import {
   labourQuery,
   registryHref,
   sameFilters,
+  viewFilters,
 } from "./labour";
 
 describe("labour registry filters", () => {
@@ -20,6 +21,15 @@ describe("labour registry filters", () => {
       }),
     ).toEqual({ status: "active", accreditation: "attention", search: "wanjiku" });
     expect(filtersFromSearchParams({ status: ["active", "left"] })).toEqual({});
+  });
+
+  it("never takes an identifier-like search from the URL", () => {
+    for (const search of ["23456789", "0712 345 678", "A012345678Z"])
+      expect(filtersFromSearchParams({ search, status: "active" }), search).toEqual({
+        status: "active",
+      });
+    expect(filtersFromSearchParams({ search: "WRK-0012" })).toEqual({ search: "WRK-0012" });
+    expect(viewFilters({ search: "kamau", status: "active" })).toEqual({ status: "active" });
   });
 
   it("builds stable query strings and hrefs", () => {
@@ -37,6 +47,8 @@ describe("labour registry filters", () => {
     ];
     expect(activeView(views, { status: "active" })?.id).toBe("active");
     expect(activeView(views, { status: "left" })).toBeNull();
+    // Search text narrows a view; the view stays highlighted.
+    expect(activeView(views, { status: "active", search: "kamau" })?.id).toBe("active");
   });
 
   it("treats only bullet masks as masked", () => {

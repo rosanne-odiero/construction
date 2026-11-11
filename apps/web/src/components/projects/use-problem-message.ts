@@ -60,6 +60,20 @@ const codes: Record<string, ProblemKey> = {
   "payload-too-large": "payloadTooLarge",
   "source-integrity": "sourceIntegrity",
   "bq-not-found": "bqNotFound",
+  "baseline-not-approved": "baselineNotApproved",
+  "maker-checker": "makerChecker",
+  "instruction-number-taken": "instructionNumberTaken",
+  "instruction-closed": "instructionClosed",
+  "variation-stale": "variationStale",
+  "variation-not-stale": "variationNotStale",
+  "variation-empty": "variationEmpty",
+  "variation-line-invalid": "variationLineInvalid",
+  "line-no-change": "lineNoChange",
+  "buildup-code-taken": "buildupCodeTaken",
+  "unit-mismatch": "unitMismatch",
+  "item-unit-missing": "itemUnitMissing",
+  "item-unit-unknown": "itemUnitUnknown",
+  "bq-not-approved": "bqNotApproved",
 };
 
 /** EN/SW text for an API problem code; anything unknown is "unexpected" (never a success). */

@@ -30,6 +30,11 @@ function print(summary: SeedSummary) {
     lines.push(
       `  ${project.code}  ${project.name} — ${project.status} (${project.created ? "created" : "already present"})`,
     );
+  lines.push("", "Rate build-ups (synthetic example values):");
+  for (const buildup of summary.buildups)
+    lines.push(
+      `  ${buildup.code}  ${buildup.name} — ${buildup.created ? "created" : "already present"}`,
+    );
   console.log(lines.join("\n"));
 }
 

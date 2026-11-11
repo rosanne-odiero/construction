@@ -78,7 +78,7 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 |---|---|---|---|---|---|
 | D2.1 | **Projects, sites and geofences**: polygon or radius geofences drawn on a map; WBS/phases; milestones; team assignment by role; project dashboard shell | Project list and detail, site map editor, team tab | Projects and sites with geofences persist and are tenant-isolated | M | ⏳ |
 | D2.2 | **BQ import**:<br/>• `.xlsx` upload; sheet and header detection; column-mapping screen; saved mapping templates<br/>• Bill → Section → Item hierarchy<br/>• Preliminaries, provisional sums, PC sums, contingencies, dayworks and VAT<br/>• Totals reconciliation; BQ viewer; Excel and PDF export | Import wizard, BQ tree table, totals check | **A real Excel BQ imports correctly and totals match** | L | ⏳ |
-| D2.3 | **BQ versions and variations**: Architect's/Engineer's Instructions; Variation Orders with an approval workflow; original vs revised contract sum; rate build-up library | VO list and approval, version compare, rate build-up editor | **Phase 2 acceptance** | M | ⬜ |
+| D2.3 | **BQ versions and variations**: Architect's/Engineer's Instructions; Variation Orders with an approval workflow; original vs revised contract sum; rate build-up library | VO list and approval, version compare, rate build-up editor | **Phase 2 acceptance** | M | ⏳ |
 
 ### Phase 3: Labour and attendance
 
@@ -200,4 +200,5 @@ These have legal or commercial lead times, so they should start early:
 | D1.4 | `phase-1/d1.4-tenancy-rbac-audit` |
 | D2.1 | `phase-2/d2.1-projects-sites` |
 | D2.2 | `phase-2/d2.2-bq-import` |
+| D2.3 | `phase-2/d2.3-bq-variations` |
 | … | `phase-N/dN.x-<slug>` |

@@ -32,6 +32,7 @@ Provider confirmation may first post to a clearing account, with statement recon
 - Proposed monetary rounding: decimal half-up to cents per line; document total is the sum of rounded lines. Retention/tax/advance calculations must define their own reviewed bases and rounding order.
 - Record any provider/document rounding discrepancy in an explicit rounding account with configured tolerance and approval; do not silently change approved obligation amounts.
 - Foreign exchange displays retain the display rate/source/time and never rewrite the KES journal.
+- As implemented for the BQ (D2.2/D2.3, [ARCHITECTURE §4.2–4.3](./ARCHITECTURE.md#43-bq-versions-variations-and-rate-build-ups-d23)): item amount = quantity × rate rounded half-up once per line; a variation line's delta = new rounded amount − base rounded amount; additions/omissions/net are sums of deltas; VAT is rounded once on the version subtotal at the base version's snapshotted rate. A rate build-up line = quantity × (1 + waste % / 100) × unit cost, rounded half-up once per line; the build-up rate is the sum of the rounded lines (`bq.buildup.rounding`).
 
 These are proposed accounting policies, not approved defaults for production.
 

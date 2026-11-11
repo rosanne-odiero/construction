@@ -85,3 +85,49 @@ export {
   type SanitisedText,
 } from "./text.js";
 export { BQ_UNIT_LABELS, normaliseUnit, type NormalisedUnit } from "./units.js";
+export {
+  allowedVariationActions,
+  checkVariationTransition,
+  isVariationEditable,
+  isVariationFinal,
+  VARIATION_STATUS_CHANGES,
+  VARIATION_TRANSITIONS,
+  type VariationTransitionCheck,
+} from "./variation-lifecycle.js";
+export {
+  applyVariation,
+  priceVariationLine,
+  priceVariationLines,
+  projectedTotals,
+  variationSnapshotText,
+  variationTotals,
+  versionTotals,
+  type AppliedVariation,
+  type LinesCheck,
+  type PricedLine,
+  type PriceResult,
+  type VariationLineError,
+  type VariationLineInput,
+  type VariationTotals,
+  type VersionBill,
+  type VersionContent,
+  type VersionItem,
+  type VersionSection,
+  type VersionTotals,
+} from "./variation.js";
+export {
+  compareVersions,
+  type BillDifference,
+  type ComparedValues,
+  type ItemDifference,
+  type VersionComparison,
+} from "./compare.js";
+export {
+  buildupLineAmountMinor,
+  buildupRate,
+  isBuildupOutputUnit,
+  unitsCompatible,
+  type BuildupLineInput,
+  type BuildupRate,
+  type UnitCompatibility,
+} from "./buildup.js";

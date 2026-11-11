@@ -2,7 +2,16 @@
 
 import { Fragment, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ChevronDown, ChevronRight, FunctionSquare, Loader2, Search, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FunctionSquare,
+  Layers,
+  Link2,
+  Loader2,
+  Search,
+  X,
+} from "lucide-react";
 import {
   bqBillResponseSchema,
   bqSearchResponseSchema,
@@ -19,13 +28,22 @@ import { formatDecimalString, formatKES } from "@/lib/format";
 import { liveRequest } from "@/lib/live-api";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { useUnitLabel } from "./bq-labels";
+import { LinkBuildupDialog } from "./link-buildup-dialog";
 
 type Loaded =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; data: BqBillResponse };
 
-function ItemRow({ item, indent }: { item: BqItemWire; indent: boolean }) {
+function ItemRow({
+  item,
+  indent,
+  onLink,
+}: {
+  item: BqItemWire;
+  indent: boolean;
+  onLink?: () => void;
+}) {
   const t = useTranslations("liveBq.tree");
   const unit = useUnitLabel();
   return (
@@ -45,6 +63,38 @@ function ItemRow({ item, indent }: { item: BqItemWire; indent: boolean }) {
             <StatusBadge tone="info" icon={<FunctionSquare className="size-3" aria-hidden />}>
               {t("formula")}
             </StatusBadge>
+          ) : null}
+          {item.sourceSheet === null ? (
+            <StatusBadge tone="info">{t("addedByVariation")}</StatusBadge>
+          ) : null}
+          {item.rateBuildUp ? (
+            <StatusBadge tone="neutral" icon={<Layers className="size-3" aria-hidden />}>
+              {t("buildUp", {
+                code: item.rateBuildUp.code,
+                version: item.rateBuildUp.versionNo,
+                rate:
+                  item.rateBuildUp.rateMinor === null
+                    ? t("rateUnavailable")
+                    : formatKES(item.rateBuildUp.rateMinor),
+              })}
+            </StatusBadge>
+          ) : null}
+          {onLink ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-xs"
+              onClick={onLink}
+              aria-label={t(item.rateBuildUp ? "changeLinkLabel" : "linkLabel", {
+                item: item.ref
+                  ? `${item.ref} · ${item.description.slice(0, 40)}`
+                  : item.description.slice(0, 40),
+              })}
+            >
+              <Link2 className="size-3" aria-hidden />
+              {item.rateBuildUp ? t("changeLink") : t("link")}
+            </Button>
           ) : null}
         </span>
         {item.overrideReason ? (
@@ -97,7 +147,16 @@ function ColumnHeads() {
  * The BQ as an expandable tree: bills load their sections and items only when opened (so large
  * BQs stay usable), sections fold, and a search runs on the server across every bill.
  */
-export function BqTree({ projectId, bills }: { projectId: string; bills: BqBillWire[] }) {
+export function BqTree({
+  projectId,
+  bills,
+  canLink = false,
+}: {
+  projectId: string;
+  bills: BqBillWire[];
+  /** bq.edit on an approved version: items can be linked to rate build-ups. */
+  canLink?: boolean;
+}) {
   const t = useTranslations("liveBq.tree");
   const tKinds = useTranslations("liveBq.kinds");
   const problem = useProblemMessage();
@@ -108,6 +167,7 @@ export function BqTree({ projectId, bills }: { projectId: string; bills: BqBillW
   const [search, setSearch] = useState<{ query: string; result: BqSearchResponse } | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [linking, setLinking] = useState<{ item: BqItemWire; billId: string | null } | null>(null);
 
   async function load(billId: string) {
     setLoaded((current) => ({ ...current, [billId]: { status: "loading" } }));
@@ -140,6 +200,18 @@ export function BqTree({ projectId, bills }: { projectId: string; bills: BqBillW
     if (next.has(sectionId)) next.delete(sectionId);
     else next.add(sectionId);
     setClosedSections(next);
+  }
+
+  async function refreshSearch(text: string) {
+    try {
+      const result = await liveRequest(
+        `/projects/${projectId}/bq/search?q=${encodeURIComponent(text)}`,
+        bqSearchResponseSchema,
+      );
+      setSearch({ query: text, result });
+    } catch (error) {
+      setSearchError(problem(error));
+    }
   }
 
   async function runSearch(event: React.FormEvent) {
@@ -229,7 +301,13 @@ export function BqTree({ projectId, bills }: { projectId: string; bills: BqBillW
                             {item.sectionTitle ? ` · ${item.sectionTitle}` : ""}
                           </td>
                         </tr>
-                        <ItemRow item={item} indent={false} />
+                        <ItemRow
+                          item={item}
+                          indent={false}
+                          onLink={
+                            canLink ? () => setLinking({ item, billId: item.billId }) : undefined
+                          }
+                        />
                       </Fragment>
                     ))}
                   </tbody>
@@ -335,7 +413,16 @@ export function BqTree({ projectId, bills }: { projectId: string; bills: BqBillW
                                   </tr>
                                   {sectionOpen
                                     ? items.map((item) => (
-                                        <ItemRow key={item.id} item={item} indent />
+                                        <ItemRow
+                                          key={item.id}
+                                          item={item}
+                                          indent
+                                          onLink={
+                                            canLink
+                                              ? () => setLinking({ item, billId: bill.id })
+                                              : undefined
+                                          }
+                                        />
                                       ))
                                     : null}
                                 </Fragment>
@@ -361,6 +448,17 @@ export function BqTree({ projectId, bills }: { projectId: string; bills: BqBillW
             })}
           </ul>
         )}
+        <LinkBuildupDialog
+          projectId={projectId}
+          item={linking?.item ?? null}
+          onClose={(changed) => {
+            const target = linking;
+            setLinking(null);
+            if (!changed || !target) return;
+            if (target.billId && loaded[target.billId]) void load(target.billId);
+            if (search) void refreshSearch(search.query);
+          }}
+        />
       </CardContent>
     </Card>
   );

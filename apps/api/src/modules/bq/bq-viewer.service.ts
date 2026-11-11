@@ -16,6 +16,7 @@ import {
   bqBillResponseSchema,
   bqResponseSchema,
   bqSearchResponseSchema,
+  type BqItemRateLink,
   type BqReport,
   type BqSheetSummary,
 } from "@pm-buddy/validation";
@@ -24,7 +25,8 @@ import type { Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import { BqAccess } from "./bq-access.js";
-import { safeMinor, toItem, toVersion } from "./bq-mappers.js";
+import { peopleOf, personOf, safeMinor, toItem } from "./bq-mappers.js";
+import { BqVersionsService, versionWires } from "./bq-versions.service.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -41,7 +43,10 @@ const KIND_BUCKET: Record<BqItemKind, keyof BqKindTotals> = {
 
 const SEARCH_LIMIT = 200;
 
-/** The project's current BQ version (the newest one), or null. */
+/**
+ * The project's current BQ version, or null: the newest version, which is the newest approved one
+ * (every version after the baseline is approved when created) or the draft baseline.
+ */
 export async function currentVersion(tx: Tx, tenantId: string, projectId: string) {
   const bq = await tx.bq.findUnique({ where: { tenantId_projectId: { tenantId, projectId } } });
   if (!bq) return null;
@@ -50,6 +55,41 @@ export async function currentVersion(tx: Tx, tenantId: string, projectId: string
     orderBy: { versionNo: "desc" },
   });
   return version ? { bq, version } : null;
+}
+
+/** Active build-up links of these item lineages, as wire objects keyed by lineage. */
+export async function linksOf(
+  tx: Tx,
+  tenantId: string,
+  bqId: string,
+  lineages: readonly string[],
+): Promise<Map<string, BqItemRateLink>> {
+  if (!lineages.length) return new Map();
+  const rows = await tx.bqItemRateLink.findMany({
+    where: { tenantId, bqId, unlinkedAt: null, itemLineageId: { in: [...lineages] } },
+    include: { buildupVersion: { include: { buildup: { select: { code: true } } } } },
+  });
+  const people = await peopleOf(
+    tx,
+    rows.map((row) => row.linkedBy),
+  );
+  return new Map(
+    rows.map((row) => [
+      row.itemLineageId,
+      {
+        buildupId: row.buildupId,
+        buildupVersionId: row.buildupVersionId,
+        code: row.buildupVersion.buildup.code,
+        name: row.buildupVersion.name,
+        versionNo: row.buildupVersion.versionNo,
+        unit: row.buildupVersion.unit as BqItemRateLink["unit"],
+        rateMinor:
+          row.buildupVersion.rateMinor === null ? null : safeMinor(row.buildupVersion.rateMinor),
+        linkedAt: row.linkedAt.toISOString(),
+        linkedBy: personOf(people, row.linkedBy),
+      },
+    ]),
+  );
 }
 
 /** The BQ viewer: tree (bills and sections; items per bill), summary, search (bq.view). */
@@ -64,8 +104,8 @@ export class BqViewerService {
     return this.scope.run(principal, req, async (scope) => {
       const { project, effective } = await this.access.load(scope, projectId, "bq.view");
       const { tx, access } = scope;
-      const canImport =
-        effective.has("bq.import") && !isProjectReadOnly(project.status as ProjectStatus);
+      const readOnly = isProjectReadOnly(project.status as ProjectStatus);
+      const canImport = effective.has("bq.import") && !readOnly;
       const openImports = canImport
         ? await tx.bqImport.count({
             where: {
@@ -75,9 +115,21 @@ export class BqViewerService {
             },
           })
         : 0;
-      const permissions = { canImport, canExport: true };
+      const permissions = {
+        canImport,
+        canExport: true,
+        canEdit: effective.has("bq.edit") && !readOnly,
+        canApprove: effective.has("bq.approve_variation") && !readOnly,
+      };
       const current = await currentVersion(tx, access.tenantId, projectId);
-      if (!current) return bqResponseSchema.parse({ bq: null, permissions, openImports });
+      const baselineApproval = await BqVersionsService.baselineApproval(
+        scope,
+        project,
+        effective,
+        current?.version ?? null,
+      );
+      if (!current)
+        return bqResponseSchema.parse({ bq: null, permissions, baselineApproval, openImports });
       const { bq, version } = current;
       const [bills, sections, sectionCounts, billCounts, kinds, source] = await Promise.all([
         tx.bqBill.findMany({
@@ -160,9 +212,10 @@ export class BqViewerService {
         bq: {
           id: bq.id,
           name: bq.name,
-          version: toVersion(version),
+          version: (await versionWires(tx, access.tenantId, [version]))[0],
           bills: bills.map((bill) => ({
             id: bill.id,
+            lineageId: bill.lineageId,
             number: bill.number,
             title: bill.title,
             kind: bill.kind,
@@ -173,6 +226,7 @@ export class BqViewerService {
               .filter((section) => section.billId === bill.id)
               .map((section) => ({
                 id: section.id,
+                lineageId: section.lineageId,
                 code: section.code,
                 title: section.title,
                 notes: section.notes,
@@ -186,42 +240,62 @@ export class BqViewerService {
           source: sourceInfo,
         },
         permissions,
+        baselineApproval,
         openImports,
       });
     });
   }
 
-  private async billOf(scope: Scope, projectId: string, billId: string) {
+  /**
+   * A bill of the current version, or of `versionId` (any version of this project's BQ, e.g. a
+   * variation's base); 404 for anything else, including other companies' IDs.
+   */
+  private async billOf(scope: Scope, projectId: string, billId: string, versionId?: string) {
     const current = await currentVersion(scope.tx, scope.access.tenantId, projectId);
     if (!current) throw new NotFoundException("Bill not found");
+    let version = current.version;
+    if (versionId && versionId !== version.id) {
+      const other = await scope.tx.bqVersion.findUnique({
+        where: { tenantId_id: { tenantId: scope.access.tenantId, id: versionId } },
+      });
+      if (!other || other.bqId !== current.bq.id) throw new NotFoundException("Bill not found");
+      version = other;
+    }
     const bill = await scope.tx.bqBill.findUnique({
       where: {
         tenantId_versionId_id: {
           tenantId: scope.access.tenantId,
-          versionId: current.version.id,
+          versionId: version.id,
           id: billId,
         },
       },
     });
     if (!bill) throw new NotFoundException("Bill not found");
-    return { bill, version: current.version };
+    return { bill, version, bq: current.bq };
   }
 
   /** One bill's sections and items (the tree loads bills on demand, so large BQs stay usable). */
-  bill(principal: Principal, projectId: string, billId: string, req: Request) {
+  bill(principal: Principal, projectId: string, billId: string, req: Request, versionId?: string) {
     return this.scope.run(principal, req, async (scope) => {
       await this.access.load(scope, projectId, "bq.view");
-      const { bill, version } = await this.billOf(scope, projectId, billId);
+      const { bill, version, bq } = await this.billOf(scope, projectId, billId, versionId);
       const where = { tenantId: scope.access.tenantId, versionId: version.id, billId };
       const [sections, items] = await Promise.all([
         scope.tx.bqSection.findMany({ where, orderBy: { sortOrder: "asc" } }),
         scope.tx.bqItem.findMany({ where, orderBy: { sortOrder: "asc" } }),
       ]);
+      const links = await linksOf(
+        scope.tx,
+        scope.access.tenantId,
+        bq.id,
+        items.map((item) => item.lineageId),
+      );
       const counts = new Map<string | null, number>();
       for (const item of items) counts.set(item.sectionId, (counts.get(item.sectionId) ?? 0) + 1);
       return bqBillResponseSchema.parse({
         bill: {
           id: bill.id,
+          lineageId: bill.lineageId,
           number: bill.number,
           title: bill.title,
           kind: bill.kind,
@@ -230,6 +304,7 @@ export class BqViewerService {
           itemCount: items.length,
           sections: sections.map((section) => ({
             id: section.id,
+            lineageId: section.lineageId,
             code: section.code,
             title: section.title,
             notes: section.notes,
@@ -237,7 +312,7 @@ export class BqViewerService {
             itemCount: counts.get(section.id) ?? 0,
           })),
         },
-        items: items.map(toItem),
+        items: items.map((item) => toItem(item, links.get(item.lineageId) ?? null)),
       });
     });
   }
@@ -262,9 +337,15 @@ export class BqViewerService {
         orderBy: [{ bill: { sortOrder: "asc" } }, { sortOrder: "asc" }],
         take: SEARCH_LIMIT + 1,
       });
+      const links = await linksOf(
+        scope.tx,
+        scope.access.tenantId,
+        current.bq.id,
+        rows.map((row) => row.lineageId),
+      );
       return bqSearchResponseSchema.parse({
         items: rows.slice(0, SEARCH_LIMIT).map((row) => ({
-          ...toItem(row),
+          ...toItem(row, links.get(row.lineageId) ?? null),
           billId: row.billId,
           billNumber: row.bill.number,
           sectionTitle: row.section?.title ?? null,

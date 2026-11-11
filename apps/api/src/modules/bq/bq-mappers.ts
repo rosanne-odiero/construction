@@ -4,6 +4,7 @@ import { sanitiseCellText } from "@pm-buddy/domain";
 import type {
   BqImport,
   BqImportSummary,
+  BqItemRateLink,
   BqItemWire,
   BqReport,
   BqSheetSummary,
@@ -115,12 +116,44 @@ export function buildDigest(result: BqBuildResult): string {
     .digest("hex");
 }
 
-export function toVersion(row: BqVersionRow): BqVersionWire {
+/** Display names for user IDs (rows keep IDs only; names are resolved per response). */
+export async function peopleOf(
+  tx: Prisma.TransactionClient,
+  ids: readonly (string | null | undefined)[],
+): Promise<People> {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (!unique.length) return new Map();
+  const users = await tx.user.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, displayName: true },
+  });
+  return new Map(users.map((user) => [user.id, user.displayName]));
+}
+
+export const personOf = person;
+
+/**
+ * A version on the wire. `current` marks the version in force (the newest approved one, or the
+ * draft baseline while nothing is approved); `variationNumber` names the variation behind it.
+ */
+export function toVersion(
+  row: BqVersionRow,
+  extras: { people: People; current: boolean; variationNumber: string | null },
+): BqVersionWire {
   return {
     id: row.id,
     versionNo: row.versionNo,
     status: row.status as BqVersionWire["status"],
     source: row.source as BqVersionWire["source"],
+    parentVersionId: row.parentVersionId,
+    variation:
+      row.variationId && extras.variationNumber
+        ? { id: row.variationId, number: extras.variationNumber }
+        : null,
+    createdBy: person(extras.people, row.createdBy),
+    approvedBy: row.approvedBy ? person(extras.people, row.approvedBy) : null,
+    approvedAt: row.approvedAt?.toISOString() ?? null,
+    current: extras.current,
     vatRatePercent: row.vatRatePercent.toFixed(),
     vatRuleKey: row.vatRuleKey,
     vatRuleStatus: row.vatRuleStatus,
@@ -136,9 +169,10 @@ export function toVersion(row: BqVersionRow): BqVersionWire {
   };
 }
 
-export function toItem(row: BqItemRow): BqItemWire {
+export function toItem(row: BqItemRow, link: BqItemRateLink | null = null): BqItemWire {
   return {
     id: row.id,
+    lineageId: row.lineageId,
     sectionId: row.sectionId,
     ref: row.ref,
     description: row.description,
@@ -155,6 +189,7 @@ export function toItem(row: BqItemRow): BqItemWire {
     sourceSheet: row.sourceSheet,
     sourceRow: row.sourceRow,
     hasFormula: row.hasFormula,
+    rateBuildUp: link,
   };
 }
 

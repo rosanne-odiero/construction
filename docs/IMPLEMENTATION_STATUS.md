@@ -735,6 +735,18 @@ Not yet done: a sign-in against real Google (needs the owner's OAuth client and 
 registration); unlinking Google from an account; showing linked sign-in methods in the
 account console. Google sign-in does not reset password-lockout counters.
 
+## Independent review of the portals, Google and PIN sign-in
+
+Reviewed when this work was merged into main. Google sign-in (state, nonce and PKCE in a single-use encrypted cookie, issuer/audience/signature checks, linking by Google subject, MFA still enforced), the portals, diaries, photos and the migrations raised nothing. Three findings on the PIN sign-in:
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Medium | Every PIN attempt, right or wrong, counted against the 30-per-day budget per number, which was checked before the PIN and not cleared by a reset: 30 wrong guesses locked a labourer out for the day, even after resetting | Only wrong PINs count (`PIN_DAILY_FAILURES`, checked before verifying, recorded after); a spent budget answers `pin-reset-required` (429, EN/SW message pointing to "Forgot PIN?"); a PIN reset clears it. Portals e2e |
+| 2 | Medium | PIN sessions were limited with `portalFor`, which treats `projects.view`, `bq.view` and `portal.client` as non-staff, so a custom role with `portal.worker` plus those let a guessed PIN read BQ rates and contract sums | `pinAllowed` (packages/types): a PIN session's role must hold `portal.worker` and nothing else, checked when joining, accepting an invitation and on every tenant request. Unit test and portals e2e (join refused; a role that later gains view permissions loses PIN access) |
+| 3 | Low | PIN hashes use the password Argon2id settings without a server-side pepper; with 10⁶ PINs a database dump reveals them | **Open:** add an HMAC pepper held in the secrets manager / KMS (needs the key-management decision); until then PINs open only the worker portal |
+
+Also open: per-IP limits apply only when `TRUST_PROXY` is set, and there is no company- or platform-wide budget of PIN failures with alerting yet. Each fix was mutation-checked: reverting it fails a test.
+
 ## Portals for clients, labourers and staff (11 November 2026)
 
 Owner request: "id like different portals for clients admin and labourers" (and Google sign-in,

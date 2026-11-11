@@ -48,6 +48,7 @@ type ErrorKey =
   | "invalidPin"
   | "invalidCode"
   | "rateLimited"
+  | "pinResetRequired"
   | "network"
   | "invalidResponse"
   | "passkeyCancelled"
@@ -62,6 +63,7 @@ function errorKey(error: unknown, credentials: boolean | "pin"): ErrorKey {
       : credentials
         ? "invalidCredentials"
         : "invalidCode";
+  if (error.code === "pin-reset-required") return "pinResetRequired";
   if (error.status === 429) return "rateLimited";
   if (error.code === "network") return "network";
   if (error.code === "invalidResponse") return "invalidResponse";

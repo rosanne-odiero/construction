@@ -32,7 +32,7 @@ const screens = [
   { key: "bq", href: "/prototype/projects/ruiru-heights/bq", icon: FileSpreadsheet },
   { key: "bqImport", href: "/prototype/projects/ruiru-heights/bq/import", icon: Table2 },
   { key: "labour", href: "/prototype/labour", icon: HardHat },
-  { key: "attendance", href: "/attendance", icon: ScanFace },
+  { key: "attendance", href: "/prototype/attendance", icon: ScanFace },
   { key: "payroll", href: "/payroll", icon: Wallet },
   { key: "portal", href: "/portal", icon: MonitorSmartphone },
   { key: "site", href: "/site", icon: Smartphone },

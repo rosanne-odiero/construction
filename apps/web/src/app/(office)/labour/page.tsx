@@ -6,6 +6,7 @@ import { LABOURER_STATUSES } from "@pm-buddy/types";
 import {
   accreditationAlertsResponseSchema,
   gangsResponseSchema,
+  labourerAttendanceResponseSchema,
   labourerResponseSchema,
   labourersResponseSchema,
   labourSetupResponseSchema,
@@ -86,6 +87,11 @@ export default async function LabourPage({
     await serverApi("/labour/accreditation-alerts", accreditationAlertsResponseSchema),
     worker ? await serverApi(`/labour/labourers/${worker}`, labourerResponseSchema) : null,
   ];
+  // Attendance totals (D3.3) only for callers who may view attendance; otherwise none is shown.
+  const attendance =
+    worker && detail?.ok
+      ? await serverApi(`/attendance/labourers/${worker}/summary`, labourerAttendanceResponseSchema)
+      : null;
   const t = await getTranslations("labourLive");
   const locale = await getLocale();
   const { labourers, total, permissions } = list.data;
@@ -368,6 +374,7 @@ export default async function LabourPage({
             labourer={detail.data.labourer}
             closeHref={closeHref}
             setup={setup.ok ? setup.data : null}
+            attendance={attendance?.ok ? attendance.data : null}
           />
         ) : (
           <p role="alert" className="text-sm text-destructive">

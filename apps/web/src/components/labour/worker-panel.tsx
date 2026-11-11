@@ -20,11 +20,13 @@ import {
 import {
   labourerResponseSchema,
   revealResponseSchema,
+  type LabourerAttendanceResponse,
   type LabourerDetail,
   type LabourSetupResponse,
   type RevealResponse,
 } from "@pm-buddy/validation";
 import { StatusBadge } from "@/components/status-badge";
+import { WorkerAttendance } from "@/components/attendance/worker-attendance";
 import { useStepUp } from "@/components/projects/step-up";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -69,10 +71,13 @@ export function WorkerPanel({
   labourer,
   closeHref,
   setup,
+  attendance = null,
 }: {
   labourer: LabourerDetail;
   closeHref: string;
   setup: LabourSetupResponse | null;
+  /** Attendance summary (D3.3); null when the caller cannot view attendance. */
+  attendance?: LabourerAttendanceResponse | null;
 }) {
   const t = useTranslations("labourLive.panel");
   const tLabour = useTranslations("labourLive");
@@ -301,6 +306,13 @@ export function WorkerPanel({
               </>
             ) : null}
           </section>
+
+          {attendance ? (
+            <>
+              <Separator />
+              <WorkerAttendance summary={attendance} />
+            </>
+          ) : null}
 
           <Separator />
           <section aria-labelledby="panel-nca" className="space-y-2">

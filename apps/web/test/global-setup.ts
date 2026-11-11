@@ -19,6 +19,12 @@ const ROUTES = [
   "/labour/gangs/43000000-0000-4000-8000-000000000001",
   "/labour/setup",
   "/labour/alerts",
+  "/attendance",
+  "/attendance/muster?project=30000000-0000-4000-8000-000000000001&site=31000000-0000-4000-8000-000000000001&date=2026-11-10",
+  "/attendance/periods?project=30000000-0000-4000-8000-000000000001",
+  "/attendance/periods/00000000-0000-4000-8000-000000000000",
+  "/attendance/anomalies",
+  "/attendance/settings",
 ];
 
 export default async function warmUp(config: FullConfig) {

@@ -67,6 +67,7 @@ import {
   type WbsNode,
 } from "@pm-buddy/validation";
 import { handleBq, initialProjectBq, type BqState } from "./mock-bq.mts";
+import { attendanceFixture, handleAttendance, type AttendanceState } from "./mock-attendance.mts";
 import { handleLabour, labourFixture, type LabourState } from "./mock-labour.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
@@ -102,6 +103,7 @@ type State = {
   team: Map<string, TeamEntry[]>;
   bq: BqState;
   labour: LabourState;
+  attendance: AttendanceState;
 };
 
 const states = new Map<string, State>();
@@ -284,6 +286,7 @@ function fixture(persona: Persona): State {
     wbs: [],
     milestones: [],
   };
+  const labour = labourFixture();
   const pmAssignment = PROJECT_ASSIGNABLE_PERMISSIONS.filter((key) =>
     SYSTEM_ROLE_PERMISSIONS.project_manager.includes(key),
   );
@@ -298,7 +301,8 @@ function fixture(persona: Persona): State {
       templates: [],
     },
     projects: [ruiru, syokimau],
-    labour: labourFixture(),
+    labour,
+    attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
     team: new Map([
       [
         RUIRU_ID,
@@ -577,6 +581,37 @@ async function handle(
     body,
   );
   if (labour) return labour;
+  const attendance = handleAttendance(
+    {
+      persona: state.persona,
+      user:
+        state.persona === "owner"
+          ? { id: OWNER_ID, displayName: "Wanjiru Kamau" }
+          : { id: AGENT_ID, displayName: "Kevin Kiprono" },
+      projects: state.projects.map(({ project, sites }) => ({
+        id: project.id,
+        code: project.code,
+        name: project.name,
+        status: project.status,
+        sites: sites.map(({ site }) => ({ id: site.id, name: site.name })),
+      })),
+      labour: state.labour,
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+      stepUpFresh: () => Date.now() - state.stepUpAt <= 5 * 60_000,
+      fail: (status, code) => {
+        throw new HttpError(status, code);
+      },
+    },
+    state.attendance,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (attendance) return attendance;
   if (path === "/projects" && method === "GET") {
     const status = query.get("status");
     const search = query.get("search")?.toLowerCase();

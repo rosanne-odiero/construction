@@ -25,7 +25,11 @@ import {
   type UnitDefinition,
 } from "@pm-buddy/domain";
 import {
+  DEFAULT_BLOCK_PAYMENT_WITHOUT_ETIMS,
+  DEFAULT_MIN_QUOTES,
   DEFAULT_PRICE_CHANGE_ALERT_PERCENT,
+  DEFAULT_PRICE_TOLERANCE_PERCENT,
+  DEFAULT_QTY_TOLERANCE_PERCENT,
   DIMENSION_BASE_UNITS,
   type Permission,
   type SizedDimension,
@@ -934,6 +938,11 @@ export function handleProcurement(
       body: {
         settings: {
           priceChangeAlertPercent: state.settings.percent,
+          // D5.2 settings at their defaults (the screens to change them come with D5.2's web).
+          minQuotes: DEFAULT_MIN_QUOTES,
+          qtyTolerancePercent: DEFAULT_QTY_TOLERANCE_PERCENT,
+          priceTolerancePercent: DEFAULT_PRICE_TOLERANCE_PERCENT,
+          blockPaymentWithoutEtims: DEFAULT_BLOCK_PAYMENT_WITHOUT_ETIMS,
           version: state.settings.version,
           updatedAt: state.settings.version ? NOW : null,
           updatedBy: state.settings.version ? OWNER : null,

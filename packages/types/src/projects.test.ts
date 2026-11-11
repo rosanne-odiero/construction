@@ -34,7 +34,7 @@ describe("project vocabulary", () => {
 });
 
 describe("project-assignable permissions", () => {
-  it("are project-scoped catalogue permissions without approval, payment or portal powers", () => {
+  it("are project-scoped catalogue permissions without approval, payment or supplier powers", () => {
     for (const permission of PROJECT_ASSIGNABLE_PERMISSIONS)
       expect(PROJECT_PERMISSIONS, permission).toContain(permission);
     for (const permission of MFA_REQUIRED_PERMISSIONS)
@@ -42,7 +42,6 @@ describe("project-assignable permissions", () => {
     for (const excluded of [
       "payments.view",
       "finance.view_sensitive",
-      "portal.client",
       "portal.supplier",
       "projects.create",
     ] satisfies Permission[])
@@ -58,6 +57,8 @@ describe("project-assignable permissions", () => {
       "stores.manage",
       "site.diary",
       "documents.manage",
+      "portal.client",
+      "portal.worker",
       "reports.view",
       "finance.view",
     ] satisfies Permission[])

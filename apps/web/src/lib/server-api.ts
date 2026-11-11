@@ -3,6 +3,7 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import type { z } from "zod";
+import { PORTAL_HOME, portalFor, type Portal } from "@pm-buddy/types";
 import { authResponseSchema, tenantsResponseSchema } from "@pm-buddy/validation";
 import { API_INTERNAL_URL } from "./api";
 import { signInHref } from "./safe-next";
@@ -99,6 +100,18 @@ export async function requireSession(path: string): Promise<LiveSession | null> 
   if (state.status === "signed-in") return state.session;
   if (state.status === "unavailable") return null;
   redirect(signInHref(path));
+}
+
+/**
+ * Portal pages: the session, if the selected company's role uses this portal. Anyone else is
+ * sent to their own portal (staff to the office app, clients to /portal, labourers to /worker).
+ */
+export async function requirePortal(portal: Portal, path: string): Promise<LiveSession | null> {
+  const session = await requireSession(path);
+  if (!session) return null;
+  const actual = portalFor(session.company.permissions);
+  if (actual !== portal) redirect(PORTAL_HOME[actual]);
+  return session;
 }
 
 /**

@@ -29,7 +29,7 @@ export default defineConfig({
     {
       command: `pnpm exec next dev --hostname 127.0.0.1 --port ${WEB_PORT}`,
       url: `http://127.0.0.1:${WEB_PORT}/design-system`,
-      env: { API_INTERNAL_URL: `http://127.0.0.1:${MOCK_API_PORT}` },
+      env: { API_INTERNAL_URL: `http://127.0.0.1:${MOCK_API_PORT}`, PLAYWRIGHT_TEST: "1" },
       reuseExistingServer: false,
       timeout: 120_000,
     },

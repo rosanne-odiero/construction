@@ -10,6 +10,29 @@ Approvals bind an immutable snapshot of recipients, amounts, allocations and eff
 
 The tables below inherit these scope, audit and retry requirements. A failed precondition returns an explicit conflict/forbidden response without side effects.
 
+## Site diary (D6.1 online foundation)
+
+Implemented locally for the web diary, not the offline site app. The API resolves
+tenant/project permission and version for each command; state and a safe-summary
+audit event commit together. There are no attachment or external-notification effects
+in this increment. Retries conflict on site/day uniqueness or a consumed version;
+offline event identity/replay and outbox integration remain future work.
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → draft | `site.diary`; site belongs to project; day is not future in Nairobi; site/day unused | Version 1; `diary.created`; manual or unknown workforce |
+| draft → draft | Original author + `site.diary`; expected version | Replace draft content; `diary.updated` |
+| draft → submitted | Original author + `site.diary`; expected version | Freeze content pending review; `diary.submitted` |
+| submitted → rejected | Independent `quality.manage` reviewer; expected version; reason 3–500 characters | Store reviewer/time/reason; `diary.rejected` |
+| rejected → draft | Original author + `site.diary`; expected version | Clear current sign-off; retain audited transition history; `diary.reopened` |
+| submitted → approved | Independent `quality.manage` reviewer; expected version | Store reviewer/time; lock record permanently; `diary.approved` |
+
+Approved diaries have no edit/reopen/delete transition. Database triggers backstop the
+lifecycle, author/reviewer identities and lock; RLS and composite foreign keys isolate
+company/project/site references. Closed/cancelled projects allow reads but no changes.
+Attendance auto-fill, verified photos and quality workflows are not supplied by this
+foundation. Financial certificate approval is a separate workflow below.
+
 ## Payroll
 
 ```mermaid

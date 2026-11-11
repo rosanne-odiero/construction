@@ -69,7 +69,7 @@ export const navGroups: {
     items: [
       { key: "labour", href: "/labour", icon: HardHat },
       { key: "attendance", href: "/attendance", icon: ScanFace },
-      { key: "diary", href: "/soon/diary", icon: NotebookPen, phase: 6 },
+      { key: "diary", href: "/diary", icon: NotebookPen },
       { key: "materials", href: "/catalogue", icon: Package },
       { key: "stores", href: "/soon/stores", icon: Warehouse, phase: 5 },
       { key: "plant", href: "/soon/plant", icon: Forklift, phase: 8 },
@@ -117,7 +117,7 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
  * labour, attendance and payroll prototypes live under /prototype.
  */
 export function isLiveRoute(pathname: string): boolean {
-  if (pathname === "/projects" || pathname === "/bq") return true;
+  if (pathname === "/projects" || pathname === "/bq" || pathname === "/diary") return true;
   if (pathname === "/labour" || pathname.startsWith("/labour/")) return true;
   if (pathname === "/attendance" || pathname.startsWith("/attendance/")) return true;
   if (pathname === "/payroll" || pathname.startsWith("/payroll/")) return true;

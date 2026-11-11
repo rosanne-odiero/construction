@@ -17,6 +17,7 @@ import {
   sessionsResponseSchema,
 } from "@pm-buddy/validation";
 import type { Prisma, Session, User } from "../../generated/prisma/client.js";
+import { AppConfig } from "../../config/app-config.js";
 import { PrismaService } from "../../infra/prisma.service.js";
 import {
   AuthSecurity,
@@ -58,6 +59,16 @@ export const requestId = (req: Request): string =>
   /^[A-Za-z0-9-]{8,64}$/.test(req.headers["x-request-id"])
     ? req.headers["x-request-id"]
     : randomUUID();
+/** A new sign-in session: 8 hours with an MFA factor, otherwise 24; 30 minutes idle. */
+export const newSessionData = (
+  user: Pick<User, "id" | "mfaEnabled">,
+  authMethod: "password" | "google" | "pin" = "password",
+) => ({
+  userId: user.id,
+  authMethod,
+  expiresAt: new Date(Date.now() + (user.mfaEnabled ? 8 : 24) * HOUR),
+  idleExpiresAt: new Date(Date.now() + 30 * MINUTE),
+});
 
 @Injectable()
 export class AuthService {
@@ -66,6 +77,7 @@ export class AuthService {
     readonly security: AuthSecurity,
     private readonly tenantDb: TenantDatabase,
     private readonly passwords: PasswordPolicy,
+    private readonly config: AppConfig,
   ) {}
 
   /**
@@ -233,13 +245,7 @@ export class AuthService {
           where: { id: user.id },
           data: { failedLogins: 0, lockedUntil: null },
         });
-        const session = await tx.session.create({
-          data: {
-            userId: user.id,
-            expiresAt: new Date(Date.now() + (user.mfaEnabled ? 8 : 24) * HOUR),
-            idleExpiresAt: new Date(Date.now() + 30 * MINUTE),
-          },
-        });
+        const session = await tx.session.create({ data: newSessionData(user) });
         return { user, session };
       },
       { timeout: 10_000 },
@@ -439,6 +445,9 @@ export class AuthService {
    * enough to add a second factor of the attacker's choosing.
    */
   requireFactorEnrolment(principal: Principal): void {
+    // A guessed six-digit PIN must never let someone attach a factor of their own choosing.
+    if (principal.session.authMethod === "pin")
+      throw new ForbiddenException("Sign in with your password before enrolling MFA");
     if (principal.user.mfaEnabled) {
       this.requireMfa(principal, true);
       return;
@@ -454,6 +463,8 @@ export class AuthService {
    */
   assertFactorEnrolment(user: User, session: Session): void {
     if (session.revokedAt) throw new UnauthorizedException("Session expired or revoked");
+    if (session.authMethod === "pin")
+      throw new ForbiddenException("Sign in with your password before enrolling MFA");
     if (user.mfaEnabled) {
       if (!isFresh(session.mfaVerifiedAt)) {
         throw new ForbiddenException("Fresh MFA step-up required");
@@ -661,8 +672,10 @@ export class AuthService {
       });
       this.security.notifyLater(
         identifier,
-        "Reset your password",
-        `Password reset token: ${token}\nExpires in fifteen minutes.`,
+        user.pinHash ? "Reset your PIN" : "Reset your password",
+        user.pinHash
+          ? `Reset your PM-Buddy PIN: ${new URL(this.config.get("WEB_ORIGIN")).origin}/worker/pin?token=${token}\nExpires in fifteen minutes. To set a password instead, use this token in the account console: ${token}`
+          : `Password reset token: ${token}\nExpires in fifteen minutes.`,
       );
     }
     return genericMessage;

@@ -1,8 +1,10 @@
 import { getTranslations } from "next-intl/server";
 import { CloudUpload, HardHat, ShieldCheck, Wallet } from "lucide-react";
+import { authProvidersResponseSchema, GOOGLE_SIGN_IN_OUTCOMES } from "@pm-buddy/validation";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { safeNextPath } from "@/lib/safe-next";
+import { serverApi } from "@/lib/server-api";
 import { SignInForm } from "./sign-in-form";
 
 export async function generateMetadata() {
@@ -17,7 +19,12 @@ export default async function SignInPage({
 }) {
   const t = await getTranslations("auth");
   const design = await getTranslations("designSystem");
-  const { next } = await searchParams;
+  const { next, google } = await searchParams;
+  const rawOutcome = Array.isArray(google) ? google[0] : google;
+  const googleOutcome = GOOGLE_SIGN_IN_OUTCOMES.find((outcome) => outcome === rawOutcome);
+  // Google is offered only when the API reports it configured; on any failure it stays hidden.
+  const providers = await serverApi("/auth/providers", authProvidersResponseSchema);
+  const googleEnabled = providers.ok && providers.data.google;
   const points = [
     { key: "mfa", icon: ShieldCheck },
     { key: "money", icon: Wallet },
@@ -71,7 +78,11 @@ export default async function SignInPage({
           </div>
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 pb-12">
             <h1 className="sr-only">{t("title")}</h1>
-            <SignInForm next={safeNextPath(Array.isArray(next) ? next[0] : next)} />
+            <SignInForm
+              next={safeNextPath(Array.isArray(next) ? next[0] : next)}
+              google={googleEnabled}
+              googleOutcome={googleOutcome}
+            />
           </div>
         </main>
       </div>

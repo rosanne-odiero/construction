@@ -12,6 +12,8 @@ import { ProcurementModule } from "./modules/procurement/procurement.module.js";
 import { LabourModule } from "./modules/labour/labour.module.js";
 import { PayrollModule } from "./modules/payroll/payroll.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
+import { PortalsModule } from "./modules/portals/portals.module.js";
+import { ProgressModule } from "./modules/progress/progress.module.js";
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { ProjectsModule } from "./modules/projects/projects.module.js";
     LabourModule,
     AttendanceModule,
     PayrollModule,
+    ProgressModule,
+    PortalsModule,
   ],
 })
 export class AppModule {}

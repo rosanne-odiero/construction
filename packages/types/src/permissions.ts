@@ -61,6 +61,7 @@ export const PERMISSIONS = [
   "reports.view",
   "portal.client",
   "portal.supplier",
+  "portal.worker",
   "platform.admin",
 ] as const;
 
@@ -117,12 +118,14 @@ export const isProjectPermission = (permission: Permission): boolean =>
 /**
  * Project-scoped permissions that a project assignment may carry today (D2.1; the labour
  * do-not-rehire and consent permissions joined in D3.1, attendance confirmation and the timesheet
- * permissions in D3.3, payroll viewing and advances in D4.1): the project, BQ, labour, attendance,
- * timesheet, payroll view/preparation/review, advance request/approval, procurement, stores, site,
- * quality, safety, plant, documents, reports and finance-view permissions. The company-level
- * payroll rule and export permissions are never project-scoped. Approval and payment permissions
- * (`payroll.approve`, `payments.*`, `finance.manage`, `finance.view_sensitive`) and the portal
- * permissions stay out until their modules define project behaviour. The database CHECK
+ * permissions in D3.3, payroll viewing and advances in D4.1, the client and labourer portals with
+ * the portals, so a client or labourer sees only the projects they are assigned to): the project,
+ * BQ, labour, attendance, timesheet, payroll view/preparation/review, advance request/approval,
+ * procurement, stores, site, quality, safety, plant, documents, reports, finance-view and portal
+ * permissions. The company-level payroll rule and export permissions are never project-scoped.
+ * Approval and payment permissions (`payroll.approve`, `payments.*`, `finance.manage`,
+ * `finance.view_sensitive`) and the supplier portal stay out until their modules define project
+ * behaviour. The database CHECK
  * `project_permissions_check` lists the same keys; effective = role ∩ assignment.
  */
 export const PROJECT_ASSIGNABLE_PERMISSIONS = [
@@ -161,6 +164,8 @@ export const PROJECT_ASSIGNABLE_PERMISSIONS = [
   "plant.manage",
   "documents.manage",
   "reports.view",
+  "portal.client",
+  "portal.worker",
 ] as const satisfies readonly Permission[];
 export type ProjectAssignablePermission = (typeof PROJECT_ASSIGNABLE_PERMISSIONS)[number];
 

@@ -206,6 +206,8 @@ for (const locale of ["en", "sw"] as const) {
       // Seven page loads, each with an axe scan: about 8 s alone, but over 30 s while the whole
       // suite and the API e2e suite share the machine. Only the time budget changes.
       test.slow();
+      // Seven pages, each compiled on first visit by the dev server and scanned by axe.
+      test.slow();
       await signInAs(context, "owner");
       await preferences(context, page, locale, theme);
       for (const path of [

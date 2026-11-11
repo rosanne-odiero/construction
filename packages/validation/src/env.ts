@@ -48,6 +48,13 @@ export const apiEnvSchema = z.object({
     .string()
     .regex(/^[a-fA-F0-9]{64}$/)
     .optional(),
+  // "Continue with Google" (OpenID Connect authorisation code flow with PKCE). Set both from a
+  // Google Cloud OAuth "Web application" client, or neither to hide Google sign-in. The redirect
+  // URI to register with Google is `${WEB_ORIGIN}/api/v1/auth/google/callback`.
+  AUTH_GOOGLE_CLIENT_ID: z.string().trim().min(1).max(255).optional(),
+  AUTH_GOOGLE_CLIENT_SECRET: z.string().trim().min(1).max(255).optional(),
+  // Test-only issuer override (a local fake provider on loopback). Refused in production.
+  AUTH_GOOGLE_ISSUER: z.url().optional(),
 
   REDIS_URL: z.url(),
 

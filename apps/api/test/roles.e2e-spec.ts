@@ -18,6 +18,7 @@ import {
   auditEventsResponseSchema,
   membersResponseSchema,
   permissionCatalogueResponseSchema,
+  projectDetailResponseSchema,
   roleResponseSchema,
   rolesResponseSchema,
   tenantsResponseSchema,
@@ -631,11 +632,12 @@ describe("Roles and permissions (real runtime role)", () => {
   });
 
   it("applies role ∩ project assignment, while company-wide roles see every project", async () => {
-    expect((await clerk.call("patch", `projects/${projectOne}`, { name: "Not yet" })).status).toBe(
-      403,
-    );
     expect(
-      (await clerk.call("patch", `projects/${projectTwo}`, { name: "Not assigned" })).status,
+      (await clerk.call("patch", `projects/${projectOne}`, { name: "Not yet", version: 1 })).status,
+    ).toBe(403);
+    expect(
+      (await clerk.call("patch", `projects/${projectTwo}`, { name: "Not assigned", version: 1 }))
+        .status,
     ).toBe(403);
     await fresh(owner);
     expect(
@@ -645,8 +647,16 @@ describe("Roles and permissions (real runtime role)", () => {
         })
       ).status,
     ).toBe(200);
+    const current = projectDetailResponseSchema.parse(
+      (await clerk.call("get", `projects/${projectOne}`)).body,
+    ).project;
     expect(
-      (await clerk.call("patch", `projects/${projectOne}`, { name: "Roles site one (PM)" })).status,
+      (
+        await clerk.call("patch", `projects/${projectOne}`, {
+          name: "Roles site one (PM)",
+          version: current.version,
+        })
+      ).status,
     ).toBe(200);
 
     const viewerRole: Role = await createRole(owner, {
@@ -663,7 +673,9 @@ describe("Roles and permissions (real runtime role)", () => {
       projectOne,
       projectTwo,
     ]);
-    expect((await viewer.call("patch", `projects/${projectTwo}`, { name: "No" })).status).toBe(403);
+    expect(
+      (await viewer.call("patch", `projects/${projectTwo}`, { name: "No", version: 1 })).status,
+    ).toBe(403);
     // A project-scoped role with no assignment sees nothing and cannot assign anyone.
     expect((await admin.call("get", "projects")).body).toEqual({ projects: [] });
     expect(

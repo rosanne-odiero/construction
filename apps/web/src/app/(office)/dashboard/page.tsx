@@ -133,7 +133,7 @@ export default async function DashboardPage() {
             <CardDescription>{t("projectsDescription")}</CardDescription>
             <CardAction>
               <Button asChild variant="ghost" size="sm">
-                <Link href="/projects">{t("viewAll")}</Link>
+                <Link href="/prototype/projects">{t("viewAll")}</Link>
               </Button>
             </CardAction>
           </CardHeader>
@@ -154,7 +154,10 @@ export default async function DashboardPage() {
                 {projects.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="pl-6">
-                      <Link href={`/projects/${p.id}`} className="font-medium hover:underline">
+                      <Link
+                        href={`/prototype/projects/${p.id}`}
+                        className="font-medium hover:underline"
+                      >
                         {p.name}
                       </Link>
                       <div className="text-xs text-muted-foreground">

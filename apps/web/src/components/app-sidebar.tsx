@@ -30,13 +30,16 @@ import {
 import { navGroups } from "@/components/nav-config";
 import { company } from "@/mocks/company";
 
-export function AppSidebar() {
+/** `companyName` is the signed-in company; without a session the prototype's mock company shows. */
+export function AppSidebar({ companyName }: { companyName?: string }) {
   const pathname = usePathname();
   const t = useTranslations("nav");
 
   const isActive = (href: string) =>
     href === "/projects"
-      ? pathname === "/projects" || /^\/projects\/[^/]+$/.test(pathname)
+      ? pathname === "/projects" ||
+        (/^\/(prototype\/)?projects\/[^/]+(\/sites(\/.*)?)?$/.test(pathname) &&
+          !pathname.includes("/bq"))
       : pathname.startsWith(href);
 
   return (
@@ -51,7 +54,9 @@ export function AppSidebar() {
                 </span>
                 <span className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-semibold">PM-Buddy</span>
-                  <span className="truncate text-xs text-muted-foreground">{company.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {companyName ?? company.name}
+                  </span>
                 </span>
               </Link>
             </SidebarMenuButton>

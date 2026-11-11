@@ -390,6 +390,19 @@ erDiagram
   }
 ```
 
+**Implemented in D2.1** (migration `20261110100000_projects_sites_geofences`; [ARCHITECTURE §4.1](./ARCHITECTURE.md#41-projects-module-d21)). The model above remains the target; the implemented tables differ as follows.
+
+| Entity | Implemented as | Difference from the target model |
+|---|---|---|
+| Client | Not yet a table | `projects.client_name`, `client_email`, `client_phone` hold a simple contact until the client portal (D7.1) introduces `Client` and `client_id`. |
+| Project | `projects` | `code` is unique per company (`PRJ-001…` assigned when omitted; existing rows were backfilled). `status` is `planning, active, on_hold, completed, closed, cancelled` with transitions in `app.guard_project`; practical completion and the defects liability period (`dlp_months`) join with valuations and retentions (D6.x). `contract_type` is `lump_sum, remeasurement, design_and_build, cost_plus, labour_only` (JBC is a standard form, not a pricing basis). Adds `description`, `town`, optional `latitude`/`longitude`, `currency` (KES only), `version` (optimistic concurrency), `created_by`, `updated_at`. |
+| ProjectStatusChange | `project_status_changes` | New: append-only history of transitions (`from_status`, `to_status`, `reason`, `changed_by`, `changed_at`). |
+| Site | `sites` | `name` (unique per project), `address` (address or landmark) and `version`; the county stays on the project. Sites cannot be deleted yet (attendance will reference them). |
+| Geofence | `site_geofences` | One row per **version** (`version`, `effective_from timestamptz` set by the database, strictly increasing per site) instead of `active_from date`, so the version in force at a capture time is exact. A polygon is a jsonb array of `{lat,lng}` vertices (open ring) rather than GeoJSON; a radius is `center_lat`/`center_lng`/`radius_m`. `area_m2` and `perimeter_m` are stored. Rows are never updated or deleted. |
+| WbsNode | `wbs_nodes` | Adds `weight_basis_points` (share of the parent, 10,000 = 100 %), `sort_order` (for `sort`) and `version`; the parent is referenced through `(tenant_id, project_id, parent_id)`. Codes are unique per project. |
+| Milestone | `milestones` | `due_date` (for `planned_date`), `status` (`planned, in_progress, achieved, cancelled`), `actual_date`, `status_reason`, `version`; names are unique per project. `payment_linked` waits for valuations (D6.x). |
+| ProjectMembership | `project_memberships` | `project_permissions_check` widened to the project-scoped catalogue (`PROJECT_ASSIGNABLE_PERMISSIONS`). |
+
 ## 4. BQ, variations, valuations and subcontracts
 
 ```mermaid

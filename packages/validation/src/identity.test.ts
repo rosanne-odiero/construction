@@ -1,4 +1,4 @@
-import { isPermission, SYSTEM_ROLES } from "@pm-buddy/types";
+import { isPermission, PROJECT_ASSIGNABLE_PERMISSIONS, SYSTEM_ROLES } from "@pm-buddy/types";
 import { describe, expect, it } from "vitest";
 import type { ZodType } from "zod";
 import {
@@ -36,7 +36,28 @@ const auth: AuthResponse = {
   mfaRequired: false,
 };
 const tenant = { id, name: "Construction company" };
-const project = { id, name: "Construction project", createdAt: date };
+const project = {
+  id,
+  code: "RUI-HTS",
+  name: "Construction project",
+  description: null,
+  clientName: null,
+  clientEmail: null,
+  clientPhone: null,
+  contractSumMinor: null,
+  currency: "KES" as const,
+  contractType: null,
+  startDate: null,
+  endDate: null,
+  county: null,
+  town: null,
+  latitude: null,
+  longitude: null,
+  status: "planning" as const,
+  version: 1,
+  createdAt: date,
+  updatedAt: date,
+};
 const event = {
   id,
   tenantId: id,
@@ -146,7 +167,7 @@ describe("Shared foundation wire contracts", () => {
   });
 
   it("uses only canonical project permissions, rejecting the retired vocabulary", () => {
-    expect(projectPermissionSchema.options).toEqual(["projects.view", "projects.manage"]);
+    expect(projectPermissionSchema.options).toEqual([...PROJECT_ASSIGNABLE_PERMISSIONS]);
     for (const permission of projectPermissionSchema.options)
       expect(isPermission(permission)).toBe(true);
     for (const value of ["project.read", "project.update", "projects.create", "payments.approve"]) {

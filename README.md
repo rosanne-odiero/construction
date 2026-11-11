@@ -9,35 +9,36 @@ Construction project management for Kenya: a secure, multi-tenant system for con
 - An offline-first site app
 - Client, supplier and USSD self-service
 
-> **Status: Phase 1 core foundation implemented and locally verified; full phase acceptance remains open.** D0 (design pack and clickable prototype) is approved. Business screens remain **mock data**; `/foundation` and `/status` use the real API. See [implementation status](docs/IMPLEMENTATION_STATUS.md) for exact evidence and missing requirements, and the [roadmap](docs/ROADMAP.md) for all deliverables.
+> **Status: Phase 1 core foundation implemented and locally verified; full phase acceptance remains open. D2.1 (projects, sites and geofences) is in progress.** D0 (design pack and clickable prototype) is approved. Business screens remain **mock data** except `/projects`; `/sign-in`, `/projects`, `/foundation` and `/status` use the real API. See [implementation status](docs/IMPLEMENTATION_STATUS.md) for exact evidence and missing requirements, and the [roadmap](docs/ROADMAP.md) for all deliverables.
 
 > **Safeguard integration:** D1.1–D1.4 implementation is approved, not automatically accepted. See [implementation status](docs/IMPLEMENTATION_STATUS.md) and [acceptance matrix](docs/ACCEPTANCE_MATRIX.md) for actual evidence and remaining work. Business previews remain mock data. No live pilot, payments or biometrics are approved.
 
 ## Documents
 
-| Document                                               | What it covers                                                                  |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [Project brief](docs/PROJECT_BRIEF.md)                 | Original scope plus mandatory workflow, payment, offline and release safeguards |
-| [Implementation status](docs/IMPLEMENTATION_STATUS.md) | Changes, actual commands/results, limitations and next step                     |
-| [Acceptance matrix](docs/ACCEPTANCE_MATRIX.md)         | Requirement coverage and mandatory failure-mode evidence                        |
-| [Workflows](docs/WORKFLOWS.md)                         | State machines, actors, preconditions, retry and audit contracts                |
-| [Invariants](docs/INVARIANTS.md)                       | Database/business correctness constraints and required tests                    |
-| [Financial model](docs/FINANCIAL_MODEL.md)             | Proposed postings, precision, allocations, reversals and closure                |
-| [Offline sync](docs/OFFLINE_SYNC.md)                   | Deduplication, conflict review, revoked devices and uploads                     |
-| [Operations](docs/OPERATIONS.md)                       | Alerts, support boundaries and coherent restore/reconciliation                  |
-| [Release plan](docs/RELEASE_PLAN.md)                   | Environments, migration compatibility, rollback and release gates               |
-| [Pilot design](docs/PILOT_PLAN.md)                     | One-site design/delivery order approved; live activation still gated            |
-| [Roadmap](docs/ROADMAP.md)                             | Phases → deliverables, review gates, definition of done                         |
-| [Architecture](docs/ARCHITECTURE.md)                   | System design, folder structure, security, payments, offline sync, decision log |
-| [ERD](docs/ERD.md)                                     | Data model (Mermaid), split by domain                                           |
-| [OpenAPI outline](docs/api/openapi-outline.yaml)       | REST API outline (OpenAPI 3.1)                                                  |
-| [Threat model](docs/THREAT_MODEL.md)                   | STRIDE analysis and domain abuse cases                                          |
-| [DPIA template](docs/DPIA_TEMPLATE.md)                 | Data protection impact assessment for biometric attendance                      |
-| [Compliance TODO](docs/COMPLIANCE_TODO.md)             | Legal, tax and regulatory items awaiting expert confirmation                    |
-| [Configuration register](docs/CONFIGURATION.md)        | Every configurable rule, its seed value and status                              |
-| [Open questions](docs/QUESTIONS.md)                    | Decisions needed from the product owner                                         |
-| [Phase 0 demo script](docs/demos/phase-0.md)           | How to run and review the prototype                                             |
-| [Phase 1 demo script](docs/demos/phase-1.md)           | How to run and review the Phase 1 deliverables                                  |
+| Document                                               | What it covers                                                                   |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| [Project brief](docs/PROJECT_BRIEF.md)                 | Original scope plus mandatory workflow, payment, offline and release safeguards  |
+| [Implementation status](docs/IMPLEMENTATION_STATUS.md) | Changes, actual commands/results, limitations and next step                      |
+| [Acceptance matrix](docs/ACCEPTANCE_MATRIX.md)         | Requirement coverage and mandatory failure-mode evidence                         |
+| [Workflows](docs/WORKFLOWS.md)                         | State machines, actors, preconditions, retry and audit contracts                 |
+| [Invariants](docs/INVARIANTS.md)                       | Database/business correctness constraints and required tests                     |
+| [Financial model](docs/FINANCIAL_MODEL.md)             | Proposed postings, precision, allocations, reversals and closure                 |
+| [Offline sync](docs/OFFLINE_SYNC.md)                   | Deduplication, conflict review, revoked devices and uploads                      |
+| [Operations](docs/OPERATIONS.md)                       | Alerts, support boundaries and coherent restore/reconciliation                   |
+| [Release plan](docs/RELEASE_PLAN.md)                   | Environments, migration compatibility, rollback and release gates                |
+| [Pilot design](docs/PILOT_PLAN.md)                     | One-site design/delivery order approved; live activation still gated             |
+| [Roadmap](docs/ROADMAP.md)                             | Phases → deliverables, review gates, definition of done                          |
+| [Architecture](docs/ARCHITECTURE.md)                   | System design, folder structure, security, payments, offline sync, decision log  |
+| [ERD](docs/ERD.md)                                     | Data model (Mermaid), split by domain                                            |
+| [OpenAPI outline](docs/api/openapi-outline.yaml)       | REST API outline (OpenAPI 3.1)                                                   |
+| [Threat model](docs/THREAT_MODEL.md)                   | STRIDE analysis and domain abuse cases                                           |
+| [DPIA template](docs/DPIA_TEMPLATE.md)                 | Data protection impact assessment for biometric attendance                       |
+| [Compliance TODO](docs/COMPLIANCE_TODO.md)             | Legal, tax and regulatory items awaiting expert confirmation                     |
+| [Configuration register](docs/CONFIGURATION.md)        | Every configurable rule, its seed value and status                               |
+| [Open questions](docs/QUESTIONS.md)                    | Decisions needed from the product owner                                          |
+| [Phase 0 demo script](docs/demos/phase-0.md)           | How to run and review the prototype                                              |
+| [Phase 1 demo script](docs/demos/phase-1.md)           | How to run and review the Phase 1 deliverables                                   |
+| [Phase 2 demo script](docs/demos/phase-2.md)           | How to run and review the Phase 2 deliverables (D2.1 projects, sites, geofences) |
 
 ## Quick start
 
@@ -47,12 +48,13 @@ Prerequisites: **Node 24**, **pnpm 12** and **Docker** (Docker Desktop on macOS 
 pnpm install
 pnpm services:up   # PostgreSQL, Valkey, RustFS (S3) and Mailpit in Docker, waits until healthy
 pnpm db:migrate    # apply database migrations
+pnpm db:seed       # optional: synthetic demo company and projects; prints demo sign-ins (never in production)
 pnpm dev           # shared packages, API on :4000 and web on :3000, all in watch mode
 ```
 
 Then open http://localhost:3000/status: every service should show **Operational**.
 
-Foundation review: `/foundation` (API-backed identity/company setup) and `/design-system` (EN/SW, light/dark controls and states). `/sign-in` and business dashboards remain labelled prototype routes. The web manifest supplies installation metadata only; it does not imply offline payroll/attendance capability or cache sensitive records.
+Foundation review: `/foundation` (API-backed identity/company setup) and `/design-system` (EN/SW, light/dark controls and states). Since D2.1, `/sign-in` signs in against the real API and `/projects` (list, detail, sites and geofence editor, team, WBS and milestones) is live; sign in with an account printed by `pnpm db:seed` (see the [Phase 2 demo](docs/demos/phase-2.md)). Other business dashboards remain labelled prototype routes. The web manifest supplies installation metadata only; it does not imply offline payroll/attendance capability or cache sensitive records.
 
 | URL                                             | What                                       |
 | ----------------------------------------------- | ------------------------------------------ |

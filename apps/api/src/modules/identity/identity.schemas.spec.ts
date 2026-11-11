@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { projectAssignmentRequestSchema as assignmentSchema } from "@pm-buddy/validation";
 import {
   identifierSchema,
   passwordSchema,
   inviteSchema,
-  assignmentSchema,
   registerSchema,
 } from "./identity.schemas.js";
 import { hashPassword, verifyPassword } from "./auth-security.service.js";

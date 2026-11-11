@@ -100,6 +100,49 @@ export const isProjectPermission = (permission: Permission): boolean =>
   PROJECT_PERMISSIONS.includes(permission);
 
 /**
+ * Project-scoped permissions that a project assignment may carry today (D2.1): the project, BQ,
+ * labour, attendance, payroll preparation/review, procurement, stores, site, quality, safety,
+ * plant, documents, reports and finance-view permissions. Approval and payment permissions
+ * (`payroll.approve`, `payments.*`, `finance.manage`, `finance.view_sensitive`) and the portal
+ * permissions stay out until their modules define project behaviour. The database CHECK
+ * `project_permissions_check` lists the same keys; effective = role ∩ assignment.
+ */
+export const PROJECT_ASSIGNABLE_PERMISSIONS = [
+  "projects.view",
+  "projects.manage",
+  "bq.view",
+  "bq.edit",
+  "bq.import",
+  "bq.approve_variation",
+  "labour.view",
+  "labour.manage",
+  "labour.view_sensitive",
+  "attendance.view",
+  "attendance.record",
+  "attendance.override",
+  "attendance.review_anomalies",
+  "payroll.prepare",
+  "payroll.review",
+  "procurement.requisition",
+  "procurement.approve",
+  "stores.manage",
+  "finance.view",
+  "site.diary",
+  "site.photos",
+  "quality.manage",
+  "safety.manage",
+  "plant.manage",
+  "documents.manage",
+  "reports.view",
+] as const satisfies readonly Permission[];
+export type ProjectAssignablePermission = (typeof PROJECT_ASSIGNABLE_PERMISSIONS)[number];
+
+export const isProjectAssignablePermission = (
+  permission: string,
+): permission is ProjectAssignablePermission =>
+  (PROJECT_ASSIGNABLE_PERMISSIONS as readonly string[]).includes(permission);
+
+/**
  * Holding any of these makes enrolled and verified MFA mandatory (brief §7: Owner, Finance and
  * Admin). The database guard app.permissions_require_mfa() lists the same keys.
  */

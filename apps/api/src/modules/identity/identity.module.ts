@@ -8,7 +8,6 @@ import {
   AuthController,
   BrowserGuard,
   PermissionsController,
-  ProjectsController,
   TenantsController,
 } from "./identity.controller.js";
 import { PasskeyService } from "./passkey.service.js";
@@ -20,7 +19,7 @@ import { TenantScope } from "./tenant-scope.service.js";
 
 @Module({
   imports: [NotificationsModule],
-  controllers: [AuthController, TenantsController, ProjectsController, PermissionsController],
+  controllers: [AuthController, TenantsController, PermissionsController],
   providers: [
     AccessPolicy,
     AuthSecurity,
@@ -34,6 +33,6 @@ import { TenantScope } from "./tenant-scope.service.js";
     TenantDatabase,
     TenantScope,
   ],
-  exports: [AccessPolicy, AuthService, AuthSecurity, TenantDatabase, TenantScope],
+  exports: [AccessPolicy, AuthService, AuthSecurity, BrowserGuard, TenantDatabase, TenantScope],
 })
 export class IdentityModule {}

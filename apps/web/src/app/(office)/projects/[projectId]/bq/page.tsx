@@ -46,7 +46,7 @@ export default async function BqPage({ params }: { params: Promise<{ projectId: 
     <div className="space-y-6">
       <PageHeader
         eyebrow={
-          <Link href={`/projects/${project.id}`} className="hover:underline">
+          <Link href={`/prototype/projects/${project.id}`} className="hover:underline">
             {project.name}
           </Link>
         }

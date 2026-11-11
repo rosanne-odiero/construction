@@ -361,6 +361,9 @@ importers:
       '@pm-buddy/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@pm-buddy/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@pm-buddy/validation':
         specifier: workspace:*
         version: link:../../packages/validation
@@ -463,6 +466,9 @@ importers:
 
   packages/domain:
     dependencies:
+      '@pm-buddy/types':
+        specifier: workspace:*
+        version: link:../types
       decimal.js:
         specifier: 'catalog:'
         version: 10.6.0

@@ -14,6 +14,7 @@
   "dependencies": {
     "@pm-buddy/domain": "workspace:*",
     "@pm-buddy/i18n": "workspace:*",
+    "@pm-buddy/types": "workspace:*",
     "@pm-buddy/validation": "workspace:*",
     "@simplewebauthn/browser": "14.0.0",
     "class-variance-authority": "0.7.1",

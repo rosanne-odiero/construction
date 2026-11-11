@@ -43,7 +43,7 @@ import {
   updateRoleRequestSchema,
 } from "@pm-buddy/validation";
 import type { Request, Response } from "express";
-import { z } from "zod";
+import { openApi } from "../../common/openapi.js";
 import { AuthSecurity } from "./auth-security.service.js";
 import { AuthService } from "./auth.service.js";
 import { PasskeyService } from "./passkey.service.js";
@@ -51,7 +51,6 @@ import { RolesService } from "./roles.service.js";
 import { TenancyService } from "./tenancy.service.js";
 import {
   acceptSchema,
-  assignmentSchema,
   codeSchema,
   identifierBody,
   inviteSchema,
@@ -64,8 +63,6 @@ import {
   verifySchema,
 } from "./identity.schemas.js";
 
-const openApi = (schema: z.ZodType) =>
-  z.toJSONSchema(schema, { target: "openapi-3.0", io: "input", unrepresentable: "any" }) as object;
 const stepUpNote = "Requires roles.manage and MFA verified within the last five minutes.";
 const enrolmentNote =
   "Requires a sign-in within the last five minutes or, once the account has an MFA factor, MFA verified within the last five minutes.";
@@ -447,52 +444,6 @@ export class TenantsController {
       await this.auth.principal(req),
       uuidSchema.parse(userId),
       memberRoleRequestSchema.parse(body).role,
-      req,
-    );
-  }
-}
-
-@ApiTags("projects")
-@UseGuards(BrowserGuard)
-@Controller({ path: "projects", version: "1" })
-export class ProjectsController {
-  constructor(
-    private readonly auth: AuthService,
-    private readonly tenancy: TenancyService,
-  ) {}
-  @Get()
-  async list(@Req() req: Request) {
-    return this.tenancy.projects(await this.auth.principal(req), req);
-  }
-  @Post()
-  async create(@Body() body: unknown, @Req() req: Request) {
-    return this.tenancy.createProject(
-      await this.auth.principal(req),
-      nameSchema.parse(body).name,
-      req,
-    );
-  }
-  @Patch(":id")
-  async update(@Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
-    return this.tenancy.updateProject(
-      await this.auth.principal(req),
-      uuidSchema.parse(id),
-      nameSchema.parse(body).name,
-      req,
-    );
-  }
-  @Put(":id/members/:userId")
-  async assign(
-    @Param("id") id: string,
-    @Param("userId") userId: string,
-    @Body() body: unknown,
-    @Req() req: Request,
-  ) {
-    return this.tenancy.assign(
-      await this.auth.principal(req),
-      uuidSchema.parse(id),
-      uuidSchema.parse(userId),
-      assignmentSchema.parse(body).permissions,
       req,
     );
   }

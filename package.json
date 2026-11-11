@@ -18,7 +18,8 @@
     "format:check": "prettier --check .",
     "services:up": "docker compose -f infra/docker/compose.yaml up -d --wait",
     "services:down": "docker compose -f infra/docker/compose.yaml down",
-    "db:migrate": "turbo run db:migrate --filter=@pm-buddy/api"
+    "db:migrate": "turbo run db:migrate --filter=@pm-buddy/api",
+    "db:seed": "turbo run db:seed --filter=@pm-buddy/api"
   },
   "devDependencies": {
     "prettier": "3.9.10",

@@ -8,6 +8,7 @@ export {
 } from "./common.js";
 export {
   isPermission,
+  isProjectAssignablePermission,
   isProjectPermission,
   MFA_REQUIRED_PERMISSIONS,
   permissionArea,
@@ -15,12 +16,28 @@ export {
   PERMISSIONS,
   permissionsRequireMfa,
   PLATFORM_PERMISSIONS,
+  PROJECT_ASSIGNABLE_PERMISSIONS,
   PROJECT_PERMISSIONS,
   TENANT_LEVEL_PERMISSIONS,
   TENANT_PERMISSIONS,
   type Permission,
   type PermissionArea,
+  type ProjectAssignablePermission,
 } from "./permissions.js";
+export {
+  CONTRACT_TYPES,
+  COUNTY_KEYS,
+  countyName,
+  GEOFENCE_KINDS,
+  KENYA_COUNTIES,
+  MILESTONE_STATUSES,
+  PROJECT_STATUSES,
+  type ContractType,
+  type County,
+  type GeofenceKind,
+  type MilestoneStatus,
+  type ProjectStatus,
+} from "./projects.js";
 export { problemType, PROBLEM_TYPE_BASE, type ProblemDetails } from "./problem.js";
 export {
   MFA_REQUIRED_ROLES,

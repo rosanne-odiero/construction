@@ -66,10 +66,47 @@ mfaRequired }`. `mfaEnabled` means at least one MFA factor (an authenticator app
 | PATCH tenants/current/roles/:id          | `{name?,permissions?,tenantWide?}`       | `{role}` (custom roles only)                                                 |
 | DELETE tenants/current/roles/:id         | —                                        | `{message}` (unused custom roles only)                                       |
 | PUT tenants/current/members/:userId/role | `{role}`                                 | `{message}`; revokes the member's sessions in this company                   |
-| GET projects                             | —                                        | `{projects:[{id,name,createdAt}]}` (project-scoped)                          |
-| POST projects                            | `{name}`                                 | `{project:{id,name,createdAt}}`                                              |
-| PATCH projects/:id                       | `{name}`                                 | `{project}`                                                                  |
-| PUT projects/:id/members/:userId         | `{permissions:string[]}`                 | `{message}`                                                                  |
+
+Projects, sites, geofences, WBS, milestones and team (D2.1; design in
+[ARCHITECTURE §4.1](../../docs/ARCHITECTURE.md#41-projects-module-d21)). Mutations that
+change an existing record send the `version` they read; a newer one is a 409
+`version-conflict`.
+
+| Method/path                                      | Body                                                                                                                                                                  | Response                                                                          |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| GET projects?status=&search=                     | —                                                                                                                                                                     | `{projects:[project]}` (projects the caller may view)                             |
+| POST projects                                    | `{name, code?, description?, clientName?, clientEmail?, clientPhone?, contractSumMinor?, contractType?, startDate?, endDate?, county?, town?, latitude?, longitude?}` | 201 `{project}`; starts in `planning`; `code` defaults to the next `PRJ-NNN`      |
+| GET projects/:id                                 | —                                                                                                                                                                     | `{project, permissions, siteCount, activationGaps, history}`                      |
+| PATCH projects/:id                               | any project field, plus `version`                                                                                                                                     | `{project}` (`code` only while planning)                                          |
+| POST projects/:id/status                         | `{to, reason?, version}`                                                                                                                                              | `{project}`; 409 `invalid-transition`, `reason-required`, `activation-incomplete` |
+| GET projects/:id/sites                           | —                                                                                                                                                                     | `{sites:[site]}` with the geofence in force                                       |
+| POST projects/:id/sites                          | `{name, address?, geofence}`                                                                                                                                          | 201 `{site}` (geofence version 1)                                                 |
+| PATCH projects/:id/sites/:siteId                 | `{name?, address?, version}`                                                                                                                                          | `{site}`                                                                          |
+| PUT projects/:id/sites/:siteId/geofence          | `{geofence, currentVersion}`                                                                                                                                          | `{site}` with a new geofence version; 409 if `currentVersion` is not the latest   |
+| GET projects/:id/sites/:siteId/geofences?at=     | —                                                                                                                                                                     | `{versions}` newest first, or only the version in force at `at`                   |
+| GET projects/:id/wbs                             | —                                                                                                                                                                     | `{nodes, weights:{complete, groups}, progress}` (`progress` null = unavailable)   |
+| POST projects/:id/wbs                            | `{code, name, parentId?, weightBasisPoints?}`                                                                                                                         | 201 `{node}`                                                                      |
+| PATCH projects/:id/wbs/:nodeId                   | `{code?, name?, parentId?, weightBasisPoints?, version}`                                                                                                              | `{node}`                                                                          |
+| PUT projects/:id/wbs/order                       | `{parentId, nodeIds}` (every sibling, in order)                                                                                                                       | WBS response                                                                      |
+| DELETE projects/:id/wbs/:nodeId                  | —                                                                                                                                                                     | `{message}` (leaf items without milestones)                                       |
+| GET projects/:id/milestones                      | —                                                                                                                                                                     | `{milestones}`                                                                    |
+| POST projects/:id/milestones                     | `{name, dueDate, wbsNodeId?}`                                                                                                                                         | 201 `{milestone}`                                                                 |
+| PATCH projects/:id/milestones/:milestoneId       | `{name?, dueDate?, wbsNodeId?, version}`                                                                                                                              | `{milestone}`                                                                     |
+| POST projects/:id/milestones/:milestoneId/status | `{to, reason?, actualDate?, version}`                                                                                                                                 | `{milestone}`                                                                     |
+| DELETE projects/:id/milestones/:milestoneId      | —                                                                                                                                                                     | `{message}` (planned milestones only)                                             |
+| GET projects/:id/team                            | —                                                                                                                                                                     | `{members, candidates, canAssign, grantable}`                                     |
+| PUT projects/:id/members/:userId                 | `{permissions:string[]}`                                                                                                                                              | `{message}`                                                                       |
+| DELETE projects/:id/members/:userId              | —                                                                                                                                                                     | `{message}`                                                                       |
+
+A `geofence` is `{kind:"radius", center:{lat,lng}, radiusM}` (20–5,000 m) or
+`{kind:"polygon", vertices:[{lat,lng}, …]}` (3–100 distinct vertices, no repeated closing
+vertex, no crossing edges, 100 m²–25 km²). Every point must be inside Kenya's bounding box
+(latitude −5 to 5.5, longitude 33.5 to 42). Coordinates are rounded to six decimals. The
+validation and the area/perimeter maths are `packages/domain` (`validateGeofence`,
+`geofenceMetrics`), shared with the web editor; failures are 400 problems whose field
+messages are stable issue codes (`self_intersecting`, `closing_vertex_repeated`,
+`coordinate_out_of_bounds`, `area_too_small`, …). Geofence versions are append-only: the
+database numbers them and sets `effective_from`; nothing can update or delete one.
 
 Identifiers accept email or Kenyan mobile numbers and are normalized. Passwords are
 12–128 characters; common passwords are rejected. Every new password (registration and
@@ -133,9 +170,12 @@ in it. Platform administrator (`platform_admin`, `platform.admin`) is never assi
 Authorisation is permission-based ([ARCHITECTURE §8](../../docs/ARCHITECTURE.md#8-authorisation-rbac-with-project-scope),
 `AccessPolicy`): members `users.invite` or `roles.manage`; invitations and project
 assignments `users.invite`; member removal, member role changes and custom-role changes
-`roles.manage`; audit `audit.view`; project creation `projects.create`; project rename
-`projects.manage` on that project. The member list, invitations, assignments, removals, role
-changes, audit and project creation need MFA verified within five minutes. Nobody can grant,
+`roles.manage`; audit `audit.view`; project creation `projects.create`; project reads
+`projects.view` and project changes (details, status, sites, geofences, WBS, milestones)
+`projects.manage` on that project; project assignments also `projects.manage` on the
+project. The member list, invitations, assignments, removals, role changes, audit and
+project creation need MFA verified within five minutes; without it the API answers 403 with
+code `step-up-required`. Nobody can grant,
 change or remove a role (or project permission) carrying permissions they do not hold;
 system roles are immutable; roles in use or named in pending invitations cannot be
 deleted; the last owner cannot be removed or demoted. Anyone holding an MFA-required
@@ -149,7 +189,11 @@ queries run inside transactions with transaction-local tenant/user/request setti
 RLS is forced for the non-owner `pmb_app` runtime role; project access additionally
 requires explicit permissions. Audit entries are append-only and hash chained in
 serialized tenant transactions.
-Assignable project permissions are the shared catalogue's `projects.view` and `projects.manage`.
+Assignable project permissions are the shared catalogue's project-scoped permissions
+(`PROJECT_ASSIGNABLE_PERMISSIONS` in `packages/types`: `projects.*`, `bq.*`, `labour.*`,
+`attendance.*`, `payroll.prepare`/`review`, `procurement.requisition`/`approve`,
+`stores.manage`, `finance.view`, `site.diary`/`photos`, `quality`/`safety`/`plant`/
+`documents.manage`, `reports.view`).
 Company-wide roles (`owner`, `finance`, custom roles marked company-wide) act on every
 project; other roles act only on assigned projects with role ∩ assignment. Self-membership
 discovery (including the custom role the user holds) and verified-recipient invitation
@@ -167,7 +211,9 @@ All foundation response contracts are exported from `@pm-buddy/validation`:
 `updateRoleRequestSchema`, `memberRoleRequestSchema`, `roleReferenceSchema`,
 `passkeyRegistrationRequestSchema` and `passkeyAuthenticationRequestSchema`. Their inferred TypeScript types are exported too, along with
 `tenantRoleSchema`, `permissionSchema`, `tenantPermissionSchema`, `projectPermissionSchema`,
-`TenantRole`, `ProjectPermission`, and the project entity's `projectSchema`/`Project`.
+`TenantRole`, `ProjectPermission`, and the project entity's `projectSchema`/`Project`. The
+D2.1 request and response schemas (projects, status changes, sites, geofences, WBS,
+milestones, team) are in `packages/validation/src/projects.ts`.
 These modules are browser-safe and do not import API/server code.
 
 Errors use the existing RFC 9457 `application/problem+json` envelope. Invalid input:
@@ -175,6 +221,20 @@ Errors use the existing RFC 9457 `application/problem+json` envelope. Invalid in
 429; unavailable notification/database/rate-limit dependency: explicit 503/500. Some 400s
 carry a more specific `code`: `password-too-weak`, `password-breached` and `passkey-invalid`
 (a registration response that failed verification).
+
+## Development seed
+
+`npx pnpm@12.17.0 db:seed` (root; it builds the API first) creates the synthetic company
+"Jenga Bora Builders Ltd" with an owner (TOTP enrolled), a project manager and a site agent,
+and three projects (Ruiru Heights Apartments, Kitengela Bungalow, Syokimau Townhouses) with
+sites, geofences, WBS and milestones. It prints each account's identifier and, when it
+creates the account, a generated password; for the owner also the TOTP secret and
+`otpauth://` URI. It is idempotent: a second run reports "already present" and leaves
+passwords unchanged. `npx pnpm@12.17.0 --filter @pm-buddy/api db:seed --reset-credentials`
+issues new passwords and a new owner TOTP secret. It needs `DATABASE_URL` and
+`AUTH_MFA_ENCRYPTION_KEY` like the API, and **refuses to run when `NODE_ENV=production`**.
+All identities are synthetic (`example.test` addresses, a reserved UK drama number for the
+diaspora client).
 
 ## Deliberate remaining scope
 

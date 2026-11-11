@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { normalizeKenyanPhone } from "@pm-buddy/domain";
-import { projectPermissionSchema, roleReferenceSchema } from "@pm-buddy/validation";
+import { roleReferenceSchema } from "@pm-buddy/validation";
 
 export const identifierSchema = z
   .string()
@@ -76,8 +76,3 @@ export const inviteSchema = z
   })
   .strict();
 export const acceptSchema = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
-export const assignmentSchema = z
-  .object({
-    permissions: z.array(projectPermissionSchema).max(projectPermissionSchema.options.length),
-  })
-  .strict();

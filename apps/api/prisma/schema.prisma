@@ -171,17 +171,150 @@ model Membership {
   @@map("memberships")
 }
 
+// A project (D2.1). Status follows packages/domain PROJECT_TRANSITIONS, enforced by the API and
+// the app.guard_project() trigger; money is KES minor units; business dates are calendar dates.
 model Project {
-  id          String              @id @default(uuid()) @db.Uuid
-  tenantId    String              @map("tenant_id") @db.Uuid
-  name        String              @db.VarChar(150)
-  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
-  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  members     ProjectMembership[]
-  invitations InvitationProject[]
+  id               String                @id @default(uuid()) @db.Uuid
+  tenantId         String                @map("tenant_id") @db.Uuid
+  code             String                @db.VarChar(20)
+  name             String                @db.VarChar(150)
+  description      String?               @db.VarChar(2000)
+  clientName       String?               @map("client_name") @db.VarChar(150)
+  clientEmail      String?               @map("client_email") @db.VarChar(254)
+  clientPhone      String?               @map("client_phone") @db.VarChar(32)
+  contractSumMinor BigInt?               @map("contract_sum_minor")
+  currency         String                @default("KES") @db.Char(3)
+  contractType     String?               @map("contract_type") @db.VarChar(30)
+  startDate        DateTime?             @map("start_date") @db.Date
+  endDate          DateTime?             @map("end_date") @db.Date
+  county           String?               @db.VarChar(30)
+  town             String?               @db.VarChar(100)
+  latitude         Decimal?              @db.Decimal(9, 6)
+  longitude        Decimal?              @db.Decimal(9, 6)
+  status           String                @default("planning") @db.VarChar(20)
+  version          Int                   @default(1)
+  createdBy        String?               @map("created_by") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant           Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members          ProjectMembership[]
+  invitations      InvitationProject[]
+  statusChanges    ProjectStatusChange[]
+  sites            Site[]
+  wbsNodes         WbsNode[]
+  milestones       Milestone[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
   @@map("projects")
+}
+
+// Append-only lifecycle history (no UPDATE/DELETE for the runtime role).
+model ProjectStatusChange {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  projectId  String   @map("project_id") @db.Uuid
+  fromStatus String   @map("from_status") @db.VarChar(20)
+  toStatus   String   @map("to_status") @db.VarChar(20)
+  reason     String?  @db.VarChar(500)
+  changedBy  String   @map("changed_by") @db.Uuid
+  changedAt  DateTime @default(now()) @map("changed_at") @db.Timestamptz
+  project    Project  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, projectId, changedAt])
+  @@map("project_status_changes")
+}
+
+model Site {
+  id        String         @id @default(uuid(7)) @db.Uuid
+  tenantId  String         @map("tenant_id") @db.Uuid
+  projectId String         @map("project_id") @db.Uuid
+  name      String         @db.VarChar(120)
+  address   String?        @db.VarChar(250)
+  version   Int            @default(1)
+  createdBy String         @map("created_by") @db.Uuid
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project   Project        @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  geofences SiteGeofence[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, name])
+  @@map("sites")
+}
+
+// One version of a site's geofence. Append-only: the database assigns `version` and
+// `effective_from` (app.assign_geofence_version) and refuses updates; the newest version is in force.
+model SiteGeofence {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  siteId        String   @map("site_id") @db.Uuid
+  version       Int      @default(1)
+  kind          String   @db.VarChar(10)
+  centerLat     Decimal? @map("center_lat") @db.Decimal(9, 6)
+  centerLng     Decimal? @map("center_lng") @db.Decimal(9, 6)
+  radiusM       Int?     @map("radius_m")
+  polygon       Json?
+  areaM2        Decimal  @map("area_m2") @db.Decimal(12, 1)
+  perimeterM    Decimal  @map("perimeter_m") @db.Decimal(10, 1)
+  effectiveFrom DateTime @default(now()) @map("effective_from") @db.Timestamptz
+  createdBy     String   @map("created_by") @db.Uuid
+  site          Site     @relation(fields: [tenantId, siteId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, siteId, version])
+  @@index([tenantId, siteId, effectiveFrom])
+  @@map("site_geofences")
+}
+
+// A WBS node. Siblings' weights (basis points) must sum to 10,000 before progress is computable.
+model WbsNode {
+  id                String      @id @default(uuid(7)) @db.Uuid
+  tenantId          String      @map("tenant_id") @db.Uuid
+  projectId         String      @map("project_id") @db.Uuid
+  parentId          String?     @map("parent_id") @db.Uuid
+  code              String      @db.VarChar(30)
+  name              String      @db.VarChar(150)
+  sortOrder         Int         @default(0) @map("sort_order")
+  weightBasisPoints Int         @default(0) @map("weight_basis_points")
+  version           Int         @default(1)
+  createdBy         String      @map("created_by") @db.Uuid
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project           Project     @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  parent            WbsNode?    @relation("WbsTree", fields: [tenantId, projectId, parentId], references: [tenantId, projectId, id], onDelete: NoAction)
+  children          WbsNode[]   @relation("WbsTree")
+  milestones        Milestone[]
+
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, code])
+  @@index([tenantId, projectId, parentId, sortOrder])
+  @@map("wbs_nodes")
+}
+
+// A milestone. Status follows packages/domain MILESTONE_TRANSITIONS (app.guard_milestone()).
+model Milestone {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  projectId    String    @map("project_id") @db.Uuid
+  wbsNodeId    String?   @map("wbs_node_id") @db.Uuid
+  name         String    @db.VarChar(150)
+  dueDate      DateTime  @map("due_date") @db.Date
+  status       String    @default("planned") @db.VarChar(20)
+  actualDate   DateTime? @map("actual_date") @db.Date
+  statusReason String?   @map("status_reason") @db.VarChar(500)
+  version      Int       @default(1)
+  createdBy    String    @map("created_by") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project      Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  wbsNode      WbsNode?  @relation(fields: [tenantId, projectId, wbsNodeId], references: [tenantId, projectId, id], onDelete: NoAction)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, name])
+  @@index([tenantId, projectId, dueDate])
+  @@index([tenantId, projectId, wbsNodeId])
+  @@map("milestones")
 }
 
 model ProjectMembership {

@@ -425,7 +425,11 @@ export class AuthService {
       throw new ForbiddenException("MFA verification required");
     }
     if (fresh && !isFresh(at)) {
-      throw new ForbiddenException("Fresh MFA step-up required");
+      // A specific code lets clients offer a step-up prompt instead of a generic refusal.
+      throw new ForbiddenException({
+        message: "Fresh MFA step-up required",
+        code: "step-up-required",
+      });
     }
   }
 

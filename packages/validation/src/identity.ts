@@ -81,16 +81,6 @@ export const tenantsResponseSchema = z
   })
   .strict();
 
-export const projectSchema = z
-  .object({
-    id: uuid,
-    name: z.string().min(1).max(150),
-    createdAt: timestamp,
-  })
-  .strict();
-export const projectsResponseSchema = z.object({ projects: z.array(projectSchema) }).strict();
-export const projectResponseSchema = z.object({ project: projectSchema }).strict();
-
 export const invitationResponseSchema = z
   .object({
     invitation: z
@@ -157,9 +147,6 @@ export type MfaVerificationResponse = z.infer<typeof mfaVerificationResponseSche
 export type SessionsResponse = z.infer<typeof sessionsResponseSchema>;
 export type TenantsResponse = z.infer<typeof tenantsResponseSchema>;
 export type TenantCreatedResponse = z.infer<typeof tenantCreatedResponseSchema>;
-export type Project = z.infer<typeof projectSchema>;
-export type ProjectsResponse = z.infer<typeof projectsResponseSchema>;
-export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 export type InvitationResponse = z.infer<typeof invitationResponseSchema>;
 export type MembersResponse = z.infer<typeof membersResponseSchema>;
 export type AuditEventsResponse = z.infer<typeof auditEventsResponseSchema>;

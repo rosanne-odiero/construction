@@ -137,6 +137,7 @@ function errorKey(error: unknown) {
     case "unauthorized":
       return "unauthorized";
     case "forbidden":
+    case "step-up-required":
       return "forbidden";
     case "not-found":
       return "notFound";

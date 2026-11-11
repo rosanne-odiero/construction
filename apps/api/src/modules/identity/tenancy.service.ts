@@ -1,12 +1,7 @@
 import { randomUUID } from "node:crypto";
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Request, Response } from "express";
-import type { ProjectPermission } from "@pm-buddy/validation";
+import { PROJECT_ASSIGNABLE_PERMISSIONS, type ProjectAssignablePermission } from "@pm-buddy/types";
 import { AccessPolicy, customRoleColumns } from "./access-policy.js";
 import { AuthService, type Principal } from "./auth.service.js";
 import { AuthSecurity, digest, opaqueToken } from "./auth-security.service.js";
@@ -14,15 +9,9 @@ import { grantOf, requiresMfa, roleReference, type Grant } from "./role-grants.j
 import { TenantDatabase } from "./tenant-database.service.js";
 import { TenantScope } from "./tenant-scope.service.js";
 
-const publicProject = { id: true, name: true, createdAt: true } as const;
-/** Project permissions that an assignment can carry today (the Phase 1 project policy). */
-const ASSIGNABLE_PROJECT_PERMISSIONS: readonly ProjectPermission[] = [
-  "projects.view",
-  "projects.manage",
-];
 /** Invitation acceptance assigns the role's own project permissions on each invited project. */
-const defaultAssignment = (grant: Grant): ProjectPermission[] =>
-  ASSIGNABLE_PROJECT_PERMISSIONS.filter((permission) => grant.permissions.has(permission));
+const defaultAssignment = (grant: Grant): ProjectAssignablePermission[] =>
+  PROJECT_ASSIGNABLE_PERMISSIONS.filter((permission) => grant.permissions.has(permission));
 
 @Injectable()
 export class TenancyService {
@@ -285,89 +274,5 @@ export class TenancyService {
       });
       return { events: events.map((event) => ({ ...event, sequence: event.sequence.toString() })) };
     });
-  }
-
-  projects(principal: Principal, req: Request) {
-    return this.scope.run(principal, req, async (scope) => ({
-      projects: await scope.tx.project.findMany({
-        where: this.policy.projectWhere(scope, "projects.view"),
-        select: publicProject,
-        orderBy: { createdAt: "asc" },
-      }),
-    }));
-  }
-
-  createProject(principal: Principal, name: string, req: Request) {
-    return this.scope.run(
-      principal,
-      req,
-      async (scope) => {
-        await this.policy.require(scope, "projects.create", { stepUp: true });
-        const project = await scope.tx.project.create({
-          data: { tenantId: scope.access.tenantId, name },
-          select: publicProject,
-        });
-        await this.scope.audit(scope.tx, "project.created", project.id);
-        return { project };
-      },
-      true,
-    );
-  }
-
-  updateProject(principal: Principal, projectId: string, name: string, req: Request) {
-    return this.scope.run(
-      principal,
-      req,
-      async (scope) => {
-        await this.policy.require(scope, "projects.manage", { projectId });
-        const updated = await scope.tx.project.update({
-          where: { tenantId_id: { tenantId: scope.access.tenantId, id: projectId } },
-          data: { name },
-          select: publicProject,
-        });
-        await this.scope.audit(scope.tx, "project.updated", projectId);
-        return { project: updated };
-      },
-      true,
-    );
-  }
-
-  assign(
-    principal: Principal,
-    projectId: string,
-    userId: string,
-    permissions: ProjectPermission[],
-    req: Request,
-  ) {
-    return this.scope.run(
-      principal,
-      req,
-      async (scope) => {
-        const { tx, access } = scope;
-        await this.policy.require(scope, "users.invite", { stepUp: true });
-        const held = await this.policy.require(scope, "projects.manage", { projectId });
-        const target = await tx.membership.findUnique({
-          where: { tenantId_userId: { tenantId: access.tenantId, userId } },
-        });
-        if (!target) throw new NotFoundException("Project or member not found");
-        if (new Set(permissions).size !== permissions.length)
-          throw new ConflictException("Duplicate permissions");
-        if (permissions.some((permission) => !held.has(permission)))
-          throw new ForbiddenException(
-            "You can only grant project permissions you hold on this project",
-          );
-        await tx.projectMembership.upsert({
-          where: { tenantId_projectId_userId: { tenantId: access.tenantId, projectId, userId } },
-          create: { tenantId: access.tenantId, projectId, userId, permissions },
-          update: { permissions },
-        });
-        await this.scope.audit(tx, "project.permissions.changed", projectId, {
-          userId,
-          permissions,
-        });
-        return { message: "Project permissions updated." };
-      },
-      true,
-    );
   }
 }

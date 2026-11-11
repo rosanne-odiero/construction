@@ -28,7 +28,7 @@ const screens = [
   { key: "designSystem", href: "/design-system", icon: Palette },
   { key: "signIn", href: "/sign-in", icon: KeyRound },
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { key: "project", href: "/projects/ruiru-heights", icon: Building },
+  { key: "project", href: "/prototype/projects/ruiru-heights", icon: Building },
   { key: "bq", href: "/projects/ruiru-heights/bq", icon: FileSpreadsheet },
   { key: "bqImport", href: "/projects/ruiru-heights/bq/import", icon: Table2 },
   { key: "labour", href: "/labour", icon: HardHat },

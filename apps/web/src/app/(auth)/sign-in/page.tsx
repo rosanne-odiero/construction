@@ -1,19 +1,23 @@
 import { getTranslations } from "next-intl/server";
-import Link from "next/link";
 import { CloudUpload, HardHat, ShieldCheck, Wallet } from "lucide-react";
 import { LanguageSwitcher } from "@/components/language-switcher";
-import { PrototypeBanner } from "@/components/prototype-banner";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { safeNextPath } from "@/lib/safe-next";
 import { SignInForm } from "./sign-in-form";
 
 export async function generateMetadata() {
-  const t = await getTranslations("auth");
+  const t = await getTranslations("signIn");
   return { title: t("title") };
 }
 
-export default async function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const t = await getTranslations("auth");
   const design = await getTranslations("designSystem");
+  const { next } = await searchParams;
   const points = [
     { key: "mfa", icon: ShieldCheck },
     { key: "money", icon: Wallet },
@@ -22,7 +26,9 @@ export default async function SignInPage() {
 
   return (
     <div className="flex min-h-svh flex-col">
-      <PrototypeBanner />
+      <a href="#main" className="sr-only focus:not-sr-only">
+        {design("skip")}
+      </a>
       <div className="grid flex-1 lg:grid-cols-2">
         <aside className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 p-10 text-white lg:flex">
           <div className="flex items-center gap-2 text-lg font-semibold">
@@ -64,13 +70,8 @@ export default async function SignInPage() {
             </div>
           </div>
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 pb-12">
-            <Link
-              href="/foundation"
-              className="text-sm font-medium text-primary underline underline-offset-4"
-            >
-              {design("foundation")}
-            </Link>
-            <SignInForm />
+            <h1 className="sr-only">{t("title")}</h1>
+            <SignInForm next={safeNextPath(Array.isArray(next) ? next[0] : next)} />
           </div>
         </main>
       </div>

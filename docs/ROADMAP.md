@@ -84,7 +84,7 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D3.1 | **Labourer registry**:<br/>• Registration that blocks anyone under 18<br/>• Field-level encryption for IDs, PINs and phone numbers<br/>• Trades, skill levels and rates<br/>• NCA accreditation with expiry alerts<br/>• Gangs<br/>• Consent capture (EN/SW)<br/>• Do-not-rehire flag | Registry table with saved views, worker side panel, registration form, consent screen | Registry works; encryption and under-18 tests pass | L | ⬜ |
+| D3.1 | **Labourer registry**:<br/>• Registration that blocks anyone under 18<br/>• Field-level encryption for IDs, PINs and phone numbers<br/>• Trades, skill levels and rates<br/>• NCA accreditation with expiry alerts<br/>• Gangs<br/>• Consent capture (EN/SW)<br/>• Do-not-rehire flag | Registry table with saved views, worker side panel, registration form, consent screen | Registry works; encryption and under-18 tests pass | L | ⏳ |
 | D3.2 | **Site app foundation (Expo, Android-first)**: login with device binding; kiosk mode; encrypted SQLite; push/pull sync engine; sync status UI | Expo app on your Android phone (Expo Go) or an emulator, plus a web preview | The app works offline and syncs when back online | L | ⬜ |
 | D3.3 | **Attendance, fallback method first**:<br/>• QR/NFC worker card + photo + supervisor confirmation<br/>• Geofence checks; signed offline records; clock-drift detection<br/>• Anomaly rules: duplicates, two sites, impossible travel<br/>• Override workflow<br/>• Timesheet rules and public holidays<br/>• Muster roll in the web app | Kiosk check-in on the device, muster roll with flags, anomaly review | A foreman records attendance offline; it syncs correctly and anomalies are flagged | L | ⬜ |
 | D3.4 | **Attendance, first biometric method** (chosen in [QUESTIONS.md](./QUESTIONS.md)):<br/>• Uses the `CaptureMethod` interface<br/>• Gated per tenant behind a signed-off DPIA<br/>• Template-only encrypted storage<br/>• Retention and deletion jobs | Enrolment and identification on the kiosk, consent and DPIA gate, deletion log | **Phase 3 acceptance** | XL | ⬜ |
@@ -200,4 +200,5 @@ These have legal or commercial lead times, so they should start early:
 | D1.4 | `phase-1/d1.4-tenancy-rbac-audit` |
 | D2.1 | `phase-2/d2.1-projects-sites` |
 | D2.2 | `phase-2/d2.2-bq-import` |
+| D3.1 | `phase-3/d3.1-labour-registry` |
 | … | `phase-N/dN.x-<slug>` |

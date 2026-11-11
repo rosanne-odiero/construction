@@ -39,6 +39,7 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `payroll.engagement_deductions` | platform/tenant | TBD mapping (casual, term, piece-rate) | Brief §5.6 | COMPLIANCE-REVIEW (CR-PAY-07) | D4.1 |
 | `payroll.deductions.max_total_pct` | platform | TBD | Employment law check | COMPLIANCE-REVIEW (CR-PAY-15) | D4.1 |
 | `payroll.minimum_wage_table` | platform | TBD (area × occupation) | Wages orders | COMPLIANCE-REVIEW (CR-PAY-09) | D3.1 |
+| `labour_rates` (data, not a key) | tenant/project/labourer | None: each company sets its own; the development seed adds synthetic rates | Brief §5.4 | PRODUCT; COMPLIANCE-REVIEW (CR-PAY-09) where a rate meets the minimum wage | D3.1 |
 | `payroll.advances.max_recovery_pct_per_period` | tenant | 50% of net | Proposal | PRODUCT | D4.1 |
 | `payroll.pay_periods.allowed` | tenant/project | daily, weekly, fortnightly, monthly | Brief §5.6 | PRODUCT | D4.1 |
 | `payroll.records_retention_years` | platform | TBD | Employment and tax law | COMPLIANCE-REVIEW (CR-PAY-13) | D4.1 |
@@ -81,8 +82,10 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `dp.consent_record_retention_years` | platform | TBD | DPIA §8 | COMPLIANCE-REVIEW (CR-DP-06) | D3.1 |
 | `dp.dpia_review_interval_months` | tenant | 12 | DPIA §13 | PRODUCT | D3.4 |
 | `labour.inactive_worker_retention_days` | platform | TBD | DPIA §8 | COMPLIANCE-REVIEW (CR-DP-06) | D3.1 |
-| `labour.accreditation_alert_days` | tenant | 30 | Brief §5.4 ("alert before expiry") | PRODUCT | D3.1 |
-| `labour.minimum_age_years` | platform | 18 | Brief §6 | COMPLIANCE-REVIEW (CR-DP-10) | D3.1 |
+| `labour.accreditation_alert_days` | tenant | 30 (allowed 1–365) | Brief §5.4 ("alert before expiry") | PRODUCT | D3.1 (implemented: `labour_settings.accreditation_alert_days`; 30 until a company saves its own) |
+| `labour.minimum_age_years` | platform | 18 | Brief §6 | COMPLIANCE-REVIEW (CR-DP-10) | D3.1 (implemented as the code constant `MINIMUM_LABOURER_AGE_YEARS` and repeated in the database CHECK and triggers; deliberately not editable at runtime, so changing it needs a migration) |
+| `labour.consent_notice_version` | platform | `registration-2026-11-v1` (EN/SW text pinned by SHA-256) | Brief §6, DPIA §7 | COMPLIANCE-REVIEW (CR-DP-03, CR-DP-11) | D3.1 (`CURRENT_CONSENT_NOTICE` in `packages/types`; a new wording is a new version) |
+| `labour.trades` / `labour.skill_levels` | tenant | 15 trades from brief §5.4 (EN/SW); skilled, semi-skilled, unskilled and site supervisor (NCA categories) | Brief §5.4 | PRODUCT; COMPLIANCE-REVIEW (CR-NCA-03) for which levels expect an NCA card | D3.1 (`trades`, `skill_levels`; "Add the standard list" installs them) |
 
 ## 4. Payments and M-Pesa
 
@@ -173,6 +176,9 @@ These are not business rules: they tell each process where its dependencies are.
 | `WEB_ORIGIN` | api | `http://localhost:3000` | Exact origin of the web app (scheme, host and port). State-changing requests must send this `Origin`; production requires HTTPS. Also the passkey relying party: WebAuthn responses must come from exactly this origin, and its hostname is the RP ID (passkeys are bound to it, so changing the hostname orphans registered passkeys; IP addresses cannot be RP IDs) | SECURITY |
 | `TRUST_PROXY` | api | unset (trust no proxy) | Proxies allowed to report the client IP in `X-Forwarded-For` (addresses, CIDRs or a hop count; `true` is rejected). Set it only when an edge proxy **appends** the real client address, because the web app's `/api` rewrite passes client-supplied values through. When unset, rate limits key on accounts, users, sessions and tokens only | SECURITY |
 | `AUTH_MFA_ENCRYPTION_KEY` | api | none (required; 64 hex characters) | Encrypts TOTP secrets and CSRF tokens. Replacing it invalidates TOTP enrolments. Secrets manager outside local development | SECURITY |
+| `FIELD_ENCRYPTION_KEYS` | api | none (required; `<version>:<64 hex>`, comma-separated during a rotation) | Master keys for labourer field encryption (D3.1): AES-256-GCM under per-company keys derived with HKDF-SHA-256, envelope tagged with the key version. Every listed version stays readable; losing a version makes the values written with it unreadable. **Development placeholders only** (generate locally, see `apps/api/.env.example`); production must use managed key material from the secrets manager/KMS (ARCHITECTURE §10) | SECURITY |
+| `FIELD_ENCRYPTION_ACTIVE_KEY_VERSION` | api | the highest listed version | Version used for new values; must be listed in `FIELD_ENCRYPTION_KEYS` | SECURITY |
+| `FIELD_BLIND_INDEX_KEY` | api | none (required; 64 hex characters) | HMAC key for blind indexes (duplicate ID, phone and KRA PIN matching, do-not-rehire checks). Separate from the encryption keys and **not rotatable without recomputing every index**. Same handling as above | SECURITY |
 | `AUTH_SIGNING_PRIVATE_KEY` | api | ephemeral in development | Base64 Ed25519 PKCS8 PEM that signs access tokens; required in production | SECURITY |
 | `AUTH_NOTIFICATION_TRANSPORT` / `AUTH_MAILPIT_PORT` | api | `disabled` (`development` in `.env.example`) / `8025` | Selects the `NotificationProvider`. `development` delivers every channel (email, SMS, WhatsApp) to loopback Mailpit only, phone channels to `phone-<number>@development.invalid` with a `[DEVELOPMENT ONLY][SMS]` / `[WHATSAPP]` subject prefix, and is refused in production; `disabled` makes every send fail explicitly. Delivery runs after the response, so it never reveals whether an account exists. Real SMS/WhatsApp (Africa's Talking) arrives in D7.3 | SECURITY |
 | `AUTH_BREACHED_PASSWORD_CHECK` | api | `off` (`off` in `.env.example`) | `hibp` checks new passwords (registration, reset) against the Have I Been Pwned range API: only the first five hex characters of the password's SHA-1 leave the server, with `Add-Padding: true` and a two-second timeout. On a timeout or error it **fails open**: the password is accepted and a warning is logged without the password or any part of its hash. Needs outbound HTTPS to `api.pwnedpasswords.com`. Strength checks (`auth.password.min_strength`) apply either way | SECURITY |

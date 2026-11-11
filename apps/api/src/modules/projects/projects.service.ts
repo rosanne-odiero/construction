@@ -25,7 +25,8 @@ import {
 } from "./project-mappers.js";
 
 type Tx = Prisma.TransactionClient;
-const AUTO_CODE = /^PRJ-(\d{1,16})$/;
+// Up to 12 digits keeps the arithmetic exact and "PRJ-" + the next number within VARCHAR(20).
+const AUTO_CODE = /^PRJ-(\d{1,12})$/;
 
 /** Field names (never values) for audit summaries: client details and sums stay out of the log. */
 const changedFields = (input: object) =>

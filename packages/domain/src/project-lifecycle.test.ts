@@ -91,6 +91,10 @@ describe("project lifecycle", () => {
     expect(checkProjectTransition({ from: "on_hold", to: "active", facts: complete }).ok).toBe(
       true,
     );
+    // An optional reason, when given, must still meet the minimum the database enforces.
+    expect(
+      checkProjectTransition({ from: "on_hold", to: "active", reason: "ok", facts: complete }),
+    ).toEqual({ ok: false, error: "reason_required" });
   });
 
   it("activates only a project with contract details and a geofenced site", () => {
@@ -160,6 +164,9 @@ describe("milestone lifecycle", () => {
       ok: false,
       error: "reason_required",
     });
+    expect(
+      checkMilestoneTransition({ from: "planned", to: "in_progress", reason: "ok", today }),
+    ).toEqual({ ok: false, error: "reason_required" });
   });
 });
 

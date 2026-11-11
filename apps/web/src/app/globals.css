@@ -171,3 +171,16 @@
     filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85);
   }
 }
+
+/* Honour the operating system's "reduce motion" setting (WCAG 2.3.3). The browser tests run with
+   it on, so accessibility scans never measure colours halfway through a fade. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

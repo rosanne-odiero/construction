@@ -910,6 +910,82 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     });
   });
 
+  it("applies the project escalation guard to invitations too", async () => {
+    await fresh(owner);
+    const role = roleResponseSchema.parse(
+      (
+        await owner.call("post", "tenants/current/roles", {
+          name: "Inviting lead",
+          permissions: ["users.invite", "projects.view", "projects.manage", "bq.view"],
+        })
+      ).body,
+    ).role;
+    const lead = new Browser(app);
+    await lead.register();
+    await lead.enroll();
+    await join(owner, lead, role.id, [rui.id]);
+    // The lead's assignment on the project is narrower than the role.
+    await fresh(owner);
+    const narrowed = await owner.call("put", `projects/${rui.id}/members/${lead.auth.user.id}`, {
+      permissions: ["projects.view", "projects.manage"],
+    });
+    expect(narrowed.status, JSON.stringify(narrowed.body)).toBe(200);
+    const newcomer = new Browser(app);
+    await newcomer.register();
+    const invite = () =>
+      lead.call("post", "tenants/current/invitations", {
+        identifier: newcomer.identifier,
+        role: role.id,
+        projectIds: [rui.id],
+      });
+    // Accepting would grant bq.view on the project, which the lead doesn't hold there.
+    await fresh(lead);
+    const refused = await invite();
+    expect(refused.status, JSON.stringify(refused.body)).toBe(403);
+    await fresh(owner);
+    expect(
+      (
+        await owner.call("put", `projects/${rui.id}/members/${lead.auth.user.id}`, {
+          permissions: ["projects.view", "projects.manage", "bq.view"],
+        })
+      ).status,
+    ).toBe(200);
+    await fresh(lead);
+    const allowed = await invite();
+    expect(allowed.status, JSON.stringify(allowed.body)).toBe(201);
+  });
+
+  it("keeps automatic codes working after a very large PRJ- code", async () => {
+    await fresh(owner);
+    const huge = await owner.call("post", "projects", {
+      code: "PRJ-9999999999999999",
+      name: "Huge code",
+    });
+    expect(huge.status, JSON.stringify(huge.body)).toBe(201);
+    const next = await owner.call("post", "projects", { name: "After huge code" });
+    expect(next.status, JSON.stringify(next.body)).toBe(201);
+    expect(project(next).code).toMatch(/^PRJ-\d{3,12}$/);
+  });
+
+  it("refuses a too-short optional reason with a 400, not a server error", async () => {
+    await fresh(owner);
+    let target = project(
+      await owner.call("post", "projects", { name: "Short reason", ...fullDetails }),
+    );
+    expect(
+      (
+        await owner.call("post", `projects/${target.id}/sites`, {
+          name: "Short reason site",
+          geofence: yard,
+        })
+      ).status,
+    ).toBe(201);
+    target = (await detail(owner, target.id)).project;
+    expect((await transition(owner, target, "active", "ok")).status).toBe(400);
+    const activated = await transition(owner, target, "active", "Site handed over");
+    expect(activated.status, JSON.stringify(activated.body)).toBe(200);
+  });
+
   it("isolates company B from company A's projects, sites, WBS and milestones", async () => {
     const aMilestone = milestonesResponseSchema.parse(
       (await owner.call("get", `projects/${rui.id}/milestones`)).body,

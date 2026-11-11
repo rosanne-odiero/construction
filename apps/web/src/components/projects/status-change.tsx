@@ -125,7 +125,11 @@ export function StatusChangeButton({ project }: { project: Project }) {
             <Button
               type="submit"
               form="status-form"
-              disabled={busy || (chosen.reasonRequired && reason.trim().length < REASON_LIMITS.min)}
+              disabled={
+                busy ||
+                ((chosen.reasonRequired || reason.trim().length > 0) &&
+                  reason.trim().length < REASON_LIMITS.min)
+              }
             >
               {t("submit")}
             </Button>

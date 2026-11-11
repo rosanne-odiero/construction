@@ -129,7 +129,12 @@ export const updateProjectRequestSchema = z
       ctx.addIssue({ code: "custom", message: "no_changes" });
   });
 
-export const reasonSchema = z.string().trim().max(REASON_LIMITS.max);
+/** Optional on some transitions, but when given it must be a real reason (the database checks 3–500). */
+export const reasonSchema = z
+  .string()
+  .trim()
+  .max(REASON_LIMITS.max)
+  .refine((value) => value.length === 0 || value.length >= REASON_LIMITS.min, "reason_too_short");
 
 export const projectStatusRequestSchema = z
   .object({ to: projectStatusSchema, reason: reasonSchema.optional(), version })

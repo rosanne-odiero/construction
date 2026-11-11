@@ -422,7 +422,8 @@ export function MilestonesPanel({
                   form="milestone-status-form"
                   disabled={
                     busy ||
-                    (change.transition.reasonRequired && reason.trim().length < REASON_LIMITS.min)
+                    ((change.transition.reasonRequired || reason.trim().length > 0) &&
+                      reason.trim().length < REASON_LIMITS.min)
                   }
                 >
                   {t("confirm")}

@@ -11,6 +11,8 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:3100",
     trace: "retain-on-failure",
+    // Transitions finish instantly (see globals.css), so axe never scans a half-faded button.
+    contextOptions: { reducedMotion: "reduce" },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], channel: "chromium" } }],
   webServer: [

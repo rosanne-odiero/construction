@@ -93,7 +93,7 @@ export function checkProjectTransition(input: {
   const transition = projectTransition(input.from, input.to);
   if (!transition) return { ok: false, error: "invalid_transition" };
   const reason = input.reason?.trim() ?? "";
-  if (transition.reasonRequired && reason.length < REASON_LIMITS.min)
+  if ((transition.reasonRequired || reason.length > 0) && reason.length < REASON_LIMITS.min)
     return { ok: false, error: "reason_required" };
   if (transition.action === "activate") {
     const missing = activationGaps(input.facts);
@@ -150,7 +150,8 @@ export function checkMilestoneTransition(input: {
 }): MilestoneTransitionCheck {
   const transition = milestoneTransition(input.from, input.to);
   if (!transition) return { ok: false, error: "invalid_transition" };
-  if (transition.reasonRequired && (input.reason?.trim() ?? "").length < REASON_LIMITS.min)
+  const reason = input.reason?.trim() ?? "";
+  if ((transition.reasonRequired || reason.length > 0) && reason.length < REASON_LIMITS.min)
     return { ok: false, error: "reason_required" };
   if (transition.action === "achieve") {
     if (!input.actualDate) return { ok: false, error: "actual_date_required" };

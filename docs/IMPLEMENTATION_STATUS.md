@@ -201,6 +201,21 @@ Note: the first development `prisma migrate deploy` of the new migration failed 
 - axe flags the shared primary button's **hover** colour (`hover:bg-primary/80`, 4.38:1) when the pointer rests on it; the new browser tests scan at rest like the existing ones. Pre-existing design-system issue to fix separately.
 - Kiswahili passkey and password wording needs a human language review. Nothing was committed or pushed; no GitHub CI run is claimed.
 
+## Independent review of D2.1
+
+A separate reviewer found four issues; all are fixed with regression tests (API e2e 85/85, web 30/30 three runs in a row):
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Medium | Open redirect: `?next=/.//evil.example` (or `/..//`, `/%2e%2e//`) normalised to `//evil.example` after the raw-string checks, sending a signed-in user to another site | The normalised path is checked too (no leading `//`, no backslash); five new unit cases |
+| 2 | Medium | Invitations skipped the project-level escalation guard: acceptance grants the role's project permissions, but the inviter only needed `projects.manage` there | The inviter must hold every permission the invitee would get on each invited project (role ∩ their assignment), as for direct assignment; e2e test |
+| 3 | Low | A code like `PRJ-9999999999999999` made the next automatic code overflow `VARCHAR(20)`, so every later create without a code failed with a 500 | Only `PRJ-` + up to 12 digits counts towards automatic numbering; e2e test |
+| 4 | Low | An optional reason of 1–2 characters failed the database check with a 500 | The shared schema and the lifecycle rules require at least 3 characters whenever a reason is given; the dialogs disable submit; unit and e2e tests |
+
+Also: the site honours "reduce motion" (WCAG 2.3.3), and the browser tests run with it on, removing a flaky accessibility scan of a button mid-fade.
+
+**Local toolchain note.** On 11/11/2026 this Mac's `/usr/local/bin/node` pointed to Bun and Homebrew's Node was an x86_64 build, which can't load the arm64 native modules. Verification used the official Node 24.22.2 darwin-arm64 build (SHA-256 checked against nodejs.org) via PATH only; nothing on the system was changed.
+
 ## D2.1 projects, sites and geofences (branch `phase-2/d2.1-projects-sites`)
 
 Status: built and verified locally; committed and pushed for CI and independent review. Design: [ARCHITECTURE §4.1](./ARCHITECTURE.md#41-projects-module-d21), §8 (wider project assignments), §18 (sign-in wiring, maps) and decisions D-27–D-29; implemented-model differences in [ERD §3](./ERD.md#3-projects-sites-and-schedule); walkthrough in the [Phase 2 demo](./demos/phase-2.md).

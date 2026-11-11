@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Request, Response } from "express";
 import { PROJECT_ASSIGNABLE_PERMISSIONS, type ProjectAssignablePermission } from "@pm-buddy/types";
 import { AccessPolicy, customRoleColumns } from "./access-policy.js";
@@ -124,8 +129,16 @@ export class TenancyService {
           throw new ConflictException("Duplicate project IDs");
         const grant = await this.policy.resolveRole(scope, input.role);
         this.policy.assertGrantable(access, grant);
-        for (const projectId of input.projectIds)
-          await this.policy.require(scope, "projects.manage", { projectId });
+        // Same guard as direct assignment: acceptance grants the role's project permissions on
+        // each project, so the inviter must hold all of them there (role ∩ their assignment).
+        const granted = defaultAssignment(grant);
+        for (const projectId of input.projectIds) {
+          const held = await this.policy.require(scope, "projects.manage", { projectId });
+          if (granted.some((permission) => !held.has(permission)))
+            throw new ForbiddenException(
+              "You can only invite to a project with permissions you hold on that project",
+            );
+        }
         const invitation = await tx.invitation.create({
           data: {
             tenantId: access.tenantId,

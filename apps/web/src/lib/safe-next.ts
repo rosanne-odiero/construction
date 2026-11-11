@@ -14,7 +14,15 @@ export function safeNextPath(value: unknown, fallback = "/projects"): string {
   } catch {
     return fallback;
   }
-  if (url.origin !== BASE || url.pathname === "/sign-in" || url.pathname.startsWith("/api/"))
+  // Check the normalised path as well: dot segments ("/.//x", "/%2e%2e//x") can collapse into a
+  // protocol-relative "//host" that the browser would treat as another site.
+  if (
+    url.origin !== BASE ||
+    url.pathname.startsWith("//") ||
+    url.pathname.includes("\\") ||
+    url.pathname === "/sign-in" ||
+    url.pathname.startsWith("/api/")
+  )
     return fallback;
   return `${url.pathname}${url.search}${url.hash}`;
 }

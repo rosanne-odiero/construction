@@ -1209,6 +1209,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         adjustments: await tx.timesheetAdjustment.count({ where: { tenantId } }),
         rules: await tx.timesheetRuleVersion.count({ where: { tenantId } }),
         holidays: await tx.publicHoliday.count({ where: { tenantId } }),
+        requisitions: await tx.requisition.count({ where: { tenantId } }),
+        quotations: await tx.quotation.count({ where: { tenantId } }),
+        lpos: await tx.lpo.findMany({ where: { tenantId }, select: { status: true } }),
+        grns: await tx.grn.count({ where: { tenantId } }),
+        invoices: await tx.supplierInvoice.findMany({
+          where: { tenantId },
+          select: { invoiceNumber: true, status: true },
+          orderBy: { invoiceNumber: "asc" },
+        }),
+        payables: await tx.invoicePayable.count({ where: { tenantId } }),
+        settlements: await tx.invoiceSettlement.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1235,7 +1246,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       materials: 21,
       conversions: 8,
       suppliers: 3,
-      prices: 8,
+      // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold.
+      prices: 14,
       alerts: 1,
       payouts: [{ status: "pending" }, { status: "verified" }],
       labourers: 40,
@@ -1249,6 +1261,18 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       adjustments: 1,
       rules: 1,
       holidays: 23,
+      // D5.2: REQ → RFQ (3 quotations) → approved LPO → partial GRN → one invoice matched,
+      // approved and settled, one blocked by the three-way match (ballast not yet delivered).
+      requisitions: 1,
+      quotations: 3,
+      lpos: [{ status: "approved" }],
+      grns: 1,
+      invoices: [
+        { invoiceNumber: "MQ-INV-1001", status: "settled" },
+        { invoiceNumber: "MQ-INV-1002", status: "disputed" },
+      ],
+      payables: 1,
+      settlements: 1,
     });
     // Nine weeks of muster rolls on two projects: past periods approved (with their snapshot
     // lines), the last complete one awaiting approval and the current one open.
@@ -1356,6 +1380,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         expect(stored.digest).toBe(submitted.digest);
       },
     );
+    expect(second.procureToPay).toEqual({
+      created: false,
+      requisition: "REQ-0001",
+      rfq: "RFQ-0001",
+      lpo: "LPO-0001",
+      grn: "GRN-0001",
+      invoices: [
+        { number: "MQ-INV-1001", status: "settled" },
+        { number: "MQ-INV-1002", status: "disputed" },
+      ],
+    });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
   });
 });

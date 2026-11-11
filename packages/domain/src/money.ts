@@ -82,3 +82,8 @@ export function lineAmountFromRate(
 export function decimalToMinor(amount: string, mode: RoundingMode = "half_up"): MinorUnits {
   return toSafeMinor(parseDecimal(amount, "amount").times(100).toDecimalPlaces(0, rounding(mode)));
 }
+
+/** A decimal string in its shortest exact form ("1.500" → "1.5", "2.00" → "2"). */
+export function normaliseDecimal(value: string): string {
+  return parseDecimal(value, "value").toString();
+}

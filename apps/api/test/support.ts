@@ -70,6 +70,52 @@ import {
   suppliersResponseSchema,
   unitResponseSchema,
   unitsResponseSchema,
+  accreditationAlertsResponseSchema,
+  gangDetailResponseSchema,
+  gangsResponseSchema,
+  labourerResponseSchema,
+  labourersResponseSchema,
+  labourRateResponseSchema,
+  labourRatesResponseSchema,
+  labourSetupResponseSchema,
+  labourViewResponseSchema,
+  labourViewsResponseSchema,
+  resolvedRateResponseSchema,
+  revealResponseSchema,
+  skillLevelResponseSchema,
+  tradeResponseSchema,
+  adjustmentResponseSchema,
+  adjustmentsResponseSchema,
+  anomaliesResponseSchema,
+  anomalyResponseSchema,
+  attendanceOverviewResponseSchema,
+  attendanceSettingsResponseSchema,
+  correctionResponseSchema,
+  correctionsResponseSchema,
+  holidayResponseSchema,
+  labourerAttendanceResponseSchema,
+  musterResponseSchema,
+  periodDetailResponseSchema,
+  periodsResponseSchema,
+  timesheetLinesResponseSchema,
+  timesheetRuleResponseSchema,
+  advanceResponseSchema,
+  advancesResponseSchema,
+  allowanceResponseSchema,
+  allowancesResponseSchema,
+  batchDetailResponseSchema,
+  batchSnapshotResponseSchema,
+  exportSummaryResponseSchema,
+  minimumWageResponseSchema,
+  outputResponseSchema,
+  outputsResponseSchema,
+  payCalendarResponseSchema,
+  payrollOverviewResponseSchema,
+  payrollRulesResponseSchema,
+  payrollSettingsResponseSchema,
+  payslipResponseSchema,
+  projectPayrollResponseSchema,
+  statutoryRuleResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -171,6 +217,12 @@ export function responseContract(method: string, target: string) {
   if (/^rate-buildups\/[^/]+\/versions\/\d+$/.test(path)) return buildupVersionResponseSchema;
   const procurement = procurementContract(method, path);
   if (procurement) return procurement;
+  const labour = labourContract(method, path);
+  if (labour) return labour;
+  const attendance = attendanceContract(path);
+  if (attendance) return attendance;
+  const payroll = payrollContract(method, path);
+  if (payroll) return payroll;
   return messageResponseSchema;
 }
 
@@ -196,6 +248,99 @@ function procurementContract(method: string, path: string) {
   return null;
 }
 
+/** The D4.1 payroll endpoints' success contracts. */
+function payrollContract(method: string, path: string) {
+  if (!path.startsWith("payroll/")) return null;
+  const get = method === "get";
+  if (path === "payroll/overview") return payrollOverviewResponseSchema;
+  if (path === "payroll/settings") return payrollSettingsResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/calendar$/.test(path)) return payCalendarResponseSchema;
+  if (path === "payroll/rules")
+    return get ? payrollRulesResponseSchema : statutoryRuleResponseSchema;
+  if (path === "payroll/rules/defaults") return payrollRulesResponseSchema;
+  if (/^payroll\/rules\/[^/]+\/verify$/.test(path)) return statutoryRuleResponseSchema;
+  if (/^payroll\/rules\/[^/]+$/.test(path)) return messageResponseSchema;
+  if (path === "payroll/minimum-wages") return minimumWageResponseSchema;
+  if (/^payroll\/projects\/[^/]+$/.test(path)) return projectPayrollResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/batches$/.test(path)) return batchDetailResponseSchema;
+  if (/^payroll\/batches\/[^/]+(\/(recalculate|submit|cancel))?$/.test(path))
+    return batchDetailResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/lines\/[^/]+$/.test(path)) return payslipResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/snapshot$/.test(path)) return batchSnapshotResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/allowances$/.test(path))
+    return get ? allowancesResponseSchema : allowanceResponseSchema;
+  if (/^payroll\/allowances\/[^/]+\/end$/.test(path)) return allowanceResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/outputs$/.test(path))
+    return get ? outputsResponseSchema : outputResponseSchema;
+  if (/^payroll\/outputs\/[^/]+\/(approve|reject)$/.test(path)) return outputResponseSchema;
+  if (path === "payroll/advances") return advancesResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/advances$/.test(path)) return advanceResponseSchema;
+  if (/^payroll\/advances\/[^/]+\/(approve|reject|disburse|cancel)$/.test(path))
+    return advanceResponseSchema;
+  if (path === "payroll/exports") return get ? exportSummaryResponseSchema : z.unknown();
+  return null;
+}
+
+/** The D3.3 attendance and timesheet endpoints' success contracts. */
+function attendanceContract(path: string) {
+  if (!path.startsWith("attendance/")) return null;
+  if (path === "attendance/overview") return attendanceOverviewResponseSchema;
+  if (
+    [
+      "attendance/settings",
+      "attendance/settings/periods",
+      "attendance/rules/defaults",
+      "attendance/holidays/defaults",
+    ].includes(path)
+  )
+    return attendanceSettingsResponseSchema;
+  if (path === "attendance/rules") return timesheetRuleResponseSchema;
+  if (path === "attendance/holidays") return holidayResponseSchema;
+  if (/^attendance\/(rules|holidays)\/[^/]+$/.test(path)) return messageResponseSchema;
+  if (/^attendance\/projects\/[^/]+\/muster$/.test(path)) return musterResponseSchema;
+  if (/^attendance\/days\/[^/]+\/(submit|confirm|return)$/.test(path)) return musterResponseSchema;
+  if (/^attendance\/days\/[^/]+\/corrections$/.test(path)) return correctionResponseSchema;
+  if (/^attendance\/projects\/[^/]+\/corrections$/.test(path)) return correctionsResponseSchema;
+  if (/^attendance\/corrections\/[^/]+\/(approve|reject)$/.test(path))
+    return correctionResponseSchema;
+  if (path === "attendance/anomalies") return anomaliesResponseSchema;
+  if (/^attendance\/anomalies\/[^/]+\/review$/.test(path)) return anomalyResponseSchema;
+  if (/^attendance\/projects\/[^/]+\/periods$/.test(path)) return periodsResponseSchema;
+  if (/^attendance\/periods\/[^/]+\/lines$/.test(path)) return timesheetLinesResponseSchema;
+  if (/^attendance\/periods\/[^/]+\/adjustments$/.test(path)) return adjustmentResponseSchema;
+  if (/^attendance\/periods\/[^/]+(\/(submit|approve|reject|reopen))?$/.test(path))
+    return periodDetailResponseSchema;
+  if (/^attendance\/projects\/[^/]+\/adjustments$/.test(path)) return adjustmentsResponseSchema;
+  if (/^attendance\/adjustments\/[^/]+\/(approve|reject)$/.test(path))
+    return adjustmentResponseSchema;
+  if (/^attendance\/labourers\/[^/]+\/summary$/.test(path)) return labourerAttendanceResponseSchema;
+  return null;
+}
+
+/** The D3.1 labour endpoints' success contracts. */
+function labourContract(method: string, path: string) {
+  if (!path.startsWith("labour/")) return null;
+  if (["labour/setup", "labour/setup/defaults", "labour/settings"].includes(path))
+    return labourSetupResponseSchema;
+  if (/^labour\/trades(\/[^/]+)?$/.test(path)) return tradeResponseSchema;
+  if (/^labour\/skill-levels(\/[^/]+)?$/.test(path)) return skillLevelResponseSchema;
+  if (path === "labour/rates")
+    return method === "get" ? labourRatesResponseSchema : labourRateResponseSchema;
+  if (path === "labour/labourers")
+    return method === "get" ? labourersResponseSchema : labourerResponseSchema;
+  if (path === "labour/labourers/lookup") return labourersResponseSchema;
+  if (/^labour\/labourers\/[^/]+\/reveal$/.test(path)) return revealResponseSchema;
+  if (/^labour\/labourers\/[^/]+\/rate$/.test(path)) return resolvedRateResponseSchema;
+  if (/^labour\/labourers\/[^/]+(\/.*)?$/.test(path)) return labourerResponseSchema;
+  if (path === "labour/accreditation-alerts") return accreditationAlertsResponseSchema;
+  if (path === "labour/views")
+    return method === "get" ? labourViewsResponseSchema : labourViewResponseSchema;
+  if (path === "labour/gangs")
+    return method === "get" ? gangsResponseSchema : gangDetailResponseSchema;
+  if (/^labour\/gangs\/[^/]+(\/.*)?$/.test(path)) return gangDetailResponseSchema;
+  return null;
+}
+
 export class Browser {
   readonly cookies = new Map<string, string>();
   csrf = "";
@@ -210,11 +355,13 @@ export class Browser {
     path: string,
     body?: object,
     csrf = true,
+    headers: Record<string, string> = {},
   ): Promise<request.Response> {
     const operation = request(this.app.getHttpServer())[method](`/api/v1/${path}`);
     operation.set("Cookie", [...this.cookies].map(([key, value]) => `${key}=${value}`).join("; "));
     operation.set("Origin", origin);
     if (csrf) operation.set("X-CSRF-Token", this.csrf);
+    for (const [key, value] of Object.entries(headers)) operation.set(key, value);
     const res = body === undefined ? await operation : await operation.send(body);
     if (res.status >= 200 && res.status < 300) {
       expect(

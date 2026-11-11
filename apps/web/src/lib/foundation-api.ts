@@ -1,12 +1,18 @@
 import { z } from "zod";
 
-const problemSchema = z.object({ code: z.string().optional(), traceId: z.string().optional() });
+const problemSchema = z.object({
+  code: z.string().optional(),
+  traceId: z.string().optional(),
+  match: z.record(z.string(), z.string()).optional(),
+});
 
 export class FoundationApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
     readonly traceId?: string,
+    /** The existing record a 409 collided with (RFC 9457 extension), e.g. a labourer. */
+    readonly match?: Readonly<Record<string, string>>,
   ) {
     super(code);
     this.name = "FoundationApiError";
@@ -60,6 +66,7 @@ export async function foundationRequest<T>(
       response.status,
       problem.success ? (problem.data.code ?? "requestFailed") : "requestFailed",
       problem.success ? problem.data.traceId : undefined,
+      problem.success ? problem.data.match : undefined,
     );
   }
   const parsed = schema.safeParse(body);

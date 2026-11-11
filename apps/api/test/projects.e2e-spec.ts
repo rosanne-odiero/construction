@@ -3,7 +3,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { PROJECT_ASSIGNABLE_PERMISSIONS } from "@pm-buddy/types";
+import { KENYA_STATUTORY_SEED, PROJECT_ASSIGNABLE_PERMISSIONS } from "@pm-buddy/types";
 import {
   auditEventsResponseSchema,
   geofenceHistoryResponseSchema,
@@ -24,6 +24,7 @@ import {
 import { AppModule } from "../src/app.module.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { configureApp } from "../src/app.setup.js";
+import { BatchBuilder } from "../src/modules/payroll/batch-builder.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
@@ -1167,7 +1168,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     ).rejects.toThrow();
   });
 
-  it("seeds the demo company idempotently", async () => {
+  it("seeds the demo company, labour registry and attendance idempotently", async () => {
     const counts = async (tenantId: string, userId: string) =>
       db.run({ tenantId, userId, requestId: "seed-counts" }, async (tx) => ({
         members: await tx.membership.count({ where: { tenantId } }),
@@ -1192,6 +1193,22 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
           select: { status: true },
           orderBy: { status: "asc" },
         }),
+        labourers: await tx.labourer.count({ where: { tenantId } }),
+        consents: await tx.labourerConsent.count({ where: { tenantId } }),
+        engagements: await tx.labourEngagement.count({ where: { tenantId } }),
+        accreditations: await tx.labourerAccreditation.count({ where: { tenantId } }),
+        gangs: await tx.gang.count({ where: { tenantId } }),
+        gangMembers: await tx.gangMembership.count({ where: { tenantId } }),
+        doNotRehire: await tx.labourer.count({ where: { tenantId, doNotRehire: true } }),
+        trades: await tx.trade.count({ where: { tenantId } }),
+        attendanceDays: await tx.attendanceDay.count({ where: { tenantId } }),
+        attendanceRecords: await tx.attendanceRecord.count({ where: { tenantId } }),
+        periods: await tx.timesheetPeriod.count({ where: { tenantId } }),
+        timesheetLines: await tx.timesheetLine.count({ where: { tenantId } }),
+        anomalies: await tx.attendanceAnomaly.count({ where: { tenantId } }),
+        adjustments: await tx.timesheetAdjustment.count({ where: { tenantId } }),
+        rules: await tx.timesheetRuleVersion.count({ where: { tenantId } }),
+        holidays: await tx.publicHoliday.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1199,7 +1216,9 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       await prisma.user.findUniqueOrThrow({ where: { identifier: DEMO_ACCOUNTS[0]!.identifier } })
     ).id;
     const afterFirst = await counts(first.company.id, ownerId);
-    expect(afterFirst).toEqual({
+    const { attendanceDays, attendanceRecords, periods, timesheetLines, anomalies, ...registry } =
+      afterFirst;
+    expect(registry).toEqual({
       members: 4,
       projects: 3,
       sites: 3,
@@ -1219,7 +1238,63 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       prices: 8,
       alerts: 1,
       payouts: [{ status: "pending" }, { status: "verified" }],
+      labourers: 40,
+      consents: 40,
+      engagements: 40,
+      accreditations: 18,
+      gangs: 6,
+      gangMembers: 39,
+      doNotRehire: 1,
+      trades: 15,
+      adjustments: 1,
+      rules: 1,
+      holidays: 23,
     });
+    // Nine weeks of muster rolls on two projects: past periods approved (with their snapshot
+    // lines), the last complete one awaiting approval and the current one open.
+    // The test database is reused between runs, so the first call may find the data already there.
+    expect(first.attendance).toMatchObject({ adjustments: 1, holidays: 23 });
+    expect(attendanceRecords).toBe(first.attendance.records);
+    expect(attendanceRecords).toBeGreaterThan(1000);
+    expect(attendanceDays).toBeGreaterThan(100);
+    expect(timesheetLines).toBeGreaterThan(0);
+    expect(anomalies).toBeGreaterThan(first.attendance.openAnomalies);
+    expect(periods).toBe(first.attendance.periods);
+    const states = await db.run(
+      { tenantId: first.company.id, userId: ownerId, requestId: "seed-counts" },
+      async (tx) => ({
+        periods: await tx.timesheetPeriod.groupBy({
+          by: ["status"],
+          where: { tenantId: first.company.id },
+          _count: true,
+        }),
+        unapprovedLines: await tx.timesheetLine.count({
+          where: { tenantId: first.company.id, period: { status: { not: "approved" } } },
+        }),
+        open: await tx.attendanceAnomaly.findMany({
+          where: { tenantId: first.company.id, status: "open" },
+          select: { kind: true },
+          distinct: ["kind"],
+        }),
+        adjustment: await tx.timesheetAdjustment.findFirstOrThrow({
+          where: { tenantId: first.company.id },
+          select: { status: true, requestedBy: true, decidedBy: true },
+        }),
+      }),
+    );
+    const byStatus = Object.fromEntries(states.periods.map((row) => [row.status, row._count]));
+    // Past weeks approved, the last complete week of each project submitted, and the current
+    // week open (none when the seed ran after Thursday's cut-off).
+    expect(byStatus["approved"]).toBe(first.attendance.approvedPeriods);
+    expect(byStatus["submitted"]).toBe(2);
+    expect([0, 2]).toContain(byStatus["open"] ?? 0);
+    expect(byStatus["rejected"]).toBeUndefined();
+    expect(states.unapprovedLines).toBe(0);
+    expect(states.open.map((row) => row.kind)).toEqual(
+      expect.arrayContaining(["two_sites", "excess_hours"]),
+    );
+    expect(states.adjustment.status).toBe("approved");
+    expect(states.adjustment.decidedBy).not.toBe(states.adjustment.requestedBy);
     const second = await seedDemo(app);
     expect(second.company).toEqual({ ...first.company, created: false });
     expect(second.accounts.every((account) => !account.created && account.password === null)).toBe(
@@ -1249,6 +1324,38 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         { code: "SUP-0003", name: "Kitengela Hardware (synthetic)", created: false },
       ],
     });
+    expect(second.labour).toMatchObject({ labourersCreated: 0, labourersTotal: 40, rates: 0 });
+    expect(second.attendance).toEqual({ ...first.attendance, created: false });
+    // Payroll (D4.1): unverified statutory rules, minimum wages, allowances, piece-rate output,
+    // two advances, one submitted and three draft batches; the submitted snapshot matches its digest.
+    expect(first.payroll).toMatchObject({
+      ruleVersions: KENYA_STATUTORY_SEED.length,
+      minimumWages: 18,
+      allowances: 3,
+      outputs: 2,
+      advances: 2,
+      submittedBatches: 1,
+      draftBatches: 3,
+    });
+    expect(second.payroll).toEqual({ ...first.payroll, created: false });
+    await db.run(
+      { tenantId: first.company.id, userId: ownerId, requestId: "seed-payroll" },
+      async (tx) => {
+        expect(
+          await tx.statutoryRuleVersion.count({
+            where: { tenantId: first.company.id, status: { not: "unverified" } },
+          }),
+        ).toBe(0);
+        const submitted = await tx.payrollBatch.findFirstOrThrow({
+          where: { tenantId: first.company.id, status: "submitted" },
+        });
+        expect(submitted.unverifiedRules).toBe(true);
+        const stored = await app
+          .get(BatchBuilder)
+          .storedSnapshot(tx, first.company.id, submitted.id);
+        expect(stored.digest).toBe(submitted.digest);
+      },
+    );
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
   });
 });

@@ -5,11 +5,8 @@
  */
 const KRA_PIN = /^[AP]\d{9}[A-Z]$/;
 
-/** Upper-cases and removes spaces and hyphens; null when the result is not a KRA PIN. */
-export function normaliseKraPin(input: string): string | null {
-  const candidate = input.replace(/[\s-]/g, "").toUpperCase();
-  return KRA_PIN.test(candidate) ? candidate : null;
-}
+/** One KRA PIN rule for workers (D3.1) and suppliers: upper-cased, separators removed. */
+export { normaliseKraPin } from "../labour.js";
 
 export const isKraPin = (value: string) => KRA_PIN.test(value);
 

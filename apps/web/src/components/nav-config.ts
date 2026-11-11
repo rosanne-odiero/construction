@@ -112,10 +112,15 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
 
 /**
  * Routes backed by the real API: the projects list, project pages and site editors (D2.1), a
- * project's BQ viewer and import wizard (D2.2), and the catalogue and suppliers (D5.1).
+ * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1), attendance and
+ * timesheets (D3.3 web slice), payroll (D4.1), and the catalogue and suppliers (D5.1). The D0
+ * labour, attendance and payroll prototypes live under /prototype.
  */
 export function isLiveRoute(pathname: string): boolean {
   if (pathname === "/projects" || pathname === "/bq") return true;
+  if (pathname === "/labour" || pathname.startsWith("/labour/")) return true;
+  if (pathname === "/attendance" || pathname.startsWith("/attendance/")) return true;
+  if (pathname === "/payroll" || pathname.startsWith("/payroll/")) return true;
   if (/^\/catalogue(\/(alerts|convert|units|[0-9a-f-]{36}))?$/.test(pathname)) return true;
   if (/^\/suppliers(\/(new|[0-9a-f-]{36}(\/edit)?))?$/.test(pathname)) return true;
   if (/^\/rate-buildups(\/(new|[0-9a-f-]{36}))?$/.test(pathname)) return true;

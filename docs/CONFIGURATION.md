@@ -39,6 +39,7 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `payroll.engagement_deductions` | platform/tenant | TBD mapping (casual, term, piece-rate) | Brief §5.6 | COMPLIANCE-REVIEW (CR-PAY-07) | D4.1 |
 | `payroll.deductions.max_total_pct` | platform | TBD | Employment law check | COMPLIANCE-REVIEW (CR-PAY-15) | D4.1 |
 | `payroll.minimum_wage_table` | platform | TBD (area × occupation) | Wages orders | COMPLIANCE-REVIEW (CR-PAY-09) | D3.1 |
+| `labour_rates` (data, not a key) | tenant/project/labourer | None: each company sets its own; the development seed adds synthetic rates | Brief §5.4 | PRODUCT; COMPLIANCE-REVIEW (CR-PAY-09) where a rate meets the minimum wage | D3.1 |
 | `payroll.advances.max_recovery_pct_per_period` | tenant | 50% of net | Proposal | PRODUCT | D4.1 |
 | `payroll.pay_periods.allowed` | tenant/project | daily, weekly, fortnightly, monthly | Brief §5.6 | PRODUCT | D4.1 |
 | `payroll.records_retention_years` | platform | TBD | Employment and tax law | COMPLIANCE-REVIEW (CR-PAY-13) | D4.1 |
@@ -48,24 +49,30 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 
 | Key | Scope | Seed / default | Source | Status | Used from |
 |---|---|---|---|---|---|
-| `attendance.normal_hours_per_day` | tenant/project | 8 | Prototype | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 |
-| `attendance.late_after` | project | 07:15 | Prototype | DEMO, PRODUCT | D3.3 |
-| `attendance.half_day_hours` | tenant | 4 | Proposal | PRODUCT, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 |
-| `attendance.overtime.multipliers` | tenant | Weekday 1.5 · rest day 2.0 · public holiday 2.0 | Prototype | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 |
+| `attendance.normal_hours_per_day` → `timesheet_rule_versions.normal_minutes` | tenant/project (effective-dated) | 480 (8 h) | Prototype, QUESTIONS Q-C3 | DEMO, COMPLIANCE-REVIEW (CR-PAY-08); seeded `unverified` | D3.3 (built) |
+| `attendance.late_after` → `day_start_minutes` + `late_grace_minutes` | tenant/project (effective-dated) | 07:00 + 15 min (late after 07:15) | Prototype | DEMO, PRODUCT | D3.3 (built) |
+| `attendance.break` → `default_break_minutes` after `break_after_minutes` | tenant/project (effective-dated) | 60 min when the shift is longer than 5 h; a break entered on the muster roll wins | Proposal | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 (built) |
+| `attendance.half_day_hours` → `half_day_threshold_minutes` | tenant/project (effective-dated) | 240 (a day of 4 h or more is a full day; shorter, or all records `half_day`, is a half) | Proposal | PRODUCT, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 (built) |
+| `attendance.max_plausible_minutes` | tenant/project (effective-dated) | 720 (12 h worked); above it the day is flagged `excess_hours` (still counted, never capped silently) | Proposal | PRODUCT, SECURITY | D3.3 (built) |
+| `attendance.rest_days` → `rest_days` (ISO weekdays) | tenant/project (effective-dated) | Sunday | Prototype, Q-C3 | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 (built) |
+| `attendance.overtime.multipliers` → `ot_weekday_multiplier`, `ot_rest_day_multiplier`, `ot_holiday_multiplier` | tenant/project (effective-dated) | Weekday 1.50 · rest day 2.00 · public holiday 2.00 (exact decimal strings; payroll applies them) | Prototype, Q-C3 | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 (built) |
+| `attendance.period.week_ends_on` / `.cutoff_time` / `.payday` → `attendance_settings` | tenant | Thursday · 18:00 Africa/Nairobi · Friday (weekly periods Friday–Thursday) | QUESTIONS Q-C4 | DEMO, PRODUCT | D3.3 (built) |
 | `attendance.face_match_threshold` | tenant/site | 0.80 | Prototype; vendor-tuned in D3.4 | DEMO, SECURITY | D3.4 |
 | `attendance.liveness_threshold` | tenant | Vendor-specific | D3.4 vendor choice | SECURITY | D3.4 |
 | `attendance.duplicate_window_minutes` | tenant | 10 | Proposal | PRODUCT | D3.3 |
 | `attendance.clock_drift_minutes` | platform | 5 | Proposal | SECURITY | D3.3 |
 | `attendance.impossible_travel_kmh` | platform | 60 (straight-line) | Proposal | SECURITY | D3.3 |
 | `attendance.geofence_tolerance_m` | site | 30 (plus reported GPS accuracy) | Proposal | PRODUCT | D3.3 |
-| `attendance.override.step_up` | tenant | true | Threat model | SECURITY | D3.3 |
+| `attendance.override.step_up` | tenant | true (corrections and adjustments need MFA verified within 5 minutes; `ATTENDANCE_OVERRIDE_STEP_UP`) | Threat model | SECURITY | D3.3 (built, constant for now) |
 | `attendance.casual_conversion_warning_days` | tenant | 25 | Prototype | DEMO, COMPLIANCE-REVIEW (CR-PAY-10) | D3.1 |
 | `attendance.dispute_response_days` | tenant | TBD | DPIA | PRODUCT | D3.3 |
 | `attendance.records_retention_years` | platform | TBD | DPIA | COMPLIANCE-REVIEW (CR-PAY-13, CR-DP-06) | D3.3 |
 | `attendance.gps_retention_days` | platform | TBD | DPIA | COMPLIANCE-REVIEW (CR-DP-06) | D3.3 |
 | `attendance.evidence_photo_retention_days` | platform | TBD | DPIA | COMPLIANCE-REVIEW (CR-DP-06) | D3.3 |
 | `attendance.store_evidence_photo_on_biometric_match` | tenant | false | DPIA (minimisation) | COMPLIANCE-REVIEW (CR-DP-08) | D3.4 |
-| Public holidays (`PublicHoliday` table) | platform/tenant | Seeded each year | Kenya Gazette | COMPLIANCE-REVIEW (CR-PAY-14) | D3.3 |
+| Public holidays (`public_holidays` table) | tenant | 2026: 12 days (including the gazetted Idd-ul-Fitr 20/03 and Idd-ul-Adha 27/05); 2027: 11 days (no Idd yet; Sunday holidays observed on Monday) — `KENYA_PUBLIC_HOLIDAYS` with a source per row | Public Holidays Act Cap. 110 and Kenya Gazette notices (sources in [COMPLIANCE_TODO](./COMPLIANCE_TODO.md#d33-implementation-notes-attendance-and-timesheets-web-slice)) | COMPLIANCE-REVIEW (CR-PAY-14); rows `unverified` | D3.3 (built) |
+
+**How the D3.3 web slice stores these values.** Timesheet rules are rows of `timesheet_rule_versions`: a company default (`project_id` null) and optional project overrides, each effective from a date; the rule for a project on a date is the latest version of that project, else the latest company version (`resolveTimesheetRule`). A version cannot start inside a submitted or approved period, and only versions that have not started can be cancelled, so a rule change never alters an approved timesheet; approved lines also keep the rule version id they used. New rule versions start `unverified`; in production (`NODE_ENV=production`) a period whose lines use an unverified rule cannot be approved (COMPLIANCE-REVIEW). The rule values are validated by `ruleIssues` (shared Zod schema) and by database CHECK constraints (`TIMESHEET_RULE_LIMITS`).
 
 ## 3. Biometrics and data protection
 
@@ -81,8 +88,10 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `dp.consent_record_retention_years` | platform | TBD | DPIA §8 | COMPLIANCE-REVIEW (CR-DP-06) | D3.1 |
 | `dp.dpia_review_interval_months` | tenant | 12 | DPIA §13 | PRODUCT | D3.4 |
 | `labour.inactive_worker_retention_days` | platform | TBD | DPIA §8 | COMPLIANCE-REVIEW (CR-DP-06) | D3.1 |
-| `labour.accreditation_alert_days` | tenant | 30 | Brief §5.4 ("alert before expiry") | PRODUCT | D3.1 |
-| `labour.minimum_age_years` | platform | 18 | Brief §6 | COMPLIANCE-REVIEW (CR-DP-10) | D3.1 |
+| `labour.accreditation_alert_days` | tenant | 30 (allowed 1–365) | Brief §5.4 ("alert before expiry") | PRODUCT | D3.1 (implemented: `labour_settings.accreditation_alert_days`; 30 until a company saves its own) |
+| `labour.minimum_age_years` | platform | 18 | Brief §6 | COMPLIANCE-REVIEW (CR-DP-10) | D3.1 (implemented as the code constant `MINIMUM_LABOURER_AGE_YEARS` and repeated in the database CHECK and triggers; deliberately not editable at runtime, so changing it needs a migration) |
+| `labour.consent_notice_version` | platform | `registration-2026-11-v1` (EN/SW text pinned by SHA-256) | Brief §6, DPIA §7 | COMPLIANCE-REVIEW (CR-DP-03, CR-DP-11) | D3.1 (`CURRENT_CONSENT_NOTICE` in `packages/types`; a new wording is a new version) |
+| `labour.trades` / `labour.skill_levels` | tenant | 15 trades from brief §5.4 (EN/SW); skilled, semi-skilled, unskilled and site supervisor (NCA categories) | Brief §5.4 | PRODUCT; COMPLIANCE-REVIEW (CR-NCA-03) for which levels expect an NCA card | D3.1 (`trades`, `skill_levels`; "Add the standard list" installs them) |
 
 ## 4. Payments and M-Pesa
 
@@ -184,6 +193,9 @@ These are not business rules: they tell each process where its dependencies are.
 | `WEB_ORIGIN` | api | `http://localhost:3000` | Exact origin of the web app (scheme, host and port). State-changing requests must send this `Origin`; production requires HTTPS. Also the passkey relying party: WebAuthn responses must come from exactly this origin, and its hostname is the RP ID (passkeys are bound to it, so changing the hostname orphans registered passkeys; IP addresses cannot be RP IDs) | SECURITY |
 | `TRUST_PROXY` | api | unset (trust no proxy) | Proxies allowed to report the client IP in `X-Forwarded-For` (addresses, CIDRs or a hop count; `true` is rejected). Set it only when an edge proxy **appends** the real client address, because the web app's `/api` rewrite passes client-supplied values through. When unset, rate limits key on accounts, users, sessions and tokens only | SECURITY |
 | `AUTH_MFA_ENCRYPTION_KEY` | api | none (required; 64 hex characters) | Encrypts TOTP secrets and CSRF tokens. Replacing it invalidates TOTP enrolments. Secrets manager outside local development | SECURITY |
+| `FIELD_ENCRYPTION_KEYS` | api | none (required; `<version>:<64 hex>`, comma-separated during a rotation) | Master keys for labourer field encryption (D3.1): AES-256-GCM under per-company keys derived with HKDF-SHA-256, envelope tagged with the key version. Every listed version stays readable; losing a version makes the values written with it unreadable. **Development placeholders only** (generate locally, see `apps/api/.env.example`); production must use managed key material from the secrets manager/KMS (ARCHITECTURE §10) | SECURITY |
+| `FIELD_ENCRYPTION_ACTIVE_KEY_VERSION` | api | the highest listed version | Version used for new values; must be listed in `FIELD_ENCRYPTION_KEYS` | SECURITY |
+| `FIELD_BLIND_INDEX_KEY` | api | none (required; 64 hex characters) | HMAC key for blind indexes (duplicate ID, phone and KRA PIN matching, do-not-rehire checks). Separate from the encryption keys and **not rotatable without recomputing every index**. Same handling as above | SECURITY |
 | `AUTH_SIGNING_PRIVATE_KEY` | api | ephemeral in development | Base64 Ed25519 PKCS8 PEM that signs access tokens; required in production | SECURITY |
 | `AUTH_NOTIFICATION_TRANSPORT` / `AUTH_MAILPIT_PORT` | api | `disabled` (`development` in `.env.example`) / `8025` | Selects the `NotificationProvider`. `development` delivers every channel (email, SMS, WhatsApp) to loopback Mailpit only, phone channels to `phone-<number>@development.invalid` with a `[DEVELOPMENT ONLY][SMS]` / `[WHATSAPP]` subject prefix, and is refused in production; `disabled` makes every send fail explicitly. Delivery runs after the response, so it never reveals whether an account exists. Real SMS/WhatsApp (Africa's Talking) arrives in D7.3 | SECURITY |
 | `AUTH_BREACHED_PASSWORD_CHECK` | api | `off` (`off` in `.env.example`) | `hibp` checks new passwords (registration, reset) against the Have I Been Pwned range API: only the first five hex characters of the password's SHA-1 leave the server, with `Add-Padding: true` and a two-second timeout. On a timeout or error it **fails open**: the password is accepted and a warning is logged without the password or any part of its hash. Needs outbound HTTPS to `api.pwnedpasswords.com`. Strength checks (`auth.password.min_strength`) apply either way | SECURITY |

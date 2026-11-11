@@ -84,7 +84,7 @@ export default async function DashboardPage() {
         description={t("subtitle")}
         actions={
           <Button asChild>
-            <Link href="/payroll">
+            <Link href="/prototype/payroll">
               {t("reviewApprovals", { count: kpis.awaitingApproval })} <ArrowRight aria-hidden />
             </Link>
           </Button>

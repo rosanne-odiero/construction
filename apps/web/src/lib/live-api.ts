@@ -36,20 +36,28 @@ export function refreshSession(): Promise<boolean> {
 
 /**
  * Same-origin API call for live pages: state-changing requests carry the CSRF token, an expired
- * access token is refreshed once and the request retried, and every success is parsed with the
- * shared schema (a malformed response is an error, never a success).
+ * access token is refreshed once and the request retried (with the same headers, so an
+ * Idempotency-Key makes the retry safe), and every success is parsed with the shared schema (a
+ * malformed response is an error, never a success).
  */
 export async function liveRequest<T>(
   path: string,
   schema: z.ZodType<T>,
-  options: { method?: Method; body?: Record<string, unknown> } = {},
+  options: {
+    method?: Method;
+    body?: Record<string, unknown>;
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<T> {
   const method = options.method ?? "GET";
   const attempt = async () =>
     foundationRequest(path, schema, {
       method,
       body: options.body ?? (method === "GET" ? undefined : {}),
-      headers: method === "GET" ? {} : { "X-CSRF-Token": await csrfToken() },
+      headers: {
+        ...options.headers,
+        ...(method === "GET" ? {} : { "X-CSRF-Token": await csrfToken() }),
+      },
     });
   try {
     return await attempt();

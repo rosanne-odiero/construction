@@ -1167,7 +1167,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     ).rejects.toThrow();
   });
 
-  it("seeds the demo company and labour registry idempotently", async () => {
+  it("seeds the demo company, labour registry and attendance idempotently", async () => {
     const counts = async (tenantId: string, userId: string) =>
       db.run({ tenantId, userId, requestId: "seed-counts" }, async (tx) => ({
         members: await tx.membership.count({ where: { tenantId } }),
@@ -1186,6 +1186,14 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         gangMembers: await tx.gangMembership.count({ where: { tenantId } }),
         doNotRehire: await tx.labourer.count({ where: { tenantId, doNotRehire: true } }),
         trades: await tx.trade.count({ where: { tenantId } }),
+        attendanceDays: await tx.attendanceDay.count({ where: { tenantId } }),
+        attendanceRecords: await tx.attendanceRecord.count({ where: { tenantId } }),
+        periods: await tx.timesheetPeriod.count({ where: { tenantId } }),
+        timesheetLines: await tx.timesheetLine.count({ where: { tenantId } }),
+        anomalies: await tx.attendanceAnomaly.count({ where: { tenantId } }),
+        adjustments: await tx.timesheetAdjustment.count({ where: { tenantId } }),
+        rules: await tx.timesheetRuleVersion.count({ where: { tenantId } }),
+        holidays: await tx.publicHoliday.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1193,7 +1201,9 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       await prisma.user.findUniqueOrThrow({ where: { identifier: DEMO_ACCOUNTS[0]!.identifier } })
     ).id;
     const afterFirst = await counts(first.company.id, ownerId);
-    expect(afterFirst).toEqual({
+    const { attendanceDays, attendanceRecords, periods, timesheetLines, anomalies, ...registry } =
+      afterFirst;
+    expect(registry).toEqual({
       members: 3,
       projects: 3,
       sites: 3,
@@ -1210,7 +1220,55 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       gangMembers: 39,
       doNotRehire: 1,
       trades: 15,
+      adjustments: 1,
+      rules: 1,
+      holidays: 23,
     });
+    // Nine weeks of muster rolls on two projects: past periods approved (with their snapshot
+    // lines), the last complete one awaiting approval and the current one open.
+    // The test database is reused between runs, so the first call may find the data already there.
+    expect(first.attendance).toMatchObject({ adjustments: 1, holidays: 23 });
+    expect(attendanceRecords).toBe(first.attendance.records);
+    expect(attendanceRecords).toBeGreaterThan(1000);
+    expect(attendanceDays).toBeGreaterThan(100);
+    expect(timesheetLines).toBeGreaterThan(0);
+    expect(anomalies).toBeGreaterThan(first.attendance.openAnomalies);
+    expect(periods).toBe(first.attendance.periods);
+    const states = await db.run(
+      { tenantId: first.company.id, userId: ownerId, requestId: "seed-counts" },
+      async (tx) => ({
+        periods: await tx.timesheetPeriod.groupBy({
+          by: ["status"],
+          where: { tenantId: first.company.id },
+          _count: true,
+        }),
+        unapprovedLines: await tx.timesheetLine.count({
+          where: { tenantId: first.company.id, period: { status: { not: "approved" } } },
+        }),
+        open: await tx.attendanceAnomaly.findMany({
+          where: { tenantId: first.company.id, status: "open" },
+          select: { kind: true },
+          distinct: ["kind"],
+        }),
+        adjustment: await tx.timesheetAdjustment.findFirstOrThrow({
+          where: { tenantId: first.company.id },
+          select: { status: true, requestedBy: true, decidedBy: true },
+        }),
+      }),
+    );
+    const byStatus = Object.fromEntries(states.periods.map((row) => [row.status, row._count]));
+    // Past weeks approved, the last complete week of each project submitted, and the current
+    // week open (none when the seed ran after Thursday's cut-off).
+    expect(byStatus["approved"]).toBe(first.attendance.approvedPeriods);
+    expect(byStatus["submitted"]).toBe(2);
+    expect([0, 2]).toContain(byStatus["open"] ?? 0);
+    expect(byStatus["rejected"]).toBeUndefined();
+    expect(states.unapprovedLines).toBe(0);
+    expect(states.open.map((row) => row.kind)).toEqual(
+      expect.arrayContaining(["two_sites", "excess_hours"]),
+    );
+    expect(states.adjustment.status).toBe("approved");
+    expect(states.adjustment.decidedBy).not.toBe(states.adjustment.requestedBy);
     const second = await seedDemo(app);
     expect(second.company).toEqual({ ...first.company, created: false });
     expect(second.accounts.every((account) => !account.created && account.password === null)).toBe(
@@ -1225,6 +1283,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       ["SYO-TWN", "planning", false],
     ]);
     expect(second.labour).toMatchObject({ labourersCreated: 0, labourersTotal: 40, rates: 0 });
+    expect(second.attendance).toEqual({ ...first.attendance, created: false });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
   });
 });

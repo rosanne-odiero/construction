@@ -37,6 +37,13 @@ function print(summary: SeedSummary) {
     `  ${labour.trades} trades; ${labour.gangs} gangs; ${labour.rates} new rates this run`,
     `  ${labour.labourersTotal} labourers (${labour.labourersCreated} created this run)`,
   );
+  const { attendance } = summary;
+  lines.push(
+    "",
+    `Attendance and timesheets (synthetic; ${attendance.created ? "created" : "already present"}):`,
+    `  ${attendance.records} attendance records; ${attendance.periods} timesheet periods (${attendance.approvedPeriods} approved)`,
+    `  ${attendance.openAnomalies} open anomalies; ${attendance.adjustments} adjustment(s); ${attendance.holidays} public holidays`,
+  );
   console.log(lines.join("\n"));
 }
 

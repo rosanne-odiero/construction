@@ -21,13 +21,16 @@ import { PrismaService } from "../infra/prisma.service.js";
 import { AuthSecurity, hashPassword } from "../modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../modules/identity/tenant-database.service.js";
 import { LabourCrypto } from "../modules/labour/labour-support.js";
+import { seedAttendance, type AttendanceSeedSummary } from "./attendance-seed.js";
 import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
  * (password + TOTP), a project manager and a site agent, three projects with Kenyan sites,
  * geofences, WBS and milestones, and (D3.1) the labour registry: trades, rates, 40 synthetic
- * labourers with consent, gangs and NCA cards (labour-seed.ts). Idempotent: existing records are kept as they are. Never runs in
+ * labourers with consent, gangs and NCA cards (labour-seed.ts), and (D3.3) nine weeks of synthetic
+ * attendance with timesheet periods, anomalies and an adjustment (attendance-seed.ts). Idempotent:
+ * existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
  */
@@ -262,6 +265,7 @@ export type SeedSummary = {
   accounts: SeededAccount[];
   projects: { code: string; name: string; status: string; created: boolean }[];
   labour: LabourSeedSummary;
+  attendance: AttendanceSeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -418,11 +422,23 @@ export async function seedDemo(
     return seedLabour(tx, crypto, tenantId, owner.id, byCode, team, audit);
   });
 
+  const attendance = await seedAttendance(
+    app,
+    tenantId,
+    {
+      ownerId: owner.id,
+      pmId: userOf("projectManager").id,
+      agentId: userOf("siteAgent").id,
+    },
+    audit,
+  );
+
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
     accounts: accounts.map(({ id: _id, key: _key, ...account }) => account),
     projects,
     labour,
+    attendance,
   };
 }
 

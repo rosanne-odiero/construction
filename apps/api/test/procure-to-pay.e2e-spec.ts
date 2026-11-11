@@ -1400,7 +1400,7 @@ describe("Procure-to-pay (real runtime role)", () => {
       ) => tx.$executeRaw`INSERT INTO invoice_settlements (id, tenant_id, invoice_id, payable_id,
         method, external_reference, reference_key, amount_minor, paid_on, idempotency_key,
         request_digest, recorded_by) VALUES (gen_random_uuid(), ${tenantA}::uuid, ${id}::uuid,
-        ${detail.payable!.id}::uuid, 'other', ${reference}, ${reference}, ${amount}, current_date,
+        ${detail.payable!.id}::uuid, 'other', ${reference}, ${reference}, ${amount}, app.business_today(),
         ${`sql-${reference}`}, ${"0".repeat(64)}, ${browser.auth.user.id}::uuid)`) as never;
     const other = approverBrowser === owner ? financeTwo : owner;
     await sqlRefused(other, insert(other, 7_068_001, "SQLREF0001"), /outstanding balance/);

@@ -63,20 +63,31 @@ const FILE_NAME_LIMIT = 120;
  * used as a storage key.
  */
 export function sanitiseFileName(name: string, fallback = "upload"): string {
-  const base = (name.split(/[\\/]/).pop() ?? "").normalize("NFC");
+  // Bounded before any pattern runs: names are display-only and cut to 120 characters below anyway.
+  const base = (name.slice(-1_000).split(/[\\/]/).pop() ?? "").normalize("NFC");
   const cleaned = base
     .replace(UNSAFE_CHARACTERS, "")
     // oxlint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001F]/g, "")
     .replace(/[^\p{L}\p{N} ._()-]/gu, "_")
     .replace(/\s+/g, " ")
-    .replace(/_{2,}/g, "_")
-    .replace(/^[.\s]+|[.\s]+$/g, "");
-  if (!cleaned) return fallback;
-  if (cleaned.length <= FILE_NAME_LIMIT) return cleaned;
-  const dot = cleaned.lastIndexOf(".");
-  const extension = dot > 0 && cleaned.length - dot <= 6 ? cleaned.slice(dot) : "";
-  return `${cleaned.slice(0, FILE_NAME_LIMIT - extension.length).trimEnd()}${extension}`;
+    .replace(/_{2,}/g, "_");
+  const trimmed = trimDotsAndSpaces(cleaned);
+  if (!trimmed) return fallback;
+  if (trimmed.length <= FILE_NAME_LIMIT) return trimmed;
+  const dot = trimmed.lastIndexOf(".");
+  const extension = dot > 0 && trimmed.length - dot <= 6 ? trimmed.slice(dot) : "";
+  return `${trimmed.slice(0, FILE_NAME_LIMIT - extension.length).trimEnd()}${extension}`;
+}
+
+/** Strips leading and trailing dots and spaces in linear time (no backtracking pattern). */
+function trimDotsAndSpaces(value: string): string {
+  const strip = (character: string | undefined) => character === "." || character === " ";
+  let start = 0;
+  let end = value.length;
+  while (start < end && strip(value[start])) start += 1;
+  while (end > start && strip(value[end - 1])) end -= 1;
+  return value.slice(start, end);
 }
 
 /**

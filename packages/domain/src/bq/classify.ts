@@ -66,7 +66,7 @@ export type RowMarker =
 export function rowMarker(description: string): RowMarker | null {
   const text = description.toLowerCase().replace(/\s+/g, " ").trim();
   if (!text) return null;
-  if (/^(total )?(brought|b\/f\b|b\.f\.?)|brought forward|brought from/.test(text))
+  if (/^(?:total )?(?:brought|b\/f\b|b\.f\.?)/.test(text) || /brought (?:forward|from)/.test(text))
     return "brought_forward";
   if (/grand total|contract sum|tender sum|form of tender/.test(text)) return "grand_total";
   if (/\bv\.?\s?a\.?\s?t\b|value added tax/.test(text)) return "vat";
@@ -77,13 +77,14 @@ export function rowMarker(description: string): RowMarker | null {
   )
     return "bill_total";
   if (
-    /carried (forward|to collection|over|to page)|^c\/f\b|\bc\.f\.|to collection|page total/.test(
-      text,
-    )
+    /^c\/f\b/.test(text) ||
+    /carried (?:forward|to collection|over|to page)|\bc\.f\.|to collection|page total/.test(text)
   )
     return "page_total";
-  if (/^collections?\b|^(page )?collection$/.test(text)) return "collection";
-  if (/^bill\s*(no\.?|nr\.?|number)?\s*[:.]?\s*(\d+|[ivxlc]+)\b/.test(text)) return "bill_heading";
+  if (/^(?:collections?\b|(?:page )?collection$)/.test(text)) return "collection";
+  // `text` has single spaces (collapsed above), so each gap is " ?" and matching stays linear.
+  if (/^bill ?(?:(?:no|nr|number)\.? ?)?[:.]? ?(?:\d+|[ivxlc]+)\b/.test(text))
+    return "bill_heading";
   if (/^(sub-?)?total\b/.test(text)) return "page_total";
   return null;
 }

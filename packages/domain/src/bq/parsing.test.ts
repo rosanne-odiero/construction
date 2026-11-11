@@ -68,6 +68,12 @@ describe("untrusted text", () => {
 
   it("makes display-only file names from user input", () => {
     expect(sanitiseFileName("../../etc/passwd.xlsx")).toBe("passwd.xlsx");
+    expect(sanitiseFileName("  ..Ruiru BQ.xlsx. . ")).toBe("Ruiru BQ.xlsx");
+    expect(sanitiseFileName(" . . ")).toBe("upload");
+    const started = Date.now();
+    // Control characters are removed; only the last 1,000 characters are ever examined.
+    expect(sanitiseFileName(`a${"\t".repeat(200_000)}b.xlsx`)).toBe("b.xlsx");
+    expect(Date.now() - started).toBeLessThan(500);
     expect(sanitiseFileName("C:\\Users\\QS\\Ruiru BQ (final) v2.xlsx")).toBe(
       "Ruiru BQ (final) v2.xlsx",
     );

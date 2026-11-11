@@ -26,13 +26,20 @@ import { MINUTES_PER_DAY } from "./time.js";
  * 4. On a weekday the first `normalMinutes` of the day are normal time, in check-in order; the rest
  *    is weekday overtime. On a rest day or public holiday every worked minute is overtime of that
  *    category (COMPLIANCE-REVIEW CR-PAY-08: payroll applies the multipliers).
- * 5. Day units (half days): a day whose worked records are all `half_day` is one half; otherwise a
- *    day reaching `halfDayThresholdMinutes` is a full day (two halves) and a shorter one a half.
- *    Units are shared between records in proportion to their minutes (largest remainder).
+ * 5. Day units (half days, at most two a day): each `half_day` record is worth one half. When a
+ *    `present` record is involved, the threshold rule also applies: a day reaching
+ *    `halfDayThresholdMinutes` is a full day (two halves) and a shorter one at least a half (never
+ *    fewer halves than its `half_day` records). Units are shared between records in proportion to
+ *    their minutes (largest remainder), a `half_day` record receiving at most one half, so the
+ *    result does not depend on the order of the records or on which site or project comes first.
  * 6. Lateness: minutes from the expected start when the first check-in is after start + grace,
  *    on weekdays only and not for overnight (night) shifts.
  * 7. Records in an approved (locked) period keep their snapshot allocation; the other records
  *    share only what remains, so a late record on another project can never be paid twice.
+ *    The day is also computed as if nothing were locked: a locked record whose ideal share now
+ *    differs from its snapshot (because another record of the day changed) is reported in
+ *    `lockedDrift`, so the API can block approval and propose an adjustment (never a silent
+ *    over- or underpayment).
  */
 
 export type RecordAllocationValues = {
@@ -70,6 +77,17 @@ export type RecordAllocation = RecordAllocationValues & {
   locked: boolean;
 };
 
+/** A locked record whose snapshot no longer matches its share of the day as recomputed now. */
+export type LockedDrift = {
+  recordId: string;
+  projectId: string;
+  siteId: string;
+  /** What the approved timesheet (or an approved adjustment) fixed. */
+  locked: RecordAllocationValues;
+  /** The record's share if the day were computed today with nothing locked. */
+  ideal: RecordAllocationValues;
+};
+
 export type LabourerDayResult = {
   date: string;
   /** Null when no timesheet rule is configured for a project recorded that day. */
@@ -87,6 +105,8 @@ export type LabourerDayResult = {
   siteCount: number;
   maxPlausibleMinutes: number | null;
   records: RecordAllocation[];
+  /** Locked records whose ideal share differs from their snapshot (empty without locks). */
+  lockedDrift: LockedDrift[];
 };
 
 export type LabourerDayInput = {
@@ -145,7 +165,85 @@ export function shareProportionally(units: number, weights: readonly number[]): 
   return base;
 }
 
+/**
+ * Shares day units between records like `shareProportionally`, giving a `half_day` record at most
+ * one half; units taken from a capped record go to `present` records first (most minutes first),
+ * then to `half_day` records that have none yet.
+ */
+export function shareHalfDays(
+  units: number,
+  entries: readonly { minutes: number; halfDay: boolean }[],
+): number[] {
+  const shares = shareProportionally(
+    units,
+    entries.map((entry) => entry.minutes),
+  );
+  let excess = 0;
+  entries.forEach((entry, index) => {
+    if (entry.halfDay && shares[index]! > 1) {
+      excess += shares[index]! - 1;
+      shares[index] = 1;
+    }
+  });
+  const order = entries
+    .map((entry, index) => ({ entry, index }))
+    .sort(
+      (a, b) =>
+        Number(a.entry.halfDay) - Number(b.entry.halfDay) ||
+        b.entry.minutes - a.entry.minutes ||
+        a.index - b.index,
+    );
+  for (const { entry, index } of order) {
+    if (excess <= 0) break;
+    const room = entry.halfDay ? 1 - shares[index]! : excess;
+    const give = Math.min(room, excess);
+    shares[index]! += give;
+    excess -= give;
+  }
+  return shares;
+}
+
+const sameAllocation = (a: RecordAllocationValues, b: RecordAllocationValues) =>
+  a.halfDays === b.halfDays &&
+  a.workedMinutes === b.workedMinutes &&
+  a.normalMinutes === b.normalMinutes &&
+  a.overtimeMinutes === b.overtimeMinutes &&
+  a.lateMinutes === b.lateMinutes;
+
+const valuesOf = (allocation: RecordAllocationValues): RecordAllocationValues => ({
+  halfDays: allocation.halfDays,
+  workedMinutes: allocation.workedMinutes,
+  normalMinutes: allocation.normalMinutes,
+  overtimeMinutes: allocation.overtimeMinutes,
+  lateMinutes: allocation.lateMinutes,
+});
+
 export function computeLabourerDay(input: LabourerDayInput): LabourerDayResult {
+  const result = computeDayCore(input);
+  if (!input.records.some((record) => record.locked) || !result.dayType || result.missingRule)
+    return { ...result, lockedDrift: [] };
+  const ideal = computeDayCore({
+    ...input,
+    records: input.records.map((record) => ({ ...record, locked: null })),
+  });
+  const lockedDrift: LockedDrift[] = [];
+  for (const record of input.records) {
+    if (!record.locked) continue;
+    const share = ideal.records.find((entry) => entry.recordId === record.id);
+    const values = share ? valuesOf(share) : zero();
+    if (!sameAllocation(values, record.locked))
+      lockedDrift.push({
+        recordId: record.id,
+        projectId: record.projectId,
+        siteId: record.siteId,
+        locked: valuesOf(record.locked),
+        ideal: values,
+      });
+  }
+  return { ...result, lockedDrift };
+}
+
+function computeDayCore(input: LabourerDayInput): Omit<LabourerDayResult, "lockedDrift"> {
   const worked = input.records
     .filter((record) => isWorkedStatus(record.status))
     .filter((record) => record.checkIn !== null && record.checkOut !== null)
@@ -214,12 +312,14 @@ export function computeLabourerDay(input: LabourerDayInput): LabourerDayResult {
   const normalCap = dayType === "weekday" ? rule.normalMinutes : 0;
   const normalMinutes = Math.min(totalWorkedMinutes, normalCap);
   const overtimeMinutes = totalWorkedMinutes - normalMinutes;
-  const allHalf = worked.length > 0 && worked.every((entry) => entry.record.status === "half_day");
+  const halfDayRecords = worked.filter((entry) => entry.record.status === "half_day").length;
+  const byLabel = Math.min(halfDayRecords, 2);
+  const withPresent = worked.some((entry) => entry.record.status === "present");
   const halfDays = !worked.length
     ? 0
-    : allHalf || totalWorkedMinutes < rule.halfDayThresholdMinutes
-      ? 1
-      : 2;
+    : withPresent
+      ? Math.max(byLabel, totalWorkedMinutes < rule.halfDayThresholdMinutes ? 1 : 2)
+      : byLabel;
   const first = worked[0];
   const lateMinutes =
     first &&
@@ -264,9 +364,12 @@ export function computeLabourerDay(input: LabourerDayInput): LabourerDayResult {
       lateMinutes: late,
     });
   }
-  const shares = shareProportionally(
+  const shares = shareHalfDays(
     halfDaysLeft,
-    free.map((entry) => allocations.get(entry.record.id)!.workedMinutes),
+    free.map((entry) => ({
+      minutes: allocations.get(entry.record.id)!.workedMinutes,
+      halfDay: entry.record.status === "half_day",
+    })),
   );
   free.forEach((entry, index) => {
     allocations.get(entry.record.id)!.halfDays = shares[index]!;

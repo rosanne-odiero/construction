@@ -1480,7 +1480,8 @@
     "holidayExists": "Tayari kuna sikukuu ya umma tarehe hiyo.",
     "idempotencyKeyReused": "Ombi hili lilishatumwa likiwa na maelezo tofauti. Pakia upya kisha ujaribu tena.",
     "invalidIdempotencyKey": "Ombi halikuweza kutambuliwa kwa usalama. Pakia upya kisha ujaribu tena.",
-    "attendanceRule": "Hii inavunja kanuni ya mahudhurio. Hakuna kilichohifadhiwa."
+    "attendanceRule": "Hii inavunja kanuni ya mahudhurio. Hakuna kilichohifadhiwa.",
+    "correctionOutdated": "Siku au rekodi ilibadilika baada ya usahihishaji huu kuombwa. Ukatae kisha uombe upya."
   },
   "projectStatus": {
     "planning": "Mipango",
@@ -2905,7 +2906,8 @@
       "labourer_inactive": "Mfanyakazi hayupo kazini",
       "do_not_rehire": "Alama ya kutoajiriwa tena",
       "accreditation_invalid": "Kadi ya NCA imeisha au haipo",
-      "manual_override": "Usahihishaji wa mkono"
+      "manual_override": "Usahihishaji wa mkono",
+      "locked_share_changed": "Mgao ulioidhinishwa umebadilika"
     },
     "anomalyStatus": {
       "open": "Iko wazi",
@@ -3119,7 +3121,8 @@
         "sent": "Marekebisho yametumwa kwa idhini.",
         "requestTitle": "Omba marekebisho",
         "requestDescription": "Kipindi kilichoidhinishwa hakibadiliki. Mwidhinishaji mwingine akiyakubali, tofauti huingia katika kipindi kinachofuata kilicho wazi.",
-        "requestSubmit": "Omba idhini"
+        "requestSubmit": "Omba idhini",
+        "automatic": "Yamependekezwa na mfumo: rekodi nyingine ya siku ya mfanyakazi huyu ilibadilika baada ya kipindi hiki kuidhinishwa, kwa hiyo mgao ulioidhinishwa haulingani tena na siku."
       }
     },
     "anomalies": {
@@ -3144,7 +3147,8 @@
         "two_sites": "Amerekodiwa katika maeneo {count} siku hiyo",
         "overlapping_times": "Dakika {minutes} zinaingiliana na rekodi nyingine",
         "excess_hours": "Saa {worked} za kazi; kikomo saa {max}",
-        "manual_override": "Hufungwa usahihishaji unapoamuliwa"
+        "manual_override": "Hufungwa usahihishaji unapoamuliwa",
+        "locked_share_changed": "Mgao wa mradi ulioidhinishwa haulingani tena na siku: ulilipwa siku {paidDays}, saa {paidNormal} za kawaida na saa {paidOvertime} za ziada; sasa ni siku {idealDays}, saa {idealNormal} za kawaida na saa {idealOvertime} za ziada. Amua marekebisho yaliyopendekezwa."
       },
       "recordedBy": "Imerekodiwa na {name}",
       "reviewedBy": "{name}, {at}",

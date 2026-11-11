@@ -73,6 +73,9 @@ export type DayType = (typeof DAY_TYPES)[number];
  * Review signals, never automatic pay decisions (brief §15 E, CR-DP-09). Recording for a labourer
  * who is not engaged on the project that day is refused at entry; `not_engaged` catches records
  * that fall outside an engagement later (for example an engagement ended retroactively).
+ * `locked_share_changed`: another record of the labourer's day changed after one project's period
+ * was approved, so that project's approved share no longer matches the recomputed day; an
+ * adjustment is proposed and the open period waits until it is decided (never paid twice or short).
  */
 export const ANOMALY_KINDS = [
   "two_sites",
@@ -83,6 +86,7 @@ export const ANOMALY_KINDS = [
   "do_not_rehire",
   "accreditation_invalid",
   "manual_override",
+  "locked_share_changed",
 ] as const;
 export type AnomalyKind = (typeof ANOMALY_KINDS)[number];
 export const ANOMALY_SEVERITIES = ["critical", "warning", "info"] as const;
@@ -96,7 +100,14 @@ export const ANOMALY_SEVERITY: Readonly<Record<AnomalyKind, AnomalySeverity>> = 
   do_not_rehire: "critical",
   accreditation_invalid: "warning",
   manual_override: "info",
+  locked_share_changed: "critical",
 };
+/**
+ * The reason stored on the adjustment the system proposes when a locked share changed
+ * (`locked_share_changed`); screens show a translated text instead of this English sentence.
+ */
+export const AUTOMATIC_ADJUSTMENT_REASON =
+  "Automatic: another record of this labourer's day changed after this period was approved, so the approved share no longer matches the day.";
 /** `cleared`: the system closed it because the condition no longer holds after a change. */
 export const ANOMALY_STATUSES = ["open", "resolved", "dismissed", "cleared"] as const;
 export type AnomalyStatus = (typeof ANOMALY_STATUSES)[number];

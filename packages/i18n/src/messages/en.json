@@ -1480,7 +1480,8 @@
     "holidayExists": "There is already a public holiday on that date.",
     "idempotencyKeyReused": "This request was already sent with different details. Reload and try again.",
     "invalidIdempotencyKey": "The request could not be identified safely. Reload and try again.",
-    "attendanceRule": "This breaks an attendance rule. Nothing was saved."
+    "attendanceRule": "This breaks an attendance rule. Nothing was saved.",
+    "correctionOutdated": "The day or the record changed after this correction was asked for. Reject it and ask again."
   },
   "projectStatus": {
     "planning": "Planning",
@@ -2905,7 +2906,8 @@
       "labourer_inactive": "Worker not active",
       "do_not_rehire": "Do-not-rehire flag",
       "accreditation_invalid": "NCA card expired or missing",
-      "manual_override": "Manual correction"
+      "manual_override": "Manual correction",
+      "locked_share_changed": "Approved share changed"
     },
     "anomalyStatus": {
       "open": "Open",
@@ -3119,7 +3121,8 @@
         "sent": "Adjustment sent for approval.",
         "requestTitle": "Request an adjustment",
         "requestDescription": "The approved period stays unchanged. Once another approver accepts it, the difference lands in the next open period.",
-        "requestSubmit": "Ask for approval"
+        "requestSubmit": "Ask for approval",
+        "automatic": "Proposed automatically: another record of this worker’s day changed after this period was approved, so the approved share no longer matches the day."
       }
     },
     "anomalies": {
@@ -3144,7 +3147,8 @@
         "two_sites": "Recorded at {count} sites that day",
         "overlapping_times": "{minutes} min overlap with another record",
         "excess_hours": "{worked} h worked; maximum {max} h",
-        "manual_override": "Closed when the correction is decided"
+        "manual_override": "Closed when the correction is decided",
+        "locked_share_changed": "An approved project’s share no longer matches the day: paid {paidDays} days, {paidNormal} h normal and {paidOvertime} h overtime; now {idealDays} days, {idealNormal} h normal and {idealOvertime} h overtime. Decide the proposed adjustment."
       },
       "recordedBy": "Recorded by {name}",
       "reviewedBy": "{name}, {at}",

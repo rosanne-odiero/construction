@@ -501,3 +501,200 @@ describe("timesheet periods", () => {
     expect(isPeriodEditable("approved")).toBe(false);
   });
 });
+
+describe("half days across sites and projects", () => {
+  const halfA = (overrides: Partial<DayRecord> = {}) =>
+    record({
+      id: "a",
+      status: "half_day",
+      checkIn: clock("07:00"),
+      checkOut: clock("11:00"),
+      ...overrides,
+    });
+  const halfB = (overrides: Partial<DayRecord> = {}) =>
+    record({
+      id: "b",
+      projectId: "p2",
+      siteId: "s2",
+      status: "half_day",
+      checkIn: clock("12:00"),
+      checkOut: clock("16:00"),
+      ...overrides,
+    });
+  const shares = (records: DayRecord[]) =>
+    Object.fromEntries(day(records).records.map((entry) => [entry.recordId, entry.halfDays]));
+
+  it("counts each half-day record as one half, on any site or project", () => {
+    expect(day([halfA(), halfB()]).halfDays).toBe(2);
+    expect(shares([halfA(), halfB()])).toEqual({ a: 1, b: 1 });
+    // The same result whichever record comes first or is on which project.
+    expect(shares([halfB(), halfA()])).toEqual({ a: 1, b: 1 });
+    expect(shares([halfA({ projectId: "p2" }), halfB({ projectId: "p1" })])).toEqual({
+      a: 1,
+      b: 1,
+    });
+  });
+
+  it("gives half day + present the same two halves as two half days", () => {
+    expect(day([halfA(), halfB({ status: "present" })]).halfDays).toBe(2);
+    expect(shares([halfA(), halfB({ status: "present" })])).toEqual({ a: 1, b: 1 });
+    expect(shares([halfA({ status: "present" }), halfB()])).toEqual({ a: 1, b: 1 });
+  });
+
+  it("never gives a half-day record more than one half and caps the day at two", () => {
+    // A long half day with a short present record: the present record takes the second half.
+    const long = [
+      halfA({ checkIn: clock("06:00"), checkOut: clock("14:00") }),
+      halfB({ status: "present", checkIn: clock("15:00"), checkOut: clock("16:00") }),
+    ];
+    expect(day(long).halfDays).toBe(2);
+    expect(shares(long)).toEqual({ a: 1, b: 1 });
+    // Three half-day records are still one day.
+    const three = [
+      halfA({ checkOut: clock("09:00") }),
+      halfB({ checkIn: clock("10:00"), checkOut: clock("12:00") }),
+      record({
+        id: "c",
+        projectId: "p3",
+        siteId: "s3",
+        status: "half_day",
+        checkIn: clock("13:00"),
+        checkOut: clock("14:00"),
+      }),
+    ];
+    expect(day(three).halfDays).toBe(2);
+    expect(Object.values(shares(three)).every((value) => value <= 1)).toBe(true);
+    // One half-day record alone stays one half however long it was.
+    expect(day([halfA({ checkOut: clock("18:00") })]).halfDays).toBe(1);
+  });
+
+  it("applies the threshold only when a present record is involved", () => {
+    // Short present work alone is a half; a short present record cannot lower two half days.
+    expect(day([halfA({ status: "present", checkOut: clock("09:00") })]).halfDays).toBe(1);
+    const mixed = [
+      halfA({ checkOut: clock("08:00") }),
+      halfB({ checkIn: clock("09:00"), checkOut: clock("10:00") }),
+      record({
+        id: "c",
+        projectId: "p3",
+        siteId: "s3",
+        checkIn: clock("11:00"),
+        checkOut: clock("12:00"),
+      }),
+    ];
+    expect(day(mixed).halfDays).toBe(2);
+    // Present work reaching the threshold is a full day with or without half-day labels.
+    expect(day([halfA({ status: "present" }), halfB({ status: "present" })]).halfDays).toBe(2);
+  });
+});
+
+describe("locked shares when another record of the day changes", () => {
+  it("reports overpaid overtime when an earlier record on another project goes away (case a)", () => {
+    const p1 = record({ id: "p1-rec", checkIn: clock("07:00"), checkOut: clock("16:00") });
+    const p2 = record({
+      id: "p2-rec",
+      projectId: "p2",
+      siteId: "s2",
+      checkIn: clock("05:00"),
+      checkOut: clock("07:00"),
+    });
+    // Week 1: both free. p2 comes first, so p1 gets 360 normal + 120 overtime.
+    const original = day([p1, p2]);
+    const p1Share = original.records.find((entry) => entry.recordId === "p1-rec")!;
+    expect(p1Share).toMatchObject({ normalMinutes: 360, overtimeMinutes: 120 });
+    expect(original.lockedDrift).toEqual([]);
+    const lockedP1 = {
+      ...p1,
+      locked: {
+        halfDays: p1Share.halfDays,
+        workedMinutes: p1Share.workedMinutes,
+        normalMinutes: p1Share.normalMinutes,
+        overtimeMinutes: p1Share.overtimeMinutes,
+        lateMinutes: p1Share.lateMinutes,
+      },
+    };
+    // Nothing changed: the snapshot is still the ideal share.
+    expect(day([lockedP1, p2]).lockedDrift).toEqual([]);
+    // p2 is corrected to absent: p1 alone should be 480 normal, 0 overtime.
+    const corrected = day([
+      lockedP1,
+      { ...p2, status: "absent", checkIn: null, checkOut: null, breakMinutes: null },
+    ]);
+    expect(corrected.records.find((entry) => entry.recordId === "p1-rec")).toMatchObject({
+      locked: true,
+      overtimeMinutes: 120,
+    });
+    expect(corrected.lockedDrift).toEqual([
+      {
+        recordId: "p1-rec",
+        projectId: "p1",
+        siteId: "s1",
+        locked: {
+          halfDays: 2,
+          workedMinutes: 480,
+          normalMinutes: 360,
+          overtimeMinutes: 120,
+          lateMinutes: 0,
+        },
+        ideal: {
+          halfDays: 2,
+          workedMinutes: 480,
+          normalMinutes: 480,
+          overtimeMinutes: 0,
+          lateMinutes: 0,
+        },
+      },
+    ]);
+  });
+
+  it("reports an underpaid half day when the other half goes away (case b)", () => {
+    const a = record({ id: "a", checkIn: clock("07:00"), checkOut: clock("11:00") });
+    const b = record({
+      id: "b",
+      projectId: "p2",
+      siteId: "s2",
+      checkIn: clock("12:00"),
+      checkOut: clock("16:00"),
+    });
+    const original = day([a, b]);
+    expect(original.records.map((entry) => entry.halfDays)).toEqual([1, 1]);
+    const lockedA = {
+      ...a,
+      locked: {
+        halfDays: 1,
+        workedMinutes: 240,
+        normalMinutes: 240,
+        overtimeMinutes: 0,
+        lateMinutes: 0,
+      },
+    };
+    expect(day([lockedA, b]).lockedDrift).toEqual([]);
+    const result = day([
+      lockedA,
+      { ...b, status: "absent", checkIn: null, checkOut: null, breakMinutes: null },
+    ]);
+    expect(result.halfDays).toBe(2);
+    expect(result.records.find((entry) => entry.recordId === "a")!.halfDays).toBe(1);
+    expect(result.lockedDrift).toHaveLength(1);
+    expect(result.lockedDrift[0]).toMatchObject({
+      recordId: "a",
+      locked: { halfDays: 1 },
+      ideal: { halfDays: 2, normalMinutes: 240 },
+    });
+  });
+
+  it("reports nothing without locks or without a rule", () => {
+    expect(day([record({ id: "a" })]).lockedDrift).toEqual([]);
+    const locked = record({
+      id: "a",
+      locked: {
+        halfDays: 0,
+        workedMinutes: 0,
+        normalMinutes: 0,
+        overtimeMinutes: 0,
+        lateMinutes: 0,
+      },
+    });
+    expect(day([locked], "2026-11-11", [], () => null).lockedDrift).toEqual([]);
+  });
+});

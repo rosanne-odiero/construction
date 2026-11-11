@@ -4,6 +4,7 @@ import { exportPKCS8, generateKeyPair } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../config/app-config.js";
 import type { RedisService } from "../../infra/redis.service.js";
+import { notificationProviderFor } from "../notifications/notification.provider.js";
 import { AuthSecurity, cookie } from "./auth-security.service.js";
 
 function config(values: Record<string, unknown> = {}, production = false): AppConfig {
@@ -22,32 +23,32 @@ const redis = {
   ping: vi.fn().mockResolvedValue(undefined),
   client: { eval: vi.fn().mockResolvedValue(1) },
 } as unknown as RedisService;
+const security = (settings: AppConfig) =>
+  new AuthSecurity(settings, redis, notificationProviderFor(settings));
 const req = (headers: Request["headers"]): Request => ({ headers }) as Request;
 const response = () => ({ cookie: vi.fn(), setHeader: vi.fn() }) as unknown as Response;
 
 describe("Browser authentication security", () => {
   it("fails closed on missing production keys and development notification transports", () => {
-    expect(() => new AuthSecurity(config({}, true), redis)).toThrow("Production requires");
-    expect(
-      () =>
-        new AuthSecurity(
-          config(
-            {
-              AUTH_MFA_ENCRYPTION_KEY: randomBytes(32).toString("hex"),
-              AUTH_SIGNING_PRIVATE_KEY: "placeholder",
-              AUTH_NOTIFICATION_TRANSPORT: "development",
-            },
-            true,
-          ),
-          redis,
+    expect(() => security(config({}, true))).toThrow("Production requires");
+    expect(() =>
+      security(
+        config(
+          {
+            AUTH_MFA_ENCRYPTION_KEY: randomBytes(32).toString("hex"),
+            AUTH_SIGNING_PRIVATE_KEY: "placeholder",
+            AUTH_NOTIFICATION_TRANSPORT: "development",
+          },
+          true,
         ),
+      ),
     ).toThrow("forbidden in production");
   });
 
   it("uses production Secure, HttpOnly, SameSite cookies with exact host/path scopes", async () => {
     const keys = await generateKeyPair("EdDSA", { crv: "Ed25519", extractable: true });
     const pem = await exportPKCS8(keys.privateKey);
-    const service = new AuthSecurity(
+    const service = security(
       config(
         {
           WEB_ORIGIN: "https://app.example.test",
@@ -56,7 +57,6 @@ describe("Browser authentication security", () => {
         },
         true,
       ),
-      redis,
     );
     await service.onModuleInit();
     const res = response();
@@ -94,7 +94,7 @@ describe("Browser authentication security", () => {
   });
 
   it("binds CSRF to a signed encrypted cookie and rejects missing, tampered, foreign-origin or unicode values", async () => {
-    const service = new AuthSecurity(config(), redis);
+    const service = security(config());
     await service.onModuleInit();
     const { csrfToken } = await service.csrf(req({}), response());
     const headers = {
@@ -131,7 +131,7 @@ describe("Browser authentication security", () => {
   });
 
   it("rejects expired encrypted CSRF tokens and accepts neither unsigned nor wrong-key access credentials", async () => {
-    const service = new AuthSecurity(config(), redis);
+    const service = security(config());
     await service.onModuleInit();
     const expired = await service.encrypt("nonce", "csrf", "-1s");
     await expect(
@@ -146,7 +146,7 @@ describe("Browser authentication security", () => {
     await expect(service.accessClaims(req({ cookie: "pmb_at=unsigned" }))).rejects.toMatchObject({
       status: 401,
     });
-    const other = new AuthSecurity(config(), redis);
+    const other = security(config());
     await other.onModuleInit();
     const token = await other.accessToken("u", "s", 1);
     await expect(service.accessClaims(req({ cookie: `pmb_at=${token}` }))).rejects.toMatchObject({
@@ -160,7 +160,7 @@ describe("Browser authentication security", () => {
   });
 
   it("fails explicitly when no notification provider is approved", async () => {
-    const service = new AuthSecurity(config(), redis);
+    const service = security(config());
     await service.onModuleInit();
     await expect(
       service.notify("user@example.test", "Test", "No external delivery"),

@@ -54,4 +54,22 @@ describe("toProblem", () => {
     expect(problem.status).toBe(503);
     expect(problem.detail).toBeUndefined();
   });
+
+  it("uses a specific code set by the thrower, ignoring malformed ones", () => {
+    const problem = toProblem(
+      new BadRequestException({ code: "password-too-weak", message: "Too easy to guess." }),
+      "/x",
+    );
+    expect(problem).toMatchObject({
+      type: "https://pm-buddy.dev/problems/password-too-weak",
+      status: 400,
+      code: "password-too-weak",
+      detail: "Too easy to guess.",
+    });
+    for (const code of ["Not A Code", "<script>", 42, "x"]) {
+      expect(toProblem(new BadRequestException({ code, message: "m" }), "/x").code).toBe(
+        "bad-request",
+      );
+    }
+  });
 });

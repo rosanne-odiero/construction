@@ -13,57 +13,86 @@ datasource db {
 }
 
 model User {
-  id                String          @id @default(uuid()) @db.Uuid
-  identifier        String          @unique @db.VarChar(254)
-  displayName       String          @map("display_name") @db.VarChar(100)
-  passwordHash      String          @map("password_hash")
-  verifiedAt        DateTime?       @map("verified_at") @db.Timestamptz
-  failedLogins      Int             @default(0) @map("failed_logins")
-  lockedUntil       DateTime?       @map("locked_until") @db.Timestamptz
-  mfaSecret         String?         @map("mfa_secret")
-  mfaPending        String?         @map("mfa_pending")
-  mfaPendingUntil   DateTime?       @map("mfa_pending_until") @db.Timestamptz
-  mfaEnabled        Boolean         @default(false) @map("mfa_enabled")
-  mfaCounter        BigInt          @default(-1) @map("mfa_counter")
-  mfaFailedAttempts Int             @default(0) @map("mfa_failed_attempts")
-  mfaLockedUntil    DateTime?       @map("mfa_locked_until") @db.Timestamptz
-  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz
-  sessions          Session[]
-  challenges        AuthChallenge[]
-  recoveryCodes     RecoveryCode[]
-  memberships       Membership[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  identifier          String               @unique @db.VarChar(254)
+  displayName         String               @map("display_name") @db.VarChar(100)
+  passwordHash        String               @map("password_hash")
+  verifiedAt          DateTime?            @map("verified_at") @db.Timestamptz
+  failedLogins        Int                  @default(0) @map("failed_logins")
+  lockedUntil         DateTime?            @map("locked_until") @db.Timestamptz
+  mfaSecret           String?              @map("mfa_secret")
+  mfaPending          String?              @map("mfa_pending")
+  mfaPendingUntil     DateTime?            @map("mfa_pending_until") @db.Timestamptz
+  mfaPendingSessionId String?              @map("mfa_pending_session_id") @db.Uuid
+  // At least one MFA factor (TOTP secret or passkey). Maintained by app.maintain_user_mfa().
+  mfaEnabled          Boolean              @default(false) @map("mfa_enabled")
+  mfaCounter          BigInt               @default(-1) @map("mfa_counter")
+  mfaFailedAttempts   Int                  @default(0) @map("mfa_failed_attempts")
+  mfaLockedUntil      DateTime?            @map("mfa_locked_until") @db.Timestamptz
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  sessions            Session[]
+  challenges          AuthChallenge[]
+  recoveryCodes       RecoveryCode[]
+  memberships         Membership[]
+  passkeys            WebAuthnCredential[]
 
   @@map("users")
 }
 
+// Verification codes, reset tokens and WebAuthn challenges (stored as SHA-256 digests). Passkey
+// challenges are also bound to the session that requested them.
 model AuthChallenge {
   id         String    @id @default(uuid()) @db.Uuid
   userId     String    @map("user_id") @db.Uuid
+  sessionId  String?   @map("session_id") @db.Uuid
   purpose    String    @db.VarChar(20)
   digest     String
   attempts   Int       @default(0)
   expiresAt  DateTime  @map("expires_at") @db.Timestamptz
   consumedAt DateTime? @map("consumed_at") @db.Timestamptz
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session    Session?  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([userId, purpose])
+  @@index([sessionId, purpose])
   @@map("auth_challenges")
 }
 
+// A passkey (WebAuthn credential) used as a second factor and for step-up (ARCHITECTURE §7).
+// User-scoped like sessions; the public key is not secret, the credential ID is never logged.
+model WebAuthnCredential {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  credentialId String    @unique @map("credential_id")
+  publicKey    Bytes     @map("public_key")
+  counter      BigInt    @default(0)
+  transports   String[]
+  name         String    @db.VarChar(60)
+  deviceType   String    @map("device_type") @db.VarChar(20)
+  backedUp     Boolean   @map("backed_up")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  lastUsedAt   DateTime? @map("last_used_at") @db.Timestamptz
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@map("webauthn_credentials")
+}
+
 model Session {
-  id             String         @id @default(uuid()) @db.Uuid
-  userId         String         @map("user_id") @db.Uuid
-  activeTenantId String?        @map("active_tenant_id") @db.Uuid
-  generation     Int            @default(0)
-  mfaVerifiedAt  DateTime?      @map("mfa_verified_at") @db.Timestamptz
-  authTime       DateTime       @default(now()) @map("auth_time") @db.Timestamptz
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
-  lastSeenAt     DateTime       @default(now()) @map("last_seen_at") @db.Timestamptz
-  expiresAt      DateTime       @map("expires_at") @db.Timestamptz
-  idleExpiresAt  DateTime       @map("idle_expires_at") @db.Timestamptz
-  revokedAt      DateTime?      @map("revoked_at") @db.Timestamptz
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String          @id @default(uuid()) @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  activeTenantId String?         @map("active_tenant_id") @db.Uuid
+  generation     Int             @default(0)
+  mfaVerifiedAt  DateTime?       @map("mfa_verified_at") @db.Timestamptz
+  authTime       DateTime        @default(now()) @map("auth_time") @db.Timestamptz
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  lastSeenAt     DateTime        @default(now()) @map("last_seen_at") @db.Timestamptz
+  expiresAt      DateTime        @map("expires_at") @db.Timestamptz
+  idleExpiresAt  DateTime        @map("idle_expires_at") @db.Timestamptz
+  revokedAt      DateTime?       @map("revoked_at") @db.Timestamptz
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   refreshTokens  RefreshToken[]
+  challenges     AuthChallenge[]
 
   @@index([userId])
   @@map("sessions")

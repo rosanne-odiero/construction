@@ -32,6 +32,13 @@ function messageOf(response: string | object): string | undefined {
   return undefined;
 }
 
+/** A more specific stable code set by the thrower, e.g. `{ code: "password-too-weak" }`. */
+function customCode(response: string | object): string | undefined {
+  if (typeof response !== "object") return undefined;
+  const code = (response as { code?: unknown }).code;
+  return typeof code === "string" && /^[a-z][a-z0-9-]{1,62}$/.test(code) ? code : undefined;
+}
+
 /** Maps any thrown value to an RFC 9457 problem. Unknown errors never leak internals. */
 export function toProblem(exception: unknown, instance: string, traceId?: string): ProblemDetails {
   if (exception instanceof ZodError) {
@@ -51,13 +58,15 @@ export function toProblem(exception: unknown, instance: string, traceId?: string
 
   if (exception instanceof HttpException) {
     const status = exception.getStatus();
-    const code = CODES[status] ?? (status >= 500 ? "internal-error" : "error");
+    const response = exception.getResponse();
+    const code =
+      customCode(response) ?? CODES[status] ?? (status >= 500 ? "internal-error" : "error");
     return {
       type: problemType(code),
       title: STATUS_CODES[status] ?? "Error",
       status,
       code,
-      detail: status >= 500 ? undefined : messageOf(exception.getResponse()),
+      detail: status >= 500 ? undefined : messageOf(response),
       instance,
       traceId,
     };

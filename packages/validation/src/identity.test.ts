@@ -29,6 +29,8 @@ const auth: AuthResponse = {
     displayName: "Builder",
     verified: true,
     mfaEnabled: true,
+    totpEnabled: true,
+    passkeys: 0,
   },
   session: { id, tenantId: null, mfaVerified: true, expiresAt: date },
   mfaRequired: false,

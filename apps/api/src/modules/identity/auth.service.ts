@@ -26,6 +26,7 @@ import {
   opaqueToken,
   verifyPassword,
 } from "./auth-security.service.js";
+import { PasswordPolicy } from "./password-policy.js";
 import { grantOf, requiresMfa } from "./role-grants.js";
 import { TenantDatabase } from "./tenant-database.service.js";
 
@@ -35,11 +36,23 @@ const DAY_SECONDS = 86_400;
 /** Consecutive wrong MFA or recovery codes before MFA locks (brief §7: lockout on OTP attempts). */
 const MFA_MAX_FAILURES = 5;
 const MFA_LOCK_MINUTES = 15;
-type MfaOutcome = "ok" | "invalid" | "locked" | "locked-now";
+/** Fresh sign-in or step-up window for enrolling factors and sensitive actions. */
+export const FRESH_MINUTES = 5;
+export type MfaOutcome = "ok" | "invalid" | "locked" | "locked-now";
 export const genericMessage = messageResponseSchema.parse({
   message: "If the account is eligible, instructions have been sent.",
 });
-export type Principal = { user: User; session: Session; mfaRequired: boolean };
+export type Principal = {
+  user: User;
+  session: Session;
+  mfaRequired: boolean;
+  /** Registered passkeys (MFA factors besides the TOTP secret). */
+  passkeys: number;
+};
+type UserWithFactors = User & { _count: { passkeys: number } };
+const withFactors = { _count: { select: { passkeys: true } } } as const;
+export const isFresh = (at: Date | null | undefined): boolean =>
+  Boolean(at && Date.now() - at.getTime() <= FRESH_MINUTES * MINUTE);
 export const requestId = (req: Request): string =>
   typeof req.headers["x-request-id"] === "string" &&
   /^[A-Za-z0-9-]{8,64}$/.test(req.headers["x-request-id"])
@@ -52,6 +65,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     readonly security: AuthSecurity,
     private readonly tenantDb: TenantDatabase,
+    private readonly passwords: PasswordPolicy,
   ) {}
 
   /**
@@ -75,6 +89,8 @@ export class AuthService {
     req: Request,
   ) {
     await this.throttle(req, "register", input.identifier);
+    // Depends only on the submitted values, never on whether the account exists.
+    await this.passwords.assertAcceptable(input.password, input);
     const passwordHash = await hashPassword(input.password);
     const existing = await this.prisma.user.findUnique({ where: { identifier: input.identifier } });
     if (existing?.verifiedAt) {
@@ -236,7 +252,7 @@ export class AuthService {
     const claims = await this.security.accessClaims(req);
     const session = await this.prisma.session.findUnique({
       where: { id: claims.sessionId },
-      include: { user: true },
+      include: { user: { include: withFactors } },
     });
     if (
       !session ||
@@ -252,17 +268,17 @@ export class AuthService {
     return this.describe(session.user, session);
   }
 
-  /** MFA is mandatory once the user holds an MFA-required permission in any company (brief §7). */
-  private async describe(user: User, session: Session): Promise<Principal> {
+  /** Whether the user holds an MFA-required permission in any company (brief §7). */
+  async holdsPrivilegedRole(userId: string): Promise<boolean> {
     const memberships = await this.tenantDb.run(
       {
-        userId: user.id,
+        userId,
         tenantId: null,
         requestId: "authentication",
       },
       (tx) =>
         tx.membership.findMany({
-          where: { userId: user.id },
+          where: { userId },
           select: {
             role: true,
             customRoleId: true,
@@ -270,8 +286,21 @@ export class AuthService {
           },
         }),
     );
-    const privileged = memberships.some((membership) => requiresMfa(grantOf(membership)));
-    return { user, session, mfaRequired: user.mfaEnabled || privileged };
+    return memberships.some((membership) => requiresMfa(grantOf(membership)));
+  }
+
+  /** MFA is mandatory once the user has a factor or holds an MFA-required permission. */
+  private async describe(
+    { _count, ...user }: UserWithFactors,
+    session: Session,
+  ): Promise<Principal> {
+    const privileged = await this.holdsPrivilegedRole(user.id);
+    return {
+      user,
+      session,
+      mfaRequired: user.mfaEnabled || privileged,
+      passkeys: _count.passkeys,
+    };
   }
 
   response(principal: Principal) {
@@ -282,6 +311,8 @@ export class AuthService {
         displayName: principal.user.displayName,
         verified: Boolean(principal.user.verifiedAt),
         mfaEnabled: principal.user.mfaEnabled,
+        totpEnabled: principal.user.mfaSecret !== null,
+        passkeys: principal.passkeys,
       },
       session: {
         id: principal.session.id,
@@ -324,7 +355,10 @@ export class AuthService {
       value.refresh,
       Math.max(0, value.session.expiresAt.getTime() - Date.now()),
     );
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: value.session.userId } });
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: value.session.userId },
+      include: withFactors,
+    });
     return this.response(await this.describe(user, value.session));
   }
 
@@ -390,16 +424,46 @@ export class AuthService {
     if ((principal.mfaRequired || fresh) && (!principal.user.mfaEnabled || !at)) {
       throw new ForbiddenException("MFA verification required");
     }
-    if (fresh && at && Date.now() - at.getTime() > 5 * MINUTE) {
+    if (fresh && !isFresh(at)) {
       throw new ForbiddenException("Fresh MFA step-up required");
     }
   }
 
-  async enroll(principal: Principal) {
-    if (principal.user.mfaEnabled) throw new ConflictException("MFA is already enrolled");
-    if (Date.now() - principal.session.authTime.getTime() > 5 * MINUTE) {
+  /**
+   * Adding a factor needs a sign-in (or step-up) within five minutes. Once the account has a
+   * factor, only a fresh step-up with an existing factor will do: a password alone must never be
+   * enough to add a second factor of the attacker's choosing.
+   */
+  requireFactorEnrolment(principal: Principal): void {
+    if (principal.user.mfaEnabled) {
+      this.requireMfa(principal, true);
+      return;
+    }
+    if (!isFresh(principal.session.authTime) && !isFresh(principal.session.mfaVerifiedAt)) {
       throw new ForbiddenException("Sign in again before enrolling MFA");
     }
+  }
+
+  /**
+   * The same rule, checked against the user and session rows locked in the current transaction,
+   * so a factor added by another session in the meantime is taken into account.
+   */
+  assertFactorEnrolment(user: User, session: Session): void {
+    if (session.revokedAt) throw new UnauthorizedException("Session expired or revoked");
+    if (user.mfaEnabled) {
+      if (!isFresh(session.mfaVerifiedAt)) {
+        throw new ForbiddenException("Fresh MFA step-up required");
+      }
+      return;
+    }
+    if (!isFresh(session.authTime) && !isFresh(session.mfaVerifiedAt)) {
+      throw new ForbiddenException("Sign in again before enrolling MFA");
+    }
+  }
+
+  async enroll(principal: Principal) {
+    if (principal.user.mfaSecret) throw new ConflictException("MFA is already enrolled");
+    this.requireFactorEnrolment(principal);
     const secret = new Secret({ size: 20 });
     const totp = new TOTP({ issuer: "PM-Buddy", label: principal.user.identifier, secret });
     await this.prisma.user.update({
@@ -407,6 +471,7 @@ export class AuthService {
       data: {
         mfaPending: await this.security.encrypt(secret.base32, `totp:${principal.user.id}`),
         mfaPendingUntil: new Date(Date.now() + 10 * MINUTE),
+        mfaPendingSessionId: principal.session.id,
       },
     });
     return mfaEnrollmentResponseSchema.parse({ secret: secret.base32, uri: totp.toString() });
@@ -428,12 +493,18 @@ export class AuthService {
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${principal.user.id}::uuid FOR UPDATE`;
       const user = await tx.user.findUniqueOrThrow({ where: { id: principal.user.id } });
       if (user.mfaLockedUntil && user.mfaLockedUntil > new Date()) return "locked";
+      if (enroll) {
+        // A pending secret only counts for the session that started enrolment, and that session
+        // must still meet the enrolment rule now: the account may have gained a factor since.
+        const session = await tx.session.findUniqueOrThrow({ where: { id: principal.session.id } });
+        if (user.mfaPendingSessionId !== session.id) return "invalid";
+        this.assertFactorEnrolment(user, session);
+      }
       const encrypted = enroll ? user.mfaPending : user.mfaSecret;
       if (
         !encrypted ||
         (enroll &&
-          (user.mfaEnabled || !user.mfaPendingUntil || user.mfaPendingUntil <= new Date())) ||
-        (!enroll && !user.mfaEnabled)
+          (user.mfaSecret !== null || !user.mfaPendingUntil || user.mfaPendingUntil <= new Date()))
       )
         return "invalid";
       const secret = await this.security.decrypt(encrypted, `totp:${user.id}`);
@@ -454,7 +525,13 @@ export class AuthService {
           mfaCounter: counter,
           mfaFailedAttempts: 0,
           ...(enroll
-            ? { mfaSecret: encrypted, mfaPending: null, mfaPendingUntil: null, mfaEnabled: true }
+            ? {
+                mfaSecret: encrypted,
+                mfaPending: null,
+                mfaPendingUntil: null,
+                mfaPendingSessionId: null,
+                mfaEnabled: true,
+              }
             : {}),
         },
       });
@@ -515,7 +592,7 @@ export class AuthService {
    * Counts a wrong MFA or recovery code. After MFA_MAX_FAILURES in a row, MFA locks for
    * MFA_LOCK_MINUTES and the session is revoked, so the password must be entered again too.
    */
-  private async recordMfaFailure(
+  async recordMfaFailure(
     tx: Prisma.TransactionClient,
     user: User,
     sessionId: string,
@@ -536,7 +613,7 @@ export class AuthService {
     return "locked-now";
   }
 
-  private rejectMfaOutcome(
+  rejectMfaOutcome(
     outcome: MfaOutcome,
     principal: Principal,
     res: Response,
@@ -549,7 +626,7 @@ export class AuthService {
       this.security.notifyLater(
         principal.user.identifier,
         "Two-step verification locked",
-        `Too many wrong verification codes were entered for your PM-Buddy account. Two-step verification is locked for ${MFA_LOCK_MINUTES} minutes and you have been signed out. If this wasn't you, change your password.`,
+        `Too many wrong verification codes or failed passkey checks were entered for your PM-Buddy account. Two-step verification is locked for ${MFA_LOCK_MINUTES} minutes and you have been signed out. If this wasn't you, change your password.`,
       );
     }
     throw new HttpException(
@@ -589,6 +666,19 @@ export class AuthService {
 
   async reset(token: string, password: string, req: Request) {
     await this.throttle(req, "password-reset", digest(token), { maximum: 5, seconds: 900 });
+    // The token is a 256-bit secret, so checking it first reveals nothing; the account it belongs
+    // to supplies the context for the strength check.
+    const pending = await this.prisma.authChallenge.findFirst({
+      where: {
+        purpose: "reset",
+        digest: digest(token),
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: { user: { select: { identifier: true, displayName: true } } },
+    });
+    if (!pending) throw new UnauthorizedException("Invalid or expired reset token");
+    await this.passwords.assertAcceptable(password, pending.user);
     const passwordHash = await hashPassword(password);
     const valid = await this.prisma.$transaction(async (tx) => {
       const found = await tx.authChallenge.findFirst({

@@ -41,6 +41,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -68,6 +69,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.034 264.665);
   --primary: oklch(0.488 0.243 264.376);
+  /* Hover moves away from the text colour, keeping contrast at 8.1:1 (blending with the page fell to 4.4:1). */
+  --primary-hover: oklch(0.44 0.235 264.376);
   --primary-foreground: oklch(0.985 0.002 247.839);
   --secondary: oklch(0.967 0.003 264.542);
   --secondary-foreground: oklch(0.278 0.033 256.848);
@@ -109,6 +112,7 @@
   --popover: oklch(0.18 0.032 264.6);
   --popover-foreground: oklch(0.967 0.003 264.542);
   --primary: oklch(0.623 0.214 259.815);
+  --primary-hover: oklch(0.68 0.19 259.815); /* 6.7:1 against the dark-mode text */
   --primary-foreground: oklch(0.13 0.028 261.692);
   --secondary: oklch(0.278 0.033 256.848);
   --secondary-foreground: oklch(0.967 0.003 264.542);

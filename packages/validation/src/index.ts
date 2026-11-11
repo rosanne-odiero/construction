@@ -23,6 +23,7 @@ export {
 export {
   csrfResponseSchema,
   authResponseSchema,
+  MAX_PASSKEYS,
   messageResponseSchema,
   mfaEnrollmentResponseSchema,
   mfaVerificationResponseSchema,
@@ -50,6 +51,34 @@ export {
   type MembersResponse,
   type AuditEventsResponse,
 } from "./identity.js";
+export {
+  PASSKEY_TRANSPORTS,
+  isPasskeyTransport,
+  passkeyAuthenticationCredentialSchema,
+  passkeyAuthenticationOptionsResponseSchema,
+  passkeyAuthenticationOptionsSchema,
+  passkeyAuthenticationRequestSchema,
+  passkeyNameSchema,
+  passkeyRegistrationCredentialSchema,
+  passkeyRegistrationOptionsResponseSchema,
+  passkeyRegistrationOptionsSchema,
+  passkeyRegistrationRequestSchema,
+  passkeyRegistrationResponseSchema,
+  passkeySchema,
+  passkeysResponseSchema,
+  passkeyTransportSchema,
+  type Passkey,
+  type PasskeyAuthenticationCredential,
+  type PasskeyAuthenticationOptions,
+  type PasskeyAuthenticationRequest,
+  type PasskeyRegistrationCredential,
+  type PasskeyRegistrationOptions,
+  type PasskeyRegistrationRequest,
+  type PasskeyRegistrationResponse,
+  type PasskeysResponse,
+  type PasskeyTransport,
+} from "./passkeys.js";
+export { PASSWORD_PROBLEM_CODES, type PasswordProblemCode } from "./passwords.js";
 export {
   createRoleRequestSchema,
   memberRoleRequestSchema,

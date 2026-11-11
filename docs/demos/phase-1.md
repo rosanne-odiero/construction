@@ -110,7 +110,7 @@ Start local services, apply migrations and run API/web as above. Configure the a
 
 Final local verification: 22 lint/type/unit/i18n/build tasks successful, formatting passed; 35 API integration tests and 8 browser/a11y tests passed. A separate real-browser smoke used the actual API, PostgreSQL runtime role and Mailpit to verify registration through MFA, company/project persistence, cross-company switching, audit/member views and logout. Its isolated database/message and helper servers were cleaned up.
 
-Passkeys, external messaging, action-bound financial approvals, mobile binding and full breached-password checking are not presented as implemented. Financial/domain reviewer approval, coherent restore and field/mobile evidence remain required before any live pilot.
+External messaging providers, action-bound financial approvals and mobile binding are not presented as implemented. Passkeys, the password policy and the development SMS/WhatsApp channels arrived later in D1.3; see the next section. Financial/domain reviewer approval, coherent restore and field/mobile evidence remain required before any live pilot.
 
 ---
 
@@ -130,3 +130,33 @@ Permission-based RBAC with company custom roles ([ARCHITECTURE §8](../ARCHITECT
 Checks: `pnpm --filter @pm-buddy/types test`, `pnpm --filter @pm-buddy/validation test`, `pnpm --filter @pm-buddy/api test`, `pnpm --filter @pm-buddy/api test:e2e` (`test/roles.e2e-spec.ts` runs under the real `pmb_app` role) and `pnpm --filter @pm-buddy/web test:e2e` (`test/foundation.spec.ts`, axe included).
 
 Remaining: project assignments still carry only `projects.view`/`projects.manage` until later modules give other permissions project behaviour; approval limits per assignment arrive with the financial modules; Kiswahili permission wording needs a human review.
+
+---
+
+## D1.3: Passkeys, password policy and notification channels
+
+Passkeys (WebAuthn) as an MFA factor and for step-up, a server-side password strength check with an optional breached-password lookup, and SMS/WhatsApp channels behind the notification provider ([ARCHITECTURE §7](../ARCHITECTURE.md#7-identity-authentication-and-sessions)). Synthetic identities only; nothing leaves the machine.
+
+### Setup
+
+As above. Open the web app at exactly the `WEB_ORIGIN` origin, normally **http://localhost:3000**: passkeys are bound to that hostname, and browsers refuse WebAuthn on IP addresses such as `127.0.0.1`. You need a passkey-capable browser and either a platform authenticator (Touch ID, Windows Hello, an Android or iOS screen lock), a security key, or Chrome DevTools' **WebAuthn** panel ("Enable virtual authenticator environment", then add a ctap2/internal authenticator with user verification).
+
+### Walkthrough
+
+1. **Password policy.** Register a synthetic identity with a guessable password such as `password12345678`, or one built from your own name and email: the form explains that it is too easy to guess (400, `password-too-weak`). A long passphrase works. With `AUTH_BREACHED_PASSWORD_CHECK=hibp` in `apps/api/.env`, a password known from breaches is refused with "found in a data breach"; only five characters of its SHA-1 leave the API, and an unreachable service lets the password through with a warning in the API log. The default is `off`. Switch to Kiswahili to see the same messages translated.
+2. **SMS channel.** Register a phone identity (for example a synthetic `07…` number). Its verification code arrives in Mailpit (http://localhost:8025) addressed to `phone-2547…@development.invalid`, with the subject `[DEVELOPMENT ONLY][SMS] Verify your account`. No real SMS is sent.
+3. **First passkey.** Verify and sign in a fresh synthetic account (no authenticator app). Within five minutes of signing in, type a name under **Passkeys** (for example "Site phone") and choose **Add passkey**. Complete the browser prompt (fingerprint, face, PIN or the virtual authenticator). The passkey appears in the list, the account now has MFA, the other sessions are signed out and **ten recovery codes are shown once**: save them, then hide them. Mailpit receives a "Passkey added" notice.
+4. **Sign-in with a passkey as the second factor.** Sign out and sign in again with the password. MFA is now required: choose **Verify with a passkey** and complete the prompt. Load the workspace; the passkey shows when it was last used.
+5. **Step-up.** Wait five minutes (or sign in again), then try a privileged action such as creating a company: it is refused until you verify a fresh MFA check. **Verify with a passkey** counts exactly like an authenticator code. Users with both factors can use either.
+6. **Second passkey.** After a fresh step-up, add another passkey (a different authenticator, or a second virtual one). Adding a factor never works with a password alone: once an account has a factor, the API demands a fresh MFA check first. Names must be unique per account; ten passkeys at most.
+7. **Privileged role.** As a company owner, invite the passkey-only account as **Finance**. It can accept the invitation (after a fresh passkey check) because a passkey satisfies MFA-required permissions, in the API and in the database trigger.
+8. **Removal.** As the Finance member, after a fresh step-up, remove one passkey: allowed while another factor remains. Removing the **last** one is refused ("conflicts with current state"); the database refuses it too. An account without an MFA-required permission may remove its last passkey and goes back to having no MFA.
+9. **Cancelled prompts and lockout.** Cancel the browser prompt: the page says the prompt was cancelled, nothing is sent to the API and nothing changes. Assertions that reach the API and fail verification (replayed, expired or superseded challenges, wrong origin, bad signature, counter regression) count toward the MFA lockout like wrong authenticator codes: five in a row lock two-step verification for 15 minutes, sign the session out and send "Two-step verification locked". A normal browser does not produce such assertions, so the API tests below demonstrate this.
+
+### Checks
+
+`pnpm --filter @pm-buddy/api test:e2e` runs `test/passkeys.e2e-spec.ts` (a software ES256 authenticator produces real `none`-attestation registrations and signed assertions; nothing in the WebAuthn verification is mocked), `test/passwords.e2e-spec.ts` (fake breach checker, no network) and the Mailpit email and SMS-channel tests in `test/identity.e2e-spec.ts`. `pnpm --filter @pm-buddy/web test:e2e` runs `test/passkeys.spec.ts`, which drives Chromium's virtual authenticator through registration, step-up, a cancelled prompt and removal against a mocked API, plus EN/SW password refusals, all with axe.
+
+### Known limits
+
+No real SMS, WhatsApp or email provider (Africa's Talking is D7.3). No passwordless or usernameless passkey sign-in, attestation checks or authenticator allow-lists. Passkey changes send notifications but are not in a company's audit log. The breached-password check is optional and fails open. Kiswahili wording needs a human review.

@@ -109,12 +109,14 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
 
 /**
  * Routes backed by the real API: the projects list, project pages and site editors (D2.1), a
- * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1) and attendance and
- * timesheets (D3.3 web slice). The D0 labour and attendance prototypes live under /prototype.
+ * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1), attendance and
+ * timesheets (D3.3 web slice) and payroll (D4.1). The D0 labour, attendance and payroll
+ * prototypes live under /prototype.
  */
 export function isLiveRoute(pathname: string): boolean {
   if (pathname === "/projects") return true;
   if (pathname === "/labour" || pathname.startsWith("/labour/")) return true;
   if (pathname === "/attendance" || pathname.startsWith("/attendance/")) return true;
+  if (pathname === "/payroll" || pathname.startsWith("/payroll/")) return true;
   return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/import)?)?$/.test(pathname);
 }

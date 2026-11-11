@@ -33,7 +33,7 @@ const screens = [
   { key: "bqImport", href: "/prototype/projects/ruiru-heights/bq/import", icon: Table2 },
   { key: "labour", href: "/prototype/labour", icon: HardHat },
   { key: "attendance", href: "/prototype/attendance", icon: ScanFace },
-  { key: "payroll", href: "/payroll", icon: Wallet },
+  { key: "payroll", href: "/prototype/payroll", icon: Wallet },
   { key: "portal", href: "/portal", icon: MonitorSmartphone },
   { key: "site", href: "/site", icon: Smartphone },
   { key: "status", href: "/status", icon: Activity, live: true },

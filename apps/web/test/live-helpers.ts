@@ -3,7 +3,9 @@ import AxeBuilder from "@axe-core/playwright";
 import type { BrowserContext, Page } from "@playwright/test";
 
 /** Shared helpers for the live (API-backed) page tests. IDs match test/mock-api.mts. */
-export const BASE_URL = "http://127.0.0.1:3100";
+// PLAYWRIGHT_WEB_PORT matches playwright.config.ts (overridable for a parallel checkout).
+export const WEB_PORT = Number(process.env["PLAYWRIGHT_WEB_PORT"] ?? 3100);
+export const BASE_URL = `http://127.0.0.1:${WEB_PORT}`;
 export const RUIRU_ID = "30000000-0000-4000-8000-000000000001";
 export const SYOKIMAU_ID = "30000000-0000-4000-8000-000000000002";
 export const MAIN_PLOT_ID = "31000000-0000-4000-8000-000000000001";

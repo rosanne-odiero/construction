@@ -1,12 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { WEB_PORT } from "./live-helpers";
 
 /**
  * Passkey UI against a mocked API, with Chromium's virtual authenticator (CDP WebAuthn domain)
  * performing the real browser ceremonies. WebAuthn refuses IP-address origins, so these pages
  * load from localhost rather than 127.0.0.1.
  */
-const origin = "http://localhost:3100";
+const origin = `http://localhost:${WEB_PORT}`;
 const userId = "20000000-0000-4000-8000-000000000001";
 const sessionId = "20000000-0000-4000-8000-000000000002";
 const passkeyId = "20000000-0000-4000-8000-000000000003";

@@ -14,6 +14,9 @@ import { SYSTEM_ROLE_PERMISSIONS } from "@pm-buddy/types";
 import { membersResponseSchema, tenantsResponseSchema } from "@pm-buddy/validation";
 import { Browser, notifications, origin, password, type AuthResponse } from "./support.js";
 
+// The same Mailpit the API delivers to (AUTH_MAILPIT_PORT), so a parallel stack on other ports works.
+const mailpit = `http://localhost:${process.env["AUTH_MAILPIT_PORT"] ?? "8025"}`;
+
 describe("Identity, tenancy and project permissions (real runtime role)", () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -763,13 +766,13 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
     for (let attempt = 0; attempt < 50 && result.messages.length === 0; attempt += 1) {
       if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 100));
       const response = await fetch(
-        `http://localhost:8025/api/v1/search?query=${encodeURIComponent(target.identifier)}`,
+        `${mailpit}/api/v1/search?query=${encodeURIComponent(target.identifier)}`,
       );
       expect(response.ok).toBe(true);
       result = (await response.json()) as typeof result;
     }
     expect(result.messages[0]!.Subject).toContain("[DEVELOPMENT ONLY]");
-    const delivered = await fetch(`http://localhost:8025/api/v1/message/${result.messages[0]!.ID}`);
+    const delivered = await fetch(`${mailpit}/api/v1/message/${result.messages[0]!.ID}`);
     const message = (await delivered.json()) as { Text: string };
     const code = message.Text.match(/Verification code: (\d{6})/)?.[1];
     expect(code).toMatch(/^\d{6}$/);
@@ -798,7 +801,7 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
     for (let attempt = 0; attempt < 50 && result.messages.length === 0; attempt += 1) {
       if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 100));
       const response = await fetch(
-        `http://localhost:8025/api/v1/search?query=${encodeURIComponent(`to:"${mailbox}"`)}`,
+        `${mailpit}/api/v1/search?query=${encodeURIComponent(`to:"${mailbox}"`)}`,
       );
       expect(response.ok).toBe(true);
       result = (await response.json()) as typeof result;
@@ -806,7 +809,7 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
     expect(result.messages).toHaveLength(1);
     expect(result.messages[0]!.To.map((to) => to.Address)).toEqual([mailbox]);
     expect(result.messages[0]!.Subject).toBe("[DEVELOPMENT ONLY][SMS] Verify your account");
-    const delivered = await fetch(`http://localhost:8025/api/v1/message/${result.messages[0]!.ID}`);
+    const delivered = await fetch(`${mailpit}/api/v1/message/${result.messages[0]!.ID}`);
     const code = ((await delivered.json()) as { Text: string }).Text.match(
       /Verification code: (\d{6})/,
     )?.[1];

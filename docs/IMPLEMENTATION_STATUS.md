@@ -99,6 +99,7 @@ Also fixed: the primary button's hover colour blended into the page and fell to 
 - [Pilot design and proposed delivery order](./PILOT_PLAN.md) are approved; live pilot activation is not. All existing phases/modules remain on the roadmap.
 - No production onboarding, coherent restore rehearsal, real-device offline test, human accessibility/Kiswahili field review, verified cost estimate or named operations ownership has been completed here.
 - Only loopback development Mailpit messages were sent to synthetic identities; no external notifications or real payments, biometric collection, deployment or commit occurred.
+- CI browser job runs in the official `mcr.microsoft.com/playwright` image, pinned by digest, as runner UID 1001. Two consecutive PR #20 runs failed before any test because the hosted runner could not resolve its Ubuntu apt mirror during `playwright install --with-deps`; the image already carries the browser libraries and fonts. Bump the image tag with `@playwright/test`.
 
 ## Next step and demo
 

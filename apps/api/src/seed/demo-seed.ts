@@ -24,6 +24,7 @@ import { PrismaService } from "../infra/prisma.service.js";
 import { AuthSecurity, hashPassword } from "../modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../modules/identity/tenant-database.service.js";
 import { seedProcurement, type ProcurementSeedSummary } from "./demo-procurement.js";
+import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -328,6 +329,7 @@ export type SeedSummary = {
   projects: { code: string; name: string; status: string; created: boolean }[];
   buildups: { code: string; name: string; rateMinor: number | null; created: boolean }[];
   procurement: ProcurementSeedSummary;
+  procureToPay: ProcureToPaySeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -462,6 +464,12 @@ export async function seedDemo(
   });
 
   const procurement = await seedProcurement(app, tenantId, owner.id, userOf("finance").id);
+  const procureToPay = await seedProcureToPay(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    financeId: userOf("finance").id,
+  });
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
@@ -469,6 +477,7 @@ export async function seedDemo(
     projects,
     buildups,
     procurement,
+    procureToPay,
   };
 }
 

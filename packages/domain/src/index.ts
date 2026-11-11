@@ -76,3 +76,4 @@ export {
 } from "./wbs.js";
 export * from "./bq/index.js";
 export * from "./materials/index.js";
+export * from "./procurement/index.js";

@@ -1,7 +1,15 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Request } from "express";
 import { defineCustomUnit, STANDARD_UNITS } from "@pm-buddy/domain";
-import { PROCUREMENT_LIMITS, type MaterialCategory, type UnitDimension } from "@pm-buddy/types";
+import {
+  DEFAULT_BLOCK_PAYMENT_WITHOUT_ETIMS,
+  DEFAULT_MIN_QUOTES,
+  DEFAULT_PRICE_TOLERANCE_PERCENT,
+  DEFAULT_QTY_TOLERANCE_PERCENT,
+  PROCUREMENT_LIMITS,
+  type MaterialCategory,
+  type UnitDimension,
+} from "@pm-buddy/types";
 import {
   attributeIssues,
   loadDefaultsResponseSchema,
@@ -15,6 +23,7 @@ import {
   type CreateUnitRequest,
   type MaterialAttributesInput,
   type MaterialListQuery,
+  type UpdateProcurementSettingsRequest,
   type UpdateMaterialRequest,
 } from "@pm-buddy/validation";
 import { Ratio } from "@pm-buddy/domain";
@@ -470,6 +479,13 @@ export class CatalogueService {
     return procurementSettingsResponseSchema.parse({
       settings: {
         priceChangeAlertPercent: await this.store.threshold(scope),
+        minQuotes: row?.minQuotes ?? DEFAULT_MIN_QUOTES,
+        qtyTolerancePercent: row ? row.qtyTolerancePercent.toFixed() : DEFAULT_QTY_TOLERANCE_PERCENT,
+        priceTolerancePercent: row
+          ? row.priceTolerancePercent.toFixed()
+          : DEFAULT_PRICE_TOLERANCE_PERCENT,
+        blockPaymentWithoutEtims:
+          row?.blockPaymentWithoutEtims ?? DEFAULT_BLOCK_PAYMENT_WITHOUT_ETIMS,
         version: row?.version ?? 0,
         updatedAt: row ? row.updatedAt.toISOString() : null,
         updatedBy: row ? personOf(people, row.updatedBy) : null,
@@ -485,11 +501,7 @@ export class CatalogueService {
     });
   }
 
-  updateSettings(
-    principal: Principal,
-    input: { priceChangeAlertPercent: string; version: number },
-    req: Request,
-  ) {
+  updateSettings(principal: Principal, input: UpdateProcurementSettingsRequest, req: Request) {
     return this.scope.run(
       principal,
       req,
@@ -500,11 +512,25 @@ export class CatalogueService {
           where: { tenantId: access.tenantId },
         });
         if ((row?.version ?? 0) !== input.version) throw versionConflict();
+        // D5.2 settings: omitted ones keep their value (or the default before the first save).
+        const p2p = {
+          ...(input.minQuotes !== undefined ? { minQuotes: input.minQuotes } : {}),
+          ...(input.qtyTolerancePercent !== undefined
+            ? { qtyTolerancePercent: input.qtyTolerancePercent }
+            : {}),
+          ...(input.priceTolerancePercent !== undefined
+            ? { priceTolerancePercent: input.priceTolerancePercent }
+            : {}),
+          ...(input.blockPaymentWithoutEtims !== undefined
+            ? { blockPaymentWithoutEtims: input.blockPaymentWithoutEtims }
+            : {}),
+        };
         if (!row)
           await tx.procurementSettings.create({
             data: {
               tenantId: access.tenantId,
               priceChangeAlertPercent: input.priceChangeAlertPercent,
+              ...p2p,
               updatedBy: access.userId,
             },
           });
@@ -513,6 +539,7 @@ export class CatalogueService {
             where: { tenantId: access.tenantId, version: input.version },
             data: {
               priceChangeAlertPercent: input.priceChangeAlertPercent,
+              ...p2p,
               version: { increment: 1 },
               updatedBy: access.userId,
               updatedAt: new Date(),
@@ -521,7 +548,7 @@ export class CatalogueService {
           if (!updated.count) throw versionConflict();
         }
         await this.scope.audit(tx, "procurement.settings_updated", access.tenantId, {
-          fields: ["priceChangeAlertPercent"],
+          fields: Object.keys(input).filter((field) => field !== "version"),
         });
         return this.settingsView(scope);
       },

@@ -44,6 +44,12 @@ function print(summary: SeedSummary) {
     lines.push(
       `  ${supplier.code}  ${supplier.name} — ${supplier.created ? "created" : "already present"}`,
     );
+  const p2p = summary.procureToPay;
+  lines.push(
+    "",
+    `Procure-to-pay (synthetic, ${p2p.created ? "created" : "already present"}): ${p2p.requisition} → ${p2p.rfq} → ${p2p.lpo} → ${p2p.grn}`,
+  );
+  for (const invoice of p2p.invoices) lines.push(`  invoice ${invoice.number} — ${invoice.status}`);
   console.log(lines.join("\n"));
 }
 

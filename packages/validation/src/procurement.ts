@@ -448,8 +448,22 @@ export const loadDefaultsResponseSchema = z.strictObject({
   conversions: z.number().int().min(0),
 });
 
+/** A tolerance percentage: 0–100 with up to four decimals (D5.2 three-way match). */
+export const tolerancePercentSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{1,3}(\.\d{1,4})?$/, "invalid_percent")
+  .refine((value) => Number(value) <= 100, "invalid_percent");
+
 export const procurementSettingsSchema = z.strictObject({
   priceChangeAlertPercent: z.string(),
+  /** `procurement.min_quotes` (D5.2): complete quotations an RFQ needs before an award. */
+  minQuotes: z.number().int().min(1).max(10),
+  /** `procurement.three_way_match.qty_tolerance_pct` / `.price_tolerance_pct` (D5.2). */
+  qtyTolerancePercent: z.string(),
+  priceTolerancePercent: z.string(),
+  /** `procurement.block_payment_without_etims` (D5.2, CR-TAX-02). */
+  blockPaymentWithoutEtims: z.boolean(),
   /** 0 until the company saves its own value (the default applies). */
   version: z.number().int().min(0),
   updatedAt: timestamp.nullable(),
@@ -462,8 +476,16 @@ export const procurementSettingsResponseSchema = z.strictObject({
 export type ProcurementSettingsResponse = z.infer<typeof procurementSettingsResponseSchema>;
 export const updateProcurementSettingsRequestSchema = z.strictObject({
   priceChangeAlertPercent: thresholdPercentSchema,
+  /** D5.2 settings; omitted ones keep their current value. */
+  minQuotes: z.number().int().min(1).max(10).optional(),
+  qtyTolerancePercent: tolerancePercentSchema.optional(),
+  priceTolerancePercent: tolerancePercentSchema.optional(),
+  blockPaymentWithoutEtims: z.boolean().optional(),
   version: z.number().int().min(0).max(2_147_483_647),
 });
+export type UpdateProcurementSettingsRequest = z.infer<
+  typeof updateProcurementSettingsRequestSchema
+>;
 
 // Suppliers -------------------------------------------------------------------------------------
 

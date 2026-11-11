@@ -68,6 +68,20 @@ import {
   supplierDetailResponseSchema,
   supplierRevealResponseSchema,
   suppliersResponseSchema,
+  commitmentsResponseSchema,
+  grnResponseSchema,
+  grnsResponseSchema,
+  inboxResponseSchema,
+  invoiceDetailResponseSchema,
+  invoicesResponseSchema,
+  lpoDetailResponseSchema,
+  lposResponseSchema,
+  procurementDocumentResponseSchema,
+  receivableLposResponseSchema,
+  requisitionDetailResponseSchema,
+  requisitionsResponseSchema,
+  rfqDetailResponseSchema,
+  rfqsResponseSchema,
   unitResponseSchema,
   unitsResponseSchema,
   type AuthResponse as SharedAuthResponse,
@@ -171,7 +185,32 @@ export function responseContract(method: string, target: string) {
   if (/^rate-buildups\/[^/]+\/versions\/\d+$/.test(path)) return buildupVersionResponseSchema;
   const procurement = procurementContract(method, path);
   if (procurement) return procurement;
+  const p2p = procureToPayContract(method, path);
+  if (p2p) return p2p;
   return messageResponseSchema;
+}
+
+/** The D5.2 procure-to-pay endpoints' success contracts. */
+function procureToPayContract(method: string, path: string) {
+  const match = /^procurement\/(requisitions|rfqs|lpos|grns|invoices)(\/.*)?$/.exec(path);
+  if (path === "procurement/inbox") return inboxResponseSchema;
+  if (path === "procurement/commitments") return commitmentsResponseSchema;
+  if (/^procurement\/documents\/[^/]+$/.test(path)) return z.unknown();
+  if (!match) return null;
+  const [, area, rest = ""] = match;
+  if (/\/(document|photos)$/.test(rest)) return procurementDocumentResponseSchema;
+  if (area === "requisitions")
+    return rest === "" && method === "get" ? requisitionsResponseSchema : requisitionDetailResponseSchema;
+  if (area === "rfqs") {
+    if (rest === "" && method === "get") return rfqsResponseSchema;
+    return rest.endsWith("/award") ? lpoDetailResponseSchema : rfqDetailResponseSchema;
+  }
+  if (area === "lpos") return rest === "" ? lposResponseSchema : lpoDetailResponseSchema;
+  if (area === "grns") {
+    if (rest === "/receivable") return receivableLposResponseSchema;
+    return rest === "" && method === "get" ? grnsResponseSchema : grnResponseSchema;
+  }
+  return rest === "" && method === "get" ? invoicesResponseSchema : invoiceDetailResponseSchema;
 }
 
 /** The D5.1 catalogue and supplier endpoints' success contracts. */
@@ -210,11 +249,13 @@ export class Browser {
     path: string,
     body?: object,
     csrf = true,
+    headers: Record<string, string> = {},
   ): Promise<request.Response> {
     const operation = request(this.app.getHttpServer())[method](`/api/v1/${path}`);
     operation.set("Cookie", [...this.cookies].map(([key, value]) => `${key}=${value}`).join("; "));
     operation.set("Origin", origin);
     if (csrf) operation.set("X-CSRF-Token", this.csrf);
+    for (const [name, value] of Object.entries(headers)) operation.set(name, value);
     const res = body === undefined ? await operation : await operation.send(body);
     if (res.status >= 200 && res.status < 300) {
       expect(

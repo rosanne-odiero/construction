@@ -1192,6 +1192,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
           select: { status: true },
           orderBy: { status: "asc" },
         }),
+        requisitions: await tx.requisition.count({ where: { tenantId } }),
+        quotations: await tx.quotation.count({ where: { tenantId } }),
+        lpos: await tx.lpo.findMany({ where: { tenantId }, select: { status: true } }),
+        grns: await tx.grn.count({ where: { tenantId } }),
+        invoices: await tx.supplierInvoice.findMany({
+          where: { tenantId },
+          select: { invoiceNumber: true, status: true },
+          orderBy: { invoiceNumber: "asc" },
+        }),
+        payables: await tx.invoicePayable.count({ where: { tenantId } }),
+        settlements: await tx.invoiceSettlement.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1216,9 +1227,22 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       materials: 21,
       conversions: 8,
       suppliers: 3,
-      prices: 8,
+      // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold.
+      prices: 14,
       alerts: 1,
       payouts: [{ status: "pending" }, { status: "verified" }],
+      // D5.2: REQ → RFQ (3 quotations) → approved LPO → partial GRN → one invoice matched,
+      // approved and settled, one blocked by the three-way match (ballast not yet delivered).
+      requisitions: 1,
+      quotations: 3,
+      lpos: [{ status: "approved" }],
+      grns: 1,
+      invoices: [
+        { invoiceNumber: "MQ-INV-1001", status: "settled" },
+        { invoiceNumber: "MQ-INV-1002", status: "disputed" },
+      ],
+      payables: 1,
+      settlements: 1,
     });
     const second = await seedDemo(app);
     expect(second.company).toEqual({ ...first.company, created: false });
@@ -1247,6 +1271,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         { code: "SUP-0001", name: "Mlolongo Quarry (synthetic)", created: false },
         { code: "SUP-0002", name: "Athi River Steel (synthetic)", created: false },
         { code: "SUP-0003", name: "Kitengela Hardware (synthetic)", created: false },
+      ],
+    });
+    expect(second.procureToPay).toEqual({
+      created: false,
+      requisition: "REQ-0001",
+      rfq: "RFQ-0001",
+      lpo: "LPO-0001",
+      grn: "GRN-0001",
+      invoices: [
+        { number: "MQ-INV-1001", status: "settled" },
+        { number: "MQ-INV-1002", status: "disputed" },
       ],
     });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);

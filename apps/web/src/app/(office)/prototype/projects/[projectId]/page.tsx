@@ -87,7 +87,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           </Link>
         </Button>
         <Button asChild size="sm" variant="outline">
-          <Link href="/labour">
+          <Link href="/prototype/labour">
             <HardHat aria-hidden /> {t("tabs.labour")}
           </Link>
         </Button>

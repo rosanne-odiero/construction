@@ -108,10 +108,12 @@ export const comingSoonSections = {
 export type ComingSoonSection = keyof typeof comingSoonSections;
 
 /**
- * Routes backed by the real API: the projects list, project pages and site editors (D2.1), and a
- * project's BQ viewer and import wizard (D2.2).
+ * Routes backed by the real API: the projects list, project pages and site editors (D2.1), a
+ * project's BQ viewer and import wizard (D2.2) and the labour registry (D3.1). The D0 labour
+ * prototype lives under /prototype/labour.
  */
 export function isLiveRoute(pathname: string): boolean {
   if (pathname === "/projects") return true;
+  if (pathname === "/labour" || pathname.startsWith("/labour/")) return true;
   return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/import)?)?$/.test(pathname);
 }

@@ -66,8 +66,8 @@ import {
   type Site,
   type WbsNode,
 } from "@pm-buddy/validation";
-
 import { handleBq, initialProjectBq, type BqState } from "./mock-bq.mts";
+import { handleLabour, labourFixture, type LabourState } from "./mock-labour.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -101,6 +101,7 @@ type State = {
   projects: ProjectState[];
   team: Map<string, TeamEntry[]>;
   bq: BqState;
+  labour: LabourState;
 };
 
 const states = new Map<string, State>();
@@ -297,6 +298,7 @@ function fixture(persona: Persona): State {
       templates: [],
     },
     projects: [ruiru, syokimau],
+    labour: labourFixture(),
     team: new Map([
       [
         RUIRU_ID,
@@ -343,10 +345,13 @@ function fixture(persona: Persona): State {
 class HttpError extends Error {
   readonly status: number;
   readonly code: string;
-  constructor(status: number, code: string) {
+  /** RFC 9457 extension naming an existing record (labour duplicate and do-not-rehire matches). */
+  readonly match: Record<string, string> | undefined;
+  constructor(status: number, code: string, match?: Record<string, string>) {
     super(code);
     this.status = status;
     this.code = code;
+    this.match = match;
   }
 }
 
@@ -547,6 +552,31 @@ async function handle(
       },
       schema: tenantsResponseSchema,
     };
+  const labour = handleLabour(
+    {
+      persona: state.persona,
+      user:
+        state.persona === "owner"
+          ? { id: OWNER_ID, displayName: "Wanjiru Kamau" }
+          : { id: AGENT_ID, displayName: "Kevin Kiprono" },
+      projects: state.projects.map(({ project }) => ({
+        id: project.id,
+        code: project.code,
+        name: project.name,
+        status: project.status,
+      })),
+      stepUpFresh: () => Date.now() - state.stepUpAt <= 5 * 60_000,
+      fail: (status, code, match) => {
+        throw new HttpError(status, code, match);
+      },
+    },
+    state.labour,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (labour) return labour;
   if (path === "/projects" && method === "GET") {
     const status = query.get("status");
     const search = query.get("search")?.toLowerCase();
@@ -865,7 +895,16 @@ const server = createServer((req, res) => {
       send(res, reply.status ?? 200, reply.body);
     } catch (error) {
       if (error instanceof HttpError)
-        return send(res, error.status, { status: error.status, code: error.code }, true);
+        return send(
+          res,
+          error.status,
+          {
+            status: error.status,
+            code: error.code,
+            ...(error.match ? { match: error.match } : {}),
+          },
+          true,
+        );
       console.error(error);
       send(res, 500, { code: "internal-error" }, true);
     }

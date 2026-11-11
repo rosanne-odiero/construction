@@ -29,6 +29,26 @@ for (const locale of ["en", "sw"] as const) {
   }
 }
 
+for (const theme of ["light", "dark"] as const) {
+  test(`primary buttons keep text contrast while hovered (${theme})`, async ({ page }) => {
+    await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
+    await page.goto("/design-system");
+    if (theme === "dark") await expect(page.locator("html")).toHaveClass(/dark/);
+    const button = page
+      .locator('[data-slot="button"][data-variant="default"]:not([disabled])')
+      .first();
+    await button.hover();
+    await page.waitForTimeout(400); // let the colour transition finish
+    await button.evaluate((element) => element.setAttribute("data-hover-under-test", ""));
+    const scan = await new AxeBuilder({ page })
+      .include("[data-hover-under-test]")
+      .withRules(["color-contrast"])
+      .analyze();
+    expect(scan.violations).toEqual([]);
+    expect(scan.passes.map((rule) => rule.id)).toContain("color-contrast");
+  });
+}
+
 test("gallery fits a low-width Android viewport and exposes an install manifest", async ({
   page,
 }) => {

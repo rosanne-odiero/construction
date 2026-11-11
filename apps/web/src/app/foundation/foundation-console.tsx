@@ -14,6 +14,10 @@ import {
   messageResponseSchema,
   mfaEnrollmentResponseSchema,
   mfaVerificationResponseSchema,
+  passkeyAuthenticationOptionsResponseSchema,
+  passkeyRegistrationOptionsResponseSchema,
+  passkeyRegistrationResponseSchema,
+  passkeysResponseSchema,
   permissionCatalogueResponseSchema,
   projectResponseSchema,
   projectsResponseSchema,
@@ -25,9 +29,11 @@ import {
   tenantRoleSchema,
   tenantsResponseSchema,
   updateRoleRequestSchema,
+  type Passkey,
   type PermissionCatalogueResponse,
   type Role,
 } from "@pm-buddy/validation";
+import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -35,6 +41,7 @@ import { Input } from "@/components/ui/input";
 import { FoundationApiError, foundationRequest } from "@/lib/foundation-api";
 import { formatDateTime } from "@/lib/format";
 import type { Messages } from "@pm-buddy/i18n";
+import { PasskeysPanel } from "./passkeys-panel";
 import { RolesPanel, useRoleLabel, type RoleDraft } from "./roles-panel";
 
 type NoticeKey = keyof Messages["foundation"]["notices"];
@@ -139,8 +146,28 @@ function errorKey(error: unknown) {
       return "rateLimited";
     case "service-unavailable":
       return "unavailable";
+    case "password-too-weak":
+      return "passwordWeak";
+    case "password-breached":
+      return "passwordBreached";
+    case "passkey-invalid":
+      return "passkeyInvalid";
+    case "passkey-cancelled":
+      return "passkeyCancelled";
     default:
       return "unexpected";
+  }
+}
+
+/**
+ * Runs the browser's WebAuthn ceremony. A cancelled, timed-out or unsupported prompt becomes one
+ * local error; nothing is sent to the API in that case.
+ */
+async function ceremony<T>(prompt: () => Promise<T>): Promise<T> {
+  try {
+    return await prompt();
+  } catch {
+    throw new FoundationApiError(0, "passkey-cancelled");
   }
 }
 
@@ -160,6 +187,7 @@ export function FoundationConsole() {
   const [members, setMembers] = useState<Member[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [passkeys, setPasskeys] = useState<Passkey[]>([]);
   const [catalogue, setCatalogue] = useState<PermissionCatalogueResponse | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -197,6 +225,7 @@ export function FoundationConsole() {
     setAudit([]);
     setRoles([]);
     setCatalogue(null);
+    setPasskeys([]);
   }
 
   function applyAccount(next: Account | null) {
@@ -228,6 +257,8 @@ export function FoundationConsole() {
           "forgot",
           "reset",
           "resend",
+          "passkeyRegister",
+          "passkeyStepUp",
         ].includes(key)
       ) {
         applyAccount(null);
@@ -268,6 +299,68 @@ export function FoundationConsole() {
     }
     const result = await foundationRequest("/auth/sessions", sessionsResponseSchema);
     setSessions(result.sessions);
+    await loadPasskeys();
+  }
+
+  async function loadPasskeys() {
+    setPasskeys((await foundationRequest("/auth/passkeys", passkeysResponseSchema)).passkeys);
+  }
+
+  function registerPasskey(name: string) {
+    void run(
+      "passkeyRegister",
+      async () => {
+        const { options } = await mutate(
+          "/auth/passkeys/registration/options",
+          passkeyRegistrationOptionsResponseSchema,
+        );
+        const credential = await ceremony(() => startRegistration({ optionsJSON: options }));
+        const result = await mutate(
+          "/auth/passkeys/registration",
+          passkeyRegistrationResponseSchema,
+          {
+            name,
+            credential,
+          },
+        );
+        applyAccount(result);
+        setRecoveryCodes(result.recoveryCodes ?? []);
+        if (!result.mfaRequired) await loadPasskeys();
+      },
+      "passkeyAdded",
+    );
+  }
+
+  function passkeyStepUp() {
+    void run(
+      "passkeyStepUp",
+      async () => {
+        const { options } = await mutate(
+          "/auth/passkeys/step-up/options",
+          passkeyAuthenticationOptionsResponseSchema,
+        );
+        const credential = await ceremony(() => startAuthentication({ optionsJSON: options }));
+        applyAccount(await mutate("/auth/passkeys/step-up", authResponseSchema, { credential }));
+      },
+      "mfaVerified",
+    );
+  }
+
+  function removePasskey(passkey: Passkey) {
+    void run(
+      "passkeyRemove",
+      async () => {
+        await mutate(
+          `/auth/passkeys/${encodeURIComponent(passkey.id)}`,
+          messageResponseSchema,
+          {},
+          "DELETE",
+        );
+        setAccount(await foundationRequest("/auth/me", authResponseSchema));
+        await loadPasskeys();
+      },
+      "passkeyRemoved",
+    );
   }
 
   async function loadMembers() {
@@ -574,7 +667,7 @@ export function FoundationConsole() {
           </Card>
 
           <div className="grid gap-6 md:grid-cols-2">
-            {!account.user.mfaEnabled ? (
+            {!account.user.totpEnabled ? (
               <Card>
                 <CardHeader>
                   <CardTitle>
@@ -615,7 +708,7 @@ export function FoundationConsole() {
             ) : null}
             <ActionForm
               id="mfa"
-              title={account.user.mfaEnabled ? t("stepUp") : t("confirmEnrollment")}
+              title={account.user.totpEnabled ? t("stepUp") : t("confirmEnrollment")}
               submit={t("verify")}
               fields={[code]}
               disabled={disabled}
@@ -623,7 +716,7 @@ export function FoundationConsole() {
                 void run(
                   "mfa",
                   async () => {
-                    if (account.user.mfaEnabled) {
+                    if (account.user.totpEnabled) {
                       applyAccount(
                         await mutate("/auth/mfa/step-up", authResponseSchema, {
                           code: value(data, "code"),
@@ -665,6 +758,14 @@ export function FoundationConsole() {
                 }
               />
             ) : null}
+            <PasskeysPanel
+              passkeys={passkeys}
+              registered={account.user.passkeys}
+              disabled={disabled}
+              onRegister={registerPasskey}
+              onStepUp={passkeyStepUp}
+              onRemove={removePasskey}
+            />
           </div>
           {recoveryCodes.length ? (
             <Card>

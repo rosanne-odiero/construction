@@ -30,6 +30,10 @@ export const apiEnvSchema = z.object({
     .optional(),
   AUTH_NOTIFICATION_TRANSPORT: z.enum(["development", "disabled"]).default("disabled"),
   AUTH_MAILPIT_PORT: z.coerce.number().int().min(1).max(65535).default(8025),
+  // Breached-password check on registration and reset: `hibp` asks the Have I Been Pwned range API
+  // (k-anonymity: only the first five hex characters of the SHA-1 leave the server). It fails
+  // open, with a warning, when the service is slow or unreachable.
+  AUTH_BREACHED_PASSWORD_CHECK: z.enum(["off", "hibp"]).default("off"),
 
   REDIS_URL: z.url(),
 

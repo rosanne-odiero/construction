@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
@@ -771,6 +771,42 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
         .status,
     ).toBe(200);
     await target.login();
+  });
+
+  it("routes phone identifiers through the SMS channel to the development mailbox", async () => {
+    const target = new Browser(app);
+    target.identifier = `2547${String(randomInt(0, 100_000_000)).padStart(8, "0")}`;
+    await target.initialize();
+    notificationSpy.mockImplementationOnce(realNotify);
+    const registered = await target.call("post", "auth/register", {
+      identifier: target.identifier,
+      password,
+      displayName: "Real local SMS-channel test",
+    });
+    expect(registered.status).toBe(201);
+    const mailbox = `phone-${target.identifier}@development.invalid`;
+    let result: { messages: { ID: string; Subject: string; To: { Address: string }[] }[] } = {
+      messages: [],
+    };
+    for (let attempt = 0; attempt < 50 && result.messages.length === 0; attempt += 1) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 100));
+      const response = await fetch(
+        `http://localhost:8025/api/v1/search?query=${encodeURIComponent(`to:"${mailbox}"`)}`,
+      );
+      expect(response.ok).toBe(true);
+      result = (await response.json()) as typeof result;
+    }
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]!.To.map((to) => to.Address)).toEqual([mailbox]);
+    expect(result.messages[0]!.Subject).toBe("[DEVELOPMENT ONLY][SMS] Verify your account");
+    const delivered = await fetch(`http://localhost:8025/api/v1/message/${result.messages[0]!.ID}`);
+    const code = ((await delivered.json()) as { Text: string }).Text.match(
+      /Verification code: (\d{6})/,
+    )?.[1];
+    expect(
+      (await target.call("post", "auth/verify", { identifier: target.identifier, code, password }))
+        .status,
+    ).toBe(200);
   });
 
   it("prevents account pre-hijacking: verifying needs the latest registration's password", async () => {

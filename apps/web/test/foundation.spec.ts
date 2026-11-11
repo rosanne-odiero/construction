@@ -51,6 +51,8 @@ test("live UI uses CSRF, validates MFA and wires tenant/project permissions with
       displayName: "Synthetic Owner",
       verified: true,
       mfaEnabled,
+      totpEnabled: mfaEnabled,
+      passkeys: 0,
     },
     session: {
       id: sessionId,
@@ -122,6 +124,7 @@ test("live UI uses CSRF, validates MFA and wires tenant/project permissions with
       return json({ project }, 201);
     }
     if (path === "/projects") return json({ projects: projectCreated ? [project] : [] });
+    if (path === "/auth/passkeys") return json({ passkeys: [] });
     if (path === "/auth/sessions")
       return json({
         sessions: [
@@ -388,6 +391,8 @@ test("roles panel works in Kiswahili and offers a delegated manager only what th
           displayName: "Synthetic Delegate",
           verified: true,
           mfaEnabled: true,
+          totpEnabled: true,
+          passkeys: 0,
         },
         session: { id: sessionId, tenantId, mfaVerified: true, expiresAt: timestamp },
         mfaRequired: false,
@@ -407,6 +412,7 @@ test("roles panel works in Kiswahili and offers a delegated manager only what th
       });
     if (path === "/projects") return json({ projects: [] });
     if (path === "/auth/sessions") return json({ sessions: [] });
+    if (path === "/auth/passkeys") return json({ passkeys: [] });
     if (path === "/permissions") return json(catalogue);
     if (path === "/tenants/current/roles")
       return json({
@@ -433,6 +439,8 @@ test("roles panel works in Kiswahili and offers a delegated manager only what th
 
   await page.goto("/foundation");
   await expect(page.locator("html")).toHaveAttribute("lang", "sw");
+  await expect(page.getByRole("heading", { name: "Passkey", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ongeza passkey" })).toBeVisible();
   await page.getByRole("button", { name: "Pakia kampuni, miradi na vipindi" }).click();
   await expect(page.getByText("(Msimamizi wa timu)", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Unda mradi" })).toHaveCount(0);

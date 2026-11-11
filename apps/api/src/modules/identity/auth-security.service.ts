@@ -24,6 +24,11 @@ import { csrfResponseSchema } from "@pm-buddy/validation";
 import { describeError } from "../../common/errors.js";
 import { AppConfig, trustProxySetting } from "../../config/app-config.js";
 import { RedisService } from "../../infra/redis.service.js";
+import {
+  channelFor,
+  NotificationProvider,
+  type NotificationChannel,
+} from "../notifications/notification.provider.js";
 
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
 export const opaqueToken = (): string => randomBytes(32).toString("base64url");
@@ -56,6 +61,7 @@ export class AuthSecurity implements OnModuleInit {
   constructor(
     private readonly config: AppConfig,
     private readonly redis: RedisService,
+    private readonly notifications: NotificationProvider,
   ) {
     const key = config.get("AUTH_MFA_ENCRYPTION_KEY");
     const signingKey = config.get("AUTH_SIGNING_PRIVATE_KEY");
@@ -237,44 +243,26 @@ export class AuthSecurity implements OnModuleInit {
    * Sends without delaying or failing the request, so neither the response status nor its timing
    * reveals whether an account exists (codes can be re-requested if delivery fails).
    */
-  notifyLater(identifier: string, subject: string, text: string): void {
-    this.notify(identifier, subject, text).catch((error: unknown) => {
-      this.logger.warn(`Notification "${subject}" not delivered: ${describeError(error)}`);
+  notifyLater(
+    identifier: string,
+    subject: string,
+    text: string,
+    channel: NotificationChannel = channelFor(identifier),
+  ): void {
+    this.notify(identifier, subject, text, channel).catch((error: unknown) => {
+      this.logger.warn(
+        `Notification "${subject}" (${channel}) not delivered: ${describeError(error)}`,
+      );
     });
   }
 
-  async notify(identifier: string, subject: string, text: string): Promise<void> {
-    if (
-      this.config.isProduction ||
-      this.config.get("AUTH_NOTIFICATION_TRANSPORT") !== "development"
-    ) {
-      throw new ServiceUnavailableException("No approved notification provider is configured");
-    }
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:${this.config.get("AUTH_MAILPIT_PORT")}/api/v1/send`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          redirect: "error",
-          signal: AbortSignal.timeout(3000),
-          body: JSON.stringify({
-            From: { Email: "no-reply@development.invalid", Name: "PM-Buddy Development" },
-            To: [
-              {
-                Email: identifier.includes("@")
-                  ? identifier
-                  : `phone-${identifier}@development.invalid`,
-              },
-            ],
-            Subject: `[DEVELOPMENT ONLY] ${subject}`,
-            Text: text,
-          }),
-        },
-      );
-      if (!response.ok) throw new Error("Mailpit rejected development notification");
-    } catch {
-      throw new ServiceUnavailableException("Development notification delivery failed");
-    }
+  /** Delivers through the configured NotificationProvider: email for emails, SMS for phones. */
+  async notify(
+    identifier: string,
+    subject: string,
+    text: string,
+    channel: NotificationChannel = channelFor(identifier),
+  ): Promise<void> {
+    await this.notifications.send({ channel, recipient: identifier, subject, text });
   }
 }

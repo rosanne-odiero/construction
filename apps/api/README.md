@@ -21,59 +21,106 @@ access token.
 4. On access expiry, `POST /auth/refresh {}` rotates refresh credentials; retry the
    original request once. Reusing an old refresh token revokes its entire session family.
 5. Authentication responses are `{ user: { id, identifier, displayName, verified,
-mfaEnabled }, session: { id, tenantId, mfaVerified, expiresAt }, mfaRequired }`.
+mfaEnabled, totpEnabled, passkeys }, session: { id, tenantId, mfaVerified, expiresAt },
+mfaRequired }`. `mfaEnabled` means at least one MFA factor (an authenticator app or a
+   passkey); `passkeys` is the number of registered passkeys.
    A password-only session can enrol/verify MFA but cannot enter tenants when MFA is required.
    Access expires after ten minutes, idle refresh after thirty minutes; absolute
    sessions last 24 hours, shortened to eight hours for MFA-enrolled accounts.
    Replaying a refresh credential also sends a development security alert.
 
-| Method/path                              | Body                                     | Response                                                                    |
-| ---------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------- |
-| POST auth/register                       | `{identifier,password,displayName}`      | `{message}`                                                                 |
-| POST auth/verify                         | `{identifier,code}`                      | `{message}`                                                                 |
-| POST auth/verification/resend            | `{identifier}`                           | `{message}`                                                                 |
-| POST auth/login                          | `{identifier,password}`                  | authentication response                                                     |
-| GET auth/me                              | —                                        | authentication response                                                     |
-| POST auth/refresh                        | `{}`                                     | authentication response                                                     |
-| POST auth/logout                         | `{}`                                     | `{message}`                                                                 |
-| POST auth/mfa/enroll                     | `{}`                                     | `{secret,uri}`                                                              |
-| POST auth/mfa/verify                     | `{code}`                                 | authentication response plus `recoveryCodes` (shown once)                   |
-| POST auth/mfa/step-up                    | `{code}`                                 | authentication response                                                     |
-| POST auth/mfa/recover                    | `{code}`                                 | authentication response                                                     |
-| POST auth/password/forgot                | `{identifier}`                           | `{message}` (always generic)                                                |
-| POST auth/password/reset                 | `{token,password}`                       | `{message}`                                                                 |
-| GET auth/sessions                        | —                                        | `{sessions:[{id,createdAt,lastSeenAt,expiresAt,current}]}`                  |
-| DELETE auth/sessions/:id                 | —                                        | `{message}`                                                                 |
-| GET tenants                              | —                                        | `{tenants:[{id,name,role,roleName,tenantWide,permissions}]}`                |
-| POST tenants                             | `{name}`                                 | `{tenant:{id,name}}` (fresh MFA required; selects new tenant)               |
-| POST tenants/:id/select                  | `{}`                                     | authentication response (rotates cookies)                                   |
-| GET tenants/current/members              | —                                        | `{members}`                                                                 |
-| POST tenants/current/invitations         | `{identifier,role,projectIds?:string[]}` | `{invitation:{id,identifier,role,roleName,expiresAt}}`                      |
-| POST tenants/invitations/accept          | `{token}`                                | `{message}`                                                                 |
-| DELETE tenants/current/members/:userId   | —                                        | `{message}`                                                                 |
-| GET tenants/current/audit                | —                                        | `{events}` (most recent 100)                                                |
-| GET permissions                          | —                                        | `{areas:[{area,permissions:[{key,mfaRequired,projectScoped,assignable}]}]}` |
-| GET tenants/current/roles                | —                                        | `{roles:[role]}` (system and custom)                                        |
-| POST tenants/current/roles               | `{name,permissions,tenantWide?}`         | `{role}`                                                                    |
-| PATCH tenants/current/roles/:id          | `{name?,permissions?,tenantWide?}`       | `{role}` (custom roles only)                                                |
-| DELETE tenants/current/roles/:id         | —                                        | `{message}` (unused custom roles only)                                      |
-| PUT tenants/current/members/:userId/role | `{role}`                                 | `{message}`; revokes the member's sessions in this company                  |
-| GET projects                             | —                                        | `{projects:[{id,name,createdAt}]}` (project-scoped)                         |
-| POST projects                            | `{name}`                                 | `{project:{id,name,createdAt}}`                                             |
-| PATCH projects/:id                       | `{name}`                                 | `{project}`                                                                 |
-| PUT projects/:id/members/:userId         | `{permissions:string[]}`                 | `{message}`                                                                 |
+| Method/path                              | Body                                     | Response                                                                     |
+| ---------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| POST auth/register                       | `{identifier,password,displayName}`      | `{message}`                                                                  |
+| POST auth/verify                         | `{identifier,code,password}`             | `{message}`                                                                  |
+| POST auth/verification/resend            | `{identifier}`                           | `{message}`                                                                  |
+| POST auth/login                          | `{identifier,password}`                  | authentication response                                                      |
+| GET auth/me                              | —                                        | authentication response                                                      |
+| POST auth/refresh                        | `{}`                                     | authentication response                                                      |
+| POST auth/logout                         | `{}`                                     | `{message}`                                                                  |
+| POST auth/mfa/enroll                     | `{}`                                     | `{secret,uri}`                                                               |
+| POST auth/mfa/verify                     | `{code}`                                 | authentication response plus `recoveryCodes` (shown once)                    |
+| POST auth/mfa/step-up                    | `{code}`                                 | authentication response                                                      |
+| POST auth/mfa/recover                    | `{code}`                                 | authentication response                                                      |
+| GET auth/passkeys                        | —                                        | `{passkeys:[{id,name,createdAt,lastUsedAt,backedUp,deviceType}]}`            |
+| POST auth/passkeys/registration/options  | `{}`                                     | `{options}` (WebAuthn creation options; single-use challenge, 5 minutes)     |
+| POST auth/passkeys/registration          | `{name,credential}`                      | 201: authentication response plus `passkey` (and `recoveryCodes`, see below) |
+| DELETE auth/passkeys/:id                 | —                                        | `{message}` (fresh MFA; 409 for a privileged user's last factor)             |
+| POST auth/passkeys/step-up/options       | `{}`                                     | `{options}` (WebAuthn request options for the account's passkeys)            |
+| POST auth/passkeys/step-up               | `{credential}`                           | authentication response (MFA verified, like `mfa/step-up`)                   |
+| POST auth/password/forgot                | `{identifier}`                           | `{message}` (always generic)                                                 |
+| POST auth/password/reset                 | `{token,password}`                       | `{message}`                                                                  |
+| GET auth/sessions                        | —                                        | `{sessions:[{id,createdAt,lastSeenAt,expiresAt,current}]}`                   |
+| DELETE auth/sessions/:id                 | —                                        | `{message}`                                                                  |
+| GET tenants                              | —                                        | `{tenants:[{id,name,role,roleName,tenantWide,permissions}]}`                 |
+| POST tenants                             | `{name}`                                 | `{tenant:{id,name}}` (fresh MFA required; selects new tenant)                |
+| POST tenants/:id/select                  | `{}`                                     | authentication response (rotates cookies)                                    |
+| GET tenants/current/members              | —                                        | `{members}`                                                                  |
+| POST tenants/current/invitations         | `{identifier,role,projectIds?:string[]}` | `{invitation:{id,identifier,role,roleName,expiresAt}}`                       |
+| POST tenants/invitations/accept          | `{token}`                                | `{message}`                                                                  |
+| DELETE tenants/current/members/:userId   | —                                        | `{message}`                                                                  |
+| GET tenants/current/audit                | —                                        | `{events}` (most recent 100)                                                 |
+| GET permissions                          | —                                        | `{areas:[{area,permissions:[{key,mfaRequired,projectScoped,assignable}]}]}`  |
+| GET tenants/current/roles                | —                                        | `{roles:[role]}` (system and custom)                                         |
+| POST tenants/current/roles               | `{name,permissions,tenantWide?}`         | `{role}`                                                                     |
+| PATCH tenants/current/roles/:id          | `{name?,permissions?,tenantWide?}`       | `{role}` (custom roles only)                                                 |
+| DELETE tenants/current/roles/:id         | —                                        | `{message}` (unused custom roles only)                                       |
+| PUT tenants/current/members/:userId/role | `{role}`                                 | `{message}`; revokes the member's sessions in this company                   |
+| GET projects                             | —                                        | `{projects:[{id,name,createdAt}]}` (project-scoped)                          |
+| POST projects                            | `{name}`                                 | `{project:{id,name,createdAt}}`                                              |
+| PATCH projects/:id                       | `{name}`                                 | `{project}`                                                                  |
+| PUT projects/:id/members/:userId         | `{permissions:string[]}`                 | `{message}`                                                                  |
 
 Identifiers accept email or Kenyan mobile numbers and are normalized. Passwords are
-12–128 characters; common passwords are rejected. Verification uses six-digit,
+12–128 characters; common passwords are rejected. Every new password (registration and
+reset) must also reach a zxcvbn-ts score of 3 or more, judged with the identifier, display
+name and "pm-buddy" as context (`@zxcvbn-ts/core` with the common and English dictionaries;
+only the first 64 characters are scored). With `AUTH_BREACHED_PASSWORD_CHECK=hibp` it is also
+looked up in Have I Been Pwned's range API (k-anonymity: only the first five hex characters
+of its SHA-1 are sent, with `Add-Padding: true`, two-second timeout); a failed lookup logs a
+warning without the password or hash and accepts the password (fails open). Refusals are 400
+problems with code `password-too-weak` or `password-breached`, and no score or match details.
+Verification uses six-digit,
 five-minute single-use codes; reset and invitation credentials are opaque single-use
 tokens. These credentials are **never returned by the API**. Development/test
-notifications go only to local Mailpit (`http://localhost:8025`); phone messages use
-a synthetic `phone-<number>@development.invalid` inbox. No SMS, WhatsApp, passkey,
-identity-provider, mobile device-binding, or biometric integration is claimed.
+notifications go only to local Mailpit (`http://localhost:8025`). Delivery goes through a
+`NotificationProvider` (`src/modules/notifications`) with `email`, `sms` and `whatsapp`
+channels: email identifiers use email, phone identifiers use SMS. The development provider
+puts every channel in Mailpit; SMS and WhatsApp messages go to a synthetic
+`phone-<number>@development.invalid` inbox with a `[DEVELOPMENT ONLY][SMS]` or
+`[DEVELOPMENT ONLY][WHATSAPP]` subject prefix. No real SMS, WhatsApp (Africa's Talking
+arrives in D7.3), identity-provider, mobile device-binding, or biometric integration is claimed.
 The development provider uses Mailpit's documented HTTP send API over fixed
 loopback, with redirects forbidden and a three-second timeout. It does not release
 or relay messages. `AUTH_NOTIFICATION_TRANSPORT=development` is forbidden in
-production; `disabled` fails notification-dependent operations explicitly.
+production; `disabled` (the default) fails notification-dependent operations explicitly.
+Deliveries run after the response (`notifyLater`), so neither status nor timing reveals
+whether an account exists.
+
+Passkeys (WebAuthn, `@simplewebauthn/server`) are an MFA factor next to TOTP. The relying
+party is `WEB_ORIGIN`: its exact origin, and its hostname as RP ID. Registration and step-up
+demand user verification; attestation is `none`; EdDSA, ES256 and RS256 keys are accepted.
+Challenges are random, stored server-side as SHA-256 digests in `auth_challenges`, bound to
+the user and the session that asked for them, single-use (a new request supersedes the
+previous one) and valid for five minutes. Credential IDs are unique across accounts; the
+signature counter must increase unless the authenticator always reports zero. `credential`
+in the request bodies is the JSON that `@simplewebauthn/browser` returns
+(`passkeyRegistrationRequestSchema`, `passkeyAuthenticationRequestSchema`).
+
+- Adding a passkey (or TOTP) needs a sign-in within five minutes; once the account has an MFA
+  factor it needs MFA verified within five minutes instead, so a password alone never adds a
+  factor. Up to ten named passkeys per account (names unique per account).
+- The first factor of an account signs out its other sessions, marks this session MFA-verified
+  and, when the account has no unused recovery codes, returns ten one-time `recoveryCodes`.
+- `POST auth/passkeys/step-up` sets the session's MFA time exactly like `POST auth/mfa/step-up`
+  and shares its lockout: unknown, replayed or expired challenges, wrong origins or RP IDs, bad
+  signatures, counter regressions and missing user verification all count as failures; the
+  fifth in a row locks MFA for 15 minutes, revokes the session and notifies the user.
+- Removing a passkey needs MFA verified within five minutes. Removing the last factor of
+  someone holding an MFA-required permission is refused (409); the database enforces it too.
+- `users.mfa_enabled` ("has at least one factor") is maintained by the `user_mfa` trigger from
+  the TOTP secret and `webauthn_credentials`, so passkey-only users satisfy the privileged-MFA
+  triggers. Adding or removing a passkey sends a security notification.
 
 A `role` in requests and responses is a system role key (`owner`, `project_manager`,
 `site_agent`, `foreman`, `quantity_surveyor`, `storekeeper`, `finance`, `client`,
@@ -114,28 +161,36 @@ All foundation response contracts are exported from `@pm-buddy/validation`:
 `sessionsResponseSchema`, `tenantsResponseSchema`, `tenantCreatedResponseSchema`,
 `projectsResponseSchema`, `projectResponseSchema`, `invitationResponseSchema`,
 `membersResponseSchema`, `auditEventsResponseSchema`, `permissionCatalogueResponseSchema`,
-`rolesResponseSchema` and `roleResponseSchema`, and the request schemas
-`createRoleRequestSchema`, `updateRoleRequestSchema`, `memberRoleRequestSchema` and
-`roleReferenceSchema`. Their inferred TypeScript types are exported too, along with
+`rolesResponseSchema`, `roleResponseSchema`, `passkeysResponseSchema`,
+`passkeyRegistrationOptionsResponseSchema`, `passkeyAuthenticationOptionsResponseSchema` and
+`passkeyRegistrationResponseSchema`, and the request schemas `createRoleRequestSchema`,
+`updateRoleRequestSchema`, `memberRoleRequestSchema`, `roleReferenceSchema`,
+`passkeyRegistrationRequestSchema` and `passkeyAuthenticationRequestSchema`. Their inferred TypeScript types are exported too, along with
 `tenantRoleSchema`, `permissionSchema`, `tenantPermissionSchema`, `projectPermissionSchema`,
 `TenantRole`, `ProjectPermission`, and the project entity's `projectSchema`/`Project`.
 These modules are browser-safe and do not import API/server code.
 
 Errors use the existing RFC 9457 `application/problem+json` envelope. Invalid input:
 400; invalid/missing auth: 401; authorization/CSRF/MFA: 403; conflicts: 409; throttling:
-429; unavailable notification/database/rate-limit dependency: explicit 503/500.
+429; unavailable notification/database/rate-limit dependency: explicit 503/500. Some 400s
+carry a more specific `code`: `password-too-weak`, `password-breached` and `passkey-invalid`
+(a registration response that failed verification).
 
 ## Deliberate remaining scope
 
 This is the working D1.3/D1.4 foundation, not a claim that every roadmap bullet is
-finished. Passkeys, external email/SMS/WhatsApp providers, per-assignment approval
-limits, action-bound transaction-signing step-up tokens, mobile device
-proof-of-possession, admin force-sign-out across arbitrary users, and a complete
-breached-password corpus/provider are not implemented. Step-up currently marks a
-persisted session with fresh TOTP/recovery authentication for foundation actions;
-it must not be used as payment authorization. The local common-password denylist
-is intentionally small. No financial or biometric workflow is implemented here.
+finished. External email/SMS/WhatsApp providers, passkey sign-in without a password
+(usernameless/discoverable login), passkey attestation or authenticator allow-lists,
+per-assignment approval limits, action-bound transaction-signing step-up tokens, mobile
+device proof-of-possession and admin force-sign-out across arbitrary users are not
+implemented. The breached-password check is optional (`AUTH_BREACHED_PASSWORD_CHECK=hibp`)
+and fails open. Step-up currently marks a persisted session with fresh TOTP, passkey or
+recovery authentication for foundation actions; it must not be used as payment
+authorization. Passkey changes are user-level events: they send a security notification but
+do not appear in a company's audit log. No financial or biometric workflow is implemented here.
 
 Vetted primitives are pinned to `@node-rs/argon2@2.2.2`,
-`jose@6.2.15`, and `otpauth@9.6.0`; their official documentation was checked before
-integration. Mailpit delivery follows its [documented Send API](https://mailpit.axllent.org/docs/api-v1/).
+`jose@6.2.15`, `otpauth@9.6.0`, `@simplewebauthn/server@14.0.3` (browser `14.0.0`) and
+`@zxcvbn-ts/core@4.2.0` (`language-common@4.1.3`, `language-en@4.1.1`), all MIT or similar;
+their official documentation was checked before integration. The HIBP range API follows its
+[documented k-anonymity model](https://haveibeenpwned.com/API/v3#PwnedPasswords). Mailpit delivery follows its [documented Send API](https://mailpit.axllent.org/docs/api-v1/).

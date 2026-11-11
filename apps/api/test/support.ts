@@ -13,6 +13,10 @@ import {
   messageResponseSchema,
   mfaEnrollmentResponseSchema,
   mfaVerificationResponseSchema,
+  passkeyAuthenticationOptionsResponseSchema,
+  passkeyRegistrationOptionsResponseSchema,
+  passkeyRegistrationResponseSchema,
+  passkeysResponseSchema,
   permissionCatalogueResponseSchema,
   projectResponseSchema,
   projectsResponseSchema,
@@ -22,7 +26,9 @@ import {
   tenantCreatedResponseSchema,
   tenantsResponseSchema,
   type AuthResponse as SharedAuthResponse,
+  type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
+import type { CeremonyOverrides, SoftwareAuthenticator } from "./webauthn.js";
 
 /** Shared e2e helpers: a cookie-carrying browser and the response contract of every endpoint. */
 export type AuthResponse = SharedAuthResponse & { recoveryCodes?: string[] };
@@ -35,10 +41,20 @@ export function responseContract(method: string, path: string) {
   if (path === "auth/mfa/enroll") return mfaEnrollmentResponseSchema;
   if (path === "auth/mfa/verify") return mfaVerificationResponseSchema;
   if (path === "auth/sessions" && method === "get") return sessionsResponseSchema;
+  if (path === "auth/passkeys" && method === "get") return passkeysResponseSchema;
+  if (path === "auth/passkeys/registration/options")
+    return passkeyRegistrationOptionsResponseSchema;
+  if (path === "auth/passkeys/registration") return passkeyRegistrationResponseSchema;
+  if (path === "auth/passkeys/step-up/options") return passkeyAuthenticationOptionsResponseSchema;
   if (
-    ["auth/login", "auth/me", "auth/refresh", "auth/mfa/step-up", "auth/mfa/recover"].includes(
-      path,
-    ) ||
+    [
+      "auth/login",
+      "auth/me",
+      "auth/refresh",
+      "auth/mfa/step-up",
+      "auth/mfa/recover",
+      "auth/passkeys/step-up",
+    ].includes(path) ||
     /^tenants\/[^/]+\/select$/.test(path)
   )
     return authResponseSchema;
@@ -140,5 +156,38 @@ export class Browser {
     expect(verified.status, JSON.stringify(verified.body)).toBe(200);
     this.auth = verified.body as AuthResponse;
     expect(this.auth.recoveryCodes).toHaveLength(10);
+  }
+
+  /** Runs a real WebAuthn registration ceremony with a software authenticator. */
+  async registerPasskey(
+    authenticator: SoftwareAuthenticator,
+    name = "Test passkey",
+    overrides: CeremonyOverrides = {},
+  ): Promise<request.Response> {
+    const options = await this.call("post", "auth/passkeys/registration/options", {});
+    expect(options.status, JSON.stringify(options.body)).toBe(200);
+    const credential = authenticator.register(
+      passkeyRegistrationOptionsResponseSchema.parse(options.body).options,
+      overrides,
+    );
+    const res = await this.call("post", "auth/passkeys/registration", { name, credential });
+    if (res.status === 201) this.auth = res.body as PasskeyRegistrationResponse;
+    return res;
+  }
+
+  /** Requests step-up options, then answers them with an assertion (optionally tampered with). */
+  async passkeyStepUp(
+    authenticator: SoftwareAuthenticator,
+    overrides: CeremonyOverrides = {},
+  ): Promise<request.Response> {
+    const options = await this.call("post", "auth/passkeys/step-up/options", {});
+    expect(options.status, JSON.stringify(options.body)).toBe(200);
+    const credential = authenticator.assert(
+      passkeyAuthenticationOptionsResponseSchema.parse(options.body).options,
+      overrides,
+    );
+    const res = await this.call("post", "auth/passkeys/step-up", { credential });
+    if (res.status === 200) this.auth = res.body as AuthResponse;
+    return res;
   }
 }

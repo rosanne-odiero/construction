@@ -2,6 +2,8 @@ import { z } from "zod";
 import { permissionSchema, roleReferenceSchema } from "./roles.js";
 
 const uuid = z.uuid();
+/** The most passkeys one account can hold. */
+export const MAX_PASSKEYS = 10;
 const timestamp = z.iso.datetime({ offset: true });
 /** Custom role name, or null for a system role (clients localise system role keys). */
 const roleName = z.string().min(1).max(60).nullable();
@@ -17,7 +19,11 @@ export const authResponseSchema = z
         identifier: z.string().min(3).max(254),
         displayName: z.string().min(1).max(100),
         verified: z.boolean(),
+        /** At least one MFA factor (an authenticator app or a passkey) is registered. */
         mfaEnabled: z.boolean(),
+        totpEnabled: z.boolean(),
+        /** Number of registered passkeys. */
+        passkeys: z.number().int().min(0).max(MAX_PASSKEYS),
       })
       .strict(),
     session: z

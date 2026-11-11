@@ -26,9 +26,16 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import {
+  authResponseSchema,
   createRoleRequestSchema,
   memberRoleRequestSchema,
   messageResponseSchema,
+  passkeyAuthenticationOptionsResponseSchema,
+  passkeyAuthenticationRequestSchema,
+  passkeyRegistrationOptionsResponseSchema,
+  passkeyRegistrationRequestSchema,
+  passkeyRegistrationResponseSchema,
+  passkeysResponseSchema,
   permissionCatalogueResponseSchema,
   roleReferenceSchema,
   roleResponseSchema,
@@ -39,6 +46,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { AuthSecurity } from "./auth-security.service.js";
 import { AuthService } from "./auth.service.js";
+import { PasskeyService } from "./passkey.service.js";
 import { RolesService } from "./roles.service.js";
 import { TenancyService } from "./tenancy.service.js";
 import {
@@ -59,6 +67,8 @@ import {
 const openApi = (schema: z.ZodType) =>
   z.toJSONSchema(schema, { target: "openapi-3.0", io: "input", unrepresentable: "any" }) as object;
 const stepUpNote = "Requires roles.manage and MFA verified within the last five minutes.";
+const enrolmentNote =
+  "Requires a sign-in within the last five minutes or, once the account has an MFA factor, MFA verified within the last five minutes.";
 
 @Injectable()
 export class BrowserGuard implements CanActivate {
@@ -75,7 +85,10 @@ export class BrowserGuard implements CanActivate {
 @UseGuards(BrowserGuard)
 @Controller({ path: "auth", version: "1" })
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly passkeyService: PasskeyService,
+  ) {}
 
   @Get("csrf")
   csrf(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -175,6 +188,97 @@ export class AuthController {
   reset(@Body() body: unknown, @Req() req: Request) {
     const input = resetSchema.parse(body);
     return this.auth.reset(input.token, input.password, req);
+  }
+  @Get("passkeys")
+  @ApiOperation({
+    summary: "The caller's passkeys (names and dates; never credential IDs or keys)",
+    operationId: "listPasskeys",
+  })
+  @ApiOkResponse({ schema: openApi(passkeysResponseSchema) })
+  async listPasskeys(@Req() req: Request) {
+    return this.passkeyService.list(await this.auth.principal(req));
+  }
+  @Post("passkeys/registration/options")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "WebAuthn creation options for a new passkey (single-use challenge, 5 minutes)",
+    description: enrolmentNote,
+    operationId: "getPasskeyRegistrationOptions",
+  })
+  @ApiOkResponse({ schema: openApi(passkeyRegistrationOptionsResponseSchema) })
+  @ApiForbiddenResponse({ description: "Sign-in or MFA verification is not fresh" })
+  @ApiConflictResponse({ description: "The account already has the maximum number of passkeys" })
+  async passkeyRegistrationOptions(@Req() req: Request) {
+    return this.passkeyService.registrationOptions(await this.auth.principal(req), req);
+  }
+  @Post("passkeys/registration")
+  @ApiOperation({
+    summary: "Register a passkey from the authenticator's attestation response",
+    description: `${enrolmentNote} The first MFA factor also returns ten one-time recovery codes when the account has no unused ones.`,
+    operationId: "registerPasskey",
+  })
+  @ApiBody({ schema: openApi(passkeyRegistrationRequestSchema) })
+  @ApiCreatedResponse({ schema: openApi(passkeyRegistrationResponseSchema) })
+  @ApiConflictResponse({
+    description: "Credential already registered, name in use or limit reached",
+  })
+  async registerPasskey(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.passkeyService.register(
+      await this.auth.principal(req),
+      passkeyRegistrationRequestSchema.parse(body),
+      req,
+      res,
+    );
+  }
+  @Delete("passkeys/:id")
+  @ApiOperation({
+    summary: "Remove a passkey",
+    description:
+      "Requires MFA verified within the last five minutes. Refused (409) for the last MFA factor of someone holding an MFA-required permission.",
+    operationId: "removePasskey",
+  })
+  @ApiOkResponse({ schema: openApi(messageResponseSchema) })
+  @ApiNotFoundResponse({ description: "No such passkey on this account" })
+  @ApiConflictResponse({ description: "It is the last MFA factor and a role requires MFA" })
+  async removePasskey(@Param("id") id: string, @Req() req: Request) {
+    return this.passkeyService.remove(await this.auth.principal(req), uuidSchema.parse(id));
+  }
+  @Post("passkeys/step-up/options")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "WebAuthn request options to verify MFA with a passkey (single-use, 5 minutes)",
+    operationId: "getPasskeyStepUpOptions",
+  })
+  @ApiOkResponse({ schema: openApi(passkeyAuthenticationOptionsResponseSchema) })
+  @ApiNotFoundResponse({ description: "The account has no passkey" })
+  async passkeyStepUpOptions(@Req() req: Request) {
+    return this.passkeyService.stepUpOptions(await this.auth.principal(req), req);
+  }
+  @Post("passkeys/step-up")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Verify MFA (sign-in second factor or step-up) with a passkey assertion",
+    description:
+      "Sets the session's MFA time like a TOTP step-up. Failures count toward the MFA lockout (five in a row lock MFA for 15 minutes and sign the session out).",
+    operationId: "stepUpWithPasskey",
+  })
+  @ApiBody({ schema: openApi(passkeyAuthenticationRequestSchema) })
+  @ApiOkResponse({ schema: openApi(authResponseSchema) })
+  async passkeyStepUp(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.passkeyService.stepUp(
+      await this.auth.principal(req),
+      passkeyAuthenticationRequestSchema.parse(body),
+      req,
+      res,
+    );
   }
   @Get("sessions")
   async sessions(@Req() req: Request) {

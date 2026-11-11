@@ -99,13 +99,11 @@ Also fixed: the primary button's hover colour blended into the page and fell to 
 
 ## Next step and demo
 
-The core of D1.2–D1.4 is merged after the review fixes above. To close Phase 1:
+**Phase 1 is built and merged** (PRs #2, #11, #15, #16), with CI green on every pull request and on `main`. Phase 1 acceptance holds: users sign up, verify, sign in with TOTP or a passkey, create a company and projects, and manage roles; the tenant-isolation suites pass under the restricted runtime role. Every change was independently security-reviewed and every finding fixed with a regression test.
 
-1. ~~D1.3 gaps: passkeys (WebAuthn), a development SMS/WhatsApp code provider behind the notification interface, and a breached-password check~~: done on `phase-1/d1-passkeys` (see the last section), pending review.
-2. ~~D1.2 gap: shared `packages/i18n`~~ and ~~D1.4 gap: custom roles~~: done on `phase-1/d1-rbac-i18n` (see below), pending review.
-3. Phase 1 acceptance evidence in [ACCEPTANCE_MATRIX.md](./ACCEPTANCE_MATRIX.md), then Phase 2 (projects, sites and BQ).
+Open items carried forward (not blockers for building Phase 2): real SMS/WhatsApp/email providers (D7.3); passwordless passkey sign-in; human review of Kiswahili wording and field accessibility (§15 H); passkey events in the company audit log.
 
-Follow the [Phase 1 demo](./demos/phase-1.md). A green build never stands in for production payment or biometric approval.
+Next: **Phase 2**, starting with D2.1 (projects, sites and geofences), then D2.2 (BQ import). See the [Phase 1 demo](./demos/phase-1.md).
 
 ## D1.4 permission-based RBAC and D1.2 shared i18n (branch `phase-1/d1-rbac-i18n`)
 

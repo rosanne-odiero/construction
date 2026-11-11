@@ -49,24 +49,30 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 
 | Key | Scope | Seed / default | Source | Status | Used from |
 |---|---|---|---|---|---|
-| `attendance.normal_hours_per_day` | tenant/project | 8 | Prototype | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 |
-| `attendance.late_after` | project | 07:15 | Prototype | DEMO, PRODUCT | D3.3 |
-| `attendance.half_day_hours` | tenant | 4 | Proposal | PRODUCT, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 |
-| `attendance.overtime.multipliers` | tenant | Weekday 1.5 · rest day 2.0 · public holiday 2.0 | Prototype | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 |
+| `attendance.normal_hours_per_day` → `timesheet_rule_versions.normal_minutes` | tenant/project (effective-dated) | 480 (8 h) | Prototype, QUESTIONS Q-C3 | DEMO, COMPLIANCE-REVIEW (CR-PAY-08); seeded `unverified` | D3.3 (built) |
+| `attendance.late_after` → `day_start_minutes` + `late_grace_minutes` | tenant/project (effective-dated) | 07:00 + 15 min (late after 07:15) | Prototype | DEMO, PRODUCT | D3.3 (built) |
+| `attendance.break` → `default_break_minutes` after `break_after_minutes` | tenant/project (effective-dated) | 60 min when the shift is longer than 5 h; a break entered on the muster roll wins | Proposal | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 (built) |
+| `attendance.half_day_hours` → `half_day_threshold_minutes` | tenant/project (effective-dated) | 240 (a day of 4 h or more is a full day; shorter, or all records `half_day`, is a half) | Proposal | PRODUCT, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 (built) |
+| `attendance.max_plausible_minutes` | tenant/project (effective-dated) | 720 (12 h worked); above it the day is flagged `excess_hours` (still counted, never capped silently) | Proposal | PRODUCT, SECURITY | D3.3 (built) |
+| `attendance.rest_days` → `rest_days` (ISO weekdays) | tenant/project (effective-dated) | Sunday | Prototype, Q-C3 | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 (built) |
+| `attendance.overtime.multipliers` → `ot_weekday_multiplier`, `ot_rest_day_multiplier`, `ot_holiday_multiplier` | tenant/project (effective-dated) | Weekday 1.50 · rest day 2.00 · public holiday 2.00 (exact decimal strings; payroll applies them) | Prototype, Q-C3 | DEMO, COMPLIANCE-REVIEW (CR-PAY-08) | D3.3 (built) |
+| `attendance.period.week_ends_on` / `.cutoff_time` / `.payday` → `attendance_settings` | tenant | Thursday · 18:00 Africa/Nairobi · Friday (weekly periods Friday–Thursday) | QUESTIONS Q-C4 | DEMO, PRODUCT | D3.3 (built) |
 | `attendance.face_match_threshold` | tenant/site | 0.80 | Prototype; vendor-tuned in D3.4 | DEMO, SECURITY | D3.4 |
 | `attendance.liveness_threshold` | tenant | Vendor-specific | D3.4 vendor choice | SECURITY | D3.4 |
 | `attendance.duplicate_window_minutes` | tenant | 10 | Proposal | PRODUCT | D3.3 |
 | `attendance.clock_drift_minutes` | platform | 5 | Proposal | SECURITY | D3.3 |
 | `attendance.impossible_travel_kmh` | platform | 60 (straight-line) | Proposal | SECURITY | D3.3 |
 | `attendance.geofence_tolerance_m` | site | 30 (plus reported GPS accuracy) | Proposal | PRODUCT | D3.3 |
-| `attendance.override.step_up` | tenant | true | Threat model | SECURITY | D3.3 |
+| `attendance.override.step_up` | tenant | true (corrections and adjustments need MFA verified within 5 minutes; `ATTENDANCE_OVERRIDE_STEP_UP`) | Threat model | SECURITY | D3.3 (built, constant for now) |
 | `attendance.casual_conversion_warning_days` | tenant | 25 | Prototype | DEMO, COMPLIANCE-REVIEW (CR-PAY-10) | D3.1 |
 | `attendance.dispute_response_days` | tenant | TBD | DPIA | PRODUCT | D3.3 |
 | `attendance.records_retention_years` | platform | TBD | DPIA | COMPLIANCE-REVIEW (CR-PAY-13, CR-DP-06) | D3.3 |
 | `attendance.gps_retention_days` | platform | TBD | DPIA | COMPLIANCE-REVIEW (CR-DP-06) | D3.3 |
 | `attendance.evidence_photo_retention_days` | platform | TBD | DPIA | COMPLIANCE-REVIEW (CR-DP-06) | D3.3 |
 | `attendance.store_evidence_photo_on_biometric_match` | tenant | false | DPIA (minimisation) | COMPLIANCE-REVIEW (CR-DP-08) | D3.4 |
-| Public holidays (`PublicHoliday` table) | platform/tenant | Seeded each year | Kenya Gazette | COMPLIANCE-REVIEW (CR-PAY-14) | D3.3 |
+| Public holidays (`public_holidays` table) | tenant | 2026: 12 days (including the gazetted Idd-ul-Fitr 20/03 and Idd-ul-Adha 27/05); 2027: 11 days (no Idd yet; Sunday holidays observed on Monday) — `KENYA_PUBLIC_HOLIDAYS` with a source per row | Public Holidays Act Cap. 110 and Kenya Gazette notices (sources in [COMPLIANCE_TODO](./COMPLIANCE_TODO.md#d33-implementation-notes-attendance-and-timesheets-web-slice)) | COMPLIANCE-REVIEW (CR-PAY-14); rows `unverified` | D3.3 (built) |
+
+**How the D3.3 web slice stores these values.** Timesheet rules are rows of `timesheet_rule_versions`: a company default (`project_id` null) and optional project overrides, each effective from a date; the rule for a project on a date is the latest version of that project, else the latest company version (`resolveTimesheetRule`). A version cannot start inside a submitted or approved period, and only versions that have not started can be cancelled, so a rule change never alters an approved timesheet; approved lines also keep the rule version id they used. New rule versions start `unverified`; in production (`NODE_ENV=production`) a period whose lines use an unverified rule cannot be approved (COMPLIANCE-REVIEW). The rule values are validated by `ruleIssues` (shared Zod schema) and by database CHECK constraints (`TIMESHEET_RULE_LIMITS`).
 
 ## 3. Biometrics and data protection
 

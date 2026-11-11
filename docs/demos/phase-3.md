@@ -88,3 +88,66 @@ Sign in as the owner (`owner@jenga-bora.example.test`, with the TOTP code) unles
 - Rates are not checked against a minimum-wage table (CR-PAY-09); casual-to-term warnings wait for attendance (CR-PAY-10).
 - The consent wording is a draft for legal and Kiswahili review (CR-DP-03, CR-DP-11); biometric consent is part of D3.4.
 - Saved views are personal; there are no company-shared views.
+
+---
+
+## D3.3 (web slice): Muster roll, timesheets and adjustments
+
+This walkthrough takes about 25 minutes. **Attendance** in the sidebar now shows live data: the overview, the daily muster roll, timesheet periods, anomaly review, and rules & holidays. The D0 attendance screens (biometric and QR capture with mock data) moved to `/prototype/attendance` and stay labelled **Prototype**. Only the **web** part of D3.3 is built: a supervisor enters the roll in the web app (`web_manual`); QR/NFC cards, photos, geofences, offline signed records and clock-drift checks come with the site app (D3.2–D3.3).
+
+### 1. Run it
+
+As for [D3.1](#1-run-it) (the `FIELD_*` keys are still needed):
+
+```bash
+git checkout phase-3/d3.3-web-timesheets
+npx pnpm@12.17.0 install
+npx pnpm@12.17.0 services:up
+npx pnpm@12.17.0 db:migrate      # includes 20261112090000_attendance_timesheets
+npx pnpm@12.17.0 db:seed         # adds holidays, the demo rule and nine weeks of attendance
+npx pnpm@12.17.0 dev             # API on :4000, web on :3000
+```
+
+**What the seed adds.** After the labour summary it prints something like:
+
+```text
+Attendance and timesheets (synthetic; created):
+  1508 attendance records; 20 timesheet periods (16 approved)
+  29 open anomalies; 1 adjustment(s); 23 public holidays
+```
+
+The numbers depend on the day you seed (the nine weeks end on that day). Ruiru Heights is recorded by the site agent and Kitengela by the owner; past weeks are confirmed by the project manager and approved by someone other than the submitter; the last complete week is **submitted** and waits for approval; the current week is **open** (today's sheets are drafts; yesterday's, when it is in the current week, wait for confirmation). Watchmen work overnight 18:00–06:00. A yard helper also appears on the Main plot one recent afternoon (a **two-site** day), a mason has a 05:30–20:30 slab pour (**excessive hours**), and skilled workers without a valid NCA card on the day (a mason and an electrician whose cards expired) are flagged. A second run prints "already present" and adds nothing.
+
+Accounts: the owner (`owner@jenga-bora.example.test`, TOTP), the project manager Brian (`pm@…`, no MFA) and the site agent Kevin (`site.agent@…`, Ruiru Heights only). Use two browsers (or a private window) to act as two people.
+
+### 2. Walkthrough
+
+| #   | What | Where | Try this |
+| --- | --- | --- | --- |
+| 1 | Overview | http://localhost:3000/attendance | Each project you can see, today's muster status per site, the current period (dates, cut-off Thursday 18:00) and the queues: open anomalies, corrections and adjustments to decide, periods awaiting approval. |
+| 2 | Muster roll | **Record attendance at Main plot** (as Kevin) | Engaged labourers only, sorted by worker number, with trade and gang. Filter by **Gang**; change the date (DD/MM/YYYY) or use **Previous day**. Labourers not engaged that day cannot be recorded. |
+| 3 | Fast entry | Same page | **Mark N unrecorded workers present** fills the rule's default shift (07:00–16:00). Tab moves between fields; in a status list type the first letter (P, H, A, L, S; in Kiswahili Y, N, H, L, M); **Enter** or **Ctrl+S** saves. Set a check-out before check-in: the row is refused until you tick **Overnight**. Hours, overtime and lateness appear per row after saving. |
+| 4 | Submit and confirm | **Submit the day**, then as Brian **Confirm the day** | Kevin cannot confirm his own day (a "same person" message); Brian can, or **Return for changes** with a reason. Anyone who recorded an entry of the day cannot confirm it either. |
+| 5 | Correction | A confirmed day, as the owner → **Correct** | Change a status or time with a reason (10+ characters); a fresh authenticator code is asked; the row is flagged **Manual correction** and the change waits under **Corrections**. The owner cannot approve it; Brian can. Brian himself cannot ask for corrections until he enables two-step verification. |
+| 6 | Anomalies | **Anomalies** | Two sites the same day (both records flagged; the hours are counted once), overlapping times, hours above the maximum (12 h), NCA card expired, and corrections. Filter by project, status or kind; **Review** → **Resolve** or **Dismiss** with a note. Someone who recorded the attendance cannot review it. |
+| 7 | Timesheets | **Timesheets** | Weekly periods newest first with muster days, unconfirmed days, open anomalies and workers. Open the **Submitted** week: totals per worker (days, worked, normal, overtime by weekday/rest day/holiday, late, absences) and the blockers. Approve as someone other than the submitter after reviewing its anomalies: the period shows **Approved snapshot** and can no longer change. **Reject** (with a reason) and **Reopen** are also there. |
+| 8 | Adjustment | An approved week → **Request an adjustment** (owner) | Choose a worker, site, date and the corrected values with a reason; step-up again. Brian approves it: the approved week is untouched, and the difference appears as an **adjustment** line in the current week (**Lands in a later period**). The seed already has one. |
+| 9 | Rules & holidays | **Rules & holidays** | The company rule (8 h, 1 h break after 5 h, start 07:00 + 15 min grace, full day from 4 h, maximum 12 h, Sunday rest, ×1.50/×2.00/×2.00) is marked **Unverified (compliance review)**. Add a project override from a future date and cancel it; a version cannot start inside a submitted or approved week. The 2026 and 2027 Kenyan holidays list their source (Act, Gazette notice, Sunday rule); add the 2027 Idd days when gazetted. The cut-off and pay day can be changed. |
+| 10 | Worker panel | **Labour** → a worker's name | The panel has an **Attendance** section: days, hours and overtime from approved and not-yet-approved weeks, the last day worked and open anomalies. |
+| 11 | Languages and themes | Language switch and theme toggle | Every attendance page works in Kiswahili and in dark mode, and fits a 360 px phone. |
+| 12 | Payroll contract | `GET /api/v1/attendance/periods/<approved period id>/lines` (signed in) | The immutable lines payroll (D4.1) will read: totals in minutes and half days, the rule versions with their multipliers, source record ids and the period's holidays. |
+
+### 3. What changed under the hood
+
+- Migration `20261112090000_attendance_timesheets`: 12 tables with forced RLS, composite tenant keys and narrowed `pmb_app` grants; triggers enforce engagement on the date, one record per labourer/site/day, maker ≠ checker, period locks and insert-only snapshots ([ERD §6](../ERD.md#6-labour-attendance-and-biometrics)).
+- `packages/domain/src/attendance`: the integer-minute timesheet arithmetic, anomaly rules and weekly periods (unit-tested at every boundary); `packages/validation/src/attendance.ts`: every request and response schema; `packages/types/src/attendance.ts`: vocabularies, the demo rule and the holiday calendar with sources.
+- API module `attendance` (32 operations, [ARCHITECTURE §4.4](../ARCHITECTURE.md#44-attendance-and-timesheets-module-d33-web-slice)) with idempotency keys, audit and an outbox; permissions `attendance.confirm`, `timesheets.submit`, `timesheets.approve`, `timesheets.manage_rules`.
+- Web: `/attendance`, `/attendance/muster`, `/attendance/periods`, `/attendance/periods/[periodId]`, `/attendance/anomalies`, `/attendance/settings`, and the worker-panel summary.
+
+### 4. Known limitations
+
+- No site app yet: no QR/NFC cards, photos, GPS or geofence checks, offline signed records, clock-drift detection, duplicate-window or impossible-travel rules (D3.2–D3.3), and no biometrics (D3.4).
+- The rule values and the holiday list are demonstration values awaiting compliance review (CR-PAY-08, CR-PAY-14); the 2027 Idd holidays are not included. Production refuses to approve with unverified rules, and there is no screen yet to mark a rule as approved.
+- Overtime multipliers are recorded, not applied: pay comes with D4.1. Weekly periods only (Q-C4); daily, fortnightly or monthly periods are reserved.
+- Notifications (for example "a day waits for your confirmation") and an outbox relay are not built; the queues are on the overview.
+- Casual-to-term conversion warnings (CR-PAY-10) are not computed yet.

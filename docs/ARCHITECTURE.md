@@ -233,6 +233,43 @@ flowchart TB
 - **Audit.** Every change writes a hash-chained event (`labourer.registered`, `.updated`, `.status_changed`, `.sensitive_revealed`, `.do_not_rehire_set`/`_cleared`/`_overridden`, `.consent_recorded`/`_withdrawn`, `.engaged`, `.engagement_ended`, `.accreditation_added`/`_updated`/`_removed`; `labour.rate_created`/`_cancelled`, `labour.trade_*`, `labour.skill_level_*`, `labour.settings_updated`, `labour.defaults_installed`, `labour.view_saved`/`_deleted`; `gang.created`, `.updated`, `.member_added`, `.member_left`) whose metadata lists field names, IDs, dates and flags only, never identifiers, ciphertext, reasons or amounts.
 - **Development seed.** `db:seed` adds 15 trades, 4 skill levels, 40 synthetic labourers (clearly fictional names; national IDs `900000xx`, phones in the `0700 000 0xx` block, KRA PINs `A9000000xxZ`; nothing is ever sent to them), rates, 6 gangs on the demo projects, NCA cards (some expiring or expired) and one do-not-rehire case; idempotent like the rest of the seed.
 
+
+### 4.4 Attendance and timesheets module (D3.3 web slice)
+
+`apps/api/src/modules/attendance`: `AttendanceController` (`/attendance/*`) with `AttendanceSettingsService` (period cut-off, rule versions, holidays), `MusterService` (overview, muster roll, day submit/confirm/return), `CorrectionsService`, `AnomaliesService`, `PeriodsService` (list, detail, submit, approve, reject, reopen, payroll lines, labourer summary) and `AdjustmentsService`; shared pieces are `TimesheetCalculator` (loads rules, holidays and records and calls the pure `computeLabourerDay` in `packages/domain`), `PeriodStore` (finds or creates the weekly period covering a date) and `AnomalyEvaluator` (re-runs `detectDayAnomalies` for changed labourer-days). `AttendanceCommands` wraps every command: optional `Idempotency-Key` (8–128 characters; the same key and payload replays the stored response with `Idempotent-Replayed: true`, another payload is 409 `idempotency-key-reused`), the tenant row lock, the redacted hash-chained audit event and the transactional outbox in one transaction. Problems are RFC 9457 with attendance codes (`period-locked`, `same-person`, `period-changed`, …); database rule violations map to 409 `attendance-rule`.
+
+| Endpoint (`/api/v1/attendance`) | Permission |
+|---|---|
+| `GET overview` | `attendance.view` (projects listed) |
+| `GET settings` | `attendance.view`, `timesheets.manage_rules` or `config.manage` somewhere |
+| `PUT settings/periods` | `config.manage` |
+| `POST rules`, `DELETE rules/:id` | `config.manage` (company default) or `timesheets.manage_rules` on the project (override) |
+| `POST rules/defaults`, `POST holidays`, `POST holidays/defaults`, `DELETE holidays/:id` | `config.manage` |
+| `GET projects/:projectId/muster?siteId&date&gangId` | `attendance.view` |
+| `PUT projects/:projectId/muster` | `attendance.record` |
+| `POST days/:dayId/submit` | `attendance.record` |
+| `POST days/:dayId/confirm`, `POST days/:dayId/return` | `attendance.confirm`, not the submitter (confirm: nor anyone who recorded the day) |
+| `POST days/:dayId/corrections` | `attendance.override` + step-up |
+| `GET projects/:projectId/corrections`, `POST corrections/:id/approve`, `POST corrections/:id/reject` | `attendance.view`; decisions `attendance.confirm`, not the requester |
+| `GET anomalies`, `POST anomalies/:id/review` | `attendance.view`; review `attendance.review_anomalies`, not a recorder |
+| `GET projects/:projectId/periods`, `GET periods/:id` | `attendance.view` |
+| `GET periods/:id/lines` | `attendance.view`, `payroll.prepare` or `finance.view`; approved periods only |
+| `POST periods/:id/submit`, `POST periods/:id/reopen` | `timesheets.submit` |
+| `POST periods/:id/approve`, `POST periods/:id/reject` | `timesheets.approve`, not the submitter |
+| `POST periods/:id/adjustments` | `attendance.override` + step-up |
+| `GET projects/:projectId/adjustments`, `POST adjustments/:id/approve`, `POST adjustments/:id/reject` | `attendance.view`; decisions `timesheets.approve`, not the requester |
+| `GET labourers/:labourerId/summary` | `attendance.view` on a project the labourer worked on |
+
+- **Capture methods.** Records carry `capture_method`; only `web_manual` (a supervisor's entry on the muster roll) is implemented. `qr_card`, `face`, `fingerprint` and `terminal` are reserved in `CAPTURE_METHODS` with nullable evidence columns (device, device and server time, GPS and accuracy, geofence result and version, match confidence, photo, client event id) that a CHECK keeps empty for `web_manual`; the site app (D3.2–D3.3) and biometrics (D3.4) will write the same rows (§13).
+- **Muster roll and maker-checker.** One `attendance_days` row per site and date and one `attendance_records` row per labourer, site and date (database-unique). Only labourers engaged on the project that day can be recorded (409 `not-engaged`, also a trigger); inactive and do-not-rehire labourers can be recorded but are flagged. A recorder submits the day; a different person with `attendance.confirm` confirms or returns it (the API and a trigger refuse the submitter and anyone who created or updated a record of the day). After submission, changes are corrections with a reason and step-up, decided by someone other than the requester. Every command checks the version the caller read.
+- **Computation.** `packages/domain/src/attendance` is pure integer arithmetic on minutes and half-day units (no floating point): a labourer's day is computed once across all sites and projects (overlapping minutes counted once, breaks, overnight shifts, the governing rule of the earliest worked record, normal and overtime split by day type: public holiday over rest day over weekday, half-day units, lateness on weekdays only), then shared between the records, so a two-site day is never paid twice. Records in approved periods keep their snapshot allocation and others share only the remainder.
+- **Rules and holidays.** Effective-dated rule versions (company default plus project overrides; `resolveTimesheetRule`) and a per-company holiday calendar; neither can change inside a submitted or approved period, so approved timesheets are never recomputed with other rules. Unverified rules cannot drive production approval (COMPLIANCE-REVIEW CR-PAY-08).
+- **Periods.** Weekly per project (Q-C4: Friday–Thursday, cut-off Thursday 18:00 Africa/Nairobi, `zonedDateTime`), created when the first attendance of the week is saved. `open → submitted` after the cut-off with every day confirmed and no pending correction (the submission stores a SHA-256 digest of the computed lines), `submitted → approved` by a different person with no open anomaly and an unchanged digest (409 `period-changed`), or `submitted → rejected → open`. Approval inserts the immutable `timesheet_lines` snapshot and a `timesheet.period_approved` outbox event in the same transaction.
+- **Adjustments.** Changes to approved periods never touch them (INVARIANTS): an adjustment with a reason and step-up is approved by someone else; its `delta` (after − before) lands as an `adjustment:<id>` line in the project's next open period.
+- **Anomalies.** `two_sites`, `overlapping_times`, `excess_hours` (above the rule's plausible maximum), `not_engaged`, `labourer_inactive`, `do_not_rehire`, `accreditation_invalid` (no valid NCA card when the skill level expects one) and `manual_override` (a correction), re-evaluated on every save, correction and submission; conditions that disappear are `cleared`. Open anomalies block approval; reviewers resolve or dismiss with a note and cannot have recorded the attendance.
+- **Payroll contract.** D4.1 reads `GET /attendance/periods/:id/lines` (or `timesheet_lines` directly) for approved periods only; see [apps/api/README.md](../apps/api/README.md#payroll-facing-timesheet-contract).
+- **Development seed.** `db:seed` adds the holiday calendar, the unverified demonstration rule and nine weeks of synthetic muster rolls for the seeded labourers (`src/seed/attendance-seed.ts`): past weeks approved, the last complete week submitted, the current week open, a two-site day and an excessive-hours day left open for review, and one approved adjustment.
+
 ---
 
 ## 5. Folder structure
@@ -390,13 +427,13 @@ Derived from brief §3; `packages/types` `SYSTEM_ROLE_PERMISSIONS` is the source
 | Role | Scope | MFA required | Permissions |
 |---|---|---|---|
 | `platform_admin` | Platform operator, not a company role | Yes | `platform.admin` |
-| `owner` | All projects | Yes | All 46 tenant permissions (everything except `platform.admin`) |
-| `project_manager` | Assigned projects | No | `projects.view`, `projects.manage`, `bq.view`, `bq.edit`, `bq.import`, `bq.approve_variation`, `labour.view`, `labour.manage`, `labour.do_not_rehire`, `labour.consent`, `attendance.view`, `attendance.override`, `attendance.review_anomalies`, `payroll.prepare`, `payroll.review`, `payments.view`, `procurement.requisition`, `procurement.approve`, `finance.view`, `site.diary`, `site.photos`, `quality.manage`, `safety.manage`, `plant.manage`, `documents.manage`, `reports.view` |
-| `site_agent` | Assigned projects | No | `projects.view`, `bq.view`, `labour.view`, `labour.consent`, `attendance.view`, `attendance.record`, `procurement.requisition`, `site.diary`, `site.photos`, `quality.manage`, `safety.manage`, `reports.view` |
+| `owner` | All projects | Yes | All 50 tenant permissions (everything except `platform.admin`) |
+| `project_manager` | Assigned projects | No | `projects.view`, `projects.manage`, `bq.view`, `bq.edit`, `bq.import`, `bq.approve_variation`, `labour.view`, `labour.manage`, `labour.do_not_rehire`, `labour.consent`, `attendance.view`, `attendance.override`, `attendance.review_anomalies`, `attendance.confirm`, `timesheets.submit`, `timesheets.approve`, `timesheets.manage_rules`, `payroll.prepare`, `payroll.review`, `payments.view`, `procurement.requisition`, `procurement.approve`, `finance.view`, `site.diary`, `site.photos`, `quality.manage`, `safety.manage`, `plant.manage`, `documents.manage`, `reports.view` |
+| `site_agent` | Assigned projects | No | `projects.view`, `bq.view`, `labour.view`, `labour.consent`, `attendance.view`, `attendance.record`, `attendance.confirm`, `timesheets.submit`, `procurement.requisition`, `site.diary`, `site.photos`, `quality.manage`, `safety.manage`, `reports.view` |
 | `foreman` | Assigned projects | No | `projects.view`, `labour.view`, `labour.consent`, `attendance.view`, `attendance.record`, `site.diary`, `site.photos` |
 | `quantity_surveyor` | Assigned projects | No | `projects.view`, `bq.view`, `bq.edit`, `bq.import`, `finance.view`, `documents.manage`, `reports.view` |
 | `storekeeper` | Assigned projects | No | `projects.view`, `procurement.requisition`, `stores.manage` |
-| `finance` | All projects | Yes | `config.manage_statutory`, `projects.view`, `labour.view`, `labour.view_sensitive`, `payroll.review`, `payments.view`, `payments.approve`, `payments.disburse`, `payments.record_cash`, `payments.reverse`, `finance.view`, `finance.manage`, `finance.view_sensitive`, `reports.view` |
+| `finance` | All projects | Yes | `config.manage_statutory`, `projects.view`, `labour.view`, `labour.view_sensitive`, `attendance.view`, `timesheets.approve`, `payroll.review`, `payments.view`, `payments.approve`, `payments.disburse`, `payments.record_cash`, `payments.reverse`, `finance.view`, `finance.manage`, `finance.view_sensitive`, `reports.view` |
 | `client` | Assigned projects | No | `projects.view`, `bq.view`, `portal.client` |
 | `consultant` | Assigned projects | No | `projects.view`, `bq.view`, `bq.approve_variation`, `site.photos`, `quality.manage`, `documents.manage`, `reports.view` |
 | `supplier` | Assigned projects | No | `projects.view`, `portal.supplier` |
@@ -552,6 +589,9 @@ CaptureResult = { workerId | null, confidence, liveness?, evidencePhotoId?, meth
   - missing check-out
   - manual override (reason required; always flagged)
 - **Timesheets.** Built from events using the configured rules: normal hours, breaks, lateness grace, half-day, absence, and overtime multipliers for weekdays, rest days and public holidays. Timesheets lock once payroll is approved.
+
+
+**Implemented so far (D3.3 web slice).** `packages/types` `CAPTURE_METHODS` = `web_manual` (implemented: a supervisor's muster-roll entry), `qr_card`, `face`, `fingerprint`, `terminal` (reserved), and `CAPTURE_EVIDENCE_FIELDS` names the nullable evidence columns on `attendance_records` that those methods will fill (device id, device time, server receipt time, GPS and accuracy, geofence result and version, match confidence, photo file, client event id). A method plugs in by producing an attendance entry (labourer, site, date, status, times) plus its evidence; the timesheet computation, anomaly rules, confirmation and payroll contract do not change.
 
 ---
 
@@ -815,6 +855,12 @@ flowchart LR
 | D-34 | **NCA alerts are computed on read**, not by a scheduled job | Proposed (D3.1) | No queue infrastructure exists yet; the query is the single source a later reminder job can reuse. |
 | D-35 | **The ID blind index ignores the document type** (and leading zeros of all-digit numbers) | Proposed (D3.1, after review) | Indexing `type:number` let a flagged or duplicate person re-register with the same digits under another document type. A real collision between different documents is unlikely and is resolved by a manager through the existing record (the 409 names it). |
 | D-36 | **Identifiers never travel in URLs or saved views**: exact lookups use `POST /labour/labourers/lookup`; GET search covers names and worker numbers; saved views store no search text | Proposed (D3.1, after review) | Query strings end up in browser history, proxy and server logs and sign-in redirects; saved views were stored and served in plaintext. |
+| D-37 | **The web slice records one muster entry per labourer, site and day** (status, times, break, notes) with a pluggable `capture_method` and reserved evidence columns, instead of the signed check-in/check-out event stream of §12 | Proposed (D3.3 web slice) | Supervisors enter daily rolls in the web app now; the site app's events can later write the same rows (or derive them) without changing timesheets or payroll |
+| D-38 | **Timesheet arithmetic is integer minutes and half-day units in `packages/domain`**, computed per labourer-day across all sites, then shared between records | Proposed (D3.3) | No floating-point drift; the same day is never counted twice; the web mock, the API and payroll use one implementation |
+| D-39 | **Approval snapshots immutable `timesheet_lines`** (with rule version ids and source record ids) and binds to a digest taken at submission | Proposed (D3.3) | Payroll reads exactly what was approved; a change between submission and approval is refused (409 `period-changed`) |
+| D-40 | **Corrections before approval, adjustments after**: both need a reason, step-up and a different decider; adjustments land as separate lines in a later open period | Proposed (D3.3) | INVARIANTS: closed periods are adjusted, never mutated; the approved record and its payroll stay reproducible |
+| D-41 | **Commands accept an optional `Idempotency-Key`** stored with a request fingerprint and the response, and write audit and outbox events in the same transaction | Proposed (D3.3) | WORKFLOWS shared rules; the web client sends a fresh key per action so a retried request is not applied twice |
+| D-42 | **Inactive and do-not-rehire labourers can be recorded but are flagged**; labourers not engaged on the project that day are refused | Proposed (D3.3) | A person who turned up must be visible for pay disputes, but nobody can be put on a project roll without an engagement |
 
 ---
 

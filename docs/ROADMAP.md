@@ -86,8 +86,10 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 |---|---|---|---|---|---|
 | D3.1 | **Labourer registry**:<br/>• Registration that blocks anyone under 18<br/>• Field-level encryption for IDs, PINs and phone numbers<br/>• Trades, skill levels and rates<br/>• NCA accreditation with expiry alerts<br/>• Gangs<br/>• Consent capture (EN/SW)<br/>• Do-not-rehire flag | Registry table with saved views, worker side panel, registration form, consent screen | Registry works; encryption and under-18 tests pass | L | ⏳ |
 | D3.2 | **Site app foundation (Expo, Android-first)**: login with device binding; kiosk mode; encrypted SQLite; push/pull sync engine; sync status UI | Expo app on your Android phone (Expo Go) or an emulator, plus a web preview | The app works offline and syncs when back online | L | ⬜ |
-| D3.3 | **Attendance, fallback method first**:<br/>• QR/NFC worker card + photo + supervisor confirmation<br/>• Geofence checks; signed offline records; clock-drift detection<br/>• Anomaly rules: duplicates, two sites, impossible travel<br/>• Override workflow<br/>• Timesheet rules and public holidays<br/>• Muster roll in the web app | Kiosk check-in on the device, muster roll with flags, anomaly review | A foreman records attendance offline; it syncs correctly and anomalies are flagged | L | ⬜ |
+| D3.3 | **Attendance, fallback method first**:<br/>• QR/NFC worker card + photo + supervisor confirmation<br/>• Geofence checks; signed offline records; clock-drift detection<br/>• Anomaly rules: duplicates, two sites, impossible travel<br/>• Override workflow<br/>• Timesheet rules and public holidays<br/>• Muster roll in the web app | Kiosk check-in on the device, muster roll with flags, anomaly review | A foreman records attendance offline; it syncs correctly and anomalies are flagged | L | ⏳ |
 | D3.4 | **Attendance, first biometric method** (chosen in [QUESTIONS.md](./QUESTIONS.md)):<br/>• Uses the `CaptureMethod` interface<br/>• Gated per tenant behind a signed-off DPIA<br/>• Template-only encrypted storage<br/>• Retention and deletion jobs | Enrolment and identification on the kiosk, consent and DPIA gate, deletion log | **Phase 3 acceptance** | XL | ⬜ |
+
+> **D3.3 is partly built (⏳).** The web-only slice is built and verified locally on `phase-3/d3.3-web-timesheets` (not pushed, not reviewed): pluggable capture method (`web_manual` implemented; `qr_card`, `face`, `fingerprint` and `terminal` reserved with nullable evidence columns), the daily muster roll in the web app with supervisor confirmation by a different person, corrections and anomaly review, effective-dated timesheet rules (company default and project overrides) with the 2026–2027 Kenyan public holidays, weekly periods with a Thursday 18:00 cut-off, approval that snapshots immutable timesheet lines for payroll, and adjustments to approved periods. Still to do for D3.3: the site-app check-in (QR/NFC card and photo), geofence checks, signed offline records, clock-drift detection, duplicate and impossible-travel rules, and the kiosk flow (they need D3.2). See [IMPLEMENTATION_STATUS](./IMPLEMENTATION_STATUS.md#d33-web-attendance-and-timesheets-branch-phase-3d33-web-timesheets).
 
 ### Phase 4: Payroll and M-Pesa
 
@@ -201,4 +203,5 @@ These have legal or commercial lead times, so they should start early:
 | D2.1 | `phase-2/d2.1-projects-sites` |
 | D2.2 | `phase-2/d2.2-bq-import` |
 | D3.1 | `phase-3/d3.1-labour-registry` |
+| D3.3 (web slice) | `phase-3/d3.3-web-timesheets` |
 | … | `phase-N/dN.x-<slug>` |

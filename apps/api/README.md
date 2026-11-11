@@ -329,6 +329,87 @@ rates, and gang/engagement triggers. A rule broken only at the database level is
 `labour_rates`, or `GET labourers/:id/rate?projectId&date&basis`; a payroll line should store the
 `labour_rates.id` it used.
 
+## Attendance and timesheets (D3.3, web slice)
+
+All routes are under `/api/v1/attendance`, follow the conventions above and use the shared
+schemas in `packages/validation/src/attendance.ts`. Dates are `YYYY-MM-DD` in Africa/Nairobi;
+times are `HH:MM` (24 h); durations are integer minutes; day counts are half-day units
+(`halfDays`, with `days` as the decimal string `"4.5"`). Every command accepts an optional
+`Idempotency-Key` header (8–128 letters, digits, `-`, `_`): a retry with the same key, user and
+payload returns the stored response with `Idempotent-Replayed: true`; another payload is 409
+`idempotency-key-reused`. Commands send the `version` they read (409 `version-conflict`).
+Design notes: [ARCHITECTURE §4.4](../../docs/ARCHITECTURE.md#44-attendance-and-timesheets-module-d33-web-slice).
+
+| Method/path                                                                 | Body / query                                                                                                                                                                                                                                                    | Response                                                                                                                                                                | Permission                                                                                                   |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| GET overview                                                                | —                                                                                                                                                                                                                                                               | `{today, projects[{sites[{today}], openAnomalies, pendingCorrections, pendingAdjustments, periodsAwaitingApproval, currentPeriod, canRecord}]}`                         | `attendance.view`                                                                                            |
+| GET settings                                                                | —                                                                                                                                                                                                                                                               | `{today, periodSettings, rules, holidays, canConfigure, ruleProjects}`                                                                                                  | `attendance.view`, `timesheets.manage_rules` or `config.manage`                                              |
+| PUT settings/periods                                                        | `{weekEndsOn, cutoffTime, paydayWeekday, version}`                                                                                                                                                                                                              | settings                                                                                                                                                                | `config.manage`                                                                                              |
+| POST rules                                                                  | `{projectId?, effectiveFrom, normalMinutes, defaultBreakMinutes, breakAfterMinutes, dayStartMinutes, lateGraceMinutes, halfDayThresholdMinutes, maxPlausibleMinutes, restDays, otWeekdayMultiplier, otRestDayMultiplier, otHolidayMultiplier, sourceReference}` | 201 `{rule}`                                                                                                                                                            | company: `config.manage`; override: `timesheets.manage_rules`                                                |
+| POST rules/defaults · DELETE rules/:id                                      | —                                                                                                                                                                                                                                                               | settings · `{message}` (scheduled versions only)                                                                                                                        | `config.manage` (delete: as for adding)                                                                      |
+| POST holidays · POST holidays/defaults · DELETE holidays/:id                | `{date, nameEn, nameSw, kind, source}` · — · —                                                                                                                                                                                                                  | 201 `{holiday}` · settings · `{message}`                                                                                                                                | `config.manage`                                                                                              |
+| GET projects/:projectId/muster                                              | `?siteId&date&gangId?`                                                                                                                                                                                                                                          | `{project, site, sites, gangs, date, dayType, holiday, rule, period, day, rows[{labourer, record, anomalies, otherSites}], corrections, editable, locked, permissions}` | `attendance.view`                                                                                            |
+| PUT projects/:projectId/muster                                              | `{siteId, date, dayVersion, entries[{labourerId, status, checkIn, checkOut, overnight, breakMinutes, notes, version}]}`                                                                                                                                         | muster                                                                                                                                                                  | `attendance.record`                                                                                          |
+| POST days/:dayId/submit · confirm · return                                  | `{version}` · `{version}` · `{version, reason}`                                                                                                                                                                                                                 | muster                                                                                                                                                                  | submit `attendance.record`; confirm/return `attendance.confirm`, not the submitter (confirm: nor a recorder) |
+| POST days/:dayId/corrections                                                | `{labourerId, status, checkIn, checkOut, overnight, breakMinutes, notes, reason, recordVersion}`                                                                                                                                                                | 201 `{correction}`                                                                                                                                                      | `attendance.override` + step-up                                                                              |
+| GET projects/:projectId/corrections · POST corrections/:id/approve · reject | `?status` · `{version, note?}` · `{version, note}`                                                                                                                                                                                                              | `{corrections}` · `{correction}`                                                                                                                                        | view; decide `attendance.confirm`, not the requester                                                         |
+| GET anomalies · POST anomalies/:id/review                                   | `?projectId&status&kind&from&to` · `{decision: resolve\|dismiss, note, version}`                                                                                                                                                                                | `{anomalies, counts, reviewableProjectIds, projects}` · `{anomaly}`                                                                                                     | view; review `attendance.review_anomalies`, not a recorder                                                   |
+| GET projects/:projectId/periods · GET periods/:id                           | —                                                                                                                                                                                                                                                               | `{project, periods, settings, pendingAdjustments}` · `{project, period, source, lines, totals, rules, holidays, blockers, adjustments, permissions}`                    | `attendance.view`                                                                                            |
+| GET periods/:id/lines                                                       | —                                                                                                                                                                                                                                                               | `{project, period, lines, ruleVersions, holidays}` (approved periods only; 409 `period-not-approved`)                                                                   | `attendance.view`, `payroll.prepare` or `finance.view`                                                       |
+| POST periods/:id/submit · reopen                                            | `{version}`                                                                                                                                                                                                                                                     | period detail                                                                                                                                                           | `timesheets.submit`                                                                                          |
+| POST periods/:id/approve · reject                                           | `{version}` · `{version, reason}`                                                                                                                                                                                                                               | period detail                                                                                                                                                           | `timesheets.approve`, not the submitter                                                                      |
+| POST periods/:id/adjustments                                                | `{labourerId, siteId, date, status, checkIn, checkOut, overnight, breakMinutes, notes, reason}`                                                                                                                                                                 | 201 `{adjustment}`                                                                                                                                                      | `attendance.override` + step-up                                                                              |
+| GET projects/:projectId/adjustments · POST adjustments/:id/approve · reject | `?status` · `{version, note?}` · `{version, note}`                                                                                                                                                                                                              | `{adjustments}` · `{adjustment}`                                                                                                                                        | view; decide `timesheets.approve`, not the requester                                                         |
+| GET labourers/:labourerId/summary                                           | `?from&to` (default the last 56 days)                                                                                                                                                                                                                           | `{labourerId, from, to, projects[{approved, pending, lastWorkedOn}], openAnomalies}`                                                                                    | `attendance.view` on the projects shown                                                                      |
+
+Attendance problem codes (409 unless noted): `not-engaged`, `period-locked`, `period-overlap`,
+`day-not-draft`, `day-empty`, `invalid-transition`, `same-person`, `no-changes`,
+`correction-pending`, `correction-not-needed`, `pending-corrections`, `period-not-due`,
+`unconfirmed-days`, `open-anomalies`, `rules-not-configured`, `rules-unverified` (production
+only), `period-changed`, `period-not-approved`, `date-outside-period`, `adjustment-pending`,
+`no-target-period`, `use-correction`, `rule-exists`, `rule-in-force`, `holiday-exists`,
+`idempotency-key-reused`, `attendance-rule` (a database rule); 400
+`date-in-future`, `site-not-in-project`, `invalid-idempotency-key`; 403 `step-up-required`, `mfa-required`. Database
+triggers and CHECKs repeat every rule (engagement on the date, maker ≠ checker, period locks,
+one record per labourer/site/day, insert-only snapshots).
+
+### Payroll-facing timesheet contract
+
+D4.1 payroll reads **approved** periods only, and never recomputes them:
+
+- **Where.** `GET /api/v1/attendance/periods/:id/lines` (shared schema
+  `timesheetLinesResponseSchema`), or the `timesheet_lines` table joined to
+  `timesheet_periods` where `status = 'approved'`. Approval publishes the outbox event
+  `timesheet.period_approved` (`aggregate_id` = period id; payload `projectId`, `startDate`,
+  `endDate`, `lines`) in the same transaction, so payroll can pick periods up from
+  `outbox_events` (no relay runs yet).
+- **One line per labourer and `line_key`.** `kind = 'attendance'` (`line_key = 'attendance'`)
+  holds the labourer's attendance on the project in the period; `kind = 'adjustment'`
+  (`line_key = 'adjustment:<adjustment id>'`, `adjustment_id`, `original_period_id`) is an approved
+  adjustment of an earlier approved period that landed here — its totals are a signed **delta**
+  (after − before), so payroll adds it to this period's pay and never reopens the original
+  period. Columns: `half_days`, `worked_minutes`, `normal_minutes`, `ot_weekday_minutes`,
+  `ot_rest_day_minutes`, `ot_holiday_minutes`, `late_minutes`, `present_count`,
+  `half_day_count`, `absent_count`, `leave_count`, `sick_count`, `rule_version_ids`,
+  `record_ids` (source `attendance_records`) and `days` (per date: day type, rule version id,
+  totals, record ids). The API shape is `TimesheetLine` (`totals.overtimeMinutes.weekday`,
+  `.rest_day`, `.public_holiday`; `days[].ruleVersionId`).
+- **Rule snapshot.** Lines reference the `timesheet_rule_versions` rows they were computed with
+  (`rule_version_ids`, and per day `days[].ruleVersionId`); the endpoint returns them in
+  `ruleVersions` with the overtime multipliers (decimal strings such as `"1.50"`), and the
+  period's public holidays. Rule versions are never updated, and none can take effect inside a
+  submitted or approved period, so the referenced values are the ones used. Multipliers are
+  **not** applied here: gross pay = rate (`resolveRate` over `labour_rates`) × days or hours plus
+  overtime minutes × multiplier is payroll's job. Rules start `unverified` (COMPLIANCE-REVIEW
+  CR-PAY-08); production refuses to approve periods computed with them.
+- **Days, not money.** A full day is 2 half-day units; a labourer's day is counted once across
+  all sites and projects, and a project's lines carry only its share (a two-site day is never
+  paid twice). Absence, leave and sick days are counted (`*_count`) without minutes; whether
+  leave or sick days are paid is payroll policy.
+- **Adjustments.** `timesheet_adjustments` (status `approved`, `delta`, `target_period_id`)
+  explain each adjustment line; `GET projects/:projectId/adjustments` lists them with the reason,
+  requester and decider.
+
 ## Development seed
 
 `npx pnpm@12.17.0 db:seed` (root; it builds the API first) creates the synthetic company
@@ -337,7 +418,12 @@ and three projects (Ruiru Heights Apartments, Kitengela Bungalow, Syokimau Townh
 sites, geofences, WBS and milestones. Since D3.1 it also adds the standard trades and skill
 levels, 40 synthetic labourers (national IDs `900000xx`, phones `0700 000 0xx`, KRA PINs
 `A9000000xxZ`; encrypted with the configured field keys), rates, six gangs, NCA cards (some
-expiring or expired) and one do-not-rehire case. It prints each account's identifier and, when it
+expiring or expired) and one do-not-rehire case. Since D3.3 it also adds the 2026–2027 public
+holidays, the unverified demonstration timesheet rule and nine weeks of synthetic muster rolls
+on Ruiru Heights and Kitengela (past weeks approved with their timesheet lines, the last
+complete week submitted, the current week open, open two-site and excessive-hours anomalies,
+one approved adjustment); this part is one transaction and is skipped when the company already
+has a timesheet period. It prints each account's identifier and, when it
 creates the account, a generated password; for the owner also the TOTP secret and
 `otpauth://` URI. It is idempotent: a second run reports "already present" and leaves
 passwords unchanged. `npx pnpm@12.17.0 --filter @pm-buddy/api db:seed --reset-credentials`

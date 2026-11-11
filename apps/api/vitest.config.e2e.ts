@@ -15,6 +15,8 @@ export default defineConfig({
       LOG_LEVEL: "silent",
       WEB_ORIGIN: "http://localhost:3000",
       AUTH_MFA_ENCRYPTION_KEY: randomBytes(32).toString("hex"),
+      FIELD_ENCRYPTION_KEYS: `1:${randomBytes(32).toString("hex")}`,
+      FIELD_BLIND_INDEX_KEY: randomBytes(32).toString("hex"),
       DATABASE_URL: testDatabaseUrls().appUrl,
     },
     testTimeout: 20_000,

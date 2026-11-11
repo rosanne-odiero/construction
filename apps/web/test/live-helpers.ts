@@ -19,7 +19,7 @@ const BLANK_TILE = Buffer.from(
   "base64",
 );
 
-export type Persona = "owner" | "agent" | "pm";
+export type Persona = "owner" | "agent" | "pm" | "finance";
 
 /** A session cookie the mock API recognises; each call gets a fresh copy of the fixture data. */
 export async function signInAs(context: BrowserContext, persona: Persona) {

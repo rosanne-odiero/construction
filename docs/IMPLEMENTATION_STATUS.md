@@ -410,3 +410,74 @@ Status: built and verified locally in a separate git worktree with its own Docke
 - A variation is always based on the newest approved version; stale variations are rebased, never merged. Percentage lines (PC attendance and profit) are not recomputed when their PC sum changes.
 - Browser tests use the mock API (the mock reuses the shared domain functions for pricing and totals); the real API is covered by the API e2e suite. No real-API browser smoke was run for D2.3.
 - The seed build-up's quantities and costs are synthetic. A QS should review the variation line model and the build-up example, and a native speaker the Kiswahili wording.
+
+## Independent review of D5.1
+
+A separate reviewer traced the payout maker-checker, tenant isolation (RLS, composite keys), encryption contexts, reveal and lookup limits and the conversion maths and found nothing critical or high. Its low findings and two found while checking the screens are fixed, each with a regression test that fails when the fix is reverted:
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Low | A status reason of one or two characters passed validation and hit the database CHECK (500) | `statusReason` needs three characters (code points, as `char_length` counts); API e2e expects 400. The reviewer's emoji-name case was already a 400: Zod 4 counts code points |
+| 2 | Low | Unlimited company units made the conversion search quadratic (2,000 units: 0.6 s per call on the shared event loop) | At most 200 company units per company (`unit-limit`, 409); the resolver only takes standard steps that end at the target or at a unit with a factor (3,000 units in a few ms; same results) |
+| 3 | Low | Supplier and material pickers loaded only the first 200 records; a calculator link could not preselect a later material | Pickers follow the cursor (up to 10 pages) and the calculator fetches the linked material directly (`lib/procurement-server.ts`, `collectPages`) |
+| 4 | Low | A 5-character account number was masked as `••••2345` | Numbers shorter than ten characters show only the last two (`••••45`); the database mask CHECK accepts both forms |
+| 5 | Low | Comparable prices used the cent-rounded net, so a VAT-inclusive 800 → 900 showed +12.4989 % | The comparison uses the exact net and rounds once (`exactNetPrice`): +12.5 % |
+| 6 | Low | The calculator text described the factor order backwards (EN and SW) | Now "supplier first, then material, then standard" |
+
+## D5.1 catalogue and suppliers (branch `phase-5/d5.1-catalogue-suppliers`)
+
+Status: built and verified locally in the `construction-d23` worktree (based on the D2.3 branch tip) with its own Docker stack (`pmb-d23`: PostgreSQL on 55632); **not committed** (left for review). Design: [ARCHITECTURE §4.4](./ARCHITECTURE.md#44-catalogue-and-suppliers-d51), §8 (maker-checker), §10 (encryption as built) and decisions D-34/D-35; implemented model in [ERD §5](./ERD.md#5-materials-procurement-and-stores); invariants in [INVARIANTS](./INVARIANTS.md); acceptance rows in [ACCEPTANCE_MATRIX](./ACCEPTANCE_MATRIX.md); configuration (`materials.price_change_alert_pct`, `materials.conversion.rounding`, `materials.steel.mass_formula`, `materials.limits`, `suppliers.payout.contact_change_window_days`, `suppliers.reveal.rate_limit`, `FIELD_*` keys) in [CONFIGURATION](./CONFIGURATION.md); threats A-25 and A-28 in [THREAT_MODEL](./THREAT_MODEL.md); walkthrough in the [Phase 5 demo](./demos/phase-5.md). Earlier security fixes are untouched.
+
+**What changed**
+
+- **Dependencies.** None added or changed (`decimal.js` was not needed: the conversion engine uses `BigInt` ratios); `pnpm-lock.yaml` and `.pnpmfile.mjs` are unchanged; `packages/domain/package.json` changes only its description.
+- **Field cipher (shared with D3.1).** `apps/api/src/modules/labour/field-cipher.ts` and `field-cipher.spec.ts` are byte-identical copies of the D3.1 session's files (checked with `cmp`), with only its `packages/validation/src/env.ts` (`FIELD_ENCRYPTION_KEYS`, `FIELD_ENCRYPTION_ACTIVE_KEY_VERSION`, `FIELD_BLIND_INDEX_KEY`), `apps/api/.env.example` and `apps/api/vitest.config.e2e.ts` hunks applied, so both branches merge cleanly. It should move to a shared module once D3.1 merges. Local keys are in the git-ignored `apps/api/.env` (mode 600).
+- **Shared packages.** `types/procurement.ts` (dimensions, standard unit codes, categories, steel and roofing constants, conversion sources and derived rules, rounding, VAT treatments, price sources and alert states, supplier/eTIMS/payout statuses, verification methods, reveal fields, `PAYOUT_CONTACT_CHANGE_WINDOW_DAYS`, `PROCUREMENT_LIMITS`). `domain/materials/`: `ratio.ts` (exact `BigInt` rationals, half-up), `units.ts` (standard and company units, unit classes), `attributes.ts` (steel d²/162, piece length, cover width, timber section, mesh sheet/roll), `convert.ts` (resolver, effective dating, refusals, `checkConversionRule`), `prices.ts` (`splitVat`, `comparableUnitPrice`, `priceChange`), `identifiers.ts` (KRA PIN and account number normalisation and masks), `defaults.ts` (21-material Kenyan starter catalogue). `validation/procurement.ts` (every D5.1 request and response). EN/SW namespaces `catalogue`, `suppliers`, `nav.items.suppliers` and `apiErrors` additions (`i18n:check`: 2,670 keys in each).
+- **Database.** Migration `20261115090000_procurement_catalogue` (no existing migration edited): tables `units`, `materials`, `unit_conversions`, `material_prices`, `procurement_settings`, `suppliers`, `supplier_contacts`, `supplier_phone_changes`, `supplier_payout_versions`, each with `tenant_id`, ENABLE + FORCE RLS with `WITH CHECK`, composite `(tenant_id, …)` FKs and CHECKs; functions `app.standard_unit_dimension`, `app.unit_class`, triggers `app.guard_unit`, `app.guard_material`, `app.guard_supplier`, `app.guard_unit_conversion`, `app.guard_material_price`, `app.record_contact_phone_change`, `app.guard_payout_version`; DELETE revoked on all nine tables except contacts, UPDATE on prices and phone changes. Prisma models for all of it (partial unique indexes `supplier_payout_versions_one_current` and `supplier_contacts_one_primary` live in SQL only).
+- **API.** `modules/procurement`: `CatalogueController` (16 operations) and `SuppliersController` (8), OpenAPI-annotated (the e2e suite checks every operation ID); `CatalogueService`, `ConversionsService`, `PricesService`, `SuppliersService`, `PayoutsService`, `CatalogueStore` (codes `MAT-NNNN`/`SUP-NNNN` under a company row lock, monotonic UUIDv7 IDs, conversion context), `ProcurementAccess`, `SupplierCrypto`, `starter-catalogue.ts`, mappers. Seed: a finance account (Daniel Mwangi, TOTP), the starter catalogue and `seed/demo-procurement.ts` (three synthetic suppliers, quarry trip factors, eight prices with one alert, one verified and one pending payout version).
+- **Web.** Pages `catalogue` (list), `catalogue/[materialId]`, `catalogue/alerts`, `catalogue/convert`, `catalogue/units`, `suppliers`, `suppliers/new`, `suppliers/[supplierId]`, `suppliers/[supplierId]/edit`; components in `components/procurement/` (sub-navigation, material form, starter-catalogue button, conversion and end dialogs, price dialog, price chart (recharts, animation off), calculator, unit dialog and threshold form, supplier form, reveal button, payout panel); `lib/procurement.ts` (unit labels, exact money and factor formatting). The sidebar's **Materials** entry opens the live catalogue (no longer "Phase 5"); **Suppliers** is new under Commercial.
+- **Tests.** Domain `materials/convert.test.ts` and `prices.test.ts` (39); validation `procurement.test.ts` (9); web `lib/procurement.test.ts` (2); API unit `field-cipher.spec.ts` (copied) and the seed spec; API e2e `test/procurement.e2e-spec.ts` (12); web `test/procurement.spec.ts` (6) with the mock module `test/mock-procurement.mts`.
+
+**Decisions**
+
+- **Exact conversions:** rationals on `BigInt`, one half-up rounding to 6 decimals per result with an `exact` flag; resolution supplier → material → attribute formula → standard; a lorry trip and package units have no universal size; steel d²/162 kg/m and 12 m bars (within 0.15 % of BS 4449). Same-dimension explicit factors are refused.
+- **Prices compare net of VAT** per base unit on the exact net (rounded once to six decimals of a minor unit), so the seeded cement 800 → 900 (VAT-inclusive) is +12.5 %; the stored net and gross stay rounded to the cent. The alert is strictly above the threshold, and the threshold used is stored on the row.
+- **No new permission keys or role changes.** View: any of `procurement.manage_suppliers`, `procurement.requisition`, `procurement.approve`, `stores.manage`, `finance.view`; manage: `procurement.manage_suppliers`; reveal identifiers: manage or company-wide `finance.view_sensitive`; reveal bank account: `finance.view_sensitive`; verify/reject payouts: company-wide `payments.approve` (+ step-up to verify); settings: `config.manage`.
+- **Payout maker-checker in the database:** contributors include anyone who changed a supplier contact phone within 30 days (closes the "change the known number, then call it" path); the decider must be the signed-in user.
+- **Alerts are listed, not pushed:** there is no in-app notification centre yet (D1.3 channels deliver authentication messages only), so alerts appear on the alerts page, the material and the catalogue list.
+- **Forms:** React Hook Form is not in the repository; the forms follow the existing controlled-state + shared Zod schema pattern rather than adding a dependency.
+- **Kiswahili:** materials and company units have an optional Kiswahili name; unit and category names come from the i18n catalogues. Terms needing native review: *safari ya lori* (lorry trip), *nondo* (steel bars), *mabati ya paa* (roofing), *wavu wa BRC*, *kiwango* (threshold), the payout verification methods.
+
+**Behaviour changes to note (existing code and tests)**
+
+- `apps/api/test/projects.e2e-spec.ts`: the seed test expects a fourth tenant member (finance) and the procurement summary (21 materials, 8 conversions, 3 suppliers, 8 prices, 1 alert; payout states pending and verified). `apps/api/test/support.ts` knows the D5.1 response contracts.
+- `apps/web/test/mock-api.mts` has a fourth persona (`finance`, Daniel Mwangi, company-wide, MFA); non-company-wide personas get procurement access only through project assignments, like `AccessPolicy`. `use-problem-message.ts` maps the D5.1 problem codes.
+
+**Commands run (from the worktree root unless noted; PATH set to the arm64 Node 24.22.2 and the pnpm shim) and actual results**
+
+| Command | Actual result |
+|---|---|
+| `cmp` of the two cipher files against the D3.1 reference copies | Identical (checked again after formatting) |
+| `npx pnpm@12.17.0 format:check` | First run **failed** on 9 new D5.1 files; after `npx prettier --write` on them: "All matched files use Prettier code style!" (the cipher files were not reformatted) |
+| `npx pnpm@12.17.0 turbo run lint typecheck test i18n:check build` | **26 successful, 0 cached** (31.1 s). oxlint "Found 0 warnings and 0 errors" in `types`, `i18n`, `domain`, `validation`, `api`; ESLint clean in web. Unit tests: types 15, i18n 3, domain 188, validation 71, web 22, API 109 (**408**). "i18n OK: 2670 keys in en and sw, all ICU messages compile." `next build` compiled successfully |
+| `docker compose -p pmb-d23 … exec postgres psql -U postgres`: drop/create `pmb_test` owned by `pmb_migrator`, schema owner, `REVOKE CREATE`, `GRANT USAGE`, default privileges (tables, sequences, functions) as in `infra/docker/postgres/init/01-roles.sh` | Done before the final e2e run |
+| `PLAYWRIGHT_WEB_PORT=3410 PLAYWRIGHT_MOCK_API_PORT=3499 npx pnpm@12.17.0 turbo run test:e2e` | **7 successful** (2 m 39 s). API **9 files, 122 tests** (`procurement.e2e-spec.ts` 12, `projects.e2e-spec.ts` 15) against `pmb_test` under `pmb_app`; web **50 passed** (`procurement.spec.ts` 6) in 2.7 min |
+| `npx prisma migrate status`; `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` (in `apps/api`, dev database `pmb` migrated with `prisma migrate deploy`) | "15 migrations found", "Database schema is up to date!"; "No difference detected.", exit code 0 |
+| `grep -c 'integrity: sha1-' pnpm-lock.yaml`; `npx pnpm@12.17.0 install --frozen-lockfile` | 0; exit 0, "Lockfile passes supply-chain policies", "Lockfile is up to date" |
+| Mutation: API maker-checker check in `PayoutsService` disabled, `procurement.e2e-spec.ts` run, file restored | 12/12 still pass: the database CHECK and trigger refuse self-verification on their own (mapped to 403 `maker-checker`) |
+| Mutation: `divideHalfUp` replaced by truncation, `vitest run src/materials`, file restored | 9 tests fail (rounding, round-trip properties, steel, VAT split); restored: 39 pass |
+| During development | One API e2e run hit a transient "Can't reach database server at localhost:55632" while the container was healthy; the re-run passed. The first web spec runs failed on wrong expectations in the new spec (KES formatting, +12.5 % instead of the net-of-VAT +12.4989 %, ambiguous locators); the spec was corrected, not the code. A supplier-page column header ("Supplier" over the material names) was found in the screenshots and fixed |
+
+Screenshots (EN light catalogue, material and calculator; SW supplier profile; 360 px SW dark supplier profile) were taken with Playwright against the mock API and kept outside the repository.
+
+**Not done / limitations**
+
+- Supplier ratings, balances and statements (need supplier invoices, D5.2), prices written from quotations and invoices (D5.2), payment to verified details and a hold period before the first payment (D5.2/D4.3, OR-05), alert delivery by SMS, email or an in-app inbox (Phase 8), eTIMS checks with KRA (CR-TAX-02).
+- Browser tests use the mock API (which reuses the shared domain functions); the real API is covered by the API e2e suite. No real-API browser smoke was run.
+- The starter catalogue's densities and coverage factors are labelled ASSUMPTION and need QS review; the steel formula is the industry rule of thumb, not the BS 4449 table.
+
+**Open risks**
+
+- **Merge conflicts with D3.1** (labour registry, parallel session) are likely in `prisma/schema.prisma` (tenant relations), `app.module.ts`, `test/support.ts`, `demo-seed.ts`, the i18n JSON files, `nav-config.ts`, `mock-api.mts` and these docs (decision IDs D-34/D-35 and threat A-28 may collide). The cipher files and env hunks are byte-identical by design.
+- Key management is the env-key interim (no KMS yet); losing `FIELD_ENCRYPTION_KEYS` makes supplier identifiers unreadable (CONFIGURATION §8).
+- Partial unique indexes are in SQL only; a future `prisma migrate dev` must not drop them (the drift check passes because Prisma ignores them).

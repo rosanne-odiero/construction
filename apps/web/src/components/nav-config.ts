@@ -13,6 +13,7 @@ import {
   Receipt,
   ScanFace,
   ShieldAlert,
+  Truck,
   Wallet,
   Warehouse,
   type LucideIcon,
@@ -27,6 +28,7 @@ export type NavKey =
   | "attendance"
   | "diary"
   | "materials"
+  | "suppliers"
   | "stores"
   | "plant"
   | "safety"
@@ -58,6 +60,7 @@ export const navGroups: {
     key: "commercial",
     items: [
       { key: "bq", href: "/bq", icon: FileSpreadsheet },
+      { key: "suppliers", href: "/suppliers", icon: Truck },
       { key: "valuations", href: "/soon/valuations", icon: Calculator, phase: 6 },
     ],
   },
@@ -67,7 +70,7 @@ export const navGroups: {
       { key: "labour", href: "/labour", icon: HardHat },
       { key: "attendance", href: "/attendance", icon: ScanFace },
       { key: "diary", href: "/soon/diary", icon: NotebookPen, phase: 6 },
-      { key: "materials", href: "/soon/materials", icon: Package, phase: 5 },
+      { key: "materials", href: "/catalogue", icon: Package },
       { key: "stores", href: "/soon/stores", icon: Warehouse, phase: 5 },
       { key: "plant", href: "/soon/plant", icon: Forklift, phase: 8 },
       { key: "safety", href: "/soon/safety", icon: ShieldAlert, phase: 8 },
@@ -108,11 +111,13 @@ export const comingSoonSections = {
 export type ComingSoonSection = keyof typeof comingSoonSections;
 
 /**
- * Routes backed by the real API: the projects list, project pages and site editors (D2.1), and a
- * project's BQ viewer and import wizard (D2.2).
+ * Routes backed by the real API: the projects list, project pages and site editors (D2.1), a
+ * project's BQ viewer and import wizard (D2.2), and the catalogue and suppliers (D5.1).
  */
 export function isLiveRoute(pathname: string): boolean {
   if (pathname === "/projects" || pathname === "/bq") return true;
+  if (/^\/catalogue(\/(alerts|convert|units|[0-9a-f-]{36}))?$/.test(pathname)) return true;
+  if (/^\/suppliers(\/(new|[0-9a-f-]{36}(\/edit)?))?$/.test(pathname)) return true;
   if (/^\/rate-buildups(\/(new|[0-9a-f-]{36}))?$/.test(pathname)) return true;
   return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/(import|instructions|versions|variations(\/[0-9a-f-]{36})?))?)?$/.test(
     pathname,

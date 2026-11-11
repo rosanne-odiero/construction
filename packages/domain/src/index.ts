@@ -75,3 +75,4 @@ export {
   type WbsWeightNode,
 } from "./wbs.js";
 export * from "./bq/index.js";
+export * from "./materials/index.js";

@@ -56,6 +56,20 @@ import {
   sessionsResponseSchema,
   tenantCreatedResponseSchema,
   tenantsResponseSchema,
+  conversionResponseSchema,
+  conversionResultResponseSchema,
+  loadDefaultsResponseSchema,
+  materialDetailResponseSchema,
+  materialResponseSchema,
+  materialsResponseSchema,
+  priceAlertsResponseSchema,
+  priceResponseSchema,
+  procurementSettingsResponseSchema,
+  supplierDetailResponseSchema,
+  supplierRevealResponseSchema,
+  suppliersResponseSchema,
+  unitResponseSchema,
+  unitsResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -155,7 +169,31 @@ export function responseContract(method: string, target: string) {
     return method === "get" ? buildupsResponseSchema : buildupResponseSchema;
   if (/^rate-buildups\/[^/]+$/.test(path)) return buildupResponseSchema;
   if (/^rate-buildups\/[^/]+\/versions\/\d+$/.test(path)) return buildupVersionResponseSchema;
+  const procurement = procurementContract(method, path);
+  if (procurement) return procurement;
   return messageResponseSchema;
+}
+
+/** The D5.1 catalogue and supplier endpoints' success contracts. */
+function procurementContract(method: string, path: string) {
+  if (path === "materials")
+    return method === "get" ? materialsResponseSchema : materialResponseSchema;
+  if (path === "materials/defaults") return loadDefaultsResponseSchema;
+  if (/^materials\/[^/]+$/.test(path))
+    return method === "get" ? materialDetailResponseSchema : materialResponseSchema;
+  if (/^materials\/[^/]+\/conversions(\/[^/]+\/end)?$/.test(path)) return conversionResponseSchema;
+  if (/^materials\/[^/]+\/prices(\/[^/]+\/corrections)?$/.test(path)) return priceResponseSchema;
+  if (path === "price-alerts") return priceAlertsResponseSchema;
+  if (path === "conversions/calculate") return conversionResultResponseSchema;
+  if (path === "units") return method === "get" ? unitsResponseSchema : unitResponseSchema;
+  if (/^units\/[^/]+$/.test(path)) return unitResponseSchema;
+  if (path === "procurement/settings") return procurementSettingsResponseSchema;
+  if (path === "suppliers")
+    return method === "get" ? suppliersResponseSchema : supplierDetailResponseSchema;
+  if (/^suppliers\/[^/]+\/reveal$/.test(path)) return supplierRevealResponseSchema;
+  if (/^suppliers\/[^/]+(\/payout-details(\/[^/]+\/(verify|reject))?)?$/.test(path))
+    return supplierDetailResponseSchema;
+  return null;
 }
 
 export class Browser {

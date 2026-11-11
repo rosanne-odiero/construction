@@ -76,9 +76,9 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D2.1 | **Projects, sites and geofences**: polygon or radius geofences drawn on a map; WBS/phases; milestones; team assignment by role; project dashboard shell | Project list and detail, site map editor, team tab | Projects and sites with geofences persist and are tenant-isolated | M | ⏳ |
-| D2.2 | **BQ import**:<br/>• `.xlsx` upload; sheet and header detection; column-mapping screen; saved mapping templates<br/>• Bill → Section → Item hierarchy<br/>• Preliminaries, provisional sums, PC sums, contingencies, dayworks and VAT<br/>• Totals reconciliation; BQ viewer; Excel and PDF export | Import wizard, BQ tree table, totals check | **A real Excel BQ imports correctly and totals match** | L | ⏳ |
-| D2.3 | **BQ versions and variations**: Architect's/Engineer's Instructions; Variation Orders with an approval workflow; original vs revised contract sum; rate build-up library | VO list and approval, version compare, rate build-up editor | **Phase 2 acceptance** | M | ⏳ |
+| D2.1 | **Projects, sites and geofences**: polygon or radius geofences drawn on a map; WBS/phases; milestones; team assignment by role; project dashboard shell | Project list and detail, site map editor, team tab | Projects and sites with geofences persist and are tenant-isolated | M | ✅ |
+| D2.2 | **BQ import**:<br/>• `.xlsx` upload; sheet and header detection; column-mapping screen; saved mapping templates<br/>• Bill → Section → Item hierarchy<br/>• Preliminaries, provisional sums, PC sums, contingencies, dayworks and VAT<br/>• Totals reconciliation; BQ viewer; Excel and PDF export | Import wizard, BQ tree table, totals check | **A real Excel BQ imports correctly and totals match** | L | ✅ |
+| D2.3 | **BQ versions and variations**: Architect's/Engineer's Instructions; Variation Orders with an approval workflow; original vs revised contract sum; rate build-up library | VO list and approval, version compare, rate build-up editor | **Phase 2 acceptance** | M | ✅ |
 
 ### Phase 3: Labour and attendance
 
@@ -101,7 +101,7 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D5.1 | **Catalogue and suppliers**:<br/>• Materials with Kenyan units and conversions (bags, tonnes, lorry trips, steel by length/kg)<br/>• Suppliers: KRA PIN, eTIMS, Paybill/Till, bank details, terms<br/>• Price history | Catalogue, unit conversions, supplier profile | Conversions are unit-tested | M | ⬜ |
+| D5.1 | **Catalogue and suppliers**:<br/>• Materials with Kenyan units and conversions (bags, tonnes, lorry trips, steel by length/kg)<br/>• Suppliers: KRA PIN, eTIMS, Paybill/Till, bank details, terms<br/>• Price history | Catalogue, unit conversions, supplier profile | Conversions are unit-tested | M | 🔎 |
 | D5.2 | **Procure-to-pay**:<br/>• Requisition → approval → RFQ and quote comparison → LPO<br/>• Goods Received Note in the site app (offline, photos, GPS, vehicle reg)<br/>• Supplier invoice with eTIMS<br/>• Three-way match; B2B or bank payment | End-to-end procurement flow; match screen | **The three-way match blocks bad payments** | XL | ⬜ |
 | D5.3 | **Stores**: stock ledger per site; issues to a BQ item or gang; returns and transfers; stock takes; wastage; low stock; theoretical vs actual consumption variance alerts | Stock ledger, stock take, variance alerts | **A variance alert fires on test data** | L | ⬜ |
 | D5.4 | **Spending and cash flow** (brief §5.8):<br/>• Cost tagging<br/>• Petty cash floats; expenses with receipts<br/>• M-Pesa SMS parser<br/>• Budget vs actual vs committed; cash-flow forecast; spend alerts | Petty cash, expense capture, budget and cash-flow views | **Phase 5 acceptance** | M | ⬜ |
@@ -201,4 +201,5 @@ These have legal or commercial lead times, so they should start early:
 | D2.1 | `phase-2/d2.1-projects-sites` |
 | D2.2 | `phase-2/d2.2-bq-import` |
 | D2.3 | `phase-2/d2.3-bq-variations` |
+| D5.1 | `phase-5/d5.1-catalogue-suppliers` |
 | … | `phase-N/dN.x-<slug>` |

@@ -23,11 +23,13 @@ import type { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../infra/prisma.service.js";
 import { AuthSecurity, hashPassword } from "../modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../modules/identity/tenant-database.service.js";
+import { seedProcurement, type ProcurementSeedSummary } from "./demo-procurement.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
- * (password + TOTP), a project manager and a site agent, and three projects with Kenyan sites,
- * geofences, WBS and milestones. Idempotent: existing records are kept as they are. Never runs in
+ * (password + TOTP), a project manager, a site agent and a finance user (TOTP), three projects with
+ * Kenyan sites, geofences, WBS and milestones, and (D5.1) the starter catalogue with synthetic
+ * suppliers, prices and payout details (demo-procurement.ts). Idempotent: existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
  */
@@ -44,7 +46,7 @@ type Audit = (
 ) => Promise<unknown>;
 
 type DemoAccount = {
-  key: "owner" | "projectManager" | "siteAgent";
+  key: "owner" | "projectManager" | "siteAgent" | "finance";
   role: TenantSystemRole;
   identifier: string;
   displayName: string;
@@ -71,6 +73,14 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     identifier: "site.agent@jenga-bora.example.test",
     displayName: "Kevin Kiprono",
     totp: false,
+  },
+  {
+    // D5.1: verifies supplier payout details proposed by the owner (maker-checker).
+    key: "finance",
+    role: "finance",
+    identifier: "finance@jenga-bora.example.test",
+    displayName: "Daniel Mwangi",
+    totp: true,
   },
 ];
 
@@ -317,6 +327,7 @@ export type SeedSummary = {
   accounts: SeededAccount[];
   projects: { code: string; name: string; status: string; created: boolean }[];
   buildups: { code: string; name: string; rateMinor: number | null; created: boolean }[];
+  procurement: ProcurementSeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -450,11 +461,14 @@ export async function seedDemo(
     buildups.push(await seedBuildup(tx, tenantId, owner.id, audit));
   });
 
+  const procurement = await seedProcurement(app, tenantId, owner.id, userOf("finance").id);
+
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
     accounts: accounts.map(({ id: _id, key: _key, ...account }) => account),
     projects,
     buildups,
+    procurement,
   };
 }
 

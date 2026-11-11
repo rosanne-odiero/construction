@@ -35,6 +35,15 @@ function print(summary: SeedSummary) {
     lines.push(
       `  ${buildup.code}  ${buildup.name} — ${buildup.created ? "created" : "already present"}`,
     );
+  lines.push(
+    "",
+    `Materials: ${summary.procurement.materials.created} added, ${summary.procurement.materials.existing} already present`,
+    "Suppliers (synthetic):",
+  );
+  for (const supplier of summary.procurement.suppliers)
+    lines.push(
+      `  ${supplier.code}  ${supplier.name} — ${supplier.created ? "created" : "already present"}`,
+    );
   console.log(lines.join("\n"));
 }
 

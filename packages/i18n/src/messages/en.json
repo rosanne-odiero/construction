@@ -5235,8 +5235,7 @@
         "file": "Invoice document (optional)",
         "create": "Save as draft",
         "update": "Save changes",
-        "chooseLine": "Bill at least one line.",
-        "uploadFailed": "The invoice was saved but its file was not attached: {message}"
+        "chooseLine": "Bill at least one line."
       }
     },
     "match": {
@@ -5397,7 +5396,8 @@
         "recorded": "Recorded",
         "submitted": "Submitted",
         "cancelled": "Cancelled: {reason}"
-      }
+      },
+      "uploadFailed": "The invoice was saved but its file was not attached. Attach it again below."
     },
     "settings": {
       "title": "Procurement settings",

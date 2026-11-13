@@ -1,4 +1,11 @@
-import { Ratio } from "@pm-buddy/domain";
+import {
+  documentTotals,
+  isVatable,
+  lineNetAmountMinor,
+  netPricePerBase,
+  Ratio,
+  type DocumentTotals,
+} from "@pm-buddy/domain";
 import type {
   GrnLocationState,
   GrnStatus,
@@ -7,6 +14,7 @@ import type {
   LpoStatus,
   RequisitionStatus,
   RfqStatus,
+  VatTreatment,
 } from "@pm-buddy/types";
 import type { Tone } from "@/components/status-badge";
 import { formatDecimalString } from "./format";
@@ -89,6 +97,34 @@ export const QUANTITY_PATTERN = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/;
 export const isQuantity = (value: string) => QUANTITY_PATTERN.test(value.trim());
 export const isPositiveQuantity = (value: string) =>
   isQuantity(value) && /[1-9]/.test(value.trim());
+
+/**
+ * An invoice's totals from what has been typed, exactly as the API computes them; null while a line
+ * is incomplete, malformed or too large for the API. Never throws: it runs on every keystroke.
+ * `perBase` is the number of the typed unit in one base unit.
+ */
+export function invoiceTotals(
+  lines: readonly { quantity: string; price: string; vat: VatTreatment; perBase: Ratio }[],
+  vatRatePercent: string,
+): DocumentTotals | null {
+  try {
+    const priced = [];
+    for (const line of lines) {
+      const quantity = line.quantity.trim();
+      const price = inputToMinor(line.price);
+      if (!isPositiveQuantity(quantity) || !price || price <= 0) return null;
+      const baseQuantity = Ratio.fromDecimal(quantity).dividedBy(line.perBase).toDecimal(6).value;
+      const net = netPricePerBase(price, line.vat, vatRatePercent, line.perBase);
+      priced.push({
+        netAmountMinor: lineNetAmountMinor(baseQuantity, net),
+        vatable: isVatable(line.vat),
+      });
+    }
+    return documentTotals(priced, vatRatePercent);
+  } catch {
+    return null;
+  }
+}
 
 /** value × numerator / denominator, exactly, as a six-place decimal string. */
 export function scaleQuantity(value: string, numerator: string, denominator: string): string {

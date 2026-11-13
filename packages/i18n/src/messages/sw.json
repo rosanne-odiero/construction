@@ -5235,8 +5235,7 @@
         "file": "Hati ya ankara (si lazima)",
         "create": "Hifadhi kama rasimu",
         "update": "Hifadhi mabadiliko",
-        "chooseLine": "Toza angalau mstari mmoja.",
-        "uploadFailed": "Ankara imehifadhiwa lakini faili yake haikuambatishwa: {message}"
+        "chooseLine": "Toza angalau mstari mmoja."
       }
     },
     "match": {
@@ -5397,7 +5396,8 @@
         "recorded": "Imerekodiwa",
         "submitted": "Imewasilishwa",
         "cancelled": "Imeghairiwa: {reason}"
-      }
+      },
+      "uploadFailed": "Ankara imehifadhiwa lakini faili yake haikuambatishwa. Iambatishe tena hapa chini."
     },
     "settings": {
       "title": "Mipangilio ya ununuzi",

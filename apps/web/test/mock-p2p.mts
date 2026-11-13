@@ -1881,6 +1881,16 @@ class P2p {
         contributors: invoice.contributors,
         permissions: {
           canEdit: RECORDERS.some((key) => held.has(key)) && invoice.status === "draft",
+          canRematch:
+            (RECORDERS.some((key) => held.has(key)) || held.has("payments.approve")) &&
+            ["submitted", "disputed", "matched"].includes(invoice.status),
+          canReopen:
+            RECORDERS.some((key) => held.has(key)) &&
+            ["disputed", "matched"].includes(invoice.status),
+          canCancel:
+            RECORDERS.some((key) => held.has(key)) &&
+            ["draft", "submitted", "disputed", "matched"].includes(invoice.status),
+          canAttach: RECORDERS.some((key) => held.has(key)) && invoice.status !== "cancelled",
           canApprove: held.has("payments.approve") && needsApproval && !contributor,
           canApproveException:
             held.has("payments.approve") &&

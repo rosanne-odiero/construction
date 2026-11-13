@@ -980,6 +980,12 @@ export const invoiceDetailResponseSchema = z.strictObject({
   contributors: z.array(person),
   permissions: z.strictObject({
     canEdit: z.boolean(),
+    /** Run the match again (recorders or approvers; submitted, disputed or matched). */
+    canRematch: z.boolean(),
+    canReopen: z.boolean(),
+    canCancel: z.boolean(),
+    /** Attach the supplier's invoice document. */
+    canAttach: z.boolean(),
     canApprove: z.boolean(),
     canApproveException: z.boolean(),
     canSettle: z.boolean(),

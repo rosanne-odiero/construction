@@ -1,4 +1,5 @@
 import { expect as baseExpect, test, type BrowserContext, type Page } from "@playwright/test";
+import { nairobiDate } from "@pm-buddy/domain";
 import {
   axeViolations,
   MOCK_CSRF,
@@ -79,7 +80,7 @@ async function as(context: BrowserContext, page: Page, persona: Persona, token: 
   await page.reload();
 }
 
-const idOf = (page: Page) => page.url().split("/").filter(Boolean).at(-1)!;
+const idOf = (page: Page) => new URL(page.url()).pathname.split("/").filter(Boolean).at(-1)!;
 
 test("procure to pay: requisition to settlement, with the three-way match blocking a bad invoice", async ({
   page,
@@ -297,7 +298,8 @@ test("procure to pay: requisition to settlement, with the three-way match blocki
   await page.getByLabel("KRA eTIMS invoice number").fill("kracu0400000078/2231");
   await expect(page.getByTestId("etims-check")).toContainText("eTIMS format recognised.");
   const sandBill = page.getByRole("group", { name: "River sand" });
-  await sandBill.getByLabel("Quantity billed").fill("21");
+  // A trailing space (pasted from the supplier's PDF) is read as the API reads it, not a crash.
+  await sandBill.getByLabel("Quantity billed").fill("21 ");
   await expect(sandBill.getByLabel("Unit price (KES)")).toHaveValue("4000");
   const cementBill = page.getByRole("group", { name: "Cement 42.5N (50 kg bag)" });
   await cementBill.getByLabel("Unit", { exact: true }).selectOption("bag_50kg");
@@ -308,11 +310,27 @@ test("procure to pay: requisition to settlement, with the three-way match blocki
   );
   await expect(page.getByLabel("Total (KES)", { exact: true })).toHaveValue("187440");
   expect(await axeViolations(page)).toEqual([]);
+  // The invoice saves but its document does not upload: the detail page says so and offers it again.
+  await page
+    .getByLabel("Invoice document (optional)")
+    .setInputFiles({ name: "invoice.png", mimeType: "image/png", buffer: PNG });
+  await page.route("**/api/v1/procurement/invoices/*/document", (route) => route.abort("failed"));
   await page.getByRole("button", { name: "Save as draft" }).click();
   await expect(
     page.getByRole("heading", { level: 1, name: /MQ-INV-2001 · Mlolongo Quarry/ }),
   ).toBeVisible();
   const invoiceId = idOf(page);
+  await expect(page.getByRole("alert").filter({ hasText: "file was not attached" })).toHaveText(
+    "The invoice was saved but its file was not attached. Attach it again below.",
+  );
+  await page.unroute("**/api/v1/procurement/invoices/*/document");
+  await page
+    .getByLabel("Attach a file")
+    .setInputFiles({ name: "invoice.png", mimeType: "image/png", buffer: PNG });
+  await page.locator("button").filter({ hasText: "Attach a file" }).click();
+  await expect(page.getByRole("link", { name: /image\/png/ })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("file was not attached")).toHaveCount(0);
   await command(page, "Submit for matching", "Submit for matching");
   const verdict = page.getByTestId("match-verdict");
   await expect(verdict).toContainText("Blocked: payment cannot be approved");
@@ -404,7 +422,7 @@ test("procure to pay: requisition to settlement, with the three-way match blocki
         method: "bank_transfer",
         externalReference: "FT-OWNER-1",
         amountMinor: 100,
-        paidOn: new Date().toISOString().slice(0, 10),
+        paidOn: nairobiDate(),
       },
     },
   );
@@ -457,7 +475,7 @@ test("maker-checker: nobody approves what they prepared, in the API and on scree
   ).find((entry) => entry.code === "MAT-0002")!.id;
   const created = await api(page, "POST", "/procurement/requisitions", {
     projectId: RUIRU_ID,
-    neededBy: new Date().toISOString().slice(0, 10),
+    neededBy: nairobiDate(),
     lines: [{ materialId: material, quantity: "7", unit: "t" }],
   });
   expect(created.status).toBe(201);
@@ -583,7 +601,7 @@ test("an RFQ with too few quotations needs a single-source exception from someon
     (
       await api(page, "POST", "/procurement/requisitions", {
         projectId: RUIRU_ID,
-        neededBy: new Date().toISOString().slice(0, 10),
+        neededBy: nairobiDate(),
         lines: [{ materialId: material, quantity: "7", unit: "t" }],
       })
     ).body as { requisition: { id: string; version: number } }
@@ -606,7 +624,7 @@ test("an RFQ with too few quotations needs a single-source exception from someon
       supplierIds: [QUARRY_ID],
     })
   ).body as { rfq: { id: string }; lines: { requisitionLineId: string }[] };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = nairobiDate();
   expect(
     (
       await api(page, "POST", `/procurement/rfqs/${rfq.rfq.id}/quotations`, {

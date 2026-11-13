@@ -1135,6 +1135,8 @@ export class InvoicesService {
     const has = (permission: Parameters<ProjectAccess["permissions"]["has"]>[0]) =>
       project.permissions.has(permission);
     const contributor = row.contributors.includes(access.userId);
+    // The same project permissions and states the actions check (role ∩ project assignment).
+    const recorder = RECORDERS.some(has);
     const needsApproval =
       row.status === "matched" ||
       (["approved", "partly_settled"].includes(row.status) && !activeWire?.current);
@@ -1171,7 +1173,13 @@ export class InvoicesService {
       contributors: row.contributors.map((person) => personOf(people, person)),
       documents: documents.map((document) => toDocument(document, people)),
       permissions: {
-        canEdit: RECORDERS.some(has) && row.status === "draft",
+        canEdit: recorder && row.status === "draft",
+        canRematch:
+          (recorder || has("payments.approve")) &&
+          ["submitted", "disputed", "matched"].includes(row.status),
+        canReopen: recorder && ["disputed", "matched"].includes(row.status),
+        canCancel: recorder && ["draft", "submitted", "disputed", "matched"].includes(row.status),
+        canAttach: recorder && row.status !== "cancelled",
         canApprove: has("payments.approve") && needsApproval && !contributor,
         canApproveException:
           has("payments.approve") &&

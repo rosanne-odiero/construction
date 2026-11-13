@@ -5,7 +5,7 @@ import type { ThreeWayMatchWire, UnitWire } from "@pm-buddy/validation";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatKES } from "@/lib/format";
 import { formatQuantity } from "@/lib/p2p";
-import { formatMinorDecimal, unitLabel } from "@/lib/procurement";
+import { formatComparedPrices, unitLabel } from "@/lib/procurement";
 import { cn } from "@/lib/utils";
 
 const QUANTITY_REASONS = new Set(["not-received", "qty-exceeds-received", "qty-exceeds-ordered"]);
@@ -191,6 +191,11 @@ export async function MatchPanel({
               const quantityFails = line.reasons.some((reason) => QUANTITY_REASONS.has(reason));
               const priceFails = line.reasons.includes("price-above-order");
               const failed = line.reasons.length > 0;
+              const [orderPrice, allowedPrice, invoicePrice] = formatComparedPrices([
+                line.orderNetUnitPriceMinor,
+                line.allowedNetUnitPriceMinor,
+                ...(line.invoiceNetUnitPriceMinor ? [line.invoiceNetUnitPriceMinor] : []),
+              ]);
               return (
                 <tr
                   key={line.lpoLineId}
@@ -221,17 +226,11 @@ export async function MatchPanel({
                   <td className="py-2 pr-2 whitespace-nowrap">
                     <Check state={!billed && !failed ? "none" : quantityFails ? "fail" : "pass"} />
                   </td>
+                  <td className="py-2 pr-2 whitespace-nowrap tabular-nums">{orderPrice}</td>
                   <td className="py-2 pr-2 whitespace-nowrap tabular-nums">
-                    {formatMinorDecimal(line.orderNetUnitPriceMinor)}
+                    {invoicePrice ?? "—"}
                   </td>
-                  <td className="py-2 pr-2 whitespace-nowrap tabular-nums">
-                    {line.invoiceNetUnitPriceMinor
-                      ? formatMinorDecimal(line.invoiceNetUnitPriceMinor)
-                      : "—"}
-                  </td>
-                  <td className="py-2 pr-2 whitespace-nowrap tabular-nums">
-                    {formatMinorDecimal(line.allowedNetUnitPriceMinor)}
-                  </td>
+                  <td className="py-2 pr-2 whitespace-nowrap tabular-nums">{allowedPrice}</td>
                   <td className="py-2 pr-2 whitespace-nowrap">
                     <Check state={!billed && !failed ? "none" : priceFails ? "fail" : "pass"} />
                   </td>

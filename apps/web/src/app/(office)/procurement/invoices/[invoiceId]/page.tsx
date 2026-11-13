@@ -23,7 +23,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCalendarDate, formatDate, formatDateTime, formatKES } from "@/lib/format";
-import { formatQuantity, invoiceTone, isUuid } from "@/lib/p2p";
+import { formatQuantity, invoiceTone, isUuid, pickParam } from "@/lib/p2p";
 import { loadOrRedirect, unitOptions } from "@/lib/p2p-server";
 import { formatMinorDecimal, unitLabel } from "@/lib/procurement";
 import { requireSession } from "@/lib/server-api";
@@ -33,15 +33,21 @@ export async function generateMetadata() {
   return { title: t("title") };
 }
 
-const RECORDERS = ["finance.manage", "procurement.manage_suppliers"];
-
 /**
  * A supplier invoice and its three-way match (the D5.2 acceptance screen): the eTIMS flag, the
  * match per LPO line with explicit reasons and staleness, the independent exception, approval
  * bound to the verified payee (blocked while unmatched), and recorded settlements.
  */
-export default async function InvoicePage({ params }: { params: Promise<{ invoiceId: string }> }) {
+export default async function InvoicePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ invoiceId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { invoiceId } = await params;
+  // Set by the invoice form when the invoice saved but its document did not upload.
+  const uploadFailed = pickParam(await searchParams, "upload") === "failed";
   if (!isUuid(invoiceId)) notFound();
   const path = `/procurement/invoices/${invoiceId}`;
   const session = await requireSession(path);
@@ -69,7 +75,6 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
   const tUnits = await getTranslations("catalogue.units");
   const label = (code: string) => unitLabel(code, (unit: StandardUnitCode) => tUnits(unit), units);
   const held = new Set(session.company.permissions);
-  const recorder = RECORDERS.some((permission) => held.has(permission));
   const contributor = detail.contributors.some((person) => person.id === session.user.id);
   const payeeText = (payout: PayoutSummary) =>
     [
@@ -102,12 +107,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
         confirm: t("submit"),
       },
     });
-  if (
-    ["submitted", "disputed", "matched"].includes(invoice.status) &&
-    (recorder || held.has("payments.approve")) &&
-    match &&
-    !match.current
-  )
+  if (permissions.canRematch && match && !match.current)
     actions.push({
       action: "rematch",
       primary: true,
@@ -118,7 +118,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
         confirm: tMatch("rematch"),
       },
     });
-  if (["disputed", "matched"].includes(invoice.status) && recorder)
+  if (permissions.canReopen)
     actions.push({
       action: "reopen",
       text: {
@@ -128,7 +128,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
         confirm: t("reopen"),
       },
     });
-  if (["draft", "submitted", "disputed", "matched"].includes(invoice.status) && recorder)
+  if (permissions.canCancel)
     actions.push({
       action: "cancel",
       reason: true,
@@ -522,6 +522,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
         <h2 id="invoice-documents" className="text-base font-semibold">
           {t("documents")}
         </h2>
+        {uploadFailed && !detail.documents.length ? (
+          <p role="alert" className="text-sm text-destructive">
+            {t("uploadFailed")}
+          </p>
+        ) : null}
         {detail.documents.length ? (
           <ul className="space-y-1 text-sm">
             {detail.documents.map((document) => (
@@ -547,7 +552,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
         ) : (
           <p className="text-sm text-muted-foreground">{tCommon("noDocument")}</p>
         )}
-        {recorder && invoice.status !== "cancelled" ? (
+        {permissions.canAttach ? (
           <DocumentUpload
             id="invoice-document"
             path={`${path}/document`}

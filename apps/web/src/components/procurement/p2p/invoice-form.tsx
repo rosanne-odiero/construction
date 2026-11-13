@@ -3,14 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import {
-  classifyEtimsInvoiceNumber,
-  documentTotals,
-  isVatable,
-  lineNetAmountMinor,
-  netPricePerBase,
-  Ratio,
-} from "@pm-buddy/domain";
+import { classifyEtimsInvoiceNumber, Ratio } from "@pm-buddy/domain";
 import { VAT_TREATMENTS, type StandardUnitCode, type VatTreatment } from "@pm-buddy/types";
 import {
   invoiceDetailResponseSchema,
@@ -29,7 +22,7 @@ import { liveRequest, liveUpload } from "@/lib/live-api";
 import {
   formatQuantity,
   inputToMinor,
-  isPositiveQuantity,
+  invoiceTotals,
   minorToInput,
   remainingQuantity,
   scaleQuantity,
@@ -158,18 +151,13 @@ export function InvoiceForm({
   const [failure, setFailure] = useState<string | null>(null);
 
   const included = lpo.lines.filter((line) => lines[line.id]?.include);
-  const priced = included.map((line) => {
-    const input = lines[line.id]!;
-    const price = inputToMinor(input.price);
-    if (!isPositiveQuantity(input.quantity) || !price || price <= 0) return null;
-    const perBase = unitsPerBase(line, input.unit);
-    const baseQuantity = Ratio.fromDecimal(input.quantity).dividedBy(perBase).toDecimal(6).value;
-    const net = netPricePerBase(price, input.vat, rate, perBase);
-    return { netAmountMinor: lineNetAmountMinor(baseQuantity, net), vatable: isVatable(input.vat) };
-  });
-  const computed = priced.every((entry) => entry !== null)
-    ? documentTotals(priced as { netAmountMinor: number; vatable: boolean }[], rate)
-    : null;
+  const computed = invoiceTotals(
+    included.map((line) => {
+      const input = lines[line.id]!;
+      return { ...input, perBase: unitsPerBase(line, input.unit) };
+    }),
+    rate,
+  );
   const shown = stated ?? {
     subtotal: computed ? minorToInput(computed.subtotalMinor) : "",
     vat: computed ? minorToInput(computed.vatMinor) : "",
@@ -234,10 +222,9 @@ export function InvoiceForm({
             file,
             procurementDocumentResponseSchema,
           );
-        } catch (error) {
-          setFailure(t("uploadFailed", { message: problem(error) }));
-          setBusy(false);
-          router.push(`/procurement/invoices/${result.invoice.id}`);
+        } catch {
+          // The invoice is saved: the detail page says the document is missing and offers it again.
+          router.push(`/procurement/invoices/${result.invoice.id}?upload=failed`);
           return;
         }
       }

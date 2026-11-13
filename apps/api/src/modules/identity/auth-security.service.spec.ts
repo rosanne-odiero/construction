@@ -53,6 +53,12 @@ describe("Browser authentication security", () => {
     expect(() => security(config({ ...production, TRUST_PROXY: "false" }, true))).toThrow(
       "Production requires TRUST_PROXY",
     );
+    // "0" and an empty list are accepted by Express but trust no proxy, so per-IP limits see
+    // only the load balancer's address.
+    for (const TRUST_PROXY of ["0", ",", " , "])
+      expect(() => security(config({ ...production, TRUST_PROXY }, true))).toThrow(
+        "Production requires TRUST_PROXY",
+      );
   });
 
   it("uses production Secure, HttpOnly, SameSite cookies with exact host/path scopes", async () => {

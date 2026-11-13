@@ -358,6 +358,21 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     expect((await pinSignIn(number, PIN)).status).toBe(200);
   });
 
+  /** Statuses and codes of parallel wrong PINs for one number, sorted, so races show up as counts. */
+  const parallelWrongPins = async (identifier: string, count: number) =>
+    (await Promise.all(Array.from({ length: count }, () => pinSignIn(identifier, "802461"))))
+      .map((res) => `${res.status} ${code(res) ?? ""}`.trim())
+      .sort();
+  const resetPin = async (identifier: string, pin: string) => {
+    const forgot = await (await browser()).call("post", "auth/password/forgot", { identifier });
+    expect(forgot.status).toBe(200);
+    await vi.waitFor(() => expect(lastText(identifier)).toContain("/worker/pin?token="));
+    const reset = await (
+      await browser()
+    ).call("post", "auth/pin/reset", { token: linkToken(identifier), pin });
+    expect(reset.status, JSON.stringify(reset.body)).toBe(200);
+  };
+
   it("tightens PIN sign-in once wrong PINs across all numbers pass the hourly budget", async () => {
     const security = app.get(AuthSecurity);
     const budget = app.get(AppConfig).get("PIN_GLOBAL_FAILURES_PER_HOUR");
@@ -374,12 +389,21 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
       expect((await pinSignIn(phone(), "802461")).status).toBe(401);
       expect(alert.mock.calls.filter(([fields]) => isBudgetAlert(fields))).toHaveLength(1);
 
-      // Each number now gets one wrong PIN before it needs an SMS reset; correct PINs still work.
-      const blocked = await pinSignIn(mistyped, PIN);
-      expect([blocked.status, code(blocked)]).toEqual([429, "pin-reset-required"]);
+      // A typo from before the budget was spent does not count: the right PIN still works.
+      expect((await pinSignIn(mistyped, PIN)).status).toBe(200);
+      // Each number now gets one wrong PIN an hour; after it even the right PIN waits.
       expect((await pinSignIn(careful, PIN)).status).toBe(200);
       expect((await pinSignIn(careful, "802461")).status).toBe(401);
-      expect(code(await pinSignIn(careful, PIN))).toBe("pin-reset-required");
+      const limited = await pinSignIn(careful, PIN);
+      expect([limited.status, code(limited)]).toEqual([429, "pin-temporarily-limited"]);
+      // Parallel guesses reserve their place first, so only one of them is ever checked.
+      expect(await parallelWrongPins(mistyped, 6)).toEqual([
+        "401 unauthorized",
+        ...Array.from({ length: 5 }, () => "429 pin-temporarily-limited"),
+      ]);
+      // A PIN reset by SMS proves control of the phone and clears the hour's limit.
+      await resetPin(careful, "530718");
+      expect((await pinSignIn(careful, "530718")).status).toBe(200);
     } finally {
       alert.mockRestore();
       await security.forget(PIN_GLOBAL_FAILURES);
@@ -411,20 +435,16 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     // A correct PIN is never blocked by an unspent budget and does not spend it.
     expect((await signIn(PIN)).status).toBe(200);
     expect(await security.counted(key)).toBe(PIN_DAILY_FAILURES - 1);
-    expect((await signIn("802461")).status).toBe(401);
+    // Parallel guesses reserve their place first, so only the last one left is checked.
+    expect(await parallelWrongPins(number, 5)).toEqual([
+      "401 unauthorized",
+      ...Array.from({ length: 4 }, () => "429 pin-reset-required"),
+    ]);
     expect(await security.counted(key)).toBe(PIN_DAILY_FAILURES);
     // Spent: even the right PIN needs a reset first, and the reset clears the budget.
     const blocked = await signIn(PIN);
     expect([blocked.status, code(blocked)]).toEqual([429, "pin-reset-required"]);
-    const forgot = await (
-      await browser()
-    ).call("post", "auth/password/forgot", { identifier: number });
-    expect(forgot.status).toBe(200);
-    await vi.waitFor(() => expect(lastText(number)).toContain("/worker/pin?token="));
-    const reset = await (
-      await browser()
-    ).call("post", "auth/pin/reset", { token: linkToken(number), pin: "530718" });
-    expect(reset.status, JSON.stringify(reset.body)).toBe(200);
+    await resetPin(number, "530718");
     expect(await security.counted(key)).toBe(0);
     expect((await signIn("530718")).status).toBe(200);
   });

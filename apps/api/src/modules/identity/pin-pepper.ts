@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { Injectable, Logger } from "@nestjs/common";
 import { AppConfig } from "../../config/app-config.js";
 import { hashPassword, verifyPassword } from "./auth-security.service.js";
@@ -15,7 +15,12 @@ import { hashPassword, verifyPassword } from "./auth-security.service.js";
 
 export type PinPepperKeys = { keys: ReadonlyMap<number, Buffer>; active: number };
 
-/** Parses `AUTH_PIN_PEPPER_KEYS` ("1:<64 hex>,2:<64 hex>") and the optional active version. */
+/**
+ * Parses `AUTH_PIN_PEPPER_KEYS` ("1:<64 hex>,2:<64 hex>") and the active version, which is required
+ * once more than one key is listed: otherwise an instance that already lists a new key would hash
+ * with it while others cannot verify it yet. So a rotation is two deploys: list the new key
+ * everywhere (active version unchanged), then make it active.
+ */
 export function parsePinPepperKeys(
   raw: string | undefined,
   activeVersion: number | undefined,
@@ -31,6 +36,10 @@ export function parsePinPepperKeys(
     if (keys.has(version)) throw new Error(`AUTH_PIN_PEPPER_KEYS lists version ${version} twice`);
     keys.set(version, Buffer.from(match[2]!, "hex"));
   }
+  if (keys.size > 1 && activeVersion === undefined)
+    throw new Error(
+      "AUTH_PIN_PEPPER_ACTIVE_VERSION is required when AUTH_PIN_PEPPER_KEYS lists more than one key",
+    );
   const active = activeVersion ?? Math.max(...keys.keys());
   if (!keys.has(active))
     throw new Error(`AUTH_PIN_PEPPER_ACTIVE_VERSION ${active} is not in AUTH_PIN_PEPPER_KEYS`);
@@ -73,11 +82,22 @@ export class PinHasher {
     };
   }
 
-  /** Checks a PIN against a stored hash; false when the hash's pepper version is not configured. */
+  /**
+   * Checks a PIN against a stored hash. A hash under a pepper version this instance does not list
+   * (a key retired too early, or a rotation not yet deployed everywhere) never matches; it still
+   * costs a full Argon2id check, so timing looks the same, and logs a warning (version only).
+   */
   async verify(stored: StoredPin, pin: string): Promise<boolean> {
     if (stored.pinPepperVersion === null) return verifyPassword(stored.pinHash, pin);
     const key = this.pepper?.keys.get(stored.pinPepperVersion);
-    if (!key) return false;
+    if (!key) {
+      this.logger.warn(
+        { event: "pin_pepper_version_missing", pinPepperVersion: stored.pinPepperVersion },
+        "A stored PIN uses a pepper version that is not configured; that PIN cannot sign in",
+      );
+      await verifyPassword(stored.pinHash, pepperPin(randomBytes(32), pin));
+      return false;
+    }
     return verifyPassword(stored.pinHash, pepperPin(key, pin));
   }
 

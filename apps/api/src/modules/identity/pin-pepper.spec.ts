@@ -16,9 +16,12 @@ describe("labourer PIN pepper", () => {
   it("parses versioned keys and refuses malformed or inconsistent ones", () => {
     const [one, two] = [key(), key()];
     expect(parsePinPepperKeys(undefined, undefined)).toBeNull();
-    expect(parsePinPepperKeys(`1:${one}, 2:${two}`, undefined)?.active).toBe(2);
+    expect(parsePinPepperKeys(`1:${one}`, undefined)?.active).toBe(1);
+    expect(parsePinPepperKeys(`1:${one}, 2:${two}`, 2)?.active).toBe(2);
     expect(parsePinPepperKeys(`1:${one},2:${two}`, 1)?.active).toBe(1);
-    expect(() => parsePinPepperKeys(`1:${one},1:${two}`, undefined)).toThrow("twice");
+    // With two keys an implicit active version would differ between instances mid-rotation.
+    expect(() => parsePinPepperKeys(`1:${one},2:${two}`, undefined)).toThrow("is required");
+    expect(() => parsePinPepperKeys(`1:${one},1:${two}`, 1)).toThrow("twice");
     expect(() => parsePinPepperKeys(`1:${one}`, 3)).toThrow("not in");
     expect(() => parsePinPepperKeys(`0:${one}`, undefined)).toThrow("1–255");
     expect(() => parsePinPepperKeys("1:abc", undefined)).toThrow("<version>:<64 hex>");
@@ -51,11 +54,24 @@ describe("labourer PIN pepper", () => {
   it("moves PINs to the active key and refuses hashes whose key is no longer listed", async () => {
     const [one, two] = [key(), key()];
     const old = await hasher(`1:${one}`).hash("530718");
-    const rotated = hasher(`1:${one},2:${two}`);
+    const rotated = hasher(`1:${one},2:${two}`, 2);
     expect(await rotated.verify(old, "530718")).toBe(true);
     expect(rotated.needsRehash(old)).toBe(true);
     expect((await rotated.hash("530718")).pinPepperVersion).toBe(2);
     expect(await hasher(`2:${two}`).verify(old, "530718")).toBe(false);
+  });
+
+  it("spends a full Argon2id check on a hash whose key is not listed", async () => {
+    const old = await hasher(`1:${key()}`).hash("530718");
+    const pins = hasher(`2:${key()}`);
+    const started = performance.now();
+    expect(await pins.verify(old, "530718")).toBe(false);
+    const missing = performance.now() - started;
+    const listed = await pins.hash("530718");
+    const again = performance.now();
+    await pins.verify(listed, "530718");
+    // Same order of cost as a real check, not an instant refusal that would reveal the version.
+    expect(missing).toBeGreaterThan((performance.now() - again) / 4);
   });
 
   it("is required in production and optional locally (unpeppered, never re-hashed)", async () => {

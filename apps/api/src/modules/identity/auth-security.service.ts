@@ -79,7 +79,11 @@ export class AuthSecurity implements OnModuleInit {
     }
     // Without a trusted proxy reporting the client address there are no per-address limits on
     // password, PIN and code guessing.
-    if (config.isProduction && trustProxySetting(config.get("TRUST_PROXY")) === false) {
+    const proxy = trustProxySetting(config.get("TRUST_PROXY"));
+    if (
+      config.isProduction &&
+      (proxy === false || proxy === 0 || (Array.isArray(proxy) && !proxy.length))
+    ) {
       throw new Error("Production requires TRUST_PROXY (the edge proxy that reports client IPs)");
     }
     this.encryptionKey = Buffer.from(key, "hex");
@@ -250,6 +254,20 @@ export class AuthSecurity implements OnModuleInit {
     try {
       await this.redis.ping();
       return Number((await this.redis.client.get(rateKey(key))) ?? 0);
+    } catch {
+      throw new ServiceUnavailableException("Rate limiting is unavailable");
+    }
+  }
+
+  /** Gives back one count reserved with increment (never below zero; the window is kept). */
+  async release(key: string): Promise<void> {
+    try {
+      await this.redis.ping();
+      await this.redis.client.eval(
+        "local n=tonumber(redis.call('GET',KEYS[1]) or '0'); if n>0 then redis.call('DECR',KEYS[1]) end; return 0",
+        1,
+        rateKey(key),
+      );
     } catch {
       throw new ServiceUnavailableException("Rate limiting is unavailable");
     }

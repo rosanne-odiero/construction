@@ -15,6 +15,8 @@
     "API_DOCS_ENABLED",
     "HEALTH_CHECK_TIMEOUT_MS",
     "API_INTERNAL_URL",
+    "PLAYWRIGHT_WEB_PORT",
+    "PLAYWRIGHT_MOCK_API_PORT",
     "CI"
   ],
   "tasks": {

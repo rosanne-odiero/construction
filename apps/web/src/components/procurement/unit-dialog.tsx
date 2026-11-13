@@ -6,11 +6,7 @@ import { useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import { STANDARD_UNITS } from "@pm-buddy/domain";
 import { UNIT_DIMENSIONS, type StandardUnitCode, type UnitDimension } from "@pm-buddy/types";
-import {
-  procurementSettingsResponseSchema,
-  unitResponseSchema,
-  type UnitWire,
-} from "@pm-buddy/validation";
+import { unitResponseSchema, type UnitWire } from "@pm-buddy/validation";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { Button } from "@/components/ui/button";
 import {
@@ -244,77 +240,5 @@ export function UnitStatusButton({ unit }: { unit: UnitWire }) {
         </span>
       ) : null}
     </span>
-  );
-}
-
-/** The company's price-change alert threshold (config.manage to change it). */
-export function ThresholdForm({
-  percent,
-  version,
-  canManage,
-}: {
-  percent: string;
-  version: number;
-  canManage: boolean;
-}) {
-  const t = useTranslations("catalogue.alerts");
-  const problem = useProblemMessage();
-  const router = useRouter();
-  const [value, setValue] = useState(percent);
-  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const valid = /^\d{1,4}(\.\d{1,4})?$/.test(value) && Number(value) > 0 && Number(value) <= 1000;
-
-  async function save() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await liveRequest("/procurement/settings", procurementSettingsResponseSchema, {
-        method: "PUT",
-        body: { priceChangeAlertPercent: value, version },
-      });
-      setMessage({ text: t("saved"), error: false });
-      router.refresh();
-    } catch (error) {
-      setMessage({ text: problem(error), error: true });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form
-      className="flex flex-wrap items-end gap-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (valid) void save();
-      }}
-    >
-      <Field className="w-56">
-        <FieldLabel htmlFor="alert-threshold">{t("thresholdLabel")}</FieldLabel>
-        <Input
-          id="alert-threshold"
-          inputMode="decimal"
-          value={value}
-          disabled={!canManage}
-          onChange={(event) => setValue(event.target.value.trim())}
-        />
-      </Field>
-      {canManage ? (
-        <Button type="submit" variant="secondary" disabled={busy || !valid}>
-          {t("save")}
-        </Button>
-      ) : (
-        <p className="text-sm text-muted-foreground">{t("readOnly")}</p>
-      )}
-      {message ? (
-        <p
-          role={message.error ? "alert" : "status"}
-          className={message.error ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
-        >
-          {message.text}
-        </p>
-      ) : null}
-    </form>
   );
 }

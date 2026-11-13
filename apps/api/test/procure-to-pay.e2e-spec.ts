@@ -15,6 +15,7 @@ import {
   projectResponseSchema,
   receivableLposResponseSchema,
   requisitionDetailResponseSchema,
+  roleResponseSchema,
   requisitionsResponseSchema,
   rfqDetailResponseSchema,
   siteResponseSchema,
@@ -1267,6 +1268,52 @@ describe("Procure-to-pay (real runtime role)", () => {
     // No eTIMS number, blocked by default and never excepted.
     let missing = await submit(await record("INV-0002", "7", null));
     expect(missing.match).toMatchObject({ reasons: ["etims-missing"], exceptable: false });
+    // Only a mismatch an exception may override is offered to (and waits for) an approver.
+    expect((await invoiceOf(owner, missing.invoice.id)).permissions.canApproveException).toBe(
+      false,
+    );
+    expect((await invoiceOf(owner, double.invoice.id)).permissions.canApproveException).toBe(true);
+    expect((await invoiceOf(owner, double.invoice.id)).permissions).toMatchObject({
+      canRematch: true,
+      canReopen: true,
+      canCancel: true,
+      canAttach: true,
+    });
+    // A project-scoped custom role may list finance.manage, but it cannot be assigned per project,
+    // so the record offers its holder none of the recorder actions the server would refuse.
+    await fresh(owner);
+    const clerkRole = roleResponseSchema.parse(
+      ok(
+        await owner.call("post", "tenants/current/roles", {
+          name: "Project finance clerk",
+          permissions: ["projects.view", "finance.view", "finance.manage"],
+        }),
+        201,
+      ),
+    ).role;
+    const clerk = new Browser(app);
+    await clerk.register();
+    await clerk.enroll();
+    await join(clerk, clerkRole.id, [projectId]);
+    const seen = await invoiceOf(clerk, double.invoice.id);
+    expect(seen.permissions).toMatchObject({
+      canRematch: false,
+      canReopen: false,
+      canCancel: false,
+      canAttach: false,
+    });
+    refused(
+      await clerk.call("post", `procurement/invoices/${double.invoice.id}/reopen`, {
+        version: seen.invoice.version,
+      }),
+      403,
+    );
+    const waiting = inboxResponseSchema
+      .parse(ok(await owner.call("get", "procurement/inbox")))
+      .items.filter((item) => item.kind === "invoice-exception")
+      .map((item) => item.label);
+    expect(waiting).toContain("INV-0003");
+    expect(waiting).not.toContain("INV-0002");
     await fresh(owner);
     refused(
       await owner.call("post", `procurement/invoices/${missing.invoice.id}/exception`, {

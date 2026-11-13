@@ -63,3 +63,72 @@ npx pnpm@12.17.0 --filter @pm-buddy/domain test      # conversion and price test
 cd apps/api && npx vitest run --config ./vitest.config.e2e.ts test/procurement.e2e-spec.ts
 cd apps/web && npx playwright test test/procurement.spec.ts
 ```
+
+---
+
+## D5.2: Procure-to-pay
+
+This walkthrough takes about 25 minutes. **Procurement** in the sidebar is live: the approvals inbox, requisitions, RFQs with the quotation comparison, LPOs, deliveries (GRNs), supplier invoices with eTIMS, the three-way match screen and payments recorded outside PM-Buddy. Stores and Spending are still Phase 5 "soon" pages.
+
+### 1. Run it
+
+Same prerequisites and commands as D5.1 (§1 above), on the branch with the D5.2 web screens. `db:migrate` now includes `20261115100000_procure_to_pay`, and `db:seed` prints the procure-to-pay chain it created on RUI-HTS (synthetic values; the eTIMS numbers are made up):
+
+```text
+Procure-to-pay (synthetic, created): REQ-0001 → RFQ-0001 → LPO-0001 → GRN-0001
+  invoice MQ-INV-1001 — settled
+  invoice MQ-INV-1002 — disputed
+```
+
+| Record | What the seed did, and who |
+|---|---|
+| REQ-0001 | 14 t river sand and 20 t ballast, raised by the **site agent** (Kevin Kiprono), approved by the **project manager** (Brian Otieno) |
+| RFQ-0001 | Three quotations (quarry, steel, hardware suppliers), all prices excluding VAT; the quarry is lowest on both lines |
+| LPO-0001 | Awarded to Mlolongo Quarry; approved by the project manager (KES 100,000 net) |
+| GRN-0001 | Two 7 t lorry trips of sand and 10 t of ballast, recorded by the site agent |
+| MQ-INV-1001 | Sand 14 t + ballast 10 t, recorded by **finance** (Daniel Mwangi), matched, approved by the **owner** (Wanjiru Kamau), paid by finance (bank transfer `DEMO-FT-0001`, KES 90,480) |
+| MQ-INV-1002 | Another 10 t of ballast that has **not been delivered**: the three-way match blocks it |
+
+Steps that need a step-up (LPO approval, invoice exception and approval, recording a payment) ask for an authenticator code. The owner and finance accounts have TOTP; the project manager must first set up an authenticator to approve LPOs (**Live foundation** → *Set up authenticator MFA*, as in the [Phase 1 demo](./phase-1.md)), or let the owner approve LPOs prepared by someone else.
+
+### 2. The inbox and the blocked invoice (owner)
+
+1. **Procurement** → *Waiting for you* lists **MQ-INV-1002** as "Blocked invoice: an exception may be decided" (only what you may act on and did not prepare). *By stage* counts records per state; *Committed cost by project* shows RUI-HTS: committed KES 100,000, accrued KES 78,000, still open KES 22,000, paid KES 90,480.
+2. Open **MQ-INV-1002**: the **three-way match** screen. Ballast: ordered 20, received 10, billed before 10, billed now 10 → **Fail** "More is billed (with earlier invoices) than was accepted on site". The invoice checks (arithmetic, VAT, LPO total, eTIMS number) pass, the totals are stated vs computed, and **Approve for payment** is disabled: "Approval is blocked while the three-way match does not pass". Finance cannot approve it either: they recorded it (maker-checker note).
+
+### 3. A delivery on a phone (site agent, 360 px)
+
+1. Sign in as the site agent on a phone (or a 360 px browser window). **Procurement → Record a delivery**: pick **LPO-0001**; each line shows what was ordered and already received.
+2. Ballast: count **10** t (try a rejected quantity: a reason becomes required). Vehicle `kbz 234c` → "Kenyan plate KBZ 234C" (a foreign plate is kept and flagged). **Use my position** shows the accuracy; inside or outside the site geofence is shown after saving and never blocks the delivery. Add a photo of the delivery note and of the goods.
+3. **Record the delivery**: GRN-0002 with the geofence result and plate flag; photos upload after the GRN is saved. Pressing the button twice (or retrying after a lost connection) replays the same GRN instead of creating a second one.
+
+### 4. Rematch, approve and pay (owner, then finance)
+
+1. As the owner, reopen **MQ-INV-1002**: "Out of date: deliveries were recorded or voided" → **Run the match again** → **Matched**.
+2. **Approve for payment** shows the bound payee (the quarry's *verified* payout details, M-Pesa Paybill 600000, account JENGA-BORA, version 1) and the amount (KES 25,520); confirm with the authenticator code. The owner is now told someone else must record the payment.
+3. Sign in as **finance**: *Payments* shows "Outstanding KES 25,520 of KES 25,520". An amount above the outstanding is refused; record a bank transfer with a reference (e.g. `DEMO-FT-0002`) and the authenticator code → **Paid in full**. Using the same reference again is refused.
+4. Payee change: as the owner propose new payout details for the quarry (Suppliers, D5.1) while another approved invoice is unpaid: that invoice shows "re-approval needed" and payments are refused until it is approved again against the newly verified details.
+
+### 5. A new purchase from the start
+
+1. **Site agent:** **New requisition** on RUI-HTS (materials from the catalogue in any convertible unit, optional BQ item, needed-by date), save and **Submit**. The agent cannot approve it.
+2. **Project manager:** the requisition appears in *Waiting for you*; **Approve** (or **Reject** with a reason, which the agent can **Reopen**).
+3. **Owner:** **RFQs → New RFQ** from the approved requisition, invite the three suppliers, then **Record quotation** for each (price per line, unit, VAT treatment, delivery days, validity, a PDF or photo). The **comparison** is net of VAT per base unit; the lowest price per line and the lowest complete total are highlighted; incomplete or expired quotations are marked. With fewer than three complete quotations, **Award** is refused: **Request a single-source exception** with a reason; someone else with approval rights (the project manager) approves it.
+4. **Award** the chosen quotation → a draft **LPO**; check the delivery site, date and terms, **Submit**. The **project manager** approves it with the authenticator code (the owner who prepared it cannot). **Printable LPO** opens a print-friendly page with the supplier's masked KRA PIN and eTIMS status.
+5. Continue with a delivery (§3), then as **finance** **Record an invoice** against the LPO: the eTIMS number is format-checked as you type and a missing number is flagged; the totals preview shows exactly what the match will compute. **Submit** runs the match.
+
+### 6. Settings (owner)
+
+**Materials → Price alerts → Procurement settings** (also linked from the Procurement page; `config.manage`): minimum quotes (default 3), quantity and price tolerance (default 0 %) and "block payment without an eTIMS number" (default on). Changing a tolerance or the eTIMS rule makes every current match out of date: invoices must be matched again before approval. Users without `config.manage` see the values read-only.
+
+### 7. What is not here yet
+
+GRN capture in the offline site app (the API contract is ready, ARCHITECTURE §12.2; the web form works on a phone online only); paying suppliers through M-Pesa B2B or a bank API from PM-Buddy (payments are recorded, not sent: D4.2/D4.3); approval limits by amount; a hold period before the first payment to new payout details (OR-05); credit notes and returns; stores (D5.3).
+
+### 8. Automated checks
+
+```bash
+npx pnpm@12.17.0 --filter @pm-buddy/domain test      # match, pricing and state-machine tests
+cd apps/api && npx vitest run --config ./vitest.config.e2e.ts test/procure-to-pay.e2e-spec.ts
+cd apps/web && npx playwright test test/procure-to-pay.spec.ts
+```

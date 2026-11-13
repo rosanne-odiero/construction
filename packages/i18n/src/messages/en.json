@@ -1408,6 +1408,7 @@
       "invalidCode": "That code could not be verified. Check it and try again.",
       "rateLimited": "Too many attempts. Wait a few minutes before trying again.",
       "pinResetRequired": "Too many wrong PINs today. Choose “Forgot PIN?” to get a reset link by SMS.",
+      "pinTemporarilyLimited": "Too many wrong PINs right now. Try again in an hour, or choose “Forgot PIN?” to get a reset link by SMS.",
       "network": "PM-Buddy could not be reached. Check your connection and try again.",
       "invalidResponse": "PM-Buddy answered unexpectedly. You have not been signed in. Try again or check the system status.",
       "passkeyCancelled": "The passkey prompt was cancelled, timed out or is not available on this device.",

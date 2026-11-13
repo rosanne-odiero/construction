@@ -16,7 +16,8 @@ export const apiEnvSchema = z.object({
   // Express "trust proxy": the addresses (comma-separated, CIDR allowed) or hop count of proxies
   // allowed to report the client IP in X-Forwarded-For. Leave unset unless an edge proxy appends
   // the real client address: the Next.js /api rewrite passes client-supplied values through.
-  // Without it, rate limits use accounts, users and sessions only (no per-IP limit).
+  // Without it, rate limits use accounts, users and sessions only (no per-IP limit), so production
+  // refuses to start without it.
   TRUST_PROXY: z
     .string()
     .trim()
@@ -48,6 +49,19 @@ export const apiEnvSchema = z.object({
     .string()
     .regex(/^[a-fA-F0-9]{64}$/)
     .optional(),
+  // Labourer PIN pepper (HMAC-SHA-256 before Argon2id): comma-separated `<version>:<64 hex>` keys,
+  // like FIELD_ENCRYPTION_KEYS. New PINs use the active version (default: the highest); keep older
+  // versions listed until every PIN using them has been re-hashed (each correct sign-in does it).
+  // Required in production; from the secrets manager, never the database.
+  AUTH_PIN_PEPPER_KEYS: z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}:[0-9a-fA-F]{64}(,\s*\d{1,3}:[0-9a-fA-F]{64})*$/, "version:hexkey list")
+    .optional(),
+  AUTH_PIN_PEPPER_ACTIVE_VERSION: z.coerce.number().int().min(1).max(255).optional(),
+  // Wrong PINs per hour across every number before PIN sign-in tightens: an alert is logged and
+  // each number then gets one wrong PIN before it needs an SMS reset (correct PINs still work).
+  PIN_GLOBAL_FAILURES_PER_HOUR: z.coerce.number().int().min(10).max(100_000).default(200),
   // "Continue with Google" (OpenID Connect authorisation code flow with PKCE). Set both from a
   // Google Cloud OAuth "Web application" client, or neither to hide Google sign-in. The redirect
   // URI to register with Google is `${WEB_ORIGIN}/api/v1/auth/google/callback`.

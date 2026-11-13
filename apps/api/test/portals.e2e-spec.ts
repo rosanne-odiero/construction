@@ -1,5 +1,5 @@
-import { randomInt } from "node:crypto";
-import type { INestApplication } from "@nestjs/common";
+import { randomBytes, randomInt } from "node:crypto";
+import { Logger, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
@@ -18,13 +18,25 @@ import {
 import { AppModule } from "../src/app.module.js";
 import { configureApp } from "../src/app.setup.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
-import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
-import { PIN_DAILY_FAILURES } from "../src/modules/identity/pin.service.js";
+import { AppConfig } from "../src/config/app-config.js";
+import {
+  AuthSecurity,
+  hashPassword,
+  verifyPassword,
+} from "../src/modules/identity/auth-security.service.js";
+import { PIN_DAILY_FAILURES, PIN_GLOBAL_FAILURES } from "../src/modules/identity/pin.service.js";
 import { Browser, notifications, password } from "./support.js";
 
 const PIN = "274915";
 const phone = () => `2547${String(randomInt(0, 100_000_000)).padStart(8, "0")}`;
 const radius = { kind: "radius", center: { lat: -1.1489, lng: 36.9612 }, radiusM: 40 } as const;
+
+/** A well-formed token that matches nothing; fresh each time, so per-token limits never carry over. */
+const unknownToken = () => randomBytes(32).toString("base64url");
+const isBudgetAlert = (fields: unknown) =>
+  typeof fields === "object" &&
+  fields !== null &&
+  (fields as { event?: string }).event === "pin_failure_budget_exceeded";
 
 describe("Client, labourer and staff portals (real runtime role)", () => {
   let app: INestApplication<App>;
@@ -98,6 +110,8 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     });
     configureApp(app);
     await app.init();
+    // The platform-wide PIN failure count lives in Redis for an hour; start every run from zero.
+    await app.get(AuthSecurity).forget(PIN_GLOBAL_FAILURES);
     prisma = app.get(PrismaService);
     notificationSpy = vi
       .spyOn(app.get(AuthSecurity), "notify")
@@ -223,7 +237,7 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     expect(code(await attempt({ ...base, pin: "123456" }))).toBe("pin-too-weak");
     expect(code(await attempt({ ...base, pin: number.slice(-6) }))).toBe("pin-too-weak");
     expect((await attempt({ ...base, identifier: phone() })).status).toBe(401);
-    expect((await attempt({ ...base, token: "x".repeat(43) })).status).toBe(401);
+    expect((await attempt({ ...base, token: unknownToken() })).status).toBe(401);
     expect(await prisma.user.count({ where: { identifier: number } })).toBe(0);
 
     const res = await attempt(base);
@@ -304,6 +318,98 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     expect((await reset("648203")).status).toBe(401); // single use
   });
 
+  /** A labourer invited by the owner (the project manager's invitation limit is left alone). */
+  const ownerInvitedLabourer = async (displayName: string) => {
+    const number = phone();
+    const invited = await owner.call("post", `projects/${p1}/labourers/invitations`, {
+      identifier: number,
+    });
+    expect(invited.status, JSON.stringify(invited.body)).toBe(201);
+    const joined = await (
+      await browser()
+    ).call("post", "auth/pin/join", {
+      identifier: number,
+      token: linkToken(number),
+      displayName,
+      pin: PIN,
+    });
+    expect(joined.status, JSON.stringify(joined.body)).toBe(200);
+    return number;
+  };
+  const pinSignIn = async (identifier: string, pin: string) =>
+    (await browser()).call("post", "auth/pin/login", { identifier, pin });
+
+  it("peppers stored PINs and re-hashes an older, unpeppered PIN on its next correct sign-in", async () => {
+    const number = await ownerInvitedLabourer("Wairimu Kibarua");
+    const stored = await prisma.user.findUniqueOrThrow({ where: { identifier: number } });
+    expect(stored.pinPepperVersion).toBe(1);
+    // Without the server-side key the stored hash cannot be checked, even with the right PIN.
+    expect(await verifyPassword(stored.pinHash!, PIN)).toBe(false);
+
+    // A PIN hashed before the pepper existed still signs in, and is moved to the active key.
+    await prisma.user.update({
+      where: { id: stored.id },
+      data: { pinHash: await hashPassword(PIN), pinPepperVersion: null },
+    });
+    expect((await pinSignIn(number, PIN)).status).toBe(200);
+    const upgraded = await prisma.user.findUniqueOrThrow({ where: { id: stored.id } });
+    expect(upgraded.pinPepperVersion).toBe(1);
+    expect(await verifyPassword(upgraded.pinHash!, PIN)).toBe(false);
+    expect((await pinSignIn(number, PIN)).status).toBe(200);
+  });
+
+  /** Statuses and codes of parallel wrong PINs for one number, sorted, so races show up as counts. */
+  const parallelWrongPins = async (identifier: string, count: number) =>
+    (await Promise.all(Array.from({ length: count }, () => pinSignIn(identifier, "802461"))))
+      .map((res) => `${res.status} ${code(res) ?? ""}`.trim())
+      .sort();
+  const resetPin = async (identifier: string, pin: string) => {
+    const forgot = await (await browser()).call("post", "auth/password/forgot", { identifier });
+    expect(forgot.status).toBe(200);
+    await vi.waitFor(() => expect(lastText(identifier)).toContain("/worker/pin?token="));
+    const reset = await (
+      await browser()
+    ).call("post", "auth/pin/reset", { token: linkToken(identifier), pin });
+    expect(reset.status, JSON.stringify(reset.body)).toBe(200);
+  };
+
+  it("tightens PIN sign-in once wrong PINs across all numbers pass the hourly budget", async () => {
+    const security = app.get(AuthSecurity);
+    const budget = app.get(AppConfig).get("PIN_GLOBAL_FAILURES_PER_HOUR");
+    const alert = vi.spyOn(Logger.prototype, "error");
+    try {
+      const mistyped = await ownerInvitedLabourer("Mutua Kibarua");
+      const careful = await ownerInvitedLabourer("Atieno Kibarua");
+      expect((await pinSignIn(mistyped, "802461")).status).toBe(401);
+      while ((await security.counted(PIN_GLOBAL_FAILURES)) < budget - 1)
+        await security.increment(PIN_GLOBAL_FAILURES, 3_600);
+      expect(alert.mock.calls.filter(([fields]) => isBudgetAlert(fields))).toHaveLength(0);
+      // The wrong PIN that reaches the budget (an unknown number) raises the alert, once.
+      expect((await pinSignIn(phone(), "802461")).status).toBe(401);
+      expect((await pinSignIn(phone(), "802461")).status).toBe(401);
+      expect(alert.mock.calls.filter(([fields]) => isBudgetAlert(fields))).toHaveLength(1);
+
+      // A typo from before the budget was spent does not count: the right PIN still works.
+      expect((await pinSignIn(mistyped, PIN)).status).toBe(200);
+      // Each number now gets one wrong PIN an hour; after it even the right PIN waits.
+      expect((await pinSignIn(careful, PIN)).status).toBe(200);
+      expect((await pinSignIn(careful, "802461")).status).toBe(401);
+      const limited = await pinSignIn(careful, PIN);
+      expect([limited.status, code(limited)]).toEqual([429, "pin-temporarily-limited"]);
+      // Parallel guesses reserve their place first, so only one of them is ever checked.
+      expect(await parallelWrongPins(mistyped, 6)).toEqual([
+        "401 unauthorized",
+        ...Array.from({ length: 5 }, () => "429 pin-temporarily-limited"),
+      ]);
+      // A PIN reset by SMS proves control of the phone and clears the hour's limit.
+      await resetPin(careful, "530718");
+      expect((await pinSignIn(careful, "530718")).status).toBe(200);
+    } finally {
+      alert.mockRestore();
+      await security.forget(PIN_GLOBAL_FAILURES);
+    }
+  });
+
   it("counts only wrong PINs against the daily budget, which a PIN reset clears", async () => {
     // Invited by the owner: the project manager's invitation limit is left to the other tests.
     const number = phone();
@@ -329,20 +435,16 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     // A correct PIN is never blocked by an unspent budget and does not spend it.
     expect((await signIn(PIN)).status).toBe(200);
     expect(await security.counted(key)).toBe(PIN_DAILY_FAILURES - 1);
-    expect((await signIn("802461")).status).toBe(401);
+    // Parallel guesses reserve their place first, so only the last one left is checked.
+    expect(await parallelWrongPins(number, 5)).toEqual([
+      "401 unauthorized",
+      ...Array.from({ length: 4 }, () => "429 pin-reset-required"),
+    ]);
     expect(await security.counted(key)).toBe(PIN_DAILY_FAILURES);
     // Spent: even the right PIN needs a reset first, and the reset clears the budget.
     const blocked = await signIn(PIN);
     expect([blocked.status, code(blocked)]).toEqual([429, "pin-reset-required"]);
-    const forgot = await (
-      await browser()
-    ).call("post", "auth/password/forgot", { identifier: number });
-    expect(forgot.status).toBe(200);
-    await vi.waitFor(() => expect(lastText(number)).toContain("/worker/pin?token="));
-    const reset = await (
-      await browser()
-    ).call("post", "auth/pin/reset", { token: linkToken(number), pin: "530718" });
-    expect(reset.status, JSON.stringify(reset.body)).toBe(200);
+    await resetPin(number, "530718");
     expect(await security.counted(key)).toBe(0);
     expect((await signIn("530718")).status).toBe(200);
   });
@@ -425,7 +527,7 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     const joinBody = { identifier: worker.identifier, token, displayName: "X", pin: PIN };
     expect(code(await outsider.call("post", "auth/pin/join", joinBody))).toBe("account-exists");
     expect(
-      (await outsider.call("post", "auth/pin/join", { ...joinBody, token: "y".repeat(43) })).status,
+      (await outsider.call("post", "auth/pin/join", { ...joinBody, token: unknownToken() })).status,
     ).toBe(401);
     expect((await worker.call("post", "tenants/invitations/accept", { token })).status).toBe(200);
 

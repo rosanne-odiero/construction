@@ -43,6 +43,22 @@ describe("Browser authentication security", () => {
         ),
       ),
     ).toThrow("forbidden in production");
+    // No trusted proxy means no per-address limits on guessing: production refuses to start.
+    const production = {
+      WEB_ORIGIN: "https://app.example.test",
+      AUTH_MFA_ENCRYPTION_KEY: randomBytes(32).toString("hex"),
+      AUTH_SIGNING_PRIVATE_KEY: "placeholder",
+    };
+    expect(() => security(config(production, true))).toThrow("Production requires TRUST_PROXY");
+    expect(() => security(config({ ...production, TRUST_PROXY: "false" }, true))).toThrow(
+      "Production requires TRUST_PROXY",
+    );
+    // "0" and an empty list are accepted by Express but trust no proxy, so per-IP limits see
+    // only the load balancer's address.
+    for (const TRUST_PROXY of ["0", ",", " , "])
+      expect(() => security(config({ ...production, TRUST_PROXY }, true))).toThrow(
+        "Production requires TRUST_PROXY",
+      );
   });
 
   it("uses production Secure, HttpOnly, SameSite cookies with exact host/path scopes", async () => {
@@ -54,6 +70,7 @@ describe("Browser authentication security", () => {
           WEB_ORIGIN: "https://app.example.test",
           AUTH_SIGNING_PRIVATE_KEY: Buffer.from(pem).toString("base64"),
           AUTH_MFA_ENCRYPTION_KEY: randomBytes(32).toString("hex"),
+          TRUST_PROXY: "10.0.0.0/8",
         },
         true,
       ),

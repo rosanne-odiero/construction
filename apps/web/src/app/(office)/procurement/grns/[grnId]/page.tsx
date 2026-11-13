@@ -219,7 +219,11 @@ export default async function GrnPage({ params }: { params: Promise<{ grnId: str
       <section aria-labelledby="grn-photos" className="space-y-3">
         <h2 id="grn-photos" className="flex flex-wrap items-center gap-2 text-base font-semibold">
           {t("detail.photos")}
-          <StatusBadge tone={grn.evidenceComplete ? "success" : "warning"}>
+          {/* A sentence, not a word: it wraps rather than widening a phone screen. */}
+          <StatusBadge
+            tone={grn.evidenceComplete ? "success" : "warning"}
+            className="h-auto text-left whitespace-normal"
+          >
             {grn.evidenceComplete ? t("detail.evidenceComplete") : t("detail.evidenceIncomplete")}
           </StatusBadge>
         </h2>

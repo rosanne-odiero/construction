@@ -764,6 +764,14 @@ test("Kiswahili, dark theme and reduced motion on every procurement screen; GRN 
   await expect(recorded).toContainText("Imezidi kiasi kilichoagizwa");
   await expect(recorded).toContainText("Muundo mwingine (umewekwa alama)");
   expect(await axeViolations(page)).toEqual([]);
+  // Its detail page, with the long "evidence incomplete" notice (no photos), also fits 360 px.
+  const grns = (await api(page, "GET", "/procurement/grns")).body["grns"] as {
+    id: string;
+    number: string;
+  }[];
+  await page.goto(`/procurement/grns/${grns.find((entry) => entry.number === "GRN-0002")!.id}`);
+  await expect(page.getByText(/^Ushahidi haujakamilika/)).toBeVisible();
+  await expectNoHorizontalScroll(page, "GRN detail, evidence incomplete (sw, 360 px)");
   await page.goto("/procurement");
   await expectNoHorizontalScroll(page, "procurement home (sw, 360 px)");
   expect(await axeViolations(page)).toEqual([]);

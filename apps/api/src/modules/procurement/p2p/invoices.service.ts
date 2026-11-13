@@ -1173,7 +1173,13 @@ export class InvoicesService {
       permissions: {
         canEdit: RECORDERS.some(has) && row.status === "draft",
         canApprove: has("payments.approve") && needsApproval && !contributor,
-        canApproveException: has("payments.approve") && row.status === "disputed" && !contributor,
+        canApproveException:
+          has("payments.approve") &&
+          row.status === "disputed" &&
+          !contributor &&
+          match !== null &&
+          match.exceptionAt === null &&
+          (match.evidence as unknown as ThreeWayMatchResult).exceptable,
         canSettle:
           has("payments.disburse") &&
           ["approved", "partly_settled"].includes(row.status) &&

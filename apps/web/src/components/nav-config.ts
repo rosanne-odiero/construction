@@ -13,6 +13,7 @@ import {
   Receipt,
   ScanFace,
   ShieldAlert,
+  ShoppingCart,
   Truck,
   Wallet,
   Warehouse,
@@ -29,6 +30,7 @@ export type NavKey =
   | "diary"
   | "materials"
   | "suppliers"
+  | "procurement"
   | "stores"
   | "plant"
   | "safety"
@@ -61,6 +63,7 @@ export const navGroups: {
     items: [
       { key: "bq", href: "/bq", icon: FileSpreadsheet },
       { key: "suppliers", href: "/suppliers", icon: Truck },
+      { key: "procurement", href: "/procurement", icon: ShoppingCart },
       { key: "valuations", href: "/soon/valuations", icon: Calculator, phase: 6 },
     ],
   },
@@ -113,8 +116,8 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
 /**
  * Routes backed by the real API: the projects list, project pages and site editors (D2.1), a
  * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1), attendance and
- * timesheets (D3.3 web slice), payroll (D4.1), and the catalogue and suppliers (D5.1). The D0
- * labour, attendance and payroll prototypes live under /prototype.
+ * timesheets (D3.3 web slice), payroll (D4.1), the catalogue and suppliers (D5.1), and
+ * procure-to-pay (D5.2). The D0 labour, attendance and payroll prototypes live under /prototype.
  */
 export function isLiveRoute(pathname: string): boolean {
   if (pathname === "/projects" || pathname === "/bq" || pathname === "/diary") return true;
@@ -124,6 +127,12 @@ export function isLiveRoute(pathname: string): boolean {
   if (/^\/catalogue(\/(alerts|convert|units|[0-9a-f-]{36}))?$/.test(pathname)) return true;
   if (/^\/suppliers(\/(new|[0-9a-f-]{36}(\/edit)?))?$/.test(pathname)) return true;
   if (/^\/rate-buildups(\/(new|[0-9a-f-]{36}))?$/.test(pathname)) return true;
+  if (
+    /^\/procurement(\/(requisitions|rfqs|lpos|grns|invoices)(\/(new|[0-9a-f-]{36}(\/(edit|print))?))?)?$/.test(
+      pathname,
+    )
+  )
+    return true;
   return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/(import|instructions|versions|variations(\/[0-9a-f-]{36})?))?)?$/.test(
     pathname,
   );

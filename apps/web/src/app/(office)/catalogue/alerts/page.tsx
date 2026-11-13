@@ -10,7 +10,7 @@ import {
 } from "@pm-buddy/validation";
 import { PageHeader } from "@/components/page-header";
 import { CatalogueSubnav } from "@/components/procurement/catalogue-subnav";
-import { ThresholdForm } from "@/components/procurement/unit-dialog";
+import { ProcurementSettingsForm } from "@/components/procurement/settings-form";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ export default async function PriceAlertsPage({
     return <LiveUnavailable retryHref={path} />;
   }
   const t = await getTranslations("catalogue.alerts");
+  const tSettings = await getTranslations("p2p.settings");
   const tCatalogue = await getTranslations("catalogue");
   const tDetail = await getTranslations("catalogue.detail");
   const tUnits = await getTranslations("catalogue.units");
@@ -66,17 +67,19 @@ export default async function PriceAlertsPage({
       />
       <CatalogueSubnav current="alerts" />
       {settings.ok ? (
-        <Card>
+        <Card id="procurement-settings" className="scroll-mt-16">
           <CardHeader>
             <CardTitle>
-              <h2>{t("settingsTitle")}</h2>
+              <h2>{tSettings("title")}</h2>
             </CardTitle>
-            <CardDescription>{t("settingsDescription")}</CardDescription>
+            <CardDescription>
+              {t("settingsDescription")} {tSettings("description")}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <ThresholdForm
-              percent={settings.data.settings.priceChangeAlertPercent}
-              version={settings.data.settings.version}
+            <ProcurementSettingsForm
+              key={settings.data.settings.version}
+              settings={settings.data.settings}
               canManage={settings.data.permissions.canManage}
             />
             <p className="text-xs text-muted-foreground">{t("notifyNote")}</p>

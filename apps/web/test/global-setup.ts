@@ -25,6 +25,26 @@ const ROUTES = [
   "/attendance/periods/00000000-0000-4000-8000-000000000000",
   "/attendance/anomalies",
   "/attendance/settings",
+  "/procurement",
+  "/procurement/requisitions",
+  "/procurement/requisitions/new",
+  "/procurement/rfqs",
+  "/procurement/rfqs/new",
+  "/procurement/lpos",
+  "/procurement/grns",
+  "/procurement/grns/new",
+  "/procurement/invoices",
+  "/procurement/invoices/new",
+  "/catalogue/alerts",
+  // Unknown IDs answer 404 but compile the procurement detail routes.
+  "/procurement/requisitions/00000000-0000-4000-8000-000000000000",
+  "/procurement/requisitions/00000000-0000-4000-8000-000000000000/edit",
+  "/procurement/rfqs/00000000-0000-4000-8000-000000000000",
+  "/procurement/lpos/00000000-0000-4000-8000-000000000000",
+  "/procurement/lpos/00000000-0000-4000-8000-000000000000/print",
+  "/procurement/grns/00000000-0000-4000-8000-000000000000",
+  "/procurement/invoices/00000000-0000-4000-8000-000000000000",
+  "/procurement/invoices/00000000-0000-4000-8000-000000000000/edit",
 ];
 
 export default async function warmUp(config: FullConfig) {

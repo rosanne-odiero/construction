@@ -84,6 +84,8 @@ import { handleLabour, labourFixture, type LabourState } from "./mock-labour.mts
 import { handleDiaries, initialDiaries } from "./mock-diaries.mts";
 import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
 import { handlePhotos, initialPhotos } from "./mock-photos.mts";
+import { latestApproved } from "./mock-bq-model.mts";
+import { handleP2p, initialP2p, p2pDocument, type P2pDeps, type P2pState } from "./mock-p2p.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -161,6 +163,8 @@ type State = {
   team: Map<string, TeamEntry[]>;
   bq: BqState;
   procurement: ProcurementState;
+  /** D5.2 procure-to-pay records (mock-p2p.mts). */
+  p2p: P2pState;
   labour: LabourState;
   attendance: AttendanceState;
   diaries: SiteDiary[];
@@ -351,21 +355,25 @@ function fixture(persona: Persona): State {
   const pmAssignment = PROJECT_ASSIGNABLE_PERMISSIONS.filter((key) =>
     SYSTEM_ROLE_PERMISSIONS.project_manager.includes(key),
   );
+  const procurement = initialProcurement();
+  const bq: BqState = {
+    projects: new Map([
+      [RUIRU_ID, initialProjectBq(true, ruiru.project.contractSumMinor)],
+      [SYOKIMAU_ID, initialProjectBq(false, null)],
+    ]),
+    templates: [],
+    buildups: initialBuildups(),
+  };
+  const projects = [ruiru, syokimau];
   return {
     persona,
     stepUpAt: new Map(),
     diaries: initialDiaries(RUIRU_ID, MAIN_PLOT_ID, OWNER_ID, AGENT_ID),
     photos: initialPhotos(RUIRU_ID, MAIN_PLOT_ID),
-    bq: {
-      projects: new Map([
-        [RUIRU_ID, initialProjectBq(true, ruiru.project.contractSumMinor)],
-        [SYOKIMAU_ID, initialProjectBq(false, null)],
-      ]),
-      templates: [],
-      buildups: initialBuildups(),
-    },
-    procurement: initialProcurement(),
-    projects: [ruiru, syokimau],
+    bq,
+    procurement,
+    p2p: initialP2p(p2pBase(projects, procurement, bq)),
+    projects,
     labour,
     attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
     team: new Map([
@@ -408,6 +416,45 @@ function fixture(persona: Persona): State {
         ],
       ],
     ]),
+  };
+}
+
+/** What the procure-to-pay mock needs from the rest of the fixture (projects, catalogue, BQ). */
+function p2pBase(
+  projects: ProjectState[],
+  procurement: ProcurementState,
+  bq: BqState,
+): Omit<P2pDeps, "persona"> {
+  return {
+    fail: (status, code) => new HttpError(status, code),
+    parse,
+    requireStepUp: () => undefined,
+    projects: projects.map(({ project, sites }) => ({
+      id: project.id,
+      code: project.code,
+      name: project.name,
+      status: project.status,
+      sites: sites.map(({ site, versions }) => ({
+        id: site.id,
+        name: site.name,
+        geofence: versions[0]?.geofence ?? null,
+        geofenceVersion: versions[0]?.version ?? null,
+      })),
+    })),
+    catalogue: procurement,
+    // The fixture is seeded as if the agent could raise requisitions on Ruiru Heights.
+    projectPermissions: (projectId) => (projectId === RUIRU_ID ? PROJECT_PERMISSIONS : []),
+    bqItem: (projectId, lineageId) => {
+      const entry = bq.projects.get(projectId);
+      const version = entry ? latestApproved(entry) : null;
+      const item = version?.content.items.find((candidate) => candidate.lineageId === lineageId);
+      return version && item
+        ? { versionId: version.id, lineageId, ref: item.ref, description: item.description }
+        : null;
+    },
+    idempotencyKey: undefined,
+    contentType: undefined,
+    raw: Buffer.alloc(0),
   };
 }
 
@@ -733,6 +780,29 @@ async function handle(
     ]);
     return { status: 201, body: { project }, schema: projectResponseSchema };
   }
+  const p2p = handleP2p(
+    {
+      ...p2pBase(state.projects, state.procurement, state.bq),
+      persona: state.persona,
+      requireStepUp: () => requireStepUp(state),
+      projectPermissions: (projectId) => {
+        const entry = state.projects.find((candidate) => candidate.project.id === projectId);
+        return entry ? projectPermissions(state, entry) : [];
+      },
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+      contentType: req.headers["content-type"],
+      raw,
+    },
+    state.p2p,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (p2p) return p2p;
   const procurement = handleProcurement(
     {
       fail: (status, code) => new HttpError(status, code),
@@ -1093,6 +1163,18 @@ const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://mock.invalid");
     if (url.pathname === "/health") return send(res, 200, { status: "ok" });
     const path = url.pathname.replace(/^\/api\/v1/, "");
+    // Procurement documents and GRN photos are downloaded as bytes, not JSON.
+    const download = /^\/procurement\/documents\/([^/]+)$/.exec(path);
+    if (download && req.method === "GET") {
+      try {
+        const file = p2pDocument(stateFor(req).p2p, download[1]!);
+        if (!file) return send(res, 404, { code: "not-found" }, true);
+        res.writeHead(200, { "Content-Type": file.contentType, "Cache-Control": "no-store" });
+        return res.end(file.content);
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
     try {
       const { json, raw } = await readBody(req);
       const reply = await handle(req.method ?? "GET", path, url.searchParams, req, json, raw);

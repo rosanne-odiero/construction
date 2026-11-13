@@ -17,7 +17,7 @@ const ACCRUED = ["approved", "partly_settled", "settled"];
 /**
  * The "waiting for me" inbox and the commitments view (D5.2). The inbox lists only what the caller
  * may act on now: they hold the permission on the project and did not contribute to the record
- * (maker-checker). Commitments (brief §5.8, §15 C) keep committed (approved LPOs), accrued
+ * (maker-checker), and a blocked invoice only when its mismatch may be excepted. Commitments (brief §5.8, §15 C) keep committed (approved LPOs), accrued
  * (approved invoices) and paid (settlements) apart, per project and BQ item, net of VAT except
  * paid amounts (cash, gross); D5.4 budgets read them from here.
  */
@@ -132,6 +132,11 @@ export class P2pOverviewService {
               settlements: { select: { amountMinor: true } },
             },
           },
+          matches: {
+            orderBy: [{ computedAt: "desc" }, { id: "desc" }],
+            take: 1,
+            select: { evidence: true, exceptionAt: true },
+          },
         },
         orderBy: { updatedAt: "asc" },
       });
@@ -142,7 +147,14 @@ export class P2pOverviewService {
           (await holds(row.projectId, "payments.approve")) && !mine(row.contributors);
         const active = row.payables.find((payable) => !payable.supersededAt);
         const current = active && active.payoutVersion.status === "verified";
-        if (row.status === "disputed" && approver)
+        // Only a mismatch an exception may override is waiting for an approver (never a missing
+        // eTIMS number, inconsistent totals or a line that is not on the LPO).
+        const latest = row.matches[0];
+        const exceptable =
+          latest !== undefined &&
+          latest.exceptionAt === null &&
+          (latest.evidence as { exceptable?: boolean } | null)?.exceptable === true;
+        if (row.status === "disputed" && approver && exceptable)
           await push(
             "invoice-exception",
             row,

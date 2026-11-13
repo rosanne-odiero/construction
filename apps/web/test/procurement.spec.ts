@@ -210,8 +210,8 @@ test("units and the alert threshold: a company unit and a stricter threshold", a
     "+12.5%",
   );
   await page.getByLabel("Alert when a price changes by more than (%)").fill("5");
-  await page.getByRole("button", { name: "Save threshold" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Threshold saved." })).toBeVisible();
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Settings saved." })).toBeVisible();
   expect(await axeViolations(page)).toEqual([]);
 });
 

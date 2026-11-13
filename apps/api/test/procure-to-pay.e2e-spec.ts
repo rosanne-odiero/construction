@@ -1267,6 +1267,17 @@ describe("Procure-to-pay (real runtime role)", () => {
     // No eTIMS number, blocked by default and never excepted.
     let missing = await submit(await record("INV-0002", "7", null));
     expect(missing.match).toMatchObject({ reasons: ["etims-missing"], exceptable: false });
+    // Only a mismatch an exception may override is offered to (and waits for) an approver.
+    expect((await invoiceOf(owner, missing.invoice.id)).permissions.canApproveException).toBe(
+      false,
+    );
+    expect((await invoiceOf(owner, double.invoice.id)).permissions.canApproveException).toBe(true);
+    const waiting = inboxResponseSchema
+      .parse(ok(await owner.call("get", "procurement/inbox")))
+      .items.filter((item) => item.kind === "invoice-exception")
+      .map((item) => item.label);
+    expect(waiting).toContain("INV-0003");
+    expect(waiting).not.toContain("INV-0002");
     await fresh(owner);
     refused(
       await owner.call("post", `procurement/invoices/${missing.invoice.id}/exception`, {

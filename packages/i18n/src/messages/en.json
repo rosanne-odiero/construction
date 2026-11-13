@@ -448,6 +448,34 @@
     "intro": "Business workflow screens use synthetic mock data. Screens marked Live call the real API and may save foundation records; they do not send real payments or notifications. Use the gallery to review English/Kiswahili controls and light/dark themes.",
     "start": "Start at sign-in",
     "skipToDashboard": "Go to the dashboard",
+    "waiting": {
+      "title": "Waiting on you",
+      "intro": "These need something only you can provide. You can review everything else without them.",
+      "items": {
+        "bq": {
+          "title": "A real, anonymised Kenyan BQ",
+          "blocks": "Needed for D2.2 sign-off",
+          "description": "Upload a BQ Excel file from a real project, with client names and anything confidential removed. Sign in as a project manager, open a project and choose BQ, then Import. A clean import signs off D2.2.",
+          "action": "Go to projects"
+        },
+        "kiswahili": {
+          "title": "Native Kiswahili review",
+          "blocks": "Before the pilot",
+          "description": "Ask someone fluent to switch to SW (top right) and note any wording that reads unnaturally. Every Kiswahili label is waiting for this review."
+        },
+        "catalogue": {
+          "title": "QS check of the starter catalogue",
+          "blocks": "Before the pilot",
+          "description": "The densities and coverage in the Kenyan starter catalogue (bags per m³, blocks per m²) are assumptions. A quantity surveyor should confirm or correct them.",
+          "action": "Open the catalogue"
+        },
+        "compliance": {
+          "title": "Tax and payroll sign-off",
+          "blocks": "Before real payments",
+          "description": "The VAT rate, eTIMS rules and statutory payroll rates are placeholders marked COMPLIANCE-REVIEW. A tax or payroll professional needs to confirm them (docs/COMPLIANCE_TODO.md)."
+        }
+      }
+    },
     "screensTitle": "Screens to review",
     "liveApi": "Live API",
     "screens": {
@@ -1381,6 +1409,7 @@
       "invalidCode": "That code could not be verified. Check it and try again.",
       "rateLimited": "Too many attempts. Wait a few minutes before trying again.",
       "pinResetRequired": "Too many wrong PINs today. Choose “Forgot PIN?” to get a reset link by SMS.",
+      "pinTemporarilyLimited": "Too many wrong PINs right now. Try again in an hour, or choose “Forgot PIN?” to get a reset link by SMS.",
       "network": "PM-Buddy could not be reached. Check your connection and try again.",
       "invalidResponse": "PM-Buddy answered unexpectedly. You have not been signed in. Try again or check the system status.",
       "passkeyCancelled": "The passkey prompt was cancelled, timed out or is not available on this device.",

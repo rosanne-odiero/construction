@@ -448,6 +448,34 @@
     "intro": "Skrini za michakato ya biashara hutumia data ya majaribio. Skrini zilizoandikwa API halisi hutumia API na zinaweza kuhifadhi rekodi za msingi; hazitumi malipo au arifa halisi. Kagua vidhibiti vya Kiingereza/Kiswahili na mandhari mepesi/meusi.",
     "start": "Anza kwa kuingia",
     "skipToDashboard": "Nenda kwenye dashibodi",
+    "waiting": {
+      "title": "Tunasubiri kutoka kwako",
+      "intro": "Haya yanahitaji kitu ambacho ni wewe tu unaweza kutoa. Unaweza kukagua mengine yote bila hayo.",
+      "items": {
+        "bq": {
+          "title": "BQ halisi ya Kenya isiyo na majina",
+          "blocks": "Inahitajika kwa idhini ya D2.2",
+          "description": "Pakia faili ya Excel ya BQ kutoka kwa mradi halisi, baada ya kuondoa majina ya mteja na taarifa za siri. Ingia kama msimamizi wa mradi, fungua mradi, chagua BQ kisha Ingiza. Uingizaji usio na hitilafu unakamilisha idhini ya D2.2.",
+          "action": "Nenda kwenye miradi"
+        },
+        "kiswahili": {
+          "title": "Ukaguzi wa Kiswahili na mzungumzaji asilia",
+          "blocks": "Kabla ya majaribio",
+          "description": "Mwombe mtu anayezungumza Kiswahili kwa ufasaha abadilishe hadi SW (juu kulia) na aandike maneno yasiyosomeka kwa kawaida. Kila neno la Kiswahili linasubiri ukaguzi huu."
+        },
+        "catalogue": {
+          "title": "Ukaguzi wa QS wa orodha ya awali ya vifaa",
+          "blocks": "Kabla ya majaribio",
+          "description": "Uzito na kiasi cha matumizi katika orodha ya awali ya vifaa vya Kenya (mifuko kwa m³, matofali kwa m²) ni makadirio. Mkadiriaji majenzi (QS) athibitishe au asahihishe.",
+          "action": "Fungua orodha ya vifaa"
+        },
+        "compliance": {
+          "title": "Idhini ya kodi na mishahara",
+          "blocks": "Kabla ya malipo halisi",
+          "description": "Kiwango cha VAT, kanuni za eTIMS na viwango vya makato ya kisheria ya mishahara ni vya muda na vimewekwa alama COMPLIANCE-REVIEW. Mtaalamu wa kodi au mishahara anahitaji kuvithibitisha (docs/COMPLIANCE_TODO.md)."
+        }
+      }
+    },
     "screensTitle": "Skrini za kukagua",
     "liveApi": "API halisi",
     "screens": {
@@ -1381,6 +1409,7 @@
       "invalidCode": "Msimbo huo haukuweza kuthibitishwa. Ukague kisha ujaribu tena.",
       "rateLimited": "Majaribio mengi sana. Subiri dakika chache kabla ya kujaribu tena.",
       "pinResetRequired": "PIN zisizo sahihi zimekuwa nyingi leo. Chagua “Umesahau PIN?” upate kiungo cha kubadilisha kwa SMS.",
+      "pinTemporarilyLimited": "PIN zisizo sahihi zimekuwa nyingi sasa hivi. Jaribu tena baada ya saa moja, au chagua “Umesahau PIN?” upate kiungo cha kubadilisha kwa SMS.",
       "network": "PM-Buddy haikufikiwa. Kagua muunganisho wako kisha ujaribu tena.",
       "invalidResponse": "PM-Buddy imejibu bila kutarajiwa. Hujaingia. Jaribu tena au kagua hali ya mfumo.",
       "passkeyCancelled": "Ombi la passkey lilighairiwa, muda wake uliisha au halipatikani kwenye kifaa hiki.",

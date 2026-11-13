@@ -17,6 +17,7 @@ export default defineConfig({
       AUTH_MFA_ENCRYPTION_KEY: randomBytes(32).toString("hex"),
       FIELD_ENCRYPTION_KEYS: `1:${randomBytes(32).toString("hex")}`,
       FIELD_BLIND_INDEX_KEY: randomBytes(32).toString("hex"),
+      AUTH_PIN_PEPPER_KEYS: `1:${randomBytes(32).toString("hex")}`,
       DATABASE_URL: testDatabaseUrls().appUrl,
     },
     testTimeout: 20_000,

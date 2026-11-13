@@ -5,7 +5,7 @@ import type { PrismaService } from "../../infra/prisma.service.js";
 import type { AuthSecurity } from "./auth-security.service.js";
 import type { AuthService } from "./auth.service.js";
 import type { PinHasher } from "./pin-pepper.js";
-import { PIN_GLOBAL_FAILURES, PIN_GLOBAL_SHARE_PER_ADDRESS, PinService } from "./pin.service.js";
+import { PIN_GLOBAL_FAILURES, PinService } from "./pin.service.js";
 
 /** A PinService whose every PIN is wrong, with rate-limit counters kept in memory. */
 const wrongPins = (budget: number) => {
@@ -17,7 +17,6 @@ const wrongPins = (budget: number) => {
       return counts.get(key)!;
     },
     release: async () => {},
-    clientAddress: (req: Request) => req.ip,
   };
   const service = new PinService(
     { $transaction: async () => null } as unknown as PrismaService,
@@ -36,11 +35,11 @@ const wrongPins = (budget: number) => {
 };
 
 describe("PIN sign-in's platform-wide failure count", () => {
-  it("takes at most a fixed share from any one client address", async () => {
+  it("counts every wrong PIN, however many come from one client address", async () => {
     const { counts, guess } = wrongPins(1_000);
     for (let n = 0; n < 50; n++) await guess("198.51.100.7", n);
     for (let n = 50; n < 55; n++) await guess("203.0.113.9", n);
-    // One address alone cannot spend the budget and tighten sign-in for every labourer.
-    expect(counts.get(PIN_GLOBAL_FAILURES)).toBe(PIN_GLOBAL_SHARE_PER_ADDRESS + 5);
+    // A cap per address would let one client spray guesses across numbers without an alert.
+    expect(counts.get(PIN_GLOBAL_FAILURES)).toBe(55);
   });
 });

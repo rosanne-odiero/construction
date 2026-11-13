@@ -35,8 +35,6 @@ export const PIN_DAILY_FAILURES = 30;
  * spent. Only failures made while it is spent count, so earlier typos never lock anyone out.
  */
 export const PIN_FAILURES_UNDER_ATTACK = 1;
-/** The most one client address adds to the platform-wide count per hour. */
-export const PIN_GLOBAL_SHARE_PER_ADDRESS = 20;
 const dailyFailures = (identifier: string) => `pin-day:key:${identifier}`;
 const attackFailures = (identifier: string) => `pin-attack:key:${identifier}`;
 /** Wrong PINs across every number in the current hour (pre-sign-in, so platform-wide). */
@@ -71,9 +69,11 @@ const weakPin = (problem: string) =>
  * guessing is bounded by the shared five-failure lockout, the per-number and per-address request
  * limits, a daily budget of wrong PINs per number and a platform-wide hourly budget. Only wrong
  * PINs count; a spent number budget needs an SMS PIN reset, which also clears it. When the
- * platform-wide budget is spent (guessing across many numbers; one client address can add at most
- * PIN_GLOBAL_SHARE_PER_ADDRESS to it), an alert is logged once and each number gets one wrong PIN
- * per hour; failures from before that never count, and correct PINs keep working. Each attempt
+ * platform-wide budget is spent (guessing across many numbers), an alert is logged once and each
+ * number gets one wrong PIN per hour; failures from before that never count, so correct PINs keep
+ * working. Every wrong PIN counts towards that budget, whatever address it came from: one client
+ * can trip it, but that only tightens guessing, and a cap per address would let one client guess
+ * on unseen. Each attempt
  * reserves its place in the budgets before the PIN is checked, so parallel guesses cannot all
  * pass a check, and a correct PIN gives the reservation back. PINs are peppered (PinHasher).
  */
@@ -154,26 +154,15 @@ export class PinService {
     if (!result) {
       // The reservations stay as failures, for unknown numbers too, so the response never
       // reveals whether a number exists.
-      await this.recordGlobalFailure(req, globalBudget);
+      await this.recordGlobalFailure(globalBudget);
       throw new UnauthorizedException("Invalid phone number or PIN, or account unavailable");
     }
     await this.releaseAll(reserved);
     return this.auth.issue(result.id, res);
   }
 
-  /**
-   * Adds a wrong PIN to the platform-wide hourly count, at most PIN_GLOBAL_SHARE_PER_ADDRESS per
-   * client address (when a trusted proxy reports it), so one client cannot trip it alone. Logs a
-   * single alert when the count reaches the budget (INCR is atomic: one request sees it).
-   */
-  private async recordGlobalFailure(req: Request, globalBudget: number): Promise<void> {
-    const address = this.security.clientAddress(req);
-    if (
-      address &&
-      (await this.security.increment(`pin-fail:ip:${address}`, HOUR_SECONDS)) >
-        PIN_GLOBAL_SHARE_PER_ADDRESS
-    )
-      return;
+  /** Adds a wrong PIN to the platform-wide hourly count; one request sees the budget reached. */
+  private async recordGlobalFailure(globalBudget: number): Promise<void> {
     const failures = await this.security.increment(PIN_GLOBAL_FAILURES, HOUR_SECONDS);
     if (failures === globalBudget)
       this.logger.error(

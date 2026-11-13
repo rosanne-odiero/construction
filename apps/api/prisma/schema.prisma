@@ -139,6 +139,15 @@ model Tenant {
   publicHolidays     PublicHoliday[]
   idempotency        IdempotencyRecord[]
   outboxEvents       OutboxEvent[]
+  paymentSettings    PaymentSettings?
+  paymentRoutes      PaymentCallbackRoute[]
+  paymentRequests    PaymentRequest[]
+  paymentEvents      PaymentEvent[]
+  paymentCallbacks   PaymentCallbackInbox[]
+  paymentCases       PaymentCase[]
+  paymentQueries     ProviderQuery[]
+  paymentReceipts    ProviderTransaction[]
+  paymentOutbox      PaymentOutbox[]
 
   @@map("tenants")
 }
@@ -222,6 +231,7 @@ model Project {
   dnrEvents        DoNotRehireEvent[]
   timesheetRules   TimesheetRuleVersion[]
   timesheetPeriods TimesheetPeriod[]
+  paymentRequests  PaymentRequest[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1256,4 +1266,351 @@ model OutboxEvent {
   @@unique([tenantId, id])
   @@index([publishedAt, createdAt])
   @@map("outbox_events")
+}
+
+// ------------------------------------------------------------------------------------------------
+// D4.2 Payments and the Daraja integration (ARCHITECTURE §4.5, ERD §7, WORKFLOWS "Payment
+// attempts"). Guards, CHECKs, row-level security and grants live in the migration.
+
+// A company's Daraja configuration: environment (mock/sandbox; production refused by CHECK until the
+// go-live gate), shortcodes, limits (DEMO placeholders, CR-PMT-02), the payout master switch (off by
+// default) and write-only secrets sealed with the field cipher (AAD: company, table, column, row).
+model PaymentSettings {
+  tenantId               String    @id @map("tenant_id") @db.Uuid
+  environment            String    @default("mock") @db.VarChar(12)
+  payoutsEnabled         Boolean   @default(false) @map("payouts_enabled")
+  payoutsChangedAt       DateTime? @map("payouts_changed_at") @db.Timestamptz
+  payoutsChangedBy       String?   @map("payouts_changed_by") @db.Uuid
+  stkShortcode           String?   @map("stk_shortcode") @db.VarChar(12)
+  stkPartyB              String?   @map("stk_party_b") @db.VarChar(12)
+  stkTransactionType     String    @default("CustomerPayBillOnline") @map("stk_transaction_type") @db.VarChar(30)
+  c2bShortcode           String?   @map("c2b_shortcode") @db.VarChar(12)
+  b2cShortcode           String?   @map("b2c_shortcode") @db.VarChar(12)
+  b2bShortcode           String?   @map("b2b_shortcode") @db.VarChar(12)
+  stkMaxMinor            BigInt    @map("stk_max_minor")
+  b2cMinMinor            BigInt    @map("b2c_min_minor")
+  b2cMaxMinor            BigInt    @map("b2c_max_minor")
+  b2bMaxMinor            BigInt    @map("b2b_max_minor")
+  dailyPayoutMaxMinor    BigInt    @map("daily_payout_max_minor")
+  limitsStatus           String    @default("demo") @map("limits_status") @db.VarChar(12)
+  consumerKeyEnc         Bytes?    @map("consumer_key_enc")
+  consumerKeySetAt       DateTime? @map("consumer_key_set_at") @db.Timestamptz
+  consumerSecretEnc      Bytes?    @map("consumer_secret_enc")
+  consumerSecretSetAt    DateTime? @map("consumer_secret_set_at") @db.Timestamptz
+  initiatorNameEnc       Bytes?    @map("initiator_name_enc")
+  initiatorNameSetAt     DateTime? @map("initiator_name_set_at") @db.Timestamptz
+  initiatorPasswordEnc   Bytes?    @map("initiator_password_enc")
+  initiatorPasswordSetAt DateTime? @map("initiator_password_set_at") @db.Timestamptz
+  passkeyEnc             Bytes?    @map("passkey_enc")
+  passkeySetAt           DateTime? @map("passkey_set_at") @db.Timestamptz
+  credentialsVersion     Int       @default(0) @map("credentials_version")
+  credentialsUpdatedAt   DateTime? @map("credentials_updated_at") @db.Timestamptz
+  credentialsUpdatedBy   String?   @map("credentials_updated_by") @db.Uuid
+  version                Int       @default(1)
+  createdBy              String    @map("created_by") @db.Uuid
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy              String    @map("updated_by") @db.Uuid
+  updatedAt              DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+  tenant                 Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("payment_settings")
+}
+
+// Unguessable per-company callback path tokens (hex, rotatable). The digest is the lookup key (a
+// definer function resolves it before the company is known); the token itself is sealed so the
+// worker can build the URLs it sends. A retired token keeps working until accept_until.
+model PaymentCallbackRoute {
+  id           String                 @id @default(uuid(7)) @db.Uuid
+  tenantId     String                 @map("tenant_id") @db.Uuid
+  tokenDigest  String                 @unique @map("token_digest") @db.Char(64)
+  tokenEnc     Bytes                  @map("token_enc")
+  status       String                 @default("active") @db.VarChar(10)
+  activeMarker String?                @default("on") @map("active_marker") @db.VarChar(2)
+  acceptUntil  DateTime?              @map("accept_until") @db.Timestamptz
+  createdBy    String                 @map("created_by") @db.Uuid
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  retiredBy    String?                @map("retired_by") @db.Uuid
+  retiredAt    DateTime?              @map("retired_at") @db.Timestamptz
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempts     PaymentAttempt[]
+  callbacks    PaymentCallbackInbox[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, activeMarker])
+  @@map("payment_callback_routes")
+}
+
+// The business intent: what to collect or pay, to whom and why (purpose `test` in D4.2; payroll
+// obligations in D4.3, invoices in D5/D7). Immutable apart from the derived status.
+model PaymentRequest {
+  id               String           @id @db.Uuid
+  tenantId         String           @map("tenant_id") @db.Uuid
+  reference        String           @db.VarChar(20)
+  kind             String           @db.VarChar(20)
+  direction        String           @db.VarChar(3)
+  purpose          String           @db.VarChar(30)
+  purposeRef       String?          @map("purpose_ref") @db.Uuid
+  amountMinor      BigInt           @map("amount_minor")
+  currency         String           @default("KES") @db.Char(3)
+  msisdnEnc        Bytes?           @map("msisdn_enc")
+  msisdnMasked     String?          @map("msisdn_masked") @db.VarChar(20)
+  partyB           String?          @map("party_b") @db.VarChar(12)
+  accountReference String?          @map("account_reference") @db.VarChar(20)
+  command          String?          @db.VarChar(30)
+  description      String?          @db.VarChar(100)
+  occasion         String?          @db.VarChar(100)
+  projectId        String?          @map("project_id") @db.Uuid
+  environment      String           @db.VarChar(12)
+  status           String           @default("in_progress") @db.VarChar(20)
+  idempotencyKey   String           @map("idempotency_key") @db.VarChar(128)
+  fingerprint      String           @db.Char(64)
+  version          Int              @default(1)
+  createdBy        String           @map("created_by") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @default(now()) @map("updated_at") @db.Timestamptz
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project          Project?         @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: NoAction)
+  attempts         PaymentAttempt[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, reference])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, createdAt])
+  @@map("payment_requests")
+}
+
+// One provider call per attempt with its own state machine (guarded by app.guard_payment_attempt).
+// Provider identifiers are unique per company and never change once stored; live_marker allows one
+// live attempt per request, reversal_marker one live reversal per confirmed attempt.
+model PaymentAttempt {
+  id                       String                 @id @default(uuid(7)) @db.Uuid
+  tenantId                 String                 @map("tenant_id") @db.Uuid
+  requestId                String                 @map("request_id") @db.Uuid
+  sequence                 Int
+  kind                     String                 @db.VarChar(20)
+  direction                String                 @db.VarChar(3)
+  amountMinor              BigInt                 @map("amount_minor")
+  currency                 String                 @default("KES") @db.Char(3)
+  reversesAttemptId        String?                @map("reverses_attempt_id") @db.Uuid
+  status                   String                 @default("created") @db.VarChar(20)
+  liveMarker               String?                @map("live_marker") @db.VarChar(2)
+  reversalMarker           String?                @map("reversal_marker") @db.VarChar(2)
+  version                  Int                    @default(1)
+  environment              String                 @db.VarChar(12)
+  shortcode                String?                @db.VarChar(12)
+  routeId                  String                 @map("route_id") @db.Uuid
+  originatorConversationId String?                @map("originator_conversation_id") @db.VarChar(100)
+  conversationId           String?                @map("conversation_id") @db.VarChar(100)
+  merchantRequestId        String?                @map("merchant_request_id") @db.VarChar(100)
+  checkoutRequestId        String?                @map("checkout_request_id") @db.VarChar(100)
+  receipt                  String?                @db.VarChar(30)
+  resultCode               String?                @map("result_code") @db.VarChar(20)
+  resultDesc               String?                @map("result_desc") @db.VarChar(300)
+  reason                   String?                @db.VarChar(40)
+  providerCode             String?                @map("provider_code") @db.VarChar(30)
+  requestDigest            String?                @map("request_digest") @db.Char(64)
+  leaseOwner               String?                @map("lease_owner") @db.VarChar(80)
+  leaseExpiresAt           DateTime?              @map("lease_expires_at") @db.Timestamptz
+  submittedAt              DateTime?              @map("submitted_at") @db.Timestamptz
+  acceptedAt               DateTime?              @map("accepted_at") @db.Timestamptz
+  resultDueAt              DateTime?              @map("result_due_at") @db.Timestamptz
+  finalizedAt              DateTime?              @map("finalized_at") @db.Timestamptz
+  statusQueries            Int                    @default(0) @map("status_queries")
+  nextStatusQueryAt        DateTime?              @map("next_status_query_at") @db.Timestamptz
+  createdBy                String                 @map("created_by") @db.Uuid
+  createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                DateTime               @default(now()) @map("updated_at") @db.Timestamptz
+  request                  PaymentRequest         @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: NoAction)
+  route                    PaymentCallbackRoute   @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: NoAction)
+  reverses                 PaymentAttempt?        @relation("AttemptReversal", fields: [tenantId, reversesAttemptId], references: [tenantId, id], onDelete: NoAction)
+  reversals                PaymentAttempt[]       @relation("AttemptReversal")
+  callbacks                PaymentCallbackInbox[]
+  cases                    PaymentCase[]
+  queries                  ProviderQuery[]
+  transactions             ProviderTransaction[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, requestId, sequence])
+  @@unique([tenantId, requestId, liveMarker])
+  @@unique([tenantId, reversesAttemptId, reversalMarker])
+  @@unique([tenantId, originatorConversationId])
+  @@unique([tenantId, conversationId])
+  @@unique([tenantId, merchantRequestId])
+  @@unique([tenantId, checkoutRequestId])
+  @@unique([tenantId, receipt])
+  @@index([tenantId, status])
+  @@index([status, updatedAt])
+  @@map("payment_attempts")
+}
+
+// Append-only timeline of requests, attempts, callbacks, cases, queries and settings (the console
+// state timeline). actor_id NULL is the payments worker. Safe identifiers and codes only.
+model PaymentEvent {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  subjectType String   @map("subject_type") @db.VarChar(12)
+  subjectId   String   @map("subject_id") @db.Uuid
+  requestId   String?  @map("request_id") @db.Uuid
+  event       String   @db.VarChar(60)
+  fromStatus  String?  @map("from_status") @db.VarChar(20)
+  toStatus    String?  @map("to_status") @db.VarChar(20)
+  reason      String?  @db.VarChar(40)
+  actorId     String?  @map("actor_id") @db.Uuid
+  detail      Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, requestId, createdAt])
+  @@index([tenantId, subjectId, createdAt])
+  @@map("payment_events")
+}
+
+// Durable callback inbox: the raw body sealed before Daraja gets a success acknowledgement, a
+// redacted copy for display, and a fingerprint so a duplicate delivery is a no-op.
+model PaymentCallbackInbox {
+  id               String                @id @db.Uuid
+  tenantId         String                @map("tenant_id") @db.Uuid
+  routeId          String                @map("route_id") @db.Uuid
+  kind             String                @db.VarChar(20)
+  status           String                @default("received") @db.VarChar(12)
+  receivedAt       DateTime              @default(now()) @map("received_at") @db.Timestamptz
+  sourceIp         String?               @map("source_ip") @db.VarChar(45)
+  bodySha256       String                @map("body_sha256") @db.Char(64)
+  bodyBytes        Int                   @map("body_bytes")
+  bodyEnc          Bytes                 @map("body_enc")
+  redactedBody     Json                  @map("redacted_body")
+  fingerprint      String                @db.Char(64)
+  duplicates       Int                   @default(0)
+  lastDuplicateAt  DateTime?             @map("last_duplicate_at") @db.Timestamptz
+  processedAt      DateTime?             @map("processed_at") @db.Timestamptz
+  attemptId        String?               @map("attempt_id") @db.Uuid
+  queryId          String?               @map("query_id") @db.Uuid
+  quarantineReason String?               @map("quarantine_reason") @db.VarChar(30)
+  reviewDecision   String?               @map("review_decision") @db.VarChar(10)
+  reviewReason     String?               @map("review_reason") @db.VarChar(500)
+  reviewedBy       String?               @map("reviewed_by") @db.Uuid
+  reviewedAt       DateTime?             @map("reviewed_at") @db.Timestamptz
+  version          Int                   @default(1)
+  route            PaymentCallbackRoute  @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: NoAction)
+  attempt          PaymentAttempt?       @relation(fields: [tenantId, attemptId], references: [tenantId, id], onDelete: NoAction)
+  query            ProviderQuery?        @relation(fields: [tenantId, queryId], references: [tenantId, id], onDelete: NoAction)
+  cases            PaymentCase[]
+  transactions     ProviderTransaction[]
+  tenant           Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, fingerprint])
+  @@index([tenantId, status, receivedAt])
+  @@map("payment_callback_inbox")
+}
+
+// Reconciliation cases (unknown outcomes, quarantined callbacks, conflicting evidence, unverified
+// success): owner, age and resolution; history in payment_events. One open case per attempt and
+// kind, and per callback (open_marker).
+model PaymentCase {
+  id             String                @id @default(uuid(7)) @db.Uuid
+  tenantId       String                @map("tenant_id") @db.Uuid
+  kind           String                @db.VarChar(30)
+  status         String                @default("open") @db.VarChar(10)
+  openMarker     String?               @default("open") @map("open_marker") @db.VarChar(4)
+  requestId      String?               @map("request_id") @db.Uuid
+  attemptId      String?               @map("attempt_id") @db.Uuid
+  callbackId     String?               @map("callback_id") @db.Uuid
+  reason         String                @db.VarChar(40)
+  owner          String                @default("finance") @db.VarChar(40)
+  openedAt       DateTime              @default(now()) @map("opened_at") @db.Timestamptz
+  resolution     String?               @db.VarChar(20)
+  resolutionNote String?               @map("resolution_note") @db.VarChar(500)
+  resolvedBy     String?               @map("resolved_by") @db.Uuid
+  resolvedAt     DateTime?             @map("resolved_at") @db.Timestamptz
+  version        Int                   @default(1)
+  attempt        PaymentAttempt?       @relation(fields: [tenantId, attemptId], references: [tenantId, id], onDelete: NoAction)
+  callback       PaymentCallbackInbox? @relation(fields: [tenantId, callbackId], references: [tenantId, id], onDelete: NoAction)
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, attemptId, kind, openMarker])
+  @@unique([tenantId, callbackId, openMarker])
+  @@index([tenantId, status, openedAt])
+  @@map("payment_cases")
+}
+
+// Read-only provider queries (Transaction Status, STK Query, Account Balance, C2B URL
+// registration). They never move money; answers are evidence for reconciliation and float checks.
+model ProviderQuery {
+  id                       String                 @id @default(uuid(7)) @db.Uuid
+  tenantId                 String                 @map("tenant_id") @db.Uuid
+  kind                     String                 @db.VarChar(20)
+  status                   String                 @default("sent") @db.VarChar(10)
+  attemptId                String?                @map("attempt_id") @db.Uuid
+  originatorConversationId String?                @map("originator_conversation_id") @db.VarChar(100)
+  conversationId           String?                @map("conversation_id") @db.VarChar(100)
+  resultCode               String?                @map("result_code") @db.VarChar(20)
+  summary                  String?                @db.VarChar(300)
+  balances                 Json?
+  requestedBy              String?                @map("requested_by") @db.Uuid
+  createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  answeredAt               DateTime?              @map("answered_at") @db.Timestamptz
+  version                  Int                    @default(1)
+  attempt                  PaymentAttempt?        @relation(fields: [tenantId, attemptId], references: [tenantId, id], onDelete: NoAction)
+  callbacks                PaymentCallbackInbox[]
+  tenant                   Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, originatorConversationId])
+  @@unique([tenantId, conversationId])
+  @@index([tenantId, kind, createdAt])
+  @@map("payment_provider_queries")
+}
+
+// Provider receipts (M-Pesa transaction IDs) as immutable evidence, unique per company: confirmed
+// STK/B2C/B2B/reversal results and C2B confirmations (unallocated until invoices arrive, D5/D7).
+model ProviderTransaction {
+  id               String                @id @default(uuid(7)) @db.Uuid
+  tenantId         String                @map("tenant_id") @db.Uuid
+  kind             String                @db.VarChar(10)
+  direction        String                @db.VarChar(3)
+  status           String                @db.VarChar(12)
+  receipt          String                @db.VarChar(30)
+  amountMinor      BigInt                @map("amount_minor")
+  currency         String                @default("KES") @db.Char(3)
+  shortcode        String?               @db.VarChar(12)
+  accountReference String?               @map("account_reference") @db.VarChar(40)
+  attemptId        String?               @map("attempt_id") @db.Uuid
+  callbackId       String?               @map("callback_id") @db.Uuid
+  completedAtRaw   String?               @map("completed_at_raw") @db.VarChar(30)
+  recordedAt       DateTime              @default(now()) @map("recorded_at") @db.Timestamptz
+  attempt          PaymentAttempt?       @relation(fields: [tenantId, attemptId], references: [tenantId, id], onDelete: NoAction)
+  callback         PaymentCallbackInbox? @relation(fields: [tenantId, callbackId], references: [tenantId, id], onDelete: NoAction)
+  tenant           Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, receipt])
+  @@index([tenantId, kind, recordedAt])
+  @@map("payment_provider_transactions")
+}
+
+// The payments transactional outbox: work committed with the state change, relayed to BullMQ (job
+// ID = row ID) or drained directly when the queue is down. pending_marker allows one pending job
+// per topic and subject.
+model PaymentOutbox {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  topic         String    @db.VarChar(40)
+  refId         String    @map("ref_id") @db.Uuid
+  pendingMarker String?   @default("p") @map("pending_marker") @db.VarChar(1)
+  availableAt   DateTime  @default(now()) @map("available_at") @db.Timestamptz
+  dispatchedAt  DateTime? @map("dispatched_at") @db.Timestamptz
+  processedAt   DateTime? @map("processed_at") @db.Timestamptz
+  deadAt        DateTime? @map("dead_at") @db.Timestamptz
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.VarChar(80)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, topic, refId, pendingMarker])
+  @@index([processedAt, deadAt, availableAt])
+  @@map("payment_outbox")
 }

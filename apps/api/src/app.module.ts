@@ -9,6 +9,7 @@ import { BqModule } from "./modules/bq/bq.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
 import { LabourModule } from "./modules/labour/labour.module.js";
+import { PaymentsModule } from "./modules/payments/payments.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
 
 @Module({
@@ -27,6 +28,7 @@ import { ProjectsModule } from "./modules/projects/projects.module.js";
     BqModule,
     LabourModule,
     AttendanceModule,
+    PaymentsModule,
   ],
 })
 export class AppModule {}

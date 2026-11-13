@@ -78,6 +78,29 @@ export const apiEnvSchema = z.object({
 
   API_DOCS_ENABLED: z.stringbool().default(true),
   HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
+
+  // Payments and Daraja (D4.2; docs/CONFIGURATION.md §4 and §8). Workers (outbox relay, BullMQ
+  // consumers, watchdog) run inside the API process unless switched off.
+  PAYMENTS_WORKERS_ENABLED: z.stringbool().default(true),
+  // Public HTTPS base URL Safaricom posts callbacks to (required for the sandbox; production is
+  // gated off). Defaults to http://localhost:<PORT> outside production, which only the mock reaches.
+  PAYMENTS_CALLBACK_BASE_URL: z.url().optional(),
+  // Optional source-IP allow-list for callbacks (comma-separated addresses or IPv4 CIDRs). Defence
+  // in depth only, never proof of payment; needs TRUST_PROXY behind a proxy. Empty: disabled.
+  PAYMENTS_CALLBACK_IP_ALLOWLIST: z.string().trim().optional(),
+  PAYMENTS_CALLBACK_MAX_BYTES: z.coerce.number().int().min(1_024).max(1_048_576).default(32_768),
+  DARAJA_MOCK_BASE_URL: z.url().default("http://localhost:4690"),
+  DARAJA_SANDBOX_BASE_URL: z.url().default("https://sandbox.safaricom.co.ke"),
+  // Safaricom's public sandbox certificate (PEM) used to encrypt the initiator password. The
+  // production certificate comes from the secrets manager when production is enabled.
+  DARAJA_SANDBOX_CERTIFICATE_PATH: z.string().min(1).optional(),
+  DARAJA_HTTP_TIMEOUT_MS: z.coerce.number().int().min(500).max(120_000).default(15_000),
+  PAYMENTS_SUBMIT_LEASE_SECONDS: z.coerce.number().int().min(5).max(3_600).default(120),
+  PAYMENTS_RESULT_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(86_400).default(600),
+  PAYMENTS_STATUS_QUERY_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(86_400).default(300),
+  PAYMENTS_STATUS_QUERY_MAX: z.coerce.number().int().min(0).max(20).default(3),
+  PAYMENTS_RELAY_INTERVAL_MS: z.coerce.number().int().min(100).max(600_000).default(2_000),
+  PAYMENTS_OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(50).default(8),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

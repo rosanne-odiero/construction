@@ -44,13 +44,17 @@ export function requestId(req: IncomingMessage, res: ServerResponse): string {
   return id;
 }
 
+/** Payment callback paths carry an unguessable token (D4.2); logs keep only the endpoint kind. */
+const CALLBACK_TOKEN = /(\/payments\/hooks\/)[^/?]+/;
+
 /** Request logs keep what is needed to trace a call; headers and query strings can hold personal data. */
 export function serializeRequest(req: SerializedRequest) {
   const queryStart = req.url.indexOf("?");
+  const path = queryStart === -1 ? req.url : req.url.slice(0, queryStart);
   return {
     id: req.id,
     method: req.method,
-    url: queryStart === -1 ? req.url : req.url.slice(0, queryStart),
+    url: path.replace(CALLBACK_TOKEN, "$1[REDACTED]"),
     remoteAddress: req.remoteAddress,
   };
 }

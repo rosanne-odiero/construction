@@ -73,6 +73,16 @@ import {
   periodsResponseSchema,
   timesheetLinesResponseSchema,
   timesheetRuleResponseSchema,
+  balanceCheckResponseSchema,
+  paymentCallbackResponseSchema,
+  paymentCallbacksResponseSchema,
+  paymentRequestDetailResponseSchema,
+  paymentRequestResponseSchema,
+  paymentRequestsResponseSchema,
+  paymentSettingsResponseSchema,
+  paymentsOverviewResponseSchema,
+  reconciliationCaseResponseSchema,
+  reconciliationCasesResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -159,7 +169,27 @@ export function responseContract(method: string, target: string) {
   if (labour) return labour;
   const attendance = attendanceContract(path);
   if (attendance) return attendance;
+  const payments = paymentsContract(method, path);
+  if (payments) return payments;
   return messageResponseSchema;
+}
+
+/** The D4.2 payments console endpoints' success contracts. */
+function paymentsContract(method: string, path: string) {
+  if (!path.startsWith("payments/")) return null;
+  if (path === "payments/overview") return paymentsOverviewResponseSchema;
+  if (path.startsWith("payments/settings")) return paymentSettingsResponseSchema;
+  if (path === "payments/balance-checks") return balanceCheckResponseSchema;
+  if (path === "payments/requests")
+    return method === "get" ? paymentRequestsResponseSchema : paymentRequestResponseSchema;
+  if (/^payments\/requests\/[^/]+$/.test(path)) return paymentRequestDetailResponseSchema;
+  if (/^payments\/attempts\/[^/]+\/(reversal|status-query)$/.test(path))
+    return paymentRequestDetailResponseSchema;
+  if (path === "payments/callbacks") return paymentCallbacksResponseSchema;
+  if (/^payments\/callbacks\/[^/]+(\/review)?$/.test(path)) return paymentCallbackResponseSchema;
+  if (path === "payments/cases") return reconciliationCasesResponseSchema;
+  if (/^payments\/cases\/[^/]+(\/resolve)?$/.test(path)) return reconciliationCaseResponseSchema;
+  return null;
 }
 
 /** The D3.3 attendance and timesheet endpoints' success contracts. */

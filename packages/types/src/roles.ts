@@ -110,6 +110,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Readonly<Record<SystemRole, readonly Permi
     "payments.disburse",
     "payments.record_cash",
     "payments.reverse",
+    "payments.review",
+    "payments.initiate_test",
     "finance.view",
     "finance.manage",
     "finance.view_sensitive",

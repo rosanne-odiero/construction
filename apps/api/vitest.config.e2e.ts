@@ -18,6 +18,8 @@ export default defineConfig({
       FIELD_ENCRYPTION_KEYS: `1:${randomBytes(32).toString("hex")}`,
       FIELD_BLIND_INDEX_KEY: randomBytes(32).toString("hex"),
       DATABASE_URL: testDatabaseUrls().appUrl,
+      // Payment workers run only where a suite starts them against its own mock Daraja server.
+      PAYMENTS_WORKERS_ENABLED: "false",
     },
     testTimeout: 20_000,
     hookTimeout: 60_000,

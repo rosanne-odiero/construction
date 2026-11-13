@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { Logger } from "nestjs-pino";
 import { ProblemDetailsFilter } from "./common/problem-details.filter.js";
 import { AppConfig, trustProxySetting } from "./config/app-config.js";
+import { callbackBodyReader } from "./modules/payments/callback-body.js";
 
 export const API_PREFIX = "api";
 export const DOCS_PATH = "api/docs";
@@ -48,6 +49,8 @@ export function configureApp(app: INestApplication): void {
   app.use((req: Request, res: Response, next: NextFunction) =>
     req.path.startsWith(`/${DOCS_PATH}`) ? docsHeaders(req, res, next) : apiHeaders(req, res, next),
   );
+  // Payment provider callbacks are read raw (and size-limited) before the JSON parser runs (D4.2).
+  app.use(callbackBodyReader(config.get("PAYMENTS_CALLBACK_MAX_BYTES")));
 
   if (config.get("API_DOCS_ENABLED")) {
     const document = SwaggerModule.createDocument(

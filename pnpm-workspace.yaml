@@ -23,6 +23,7 @@ allowBuilds:
   "@prisma/engines": true
   "@scarf/scarf": false
   "@swc/core": false
+  msgpackr-extract: false
   prisma: true
   protobufjs: false
   sharp: false

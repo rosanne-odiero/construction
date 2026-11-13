@@ -99,3 +99,4 @@ export {
   type RateScope,
 } from "./labour.js";
 export * from "./attendance/index.js";
+export * from "./payments/index.js";

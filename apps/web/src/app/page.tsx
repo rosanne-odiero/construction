@@ -7,15 +7,19 @@ import {
   FileSpreadsheet,
   HardHat,
   KeyRound,
+  Languages,
   LayoutDashboard,
   MonitorSmartphone,
+  Package,
   Palette,
+  Scale,
   ScanFace,
   Smartphone,
   ShieldCheck,
   Table2,
   Wallet,
 } from "lucide-react";
+import type { Tone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LanguageSwitcher } from "@/components/language-switcher";
@@ -38,6 +42,14 @@ const screens = [
   { key: "site", href: "/site", icon: Smartphone },
   { key: "status", href: "/status", icon: Activity, live: true },
 ] as const;
+
+/** Things only the owner can provide; each says what it unblocks. */
+const waiting = [
+  { key: "bq", href: "/projects", icon: FileSpreadsheet, tone: "warning" },
+  { key: "kiswahili", icon: Languages, tone: "neutral" },
+  { key: "catalogue", href: "/catalogue", icon: Package, tone: "neutral" },
+  { key: "compliance", icon: Scale, tone: "neutral" },
+] as const satisfies readonly { key: string; href?: string; icon: unknown; tone: Tone }[];
 
 const docs = [
   "docs/IMPLEMENTATION_STATUS.md",
@@ -96,6 +108,44 @@ export default async function TourPage() {
               <Link href="/dashboard">{t("skipToDashboard")}</Link>
             </Button>
           </div>
+        </section>
+
+        <section aria-labelledby="waiting-heading">
+          <Card className="border-warning/40">
+            <CardHeader>
+              <CardTitle id="waiting-heading" role="heading" aria-level={2} className="text-lg">
+                {t("waiting.title")}
+              </CardTitle>
+              <CardDescription>{t("waiting.intro")}</CardDescription>
+              <ul className="mt-4 grid gap-4 md:grid-cols-2">
+                {waiting.map((item) => (
+                  <li key={item.key} className="flex gap-3 rounded-lg border p-4">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                      <item.icon className="size-4" aria-hidden />
+                    </span>
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-medium">{t(`waiting.items.${item.key}.title`)}</h3>
+                        <StatusBadge tone={item.tone}>
+                          {t(`waiting.items.${item.key}.blocks`)}
+                        </StatusBadge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {t(`waiting.items.${item.key}.description`)}
+                      </p>
+                      {"href" in item ? (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={item.href}>
+                            {t(`waiting.items.${item.key}.action`)} <ArrowRight aria-hidden />
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </CardHeader>
+          </Card>
         </section>
 
         <section className="space-y-4" aria-labelledby="screens-heading">

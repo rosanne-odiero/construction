@@ -100,6 +100,7 @@ Also fixed: the primary button's hover colour blended into the page and fell to 
 - Design documents specify later-phase controls; they do not implement financial journals, callback inboxes, approval snapshots or device sync.
 - Proposed posting/rounding policies need an independent accounting/QS reviewer; legal rules need authoritative source/effective dates/reviewer approval.
 - [Pilot design and proposed delivery order](./PILOT_PLAN.md) are approved; live pilot activation is not. All existing phases/modules remain on the roadmap.
+- Owner inputs still needed (a real anonymised Kenyan BQ for D2.2 sign-off, native Kiswahili review, a QS check of the starter catalogue, tax and payroll sign-off) are listed in the app under **Waiting on you** on the review home page (`/`).
 - No production onboarding, coherent restore rehearsal, real-device offline test, human accessibility/Kiswahili field review, verified cost estimate or named operations ownership has been completed here.
 - Only loopback development Mailpit messages were sent to synthetic identities; no external notifications or real payments, biometric collection, deployment or commit occurred.
 - CI browser job runs in the official `mcr.microsoft.com/playwright` image, pinned by digest, as runner UID 1001. Two consecutive PR #20 runs failed before any test because the hosted runner could not resolve its Ubuntu apt mirror during `playwright install --with-deps`; the image already carries the browser libraries and fonts. Bump the image tag with `@playwright/test`.

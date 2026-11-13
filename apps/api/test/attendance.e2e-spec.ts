@@ -532,13 +532,18 @@ describe("Attendance and timesheets (real runtime role)", () => {
         }),
       ),
     ).toBe("holiday-exists");
+    // A day without a public holiday: today + 200 days can be one (1 June 2027 is Madaraka Day).
+    const taken = new Set(holidays.map((entry) => entry.date));
+    let free = addCalendarDays(today, 200);
+    while (taken.has(free)) free = addCalendarDays(free, 1);
     const temporary = await owner.call("post", "attendance/holidays", {
-      date: addCalendarDays(today, 200),
+      date: free,
       nameEn: "Temporary",
       nameSw: "Ya muda",
       kind: "company",
       source: "Company decision",
     });
+    expect(temporary.status, JSON.stringify(temporary.body)).toBe(201);
     const temporaryId = (temporary.body as { holiday: { id: string } }).holiday.id;
     expect((await pm.call("delete", `attendance/holidays/${temporaryId}`)).status).toBe(403);
     expect((await owner.call("delete", `attendance/holidays/${temporaryId}`)).status).toBe(200);

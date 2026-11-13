@@ -62,6 +62,13 @@ jobs:
     name: Web accessibility and foundation
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Browser system libraries and fonts come from the official image, so the
+    # job no longer depends on the runner's apt mirror. Keep the tag in step
+    # with @playwright/test; a mismatch still works because the install step
+    # below downloads the matching browser build.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+      options: --user 1001
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,5 +80,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run build --filter='@pm-buddy/web^...'
-      - run: pnpm --filter @pm-buddy/web exec playwright install --with-deps --no-shell chromium
+      - run: pnpm --filter @pm-buddy/web exec playwright install --no-shell chromium
       - run: pnpm --filter @pm-buddy/web test:e2e

@@ -19,11 +19,22 @@ const BLANK_TILE = Buffer.from(
   "base64",
 );
 
+export type Persona = "owner" | "agent" | "pm" | "finance";
+
 /** A session cookie the mock API recognises; each call gets a fresh copy of the fixture data. */
-export async function signInAs(context: BrowserContext, persona: "owner" | "agent") {
+export async function signInAs(context: BrowserContext, persona: Persona | "client" | "labourer") {
   const token = `${persona}.${randomUUID()}`;
   await context.addCookies([{ name: "pmb_at", value: token, url: BASE_URL, httpOnly: true }]);
   return token;
+}
+
+/** Signs in as another persona on the same fixture data (the token's session part is shared). */
+export async function switchPersona(context: BrowserContext, persona: Persona, token: string) {
+  const session = token.split(".")[1]!;
+  await context.clearCookies({ name: "pmb_at" });
+  await context.addCookies([
+    { name: "pmb_at", value: `${persona}.${session}`, url: BASE_URL, httpOnly: true },
+  ]);
 }
 
 export async function preferences(

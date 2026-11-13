@@ -29,7 +29,10 @@ export const paymentConflict = (code: PaymentProblem, message: string) =>
 export const paymentBadRequest = (code: PaymentProblem, message: string) =>
   new BadRequestException({ message, code });
 export const versionConflict = () =>
-  paymentConflict("version-conflict", "This record was changed by someone else. Reload and try again.");
+  paymentConflict(
+    "version-conflict",
+    "This record was changed by someone else. Reload and try again.",
+  );
 
 /**
  * Database refusals (guard triggers and CHECKs raise 23514) become problems without echoing the

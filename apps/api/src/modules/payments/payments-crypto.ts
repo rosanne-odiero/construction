@@ -99,7 +99,10 @@ export class PaymentsCrypto {
   /** OAuth access tokens cached in Valkey are sealed too (bound to the company and cache key). */
   sealAccessToken(tenantId: string, cacheKey: string, token: string) {
     return Buffer.from(
-      this.seal({ tenantId, table: "valkey", column: "daraja_access_token", rowId: cacheKey }, token),
+      this.seal(
+        { tenantId, table: "valkey", column: "daraja_access_token", rowId: cacheKey },
+        token,
+      ),
     ).toString("base64");
   }
 

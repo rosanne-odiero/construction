@@ -13,6 +13,8 @@ Construction project management for Kenya: a secure, multi-tenant system for con
 
 > **Safeguard integration:** D1.1–D1.4 implementation is approved, not automatically accepted. See [implementation status](docs/IMPLEMENTATION_STATUS.md) and [acceptance matrix](docs/ACCEPTANCE_MATRIX.md) for actual evidence and remaining work. Business previews remain mock data. No live pilot, payments or biometrics are approved.
 
+> **Phase 6 started incrementally:** `/diary` and the project **Site diary** tab are API-backed, with manual workforce counts, independent sign-off and database locking. This is the first D6.1 increment, not full Phase 6 acceptance; attendance auto-fill, verified photos, quality workflows, scheduling and valuations remain pending. See the [Phase 6 demo](docs/demos/phase-6.md).
+
 ## Documents
 
 | Document                                               | What it covers                                                                   |
@@ -39,6 +41,8 @@ Construction project management for Kenya: a secure, multi-tenant system for con
 | [Phase 0 demo script](docs/demos/phase-0.md)           | How to run and review the prototype                                              |
 | [Phase 1 demo script](docs/demos/phase-1.md)           | How to run and review the Phase 1 deliverables                                   |
 | [Phase 2 demo script](docs/demos/phase-2.md)           | How to run and review the Phase 2 deliverables (D2.1 projects, sites, geofences) |
+| [Phase 6 demo script](docs/demos/phase-6.md)           | Live site-diary foundation, independent approval and explicit remaining scope    |
+| [Portals demo script](docs/demos/portals.md)           | Office, client and labourer portals; Google sign-in; labourer phone + PIN        |
 
 ## Quick start
 
@@ -60,6 +64,8 @@ Foundation review: `/foundation` (API-backed identity/company setup) and `/desig
 | ----------------------------------------------- | ------------------------------------------ |
 | http://localhost:3000                           | Web app (prototype tour)                   |
 | http://localhost:3000/status                    | Live system status                         |
+| http://localhost:3000/portal                    | Client portal (live, clients only)         |
+| http://localhost:3000/worker                    | Labourer portal (live, phone + PIN)        |
 | http://localhost:3000/api/docs                  | API reference (Swagger UI) through the web |
 | http://localhost:4000/api/v1/health/ready       | API readiness (JSON)                       |
 | http://localhost:8025                           | Mailpit: emails sent in development        |

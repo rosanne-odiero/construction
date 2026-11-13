@@ -208,10 +208,14 @@ describe("WBS, milestone and team requests", () => {
         permissions: ["projects.view", "bq.edit", "attendance.record", "stores.manage"],
       }).success,
     ).toBe(true);
+    expect(
+      projectAssignmentRequestSchema.safeParse({ permissions: ["portal.client", "portal.worker"] })
+        .success,
+    ).toBe(true);
     for (const permissions of [
       ["payments.approve"],
       ["projects.create"],
-      ["portal.client"],
+      ["portal.supplier"],
       ["projects.view", "projects.view"],
     ])
       expect(projectAssignmentRequestSchema.safeParse({ permissions }).success).toBe(false);

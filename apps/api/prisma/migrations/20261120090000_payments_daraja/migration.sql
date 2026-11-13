@@ -930,13 +930,15 @@ ALTER TABLE "tenant_roles" ADD CONSTRAINT "tenant_roles_permissions_check" CHECK
     'labour.view_sensitive', 'labour.do_not_rehire', 'labour.consent', 'attendance.view',
     'attendance.record', 'attendance.override', 'attendance.review_anomalies',
     'attendance.confirm', 'timesheets.submit', 'timesheets.approve', 'timesheets.manage_rules',
-    'payroll.prepare', 'payroll.review', 'payroll.approve', 'payments.view', 'payments.approve',
-    'payments.disburse', 'payments.record_cash', 'payments.reverse',
-    'payments.manage_credentials', 'payments.review', 'payments.initiate_test',
-    'procurement.requisition', 'procurement.approve', 'procurement.manage_suppliers',
-    'stores.manage', 'finance.view', 'finance.manage', 'finance.view_sensitive', 'site.diary',
-    'site.photos', 'quality.manage', 'safety.manage', 'plant.manage', 'documents.manage',
-    'reports.view', 'portal.client', 'portal.supplier'
+    'payroll.view', 'payroll.prepare', 'payroll.review', 'payroll.approve',
+    'payroll.manage_rules', 'payroll.verify_rules', 'payroll.export', 'advances.request',
+    'advances.approve', 'payments.view', 'payments.approve', 'payments.disburse',
+    'payments.record_cash', 'payments.reverse', 'payments.manage_credentials',
+    'payments.review', 'payments.initiate_test', 'procurement.requisition',
+    'procurement.approve', 'procurement.manage_suppliers', 'stores.manage', 'finance.view',
+    'finance.manage', 'finance.view_sensitive', 'site.diary', 'site.photos', 'quality.manage',
+    'safety.manage', 'plant.manage', 'documents.manage', 'reports.view', 'portal.client',
+    'portal.supplier', 'portal.worker'
   ]::text[]
 );
 

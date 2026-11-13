@@ -120,10 +120,18 @@ export async function BqSourceCard({ bq }: { bq: Bq }) {
         <CardTitle>
           <h2>{t("title")}</h2>
         </CardTitle>
-        <CardDescription>{t("draftNote")}</CardDescription>
+        <CardDescription>
+          {bq.version.status === "draft"
+            ? t("draftNote")
+            : bq.version.variation
+              ? t("variationNote", { number: bq.version.variation.number })
+              : t("approvedNote")}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
-        {source ? (
+        {!source && bq.version.variation ? (
+          <p>{t("variationSource", { number: bq.version.variation.number })}</p>
+        ) : source ? (
           <>
             <dl className="space-y-1">
               <div>

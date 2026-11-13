@@ -13,6 +13,7 @@ import {
   Receipt,
   ScanFace,
   ShieldAlert,
+  Truck,
   Wallet,
   Warehouse,
   type LucideIcon,
@@ -27,6 +28,7 @@ export type NavKey =
   | "attendance"
   | "diary"
   | "materials"
+  | "suppliers"
   | "stores"
   | "plant"
   | "safety"
@@ -57,7 +59,8 @@ export const navGroups: {
   {
     key: "commercial",
     items: [
-      { key: "bq", href: "/prototype/projects/ruiru-heights/bq", icon: FileSpreadsheet },
+      { key: "bq", href: "/bq", icon: FileSpreadsheet },
+      { key: "suppliers", href: "/suppliers", icon: Truck },
       { key: "valuations", href: "/soon/valuations", icon: Calculator, phase: 6 },
     ],
   },
@@ -66,8 +69,8 @@ export const navGroups: {
     items: [
       { key: "labour", href: "/labour", icon: HardHat },
       { key: "attendance", href: "/attendance", icon: ScanFace },
-      { key: "diary", href: "/soon/diary", icon: NotebookPen, phase: 6 },
-      { key: "materials", href: "/soon/materials", icon: Package, phase: 5 },
+      { key: "diary", href: "/diary", icon: NotebookPen },
+      { key: "materials", href: "/catalogue", icon: Package },
       { key: "stores", href: "/soon/stores", icon: Warehouse, phase: 5 },
       { key: "plant", href: "/soon/plant", icon: Forklift, phase: 8 },
       { key: "safety", href: "/soon/safety", icon: ShieldAlert, phase: 8 },
@@ -109,12 +112,19 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
 
 /**
  * Routes backed by the real API: the projects list, project pages and site editors (D2.1), a
- * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1) and attendance and
- * timesheets (D3.3 web slice). The D0 labour and attendance prototypes live under /prototype.
+ * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1), attendance and
+ * timesheets (D3.3 web slice), payroll (D4.1), and the catalogue and suppliers (D5.1). The D0
+ * labour, attendance and payroll prototypes live under /prototype.
  */
 export function isLiveRoute(pathname: string): boolean {
-  if (pathname === "/projects") return true;
+  if (pathname === "/projects" || pathname === "/bq" || pathname === "/diary") return true;
   if (pathname === "/labour" || pathname.startsWith("/labour/")) return true;
   if (pathname === "/attendance" || pathname.startsWith("/attendance/")) return true;
-  return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/import)?)?$/.test(pathname);
+  if (pathname === "/payroll" || pathname.startsWith("/payroll/")) return true;
+  if (/^\/catalogue(\/(alerts|convert|units|[0-9a-f-]{36}))?$/.test(pathname)) return true;
+  if (/^\/suppliers(\/(new|[0-9a-f-]{36}(\/edit)?))?$/.test(pathname)) return true;
+  if (/^\/rate-buildups(\/(new|[0-9a-f-]{36}))?$/.test(pathname)) return true;
+  return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/bq(\/(import|instructions|versions|variations(\/[0-9a-f-]{36})?))?)?$/.test(
+    pathname,
+  );
 }

@@ -13,6 +13,7 @@ import {
   BQ_SCAN_STATUSES,
   BQ_SHEET_KINDS,
   BQ_UNITS,
+  BQ_VERSION_SOURCES,
   BQ_VERSION_STATUSES,
   type BqField,
   type BqIssueCode,
@@ -322,8 +323,23 @@ export const bqPreviewResponseSchema = z.strictObject({
   ),
 });
 
+/** The build-up version a BQ item is linked to (D2.3; the link follows the item's lineage). */
+export const bqItemRateLinkSchema = z.strictObject({
+  buildupId: uuid,
+  buildupVersionId: uuid,
+  code: z.string(),
+  name: z.string(),
+  versionNo: z.number().int().min(1),
+  unit: z.enum(BQ_UNITS),
+  rateMinor: minorUnitsSchema.nullable(),
+  linkedAt: timestamp,
+  linkedBy: person,
+});
+
 export const bqItemSchema = z.strictObject({
   id: uuid,
+  /** Stable across versions: variations, comparisons and build-up links refer to it. */
+  lineageId: uuid,
   sectionId: uuid.nullable(),
   ref: z.string().nullable(),
   description: z.string(),
@@ -337,13 +353,17 @@ export const bqItemSchema = z.strictObject({
   overrideReason: z.string().nullable(),
   kind: z.enum(BQ_ITEM_KINDS),
   notes: z.string().nullable(),
-  sourceSheet: z.string(),
-  sourceRow: z.number().int().min(1),
+  /** Null for an item added by a variation (it has no spreadsheet row). */
+  sourceSheet: z.string().nullable(),
+  sourceRow: z.number().int().min(1).nullable(),
   hasFormula: z.boolean(),
+  rateBuildUp: bqItemRateLinkSchema.nullable(),
 });
 
 export const bqSectionSchema = z.strictObject({
   id: uuid,
+  /** Stable across versions (variation lines add items to a section by lineage). */
+  lineageId: uuid,
   code: z.string().nullable(),
   title: z.string().nullable(),
   notes: z.string().nullable(),
@@ -353,6 +373,8 @@ export const bqSectionSchema = z.strictObject({
 
 export const bqBillSchema = z.strictObject({
   id: uuid,
+  /** Stable across versions (comparisons and variation lines match bills by lineage). */
+  lineageId: uuid,
   number: z.string(),
   title: z.string(),
   kind: z.enum(BQ_BILL_KINDS),
@@ -366,7 +388,16 @@ export const bqVersionSchema = z.strictObject({
   id: uuid,
   versionNo: z.number().int().min(1),
   status: z.enum(BQ_VERSION_STATUSES),
-  source: z.enum(["import", "variation", "manual"]),
+  source: z.enum(BQ_VERSION_SOURCES),
+  /** The version this one was derived from (null for the original import). */
+  parentVersionId: uuid.nullable(),
+  /** The approved variation that produced this version (source variation). */
+  variation: z.strictObject({ id: uuid, number: z.string() }).nullable(),
+  createdBy: person,
+  approvedBy: person.nullable(),
+  approvedAt: timestamp.nullable(),
+  /** The version in force: the newest approved one, or the draft while nothing is approved. */
+  current: z.boolean(),
   vatRatePercent: decimalStringSchema,
   vatRuleKey: z.string(),
   vatRuleStatus: z.string(),
@@ -413,7 +444,22 @@ export const bqResponseSchema = z.strictObject({
         .nullable(),
     })
     .nullable(),
-  permissions: z.strictObject({ canImport: z.boolean(), canExport: z.boolean() }),
+  permissions: z.strictObject({
+    canImport: z.boolean(),
+    canExport: z.boolean(),
+    /** bq.edit: instructions, variations and build-up links (project not read-only). */
+    canEdit: z.boolean(),
+    /** bq.approve_variation on the project. */
+    canApprove: z.boolean(),
+  }),
+  /**
+   * Whether the caller may approve the draft as the contract baseline now, or why not
+   * (maker: they imported it; permission; not-draft; read-only project; no BQ).
+   */
+  baselineApproval: z.strictObject({
+    allowed: z.boolean(),
+    refusal: z.enum(["no-bq", "not-draft", "permission", "maker", "read-only"]).nullable(),
+  }),
   openImports: z.number().int().min(0),
 });
 
@@ -467,6 +513,7 @@ export type BqTotalsWire = z.infer<typeof bqTotalsSchema>;
 export type BqSheetRowsResponse = z.infer<typeof bqSheetRowsResponseSchema>;
 export type BqPreviewResponse = z.infer<typeof bqPreviewResponseSchema>;
 export type BqItemWire = z.infer<typeof bqItemSchema>;
+export type BqItemRateLink = z.infer<typeof bqItemRateLinkSchema>;
 export type BqSectionWire = z.infer<typeof bqSectionSchema>;
 export type BqBillWire = z.infer<typeof bqBillSchema>;
 export type BqVersionWire = z.infer<typeof bqVersionSchema>;

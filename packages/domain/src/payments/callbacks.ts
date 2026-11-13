@@ -141,7 +141,8 @@ export function parseBalances(value: unknown): ProviderBalance[] | null {
 }
 
 /** "Utility Account|KES|…" → "KES" (the only place most results state a currency). */
-const currencyOfBalance = (value: unknown): string | null => parseBalances(value)?.[0]?.currency ?? null;
+const currencyOfBalance = (value: unknown): string | null =>
+  parseBalances(value)?.[0]?.currency ?? null;
 
 function parseStk(body: Json): ParseResult {
   const envelope = isObject(body["Body"]) ? (body["Body"] as Json) : null;
@@ -298,7 +299,10 @@ export function redactCallbackBody(value: unknown, key = ""): unknown {
           : "";
     const out: Json = {};
     for (const [name, entry] of Object.entries(value).slice(0, 50)) {
-      out[name] = name === "Value" && label ? redactCallbackBody(entry, label) : redactCallbackBody(entry, name);
+      out[name] =
+        name === "Value" && label
+          ? redactCallbackBody(entry, label)
+          : redactCallbackBody(entry, name);
     }
     return out;
   }
@@ -310,7 +314,8 @@ export function redactCallbackBody(value: unknown, key = ""): unknown {
       if (party) return party;
       return /\d/.test(textValue) ? textValue.replace(/\d(?=\d{3})/g, "•") : "[redacted]";
     }
-    if (typeof value === "string") return textValue.slice(0, 300).replace(MSISDN, (match) => maskNumber(match));
+    if (typeof value === "string")
+      return textValue.slice(0, 300).replace(MSISDN, (match) => maskNumber(match));
     return value;
   }
   return value;

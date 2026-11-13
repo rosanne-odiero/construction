@@ -40,9 +40,16 @@ export function settingsToWire(
   names: Names,
   callbackUrls: { kind: (typeof CALLBACK_KINDS)[number]; url: string }[],
   warnings: string[],
-  extras: { callbackTokenRotatedAt: Date | null; ipAllowlistEnabled: boolean; certificateConfigured: boolean },
+  extras: {
+    callbackTokenRotatedAt: Date | null;
+    ipAllowlistEnabled: boolean;
+    certificateConfigured: boolean;
+  },
 ): WireSettings {
-  const secret = (enc: Uint8Array | null, at: Date | null) => ({ configured: Boolean(enc), updatedAt: iso(at) });
+  const secret = (enc: Uint8Array | null, at: Date | null) => ({
+    configured: Boolean(enc),
+    updatedAt: iso(at),
+  });
   const secrets = {
     consumerKey: secret(row.consumerKeyEnc, row.consumerKeySetAt),
     consumerSecret: secret(row.consumerSecretEnc, row.consumerSecretSetAt),
@@ -60,7 +67,8 @@ export function settingsToWire(
     shortcodes: {
       stkShortcode: row.stkShortcode,
       stkPartyB: row.stkPartyB,
-      stkTransactionType: row.stkTransactionType as WireSettings["shortcodes"]["stkTransactionType"],
+      stkTransactionType:
+        row.stkTransactionType as WireSettings["shortcodes"]["stkTransactionType"],
       c2bShortcode: row.c2bShortcode,
       b2cShortcode: row.b2cShortcode,
       b2bShortcode: row.b2bShortcode,
@@ -150,11 +158,16 @@ export function requestToWire(
 export const maskedMsisdn = (msisdn: string) => maskPhone(msisdn);
 
 const scalar = (value: unknown): string | number | boolean | null =>
-  typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : null;
+  typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? value
+    : null;
 
 export function eventToWire(row: PaymentEvent, names: Names): WireEvent {
   const detail = Object.fromEntries(
-    Object.entries((row.detail as Prisma.JsonObject | null) ?? {}).map(([key, value]) => [key, scalar(value)]),
+    Object.entries((row.detail as Prisma.JsonObject | null) ?? {}).map(([key, value]) => [
+      key,
+      scalar(value),
+    ]),
   );
   return {
     id: row.id,
@@ -170,7 +183,11 @@ export function eventToWire(row: PaymentEvent, names: Names): WireEvent {
   };
 }
 
-export function callbackToWire(row: PaymentCallbackInbox, requestId: string | null, names: Names): PaymentCallback {
+export function callbackToWire(
+  row: PaymentCallbackInbox,
+  requestId: string | null,
+  names: Names,
+): PaymentCallback {
   return {
     id: row.id,
     kind: row.kind as PaymentCallback["kind"],
@@ -239,11 +256,13 @@ export function queryToWire(row: ProviderQuery): WireQuery {
 
 export function balanceToWire(row: ProviderQuery): BalanceCheck {
   const balances = Array.isArray(row.balances)
-    ? (row.balances as { account?: unknown; currency?: unknown; availableMinor?: unknown }[]).map((entry) => ({
-        account: String(entry.account ?? ""),
-        currency: String(entry.currency ?? ""),
-        availableMinor: typeof entry.availableMinor === "number" ? entry.availableMinor : null,
-      }))
+    ? (row.balances as { account?: unknown; currency?: unknown; availableMinor?: unknown }[]).map(
+        (entry) => ({
+          account: String(entry.account ?? ""),
+          currency: String(entry.currency ?? ""),
+          availableMinor: typeof entry.availableMinor === "number" ? entry.availableMinor : null,
+        }),
+      )
     : null;
   return {
     id: row.id,

@@ -100,7 +100,19 @@ describe("amounts and limits", () => {
     expect(parseProviderAmount("190.00")).toBe(19_000);
     expect(parseProviderAmount(8959269.6)).toBe(895_926_960);
     expect(parseProviderAmount("300")).toBe(30_000);
-    for (const bad of [-1, Number.NaN, Infinity, 1e21, "1.005", "abc", "", null, undefined, {}, "1e3"])
+    for (const bad of [
+      -1,
+      Number.NaN,
+      Infinity,
+      1e21,
+      "1.005",
+      "abc",
+      "",
+      null,
+      undefined,
+      {},
+      "1e3",
+    ])
       expect(parseProviderAmount(bad), JSON.stringify(bad) ?? "undefined").toBeNull();
   });
 
@@ -147,7 +159,9 @@ describe("amounts and limits", () => {
     expect(isShortcode("174379")).toBe(true);
     expect(isShortcode("1234")).toBe(false);
     expect(isShortcode("60099A")).toBe(false);
-    expect(callbackUrlProblems("https://api.example.com/api/v1/payments/hooks/abc/stk")).toEqual([]);
+    expect(callbackUrlProblems("https://api.example.com/api/v1/payments/hooks/abc/stk")).toEqual(
+      [],
+    );
     expect(callbackUrlProblems("https://mpesa.example.com/query")).toEqual(["mpesa", "query"]);
     // 21:24:08 UTC is 00:24:08 the next day in Nairobi (UTC+3).
     expect(stkTimestamp(new Date("2026-11-10T21:24:08Z"))).toBe("20261111002408");
@@ -236,7 +250,10 @@ describe("callback parsing (official Daraja shapes)", () => {
       Key: "TransactionAmount",
       Value: "10",
     };
-    expect(parsed("b2c_result", single)).toMatchObject({ amountMinor: 1_000, receipt: "SG632NMUAB" });
+    expect(parsed("b2c_result", single)).toMatchObject({
+      amountMinor: 1_000,
+      receipt: "SG632NMUAB",
+    });
     expect(
       parsed("b2c_result", {
         Result: { ...b2cSuccess.Result, ResultCode: 2001, ResultParameters: undefined },
@@ -261,7 +278,12 @@ describe("callback parsing (official Daraja shapes)", () => {
           },
         },
       }),
-    ).toMatchObject({ outcome: "success", amountMinor: 19_000, currency: "KES", receipt: "QKA81LK5CY" });
+    ).toMatchObject({
+      outcome: "success",
+      amountMinor: 19_000,
+      currency: "KES",
+      receipt: "QKA81LK5CY",
+    });
     expect(
       parsed("reversal_result", {
         Result: {
@@ -272,14 +294,22 @@ describe("callback parsing (official Daraja shapes)", () => {
           TransactionID: "SKE52PAWR9",
           ResultParameters: {
             ResultParameter: [
-              { Key: "DebitAccountBalance", Value: "Utility Account|KES|7722179.62|7722179.62|0.00|0.00" },
+              {
+                Key: "DebitAccountBalance",
+                Value: "Utility Account|KES|7722179.62|7722179.62|0.00|0.00",
+              },
               { Key: "Amount", Value: 1.0 },
               { Key: "DebitPartyPublicName", Value: "600992 - Safaricom Daraja 992" },
             ],
           },
         },
       }),
-    ).toMatchObject({ amountMinor: 100, currency: "KES", shortcode: "600992", receipt: "SKE52PAWR9" });
+    ).toMatchObject({
+      amountMinor: 100,
+      currency: "KES",
+      shortcode: "600992",
+      receipt: "SKE52PAWR9",
+    });
     const status = parsed("status_result", {
       Result: {
         ResultType: 0,
@@ -344,7 +374,12 @@ describe("callback parsing (official Daraja shapes)", () => {
         MSISDN: "2547 ***** 126",
         FirstName: "NICHOLAS",
       }),
-    ).toMatchObject({ outcome: "success", amountMinor: 500, shortcode: "600966", billReference: "INV-1" });
+    ).toMatchObject({
+      outcome: "success",
+      amountMinor: 500,
+      shortcode: "600966",
+      billReference: "INV-1",
+    });
     for (const [kind, body] of [
       ["stk", {}],
       ["stk", { Body: { stkCallback: { CheckoutRequestID: "x", ResultCode: 0 } } }],
@@ -364,9 +399,9 @@ describe("callback parsing (official Daraja shapes)", () => {
     const b2c = JSON.stringify(redactCallbackBody(b2cSuccess));
     expect(b2c).not.toContain("NICHOLAS");
     expect(b2c).not.toContain("254705912645");
-    expect(JSON.stringify(redactCallbackBody({ FirstName: "Wanjiru", Note: "pay 0712345678" }))).toBe(
-      '{"FirstName":"[redacted]","Note":"pay 0712•••••678"}',
-    );
+    expect(
+      JSON.stringify(redactCallbackBody({ FirstName: "Wanjiru", Note: "pay 0712345678" })),
+    ).toBe('{"FirstName":"[redacted]","Note":"pay 0712•••••678"}');
   });
 });
 
@@ -390,9 +425,10 @@ describe("callback verification", () => {
       ok: false,
       reason: "direction_mismatch",
     });
-    expect(
-      verifyCallback(success, { ...expected, kind: "b2b_paybill" }),
-    ).toEqual({ ok: false, reason: "kind_mismatch" });
+    expect(verifyCallback(success, { ...expected, kind: "b2b_paybill" })).toEqual({
+      ok: false,
+      reason: "kind_mismatch",
+    });
     expect(
       verifySettlement(
         { amountMinor: 1_000, currency: "USD", receipt: "X", shortcode: null },
@@ -406,7 +442,10 @@ describe("callback verification", () => {
       ),
     ).toEqual({ ok: false, reason: "shortcode_mismatch" });
     expect(
-      verifySettlement({ amountMinor: 1_000, currency: null, receipt: null, shortcode: null }, expected),
+      verifySettlement(
+        { amountMinor: 1_000, currency: null, receipt: null, shortcode: null },
+        expected,
+      ),
     ).toEqual({ ok: false, reason: "malformed" });
     // Failures need no amount: they settle nothing.
     const failure = parsed("b2c_result", {
@@ -429,7 +468,9 @@ describe("callback verification", () => {
 
 describe("submission classification (never settlement from the initial response)", () => {
   it("treats undelivered requests as failed and anything possibly delivered as unknown", () => {
-    expect(classifySubmission("b2c", { type: "not_sent", code: "ECONNREFUSED" }, "o")).toMatchObject({
+    expect(
+      classifySubmission("b2c", { type: "not_sent", code: "ECONNREFUSED" }, "o"),
+    ).toMatchObject({
       outcome: "failed",
       reason: "not_delivered",
     });
@@ -490,7 +531,11 @@ describe("submission classification (never settlement from the initial response)
       classifySubmission("b2c", { type: "response", httpStatus: 200, body: "<html>" }, "o"),
     ).toMatchObject({ outcome: "unknown" });
     expect(
-      classifySubmission("b2c", { type: "response", httpStatus: 200, body: { ResponseCode: "1" } }, "o"),
+      classifySubmission(
+        "b2c",
+        { type: "response", httpStatus: 200, body: { ResponseCode: "1" } },
+        "o",
+      ),
     ).toMatchObject({ outcome: "failed", reason: "rejected_by_provider", providerCode: "1" });
   });
 
@@ -501,7 +546,10 @@ describe("submission classification (never settlement from the initial response)
         { type: "response", httpStatus, body: errorCode ? { errorCode, errorMessage: "x" } : null },
         "o",
       );
-    expect(error(400, "400.002.02")).toMatchObject({ outcome: "failed", providerCode: "400.002.02" });
+    expect(error(400, "400.002.02")).toMatchObject({
+      outcome: "failed",
+      providerCode: "400.002.02",
+    });
     expect(error(500, "500.003.02")).toMatchObject({ outcome: "failed" });
     expect(error(500, "500.002.1001")).toMatchObject({
       outcome: "unknown",

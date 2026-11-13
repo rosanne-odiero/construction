@@ -107,6 +107,8 @@ export type BqItemKind = (typeof BQ_ITEM_KINDS)[number];
  * Where an item's amount comes from. `computed` is quantity × rate rounded per line; `percentage`
  * is a percentage of the PC sum above it; `lump_sum` is an amount-only line; `sheet_override` is
  * the spreadsheet's amount chosen by the user with a reason; `unpriced` and `included` are zero.
+ * Approved variations (D2.3) add `fixed` (an amount set by the variation, with no rate: a lump
+ * sum or a daywork allowance) and `omitted` (quantity 0 and amount 0; the item stays for history).
  */
 export const BQ_AMOUNT_SOURCES = [
   "computed",
@@ -115,6 +117,8 @@ export const BQ_AMOUNT_SOURCES = [
   "sheet_override",
   "unpriced",
   "included",
+  "fixed",
+  "omitted",
 ] as const;
 export type BqAmountSource = (typeof BQ_AMOUNT_SOURCES)[number];
 
@@ -143,9 +147,18 @@ export const BQ_UNITS = [
 ] as const;
 export type BqUnit = (typeof BQ_UNITS)[number];
 
-/** BQ version states (ERD §4). D2.2 creates drafts; approval and supersession arrive in D2.3. */
+/**
+ * BQ version states (ERD §4). Version 1 is imported as a draft and approved as the contract
+ * baseline; every later version is created by an approved variation and is approved from birth.
+ * An approved version never changes. `superseded` is reserved: the current version is derived
+ * (the newest approved one) instead of rewriting older versions.
+ */
 export const BQ_VERSION_STATUSES = ["draft", "approved", "superseded"] as const;
 export type BqVersionStatus = (typeof BQ_VERSION_STATUSES)[number];
+
+/** How a version came about: the original import or an approved variation (manual is reserved). */
+export const BQ_VERSION_SOURCES = ["import", "variation", "manual"] as const;
+export type BqVersionSource = (typeof BQ_VERSION_SOURCES)[number];
 
 export const BQ_ISSUE_SEVERITIES = ["error", "warning", "info"] as const;
 export type BqIssueSeverity = (typeof BQ_ISSUE_SEVERITIES)[number];

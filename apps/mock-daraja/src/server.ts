@@ -141,7 +141,11 @@ const reserialised = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(reserialised)
     : isObject(value)
-      ? Object.fromEntries(Object.entries(value).reverse().map(([key, entry]) => [key, reserialised(entry)]))
+      ? Object.fromEntries(
+          Object.entries(value)
+            .reverse()
+            .map(([key, entry]) => [key, reserialised(entry)]),
+        )
       : value;
 
 const redactRequest = (body: unknown): unknown => {
@@ -391,7 +395,13 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
             callbackDelayMs + 400,
           );
         // STK has no queue-timeout URL: the same result arrives again, late and re-serialised.
-        else deliverLater(resultUrl, reserialised(stkCallback(tx)), `${label}:late`, callbackDelayMs + 1_200);
+        else
+          deliverLater(
+            resultUrl,
+            reserialised(stkCallback(tx)),
+            `${label}:late`,
+            callbackDelayMs + 1_200,
+          );
         break;
       case "conflicting_results":
         deliverLater(resultUrl, success(), label);

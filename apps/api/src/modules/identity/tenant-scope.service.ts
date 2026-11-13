@@ -1,10 +1,18 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import type { Request } from "express";
+import { pinAllowed } from "@pm-buddy/types";
 import type { Prisma } from "../../generated/prisma/client.js";
 import { AccessPolicy, type Scope } from "./access-policy.js";
 import { AuthService, type Principal, requestId } from "./auth.service.js";
 import { requiresMfa } from "./role-grants.js";
 import { TenantDatabase } from "./tenant-database.service.js";
+
+/** A PIN sign-in may only use the labourer portal (packages/types pinAllowed). */
+export const pinSessionLimited = () =>
+  new ForbiddenException({
+    code: "pin-session-limited",
+    message: "PIN sign-in is for the labourer portal only. Sign in with your password.",
+  });
 
 /**
  * Runs work for the caller's selected company in one tenant transaction (RLS context set by
@@ -52,6 +60,9 @@ export class TenantScope {
         ) {
           throw new ForbiddenException("This role requires MFA");
         }
+        // A six-digit PIN is a weak credential: it never unlocks staff or client access.
+        if (principal.session.authMethod === "pin" && !pinAllowed(access.permissions))
+          throw pinSessionLimited();
         return operation({ tx, principal, access });
       },
       timeoutMs,

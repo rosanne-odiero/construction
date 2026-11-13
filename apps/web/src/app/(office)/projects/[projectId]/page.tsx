@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { FileSpreadsheet } from "lucide-react";
 import { isProjectReadOnly } from "@pm-buddy/domain";
-import { projectDetailResponseSchema } from "@pm-buddy/validation";
+import { bqContractSumResponseSchema, projectDetailResponseSchema } from "@pm-buddy/validation";
 import { PageHeader } from "@/components/page-header";
 import { EditProjectButton } from "@/components/projects/project-form";
 import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
@@ -17,8 +17,10 @@ import { OverviewTab } from "./overview-tab";
 import { SitesTab } from "./sites-tab";
 import { TeamTab } from "./team-tab";
 import { WbsTab } from "./wbs-tab";
+import { DiaryTab } from "./diary-tab";
+import { PhotosTab } from "./photos-tab";
 
-const TABS = ["overview", "sites", "team", "wbs"] as const;
+const TABS = ["overview", "sites", "team", "wbs", "diary", "photos"] as const;
 type Tab = (typeof TABS)[number];
 const PROTOTYPE_IDS = new Set(["ruiru-heights", "kitengela-bungalow"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -42,7 +44,7 @@ export default async function ProjectPage({
   // The D0 prototype detail moved to /prototype/projects/…; keep its old links working.
   if (PROTOTYPE_IDS.has(projectId)) redirect(`/prototype/projects/${projectId}`);
   if (!UUID.test(projectId)) notFound();
-  const { tab: rawTab } = await searchParams;
+  const { tab: rawTab, cursor } = await searchParams;
   const tab: Tab = TABS.find((candidate) => candidate === rawTab) ?? "overview";
   const path = `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}`;
 
@@ -61,6 +63,11 @@ export default async function ProjectPage({
   const canManage = detail.permissions.includes("projects.manage");
   const canViewBq = detail.permissions.includes("bq.view");
   const readOnly = isProjectReadOnly(project.status);
+  // Original vs revised contract sum on the overview, for people who can see the BQ.
+  const sums =
+    tab === "overview" && canViewBq
+      ? await serverApi(`/projects/${project.id}/bq/contract-sum`, bqContractSumResponseSchema)
+      : null;
 
   return (
     <div className="space-y-6">
@@ -121,13 +128,43 @@ export default async function ProjectPage({
           ) : null}
         </ul>
       </nav>
-      {tab === "overview" ? <OverviewTab detail={detail} /> : null}
+      {tab === "overview" ? (
+        <OverviewTab
+          detail={detail}
+          contractSums={canViewBq ? (sums?.ok ? sums.data : null) : undefined}
+        />
+      ) : null}
       {tab === "sites" ? (
         <SitesTab project={project} canManage={canManage && !readOnly} returnTo={path} />
       ) : null}
-      {tab === "team" ? <TeamTab project={project} returnTo={path} /> : null}
+      {tab === "team" ? (
+        <TeamTab
+          project={project}
+          returnTo={path}
+          canInviteLabourers={!readOnly && detail.permissions.includes("labour.manage")}
+        />
+      ) : null}
       {tab === "wbs" ? (
         <WbsTab project={project} canManage={canManage && !readOnly} returnTo={path} />
+      ) : null}
+      {tab === "diary" ? (
+        <DiaryTab
+          projectId={project.id}
+          userId={session.user.id}
+          canWrite={!readOnly && detail.permissions.includes("site.diary")}
+          canReview={!readOnly && detail.permissions.includes("quality.manage")}
+          returnTo={path}
+          cursor={cursor}
+        />
+      ) : null}
+      {tab === "photos" ? (
+        <PhotosTab
+          projectId={project.id}
+          userId={session.user.id}
+          canUpload={!readOnly && detail.permissions.includes("site.photos")}
+          returnTo={path}
+          cursor={cursor}
+        />
       ) : null}
     </div>
   );

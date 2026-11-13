@@ -76,3 +76,24 @@ export const inviteSchema = z
   })
   .strict();
 export const acceptSchema = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
+
+/** Labourers sign in with a Kenyan mobile number and a six-digit PIN. */
+export const phoneIdentifierSchema = identifierSchema.refine(
+  (value) => !value.includes("@"),
+  "Use a Kenyan mobile number",
+);
+export const pinSchema = z.string().regex(/^\d{6}$/);
+const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+export const pinLoginSchema = z
+  .object({ identifier: phoneIdentifierSchema, pin: pinSchema })
+  .strict();
+export const pinJoinSchema = z
+  .object({
+    identifier: phoneIdentifierSchema,
+    token: tokenSchema,
+    displayName: z.string().trim().min(1).max(100),
+    pin: pinSchema,
+  })
+  .strict();
+export const pinResetSchema = z.object({ token: tokenSchema, pin: pinSchema }).strict();
+export const labourerInvitationSchema = z.object({ identifier: phoneIdentifierSchema }).strict();

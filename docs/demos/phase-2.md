@@ -152,6 +152,67 @@ The fixtures (regenerate with `node apps/api/test/fixtures/bq/generate.mts`):
 - Only synthetic fixtures have been imported. A real anonymised Kenyan BQ is needed for acceptance.
 - No ClamAV yet (`MALWARE_SCANNER=development` records "not scanned").
 - Sections are one level deep; Kenyan "KShs | Cts" split amount columns are not recognised (map the shillings column, or join them first).
-- No manual BQ editing, approval, variations or revisions (D2.3).
+- No manual BQ editing, approval, variations or revisions (these arrive in D2.3, below).
 - PDF export is limited to 10,000 items and renders in the API process.
+- Kiswahili wording needs a native speaker's review.
+
+---
+
+## D2.3: BQ versions, instructions, variations and rate build-ups
+
+This walkthrough takes about 25 minutes. It continues from D2.2: Ruiru Heights has a committed BQ (version 1, draft) imported from `kenyan-multi-bill.xlsx` (grand total **KES 38,647,188.75**). Two people are needed, because the person who imported or drafted something may not approve it: the **project manager** (Brian, `pm@jenga-bora.example.test`) prepares, and the **owner** (Wanjiru, `owner@jenga-bora.example.test`, TOTP enrolled) approves with a fresh authenticator code. Use two browsers, or a private window for the second person.
+
+### 1. Run it
+
+As for D2.2, on branch `phase-2/d2.3-bq-variations`:
+
+```bash
+npx pnpm@12.17.0 install
+npx pnpm@12.17.0 services:up
+npx pnpm@12.17.0 db:migrate      # includes 20261110130000_bq_variations
+npx pnpm@12.17.0 db:seed         # also adds the synthetic rate build-up CONC-C25-SYN
+npx pnpm@12.17.0 dev
+```
+
+If the BQ was imported by the owner in the D2.2 demo, swap the roles below (only someone with an authenticator can approve, so either import again as Brian or enrol TOTP for Brian first).
+
+### 2. Walkthrough
+
+| # | What | Who and where | Try this |
+| --- | --- | --- | --- |
+| 1 | Contract sum before approval | Anyone → Ruiru Heights → **BQ** | The contract sum card says the BQ is still a draft (with its total) and that the original contract sum is fixed when it is approved; there is no revised sum yet. The sub-navigation shows **BQ**, **Variations**, **Instructions**, **Versions** and **Rate build-ups**. |
+| 2 | Maker-checker on the baseline | Brian (the importer) → **BQ** | No approve button: "You imported this BQ, so someone else must approve it as the contract baseline." The API refuses it too (403 `maker-checker`). |
+| 3 | Approve the baseline | Wanjiru → **BQ** → **Approve as contract baseline** | The dialog shows the grand total and says the version will never change; **Approve baseline**, then enter the authenticator code in **Confirm it is you**. Version 1 becomes the contract baseline: **Original = KES 38,647,188.75**. A re-import is now refused ("This BQ has been approved; changes need a variation or revision."). |
+| 4 | Register an instruction | Brian → **Instructions** → **Register instruction** | Number `AI-001`, today's date, issued by "Arch. Achieng Odhiambo", Architect, subject "Revise column bases". A second instruction with the same number is refused. |
+| 5 | Draft a variation | Brian → **Variations** → **New variation** | Choose `AI-001`; the base is the newest approved version (version 1). In the editor, pick items from the BQ tree: **Change quantity or rate** on an excavation item, **Omit** a provisional item (it stays in the BQ with quantity 0), and **Add a new item** to an existing bill in a new section (ref, description, unit, quantity and rate, or a fixed amount for a lump sum or daywork). Each line shows the base amount, the new amount and the difference; the totals show additions, omissions, net and the projected grand total with VAT at the base version's snapshotted 16 %. **Save lines**. |
+| 6 | Submit | Brian → **Submit** | The proposal is frozen and gets a snapshot digest (shown shortened on the page). Lines can no longer change. |
+| 7 | Pending is not revised | Anyone → project **Overview** | The contract sum card lists the submitted variation under **Pending**; the revised sum is unchanged. |
+| 8 | Maker-checker on the variation | Brian → the submitted variation | No approve or reject buttons: "You raised or submitted this variation, so someone else must approve or reject it." The API refuses it too (403 `maker-checker`). |
+| 9 | Approve | Wanjiru → the variation → **Approve** | The dialog shows the totals and the digest being approved; enter the authenticator code. The variation is approved and **version 2** is created in the same transaction. |
+| 10 | Versions and compare | Anyone → **Versions** | Version 2: source "Variation VO-001", parent version 1, created by Brian, approved by Wanjiru, its totals and VAT rate. The comparison lists items added, removed and changed (quantity, rate, amount before and after), bill subtotals and the overall difference. |
+| 11 | Original vs revised | Project **Overview** | Original (version 1), approved variations (the net effect including VAT), revised (version 2) and pending (now zero). |
+| 12 | Stale and rebase | Brian drafts and submits VO-002 on version 1 *before* step 9; after VO-001 is approved, Wanjiru → VO-002 → **Approve** | Refused as stale: a newer version was approved. Brian → **Rebase**: VO-002 moves to version 2, returns to draft, its lines are repriced; submit again and Wanjiru can approve it as version 3. |
+| 13 | Reject and reopen | Wanjiru → a submitted variation → **Reject** (a reason is required) | Brian → **Reopen** (**Reopen as draft**) returns it to draft for changes; **Cancel variation** (with a reason) ends a draft. |
+| 14 | Rate build-up library | Brian → **Rate build-ups** | `CONC-C25-SYN` (synthetic): cement in 50 kg bags with 5 % waste, sand and ballast in tonnes, labour hours; the rate per m³ is the sum of the lines, each rounded to the cent. Read the **Assumptions** panel: conversions are written assumptions, and a lorry trip is not a unit of mass or volume. **New build-up** creates another; editing one creates version 2 and keeps version 1 viewable. |
+| 15 | Link an item | Brian → **BQ** → a concrete item measured in m³ → **Link build-up** | Only build-ups priced per the item's unit are offered (an item in m² shows "No build-up is priced per this item's unit."; the API refuses a mismatch with 422 `unit-mismatch`). Choose `CONC-C25-SYN` and **Link**: the tree shows "Build-up CONC-C25-SYN v1" with its rate. Editing the build-up later does not change the version the item is linked to. |
+| 16 | A site agent's view | Kevin (`site.agent@…`) | Versions, variations, instructions and the library are visible (`bq.view`), but nothing can be created, decided or linked. |
+
+### 3. What changed under the hood
+
+| Area | What's new |
+| --- | --- |
+| Shared packages | `types/variations.ts` (instruction, variation and build-up vocabulary). `domain/bq/variation-lifecycle.ts` (state machine), `variation.ts` (line pricing, totals, apply, snapshot text), `compare.ts`, `buildup.ts` (rate maths, unit compatibility). `validation/variations.ts` (wire contracts). |
+| API | `BqVersionsService` (baseline approval, compare, contract sums), `InstructionsService`, `VariationsService` (lifecycle, snapshot digest, atomic approval serialised per BQ, rebase), `BuildupsService` (library versions, item links); two controllers with OpenAPI. `AccessPolicy.stepUp`/`holdsSomewhere`. |
+| Database | Migration `20261110130000_bq_variations`: lineage IDs on bills and sections; version lineage, parent and approval columns; `instructions`, `variation_orders`, `variation_lines`, `variation_status_changes`, `rate_buildups`, `rate_buildup_versions`, `rate_buildup_lines`, `bq_item_rate_links`; forced RLS, composite tenant keys to project, BQ, version, bill, section and item lineage; state CHECKs and triggers (`app.guard_bq_version`, `app.guard_variation_order`, `app.guard_variation_line`, build-up totals, link guard); history tables append-only for `pmb_app`. |
+| Web | `/projects/[id]/bq` (contract sum, baseline approval, sub-navigation), `…/bq/variations` (list with status filter, editor, actions with the step-up dialog), `…/bq/instructions`, `…/bq/versions` (history and compare), `/rate-buildups` (list, editor, versions), `/bq` (projects' BQs), contract sum card on the project overview, link dialog in the BQ tree. EN and SW. |
+| Tests | Domain and validation unit tests; API unit test of the digest; API e2e `variations.e2e-spec.ts` (11 tests under `pmb_app`); Playwright `variations.spec.ts` (5 tests with axe, EN/SW, light/dark, 360 px) on an extended mock API. |
+
+### 4. Known limitations
+
+- Approval limits by amount (for example "may approve up to KES 2,000,000") are not implemented; any holder of `bq.approve_variation` with step-up may approve.
+- A variation is always based on the newest approved version; there is no branching or merging, only rebase.
+- Percentage lines (PC attendance and profit) are not recomputed when their PC sum changes; adjust them with their own line.
+- Instruction attachments are metadata only (no upload until the files module).
+- Build-ups do not convert units or use material and trade masters yet (D5.1); theoretical consumption arrives in D5.x. Seed values are synthetic, not market rates.
+- The client's decision on a variation (client portal) is not modelled yet.
 - Kiswahili wording needs a native speaker's review.

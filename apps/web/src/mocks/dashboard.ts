@@ -109,7 +109,7 @@ export const upcomingPayments = [
     amountMinor: payrollBatch.netMinor,
     direction: "out",
     state: "awaitingApproval",
-    href: "/payroll",
+    href: "/prototype/payroll",
   },
   {
     key: "payrollKitengela",
@@ -117,7 +117,7 @@ export const upcomingPayments = [
     amountMinor: 96_400_00,
     direction: "out",
     state: "prepared",
-    href: "/payroll",
+    href: "/prototype/payroll",
   },
   {
     key: "lpo42",
@@ -141,7 +141,7 @@ export const upcomingPayments = [
     amountMinor: 1_245_600_00,
     direction: "in",
     state: "due",
-    href: "/portal",
+    href: "/prototype/portal",
   },
 ] as const;
 

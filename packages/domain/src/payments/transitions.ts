@@ -7,7 +7,10 @@ import {
 } from "@pm-buddy/types";
 
 /** Whether WORKFLOWS "Payment attempts" allows `from` → `to` (the database guard has the same table). */
-export function canTransitionAttempt(from: PaymentAttemptStatus, to: PaymentAttemptStatus): boolean {
+export function canTransitionAttempt(
+  from: PaymentAttemptStatus,
+  to: PaymentAttemptStatus,
+): boolean {
   return PAYMENT_ATTEMPT_TRANSITIONS[from].includes(to);
 }
 

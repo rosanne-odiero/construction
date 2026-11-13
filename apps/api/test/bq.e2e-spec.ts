@@ -365,7 +365,14 @@ describe("BQ import, viewer and exports (real runtime role)", () => {
     expect(firstImport.bqVersionId).toEqual(expect.any(String));
 
     const view = await getBq(qs, main);
-    expect(view.permissions).toEqual({ canImport: true, canExport: true });
+    expect(view.permissions).toEqual({
+      canImport: true,
+      canExport: true,
+      canEdit: true,
+      canApprove: false,
+    });
+    // The quantity surveyor cannot approve the baseline (D2.3: bq.approve_variation).
+    expect(view.baselineApproval).toEqual({ allowed: false, refusal: "permission" });
     expect(view.bq!.version).toMatchObject({
       versionNo: 1,
       status: "draft",
@@ -970,7 +977,12 @@ describe("BQ import, viewer and exports (real runtime role)", () => {
 
   it("checks bq.view and bq.import on the project (role ∩ assignment)", async () => {
     const view = await getBq(agent, main);
-    expect(view.permissions).toEqual({ canImport: false, canExport: true });
+    expect(view.permissions).toEqual({
+      canImport: false,
+      canExport: true,
+      canEdit: false,
+      canApprove: false,
+    });
     expect(view.openImports).toBe(0);
     expect((await upload(agent, main, "kenyan-multi-bill.xlsx")).status).toBe(403);
     for (const path of [

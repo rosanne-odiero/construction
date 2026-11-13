@@ -41,7 +41,10 @@ type Tx = Prisma.TransactionClient;
 /** How long a rotated callback token keeps working, for results of calls already in flight. */
 const RETIRED_TOKEN_GRACE_MS = 72 * 3_600_000;
 
-const SECRET_COLUMNS: Record<PaymentSecretField, { enc: keyof PaymentSettings; at: keyof PaymentSettings }> = {
+const SECRET_COLUMNS: Record<
+  PaymentSecretField,
+  { enc: keyof PaymentSettings; at: keyof PaymentSettings }
+> = {
   consumerKey: { enc: "consumerKeyEnc", at: "consumerKeySetAt" },
   consumerSecret: { enc: "consumerSecretEnc", at: "consumerSecretSetAt" },
   initiatorName: { enc: "initiatorNameEnc", at: "initiatorNameSetAt" },
@@ -73,7 +76,8 @@ export class PaymentSettingsService {
   ) {}
 
   private async canAny(scope: Scope, ...permissions: Permission[]) {
-    for (const permission of permissions) if (await holds(this.policy, scope, permission)) return true;
+    for (const permission of permissions)
+      if (await holds(this.policy, scope, permission)) return true;
     return false;
   }
 
@@ -84,12 +88,27 @@ export class PaymentSettingsService {
     const canPause = canManage || (await this.canAny(scope, "payments.review"));
     const row = await tx.paymentSettings.findUnique({ where: { tenantId: access.tenantId } });
     if (!row) return { configured: false, settings: null, canManage, canPause };
-    const route = await tx.paymentCallbackRoute.findFirst({ where: { tenantId: access.tenantId, status: "active" } });
+    const route = await tx.paymentCallbackRoute.findFirst({
+      where: { tenantId: access.tenantId, status: "active" },
+    });
     const token = route ? this.crypto.openToken(access.tenantId, route.id, route.tokenEnc) : null;
-    const urls = token ? callbackUrlList((segment) => this.runtime.callbackUrl(token, segment)) : [];
+    const urls = token
+      ? callbackUrlList((segment) => this.runtime.callbackUrl(token, segment))
+      : [];
     // URLs are shown to people who manage the credentials only: the token is unguessable by design.
-    const visible = canManage ? urls : urls.map((entry) => ({ ...entry, url: entry.url.replace(/hooks\/[0-9a-f]{64}/, "hooks/••••") }));
-    const warnings = [...new Set(urls.flatMap((entry) => callbackUrlProblems(entry.url.replace(/hooks\/[0-9a-f]{64}/, "hooks/token"))))];
+    const visible = canManage
+      ? urls
+      : urls.map((entry) => ({
+          ...entry,
+          url: entry.url.replace(/hooks\/[0-9a-f]{64}/, "hooks/••••"),
+        }));
+    const warnings = [
+      ...new Set(
+        urls.flatMap((entry) =>
+          callbackUrlProblems(entry.url.replace(/hooks\/[0-9a-f]{64}/, "hooks/token")),
+        ),
+      ),
+    ];
     const names = await displayNames(tx, [row.payoutsChangedBy, row.credentialsUpdatedBy]);
     return {
       configured: true,
@@ -122,7 +141,13 @@ export class PaymentSettingsService {
     const id = uuidv7();
     const token = newCallbackToken();
     await tx.paymentCallbackRoute.create({
-      data: { id, tenantId, tokenDigest: sha256(token), tokenEnc: this.crypto.sealToken(tenantId, id, token), createdBy: userId },
+      data: {
+        id,
+        tenantId,
+        tokenDigest: sha256(token),
+        tokenEnc: this.crypto.sealToken(tenantId, id, token),
+        createdBy: userId,
+      },
     });
     return id;
   }
@@ -133,7 +158,10 @@ export class PaymentSettingsService {
       await this.manage(scope);
       const { tx, access } = scope;
       if (await tx.paymentSettings.findUnique({ where: { tenantId: access.tenantId } }))
-        throw paymentConflict("version-conflict", "Payments are already configured for this company.");
+        throw paymentConflict(
+          "version-conflict",
+          "Payments are already configured for this company.",
+        );
       await tx.paymentSettings.create({
         data: {
           tenantId: access.tenantId,
@@ -154,7 +182,9 @@ export class PaymentSettingsService {
         event: "settings.initialised",
         actorId: access.userId,
       });
-      await this.ledger.audit(tx, "payments.settings_initialised", access.tenantId, { limitsStatus: "demo" });
+      await this.ledger.audit(tx, "payments.settings_initialised", access.tenantId, {
+        limitsStatus: "demo",
+      });
       return this.view(scope);
     });
   }
@@ -168,7 +198,10 @@ export class PaymentSettingsService {
           "Production M-Pesa is not enabled: it needs the go-live review (COMPLIANCE-REVIEW CR-PMT-04).",
         );
       if (input.environment === "mock" && this.runtime.production)
-        throw paymentConflict("environment-unavailable", "The mock environment is not available in production.");
+        throw paymentConflict(
+          "environment-unavailable",
+          "The mock environment is not available in production.",
+        );
       const { tx, access } = scope;
       const row = await this.load(tx, access.tenantId);
       if (row.version !== input.version) throw versionConflict();
@@ -185,7 +218,8 @@ export class PaymentSettingsService {
         Number(row.b2cMinMinor) !== input.limits.b2cMinMinor && "b2cMinMinor",
         Number(row.b2cMaxMinor) !== input.limits.b2cMaxMinor && "b2cMaxMinor",
         Number(row.b2bMaxMinor) !== input.limits.b2bMaxMinor && "b2bMaxMinor",
-        Number(row.dailyPayoutMaxMinor) !== input.limits.dailyPayoutMaxMinor && "dailyPayoutMaxMinor",
+        Number(row.dailyPayoutMaxMinor) !== input.limits.dailyPayoutMaxMinor &&
+          "dailyPayoutMaxMinor",
       ].filter((field): field is string => Boolean(field));
       await tx.paymentSettings.update({
         where: { tenantId: access.tenantId },
@@ -222,50 +256,64 @@ export class PaymentSettingsService {
   updateCredentials(principal: Principal, req: Request, input: UpdatePaymentCredentialsRequest) {
     const fields = PAYMENT_SECRET_FIELDS.filter((field) => input[field] !== undefined);
     // The fingerprint covers which fields changed, not their values.
-    return this.commands.run(principal, req, "payments.credentials.update", { version: input.version, fields }, async (scope) => {
-      await this.manage(scope);
-      const { tx, access } = scope;
-      const row = await this.load(tx, access.tenantId);
-      if (row.version !== input.version) throw versionConflict();
-      const now = new Date();
-      const data: Record<string, unknown> = {};
-      for (const field of fields) {
-        data[SECRET_COLUMNS[field].enc] = this.crypto.sealSecret(access.tenantId, field, input[field]!);
-        data[SECRET_COLUMNS[field].at] = now;
-      }
-      await tx.paymentSettings.update({
-        where: { tenantId: access.tenantId },
-        data: {
-          ...(data as Prisma.PaymentSettingsUpdateInput),
-          credentialsVersion: row.credentialsVersion + 1,
-          credentialsUpdatedAt: now,
-          credentialsUpdatedBy: access.userId,
-          updatedBy: access.userId,
-          version: row.version + 1,
-        },
-      });
-      await this.ledger.event(tx, access.tenantId, {
-        subjectType: "settings",
-        subjectId: access.tenantId,
-        event: "settings.credentials_changed",
-        actorId: access.userId,
-        detail: { fields: fields.join(",") },
-      });
-      await this.ledger.audit(tx, "payments.credentials_changed", access.tenantId, { fields });
-      await this.provider.invalidateToken({
-        tenantId: access.tenantId,
-        environment: row.environment as never,
-        credentialsVersion: row.credentialsVersion,
-      });
-      return this.view(scope);
-    });
+    return this.commands.run(
+      principal,
+      req,
+      "payments.credentials.update",
+      { version: input.version, fields },
+      async (scope) => {
+        await this.manage(scope);
+        const { tx, access } = scope;
+        const row = await this.load(tx, access.tenantId);
+        if (row.version !== input.version) throw versionConflict();
+        const now = new Date();
+        const data: Record<string, unknown> = {};
+        for (const field of fields) {
+          data[SECRET_COLUMNS[field].enc] = this.crypto.sealSecret(
+            access.tenantId,
+            field,
+            input[field]!,
+          );
+          data[SECRET_COLUMNS[field].at] = now;
+        }
+        await tx.paymentSettings.update({
+          where: { tenantId: access.tenantId },
+          data: {
+            ...(data as Prisma.PaymentSettingsUpdateInput),
+            credentialsVersion: row.credentialsVersion + 1,
+            credentialsUpdatedAt: now,
+            credentialsUpdatedBy: access.userId,
+            updatedBy: access.userId,
+            version: row.version + 1,
+          },
+        });
+        await this.ledger.event(tx, access.tenantId, {
+          subjectType: "settings",
+          subjectId: access.tenantId,
+          event: "settings.credentials_changed",
+          actorId: access.userId,
+          detail: { fields: fields.join(",") },
+        });
+        await this.ledger.audit(tx, "payments.credentials_changed", access.tenantId, { fields });
+        await this.provider.invalidateToken({
+          tenantId: access.tenantId,
+          environment: row.environment as never,
+          credentialsVersion: row.credentialsVersion,
+        });
+        return this.view(scope);
+      },
+    );
   }
 
   /**
    * The payout master switch (brief §15 D): off by default. Off blocks every new outbound provider
    * call (B2C, B2B, reversals) without touching queued attempts; collections continue.
    */
-  setPayouts(principal: Principal, req: Request, input: { version: number; enabled: boolean; reason: string }) {
+  setPayouts(
+    principal: Principal,
+    req: Request,
+    input: { version: number; enabled: boolean; reason: string },
+  ) {
     return this.commands.run(principal, req, "payments.payouts.switch", input, async (scope) => {
       if (input.enabled) await this.manage(scope);
       else await requireOne(this.policy, scope, ["payments.manage_credentials", "payments.review"]);
@@ -313,33 +361,45 @@ export class PaymentSettingsService {
 
   /** New callback token; the old one keeps accepting results for 72 hours (calls in flight). */
   rotateToken(principal: Principal, req: Request, input: { version: number; reason: string }) {
-    return this.commands.run(principal, req, "payments.callback_token.rotate", input, async (scope) => {
-      await this.manage(scope);
-      const { tx, access } = scope;
-      const row = await this.load(tx, access.tenantId);
-      if (row.version !== input.version) throw versionConflict();
-      const active = await tx.paymentCallbackRoute.findFirst({ where: { tenantId: access.tenantId, status: "active" } });
-      if (active)
-        await tx.paymentCallbackRoute.update({
-          where: { tenantId_id: { tenantId: access.tenantId, id: active.id } },
-          data: { status: "retired", retiredBy: access.userId, acceptUntil: new Date(Date.now() + RETIRED_TOKEN_GRACE_MS) },
+    return this.commands.run(
+      principal,
+      req,
+      "payments.callback_token.rotate",
+      input,
+      async (scope) => {
+        await this.manage(scope);
+        const { tx, access } = scope;
+        const row = await this.load(tx, access.tenantId);
+        if (row.version !== input.version) throw versionConflict();
+        const active = await tx.paymentCallbackRoute.findFirst({
+          where: { tenantId: access.tenantId, status: "active" },
         });
-      const routeId = await this.createRoute(tx, access.tenantId, access.userId);
-      await tx.paymentSettings.update({
-        where: { tenantId: access.tenantId },
-        data: { updatedBy: access.userId, version: row.version + 1 },
-      });
-      await this.ledger.event(tx, access.tenantId, {
-        subjectType: "settings",
-        subjectId: access.tenantId,
-        event: "settings.callback_token_rotated",
-        actorId: access.userId,
-      });
-      await this.ledger.audit(tx, "payments.callback_token_rotated", routeId, {
-        retiredRouteId: active?.id ?? null,
-      });
-      return this.view(scope);
-    });
+        if (active)
+          await tx.paymentCallbackRoute.update({
+            where: { tenantId_id: { tenantId: access.tenantId, id: active.id } },
+            data: {
+              status: "retired",
+              retiredBy: access.userId,
+              acceptUntil: new Date(Date.now() + RETIRED_TOKEN_GRACE_MS),
+            },
+          });
+        const routeId = await this.createRoute(tx, access.tenantId, access.userId);
+        await tx.paymentSettings.update({
+          where: { tenantId: access.tenantId },
+          data: { updatedBy: access.userId, version: row.version + 1 },
+        });
+        await this.ledger.event(tx, access.tenantId, {
+          subjectType: "settings",
+          subjectId: access.tenantId,
+          event: "settings.callback_token_rotated",
+          actorId: access.userId,
+        });
+        await this.ledger.audit(tx, "payments.callback_token_rotated", routeId, {
+          retiredRouteId: active?.id ?? null,
+        });
+        return this.view(scope);
+      },
+    );
   }
 
   /** Registers the C2B confirmation and validation URLs (a provider call made by the worker). */
@@ -348,9 +408,15 @@ export class PaymentSettingsService {
       await this.manage(scope);
       const { tx, access } = scope;
       const row = await this.load(tx, access.tenantId);
-      if (!row.c2bShortcode) throw paymentConflict("payments-not-configured", "Set the C2B shortcode first.");
+      if (!row.c2bShortcode)
+        throw paymentConflict("payments-not-configured", "Set the C2B shortcode first.");
       const query = await tx.providerQuery.create({
-        data: { tenantId: access.tenantId, kind: "c2b_register", status: "sent", requestedBy: access.userId },
+        data: {
+          tenantId: access.tenantId,
+          kind: "c2b_register",
+          status: "sent",
+          requestedBy: access.userId,
+        },
       });
       await this.ledger.enqueue(tx, access.tenantId, "c2b.register", query.id);
       await this.ledger.audit(tx, "payments.c2b_registration_requested", query.id, {});
@@ -361,7 +427,14 @@ export class PaymentSettingsService {
 
   /** Throws 403 unless the caller may run a float check. */
   async assertBalanceAccess(scope: Scope) {
-    if (!(await this.canAny(scope, "payments.review", "payments.manage_credentials", "payments.initiate_test")))
+    if (
+      !(await this.canAny(
+        scope,
+        "payments.review",
+        "payments.manage_credentials",
+        "payments.initiate_test",
+      ))
+    )
       throw new ForbiddenException("Permission required: payments.review");
   }
 }

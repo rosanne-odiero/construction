@@ -43,7 +43,9 @@ export function AppSidebar({ companyName }: { companyName?: string }) {
         /^\/projects\/[^/]+(\/.*)?$/.test(pathname) ||
         (/^\/prototype\/projects\/[^/]+(\/sites(\/.*)?)?$/.test(pathname) &&
           !pathname.includes("/bq"))
-      : pathname.startsWith(href);
+      : href === "/bq"
+        ? pathname.startsWith("/bq") || pathname.startsWith("/rate-buildups")
+        : pathname.startsWith(href);
 
   return (
     <Sidebar collapsible="icon">
@@ -106,10 +108,10 @@ export function AppSidebar({ companyName }: { companyName?: string }) {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === "/portal"}
+                  isActive={pathname === "/prototype/portal"}
                   tooltip={t("items.clientPortal")}
                 >
-                  <Link href="/portal">
+                  <Link href="/prototype/portal">
                     <MonitorSmartphone aria-hidden />
                     <span>{t("items.clientPortal")}</span>
                   </Link>

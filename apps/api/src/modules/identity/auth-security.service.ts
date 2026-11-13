@@ -31,6 +31,8 @@ import {
 } from "../notifications/notification.provider.js";
 
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
+const rateKey = (key: string) => `pmb:auth:rate:${digest(key)}`;
+export type CookieKind = "at" | "rt" | "csrf" | "oauth";
 export const opaqueToken = (): string => randomBytes(32).toString("base64url");
 export const hashPassword = (value: string): Promise<string> =>
   hash(value, {
@@ -96,17 +98,18 @@ export class AuthSecurity implements OnModuleInit {
     return { privateKey, publicKey };
   }
 
-  name(kind: "at" | "rt" | "csrf"): string {
+  /** `oauth` holds a pending Google sign-in (state, nonce, PKCE verifier), encrypted, 10 minutes. */
+  name(kind: CookieKind): string {
     if (!this.config.isProduction) return `pmb_${kind}`;
-    return kind === "rt" ? "__Secure-pmb_rt" : `__Host-pmb_${kind}`;
+    return kind === "rt" || kind === "oauth" ? `__Secure-pmb_${kind}` : `__Host-pmb_${kind}`;
   }
 
-  setCookie(res: Response, kind: "at" | "rt" | "csrf", value: string, maxAge: number): void {
+  setCookie(res: Response, kind: CookieKind, value: string, maxAge: number): void {
     res.cookie(this.name(kind), value, {
       httpOnly: true,
       secure: this.config.isProduction,
       sameSite: "lax",
-      path: kind === "rt" ? "/api/v1/auth" : "/",
+      path: kind === "rt" ? "/api/v1/auth" : kind === "oauth" ? "/api/v1/auth/google" : "/",
       maxAge,
     });
     res.setHeader("Cache-Control", "no-store");
@@ -214,13 +217,19 @@ export class AuthSecurity implements OnModuleInit {
   }
 
   async limit(key: string, maximum: number, seconds: number): Promise<void> {
+    if ((await this.increment(key, seconds)) > maximum)
+      throw new HttpException("Too many attempts; retry later", 429);
+  }
+
+  /** Adds one to a rate-limit counter (window starts at the first hit) and returns the count. */
+  async increment(key: string, seconds: number): Promise<number> {
     let count: unknown;
     try {
       await this.redis.ping();
       count = await this.redis.client.eval(
         "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n",
         1,
-        `pmb:auth:rate:${digest(key)}`,
+        rateKey(key),
         seconds,
       );
     } catch {
@@ -228,7 +237,27 @@ export class AuthSecurity implements OnModuleInit {
     }
     if (typeof count !== "number")
       throw new ServiceUnavailableException("Invalid rate limit response");
-    if (count > maximum) throw new HttpException("Too many attempts; retry later", 429);
+    return count;
+  }
+
+  /** A rate-limit counter's current value, without adding to it. */
+  async counted(key: string): Promise<number> {
+    try {
+      await this.redis.ping();
+      return Number((await this.redis.client.get(rateKey(key))) ?? 0);
+    } catch {
+      throw new ServiceUnavailableException("Rate limiting is unavailable");
+    }
+  }
+
+  /** Forgets a rate-limit counter, for example once a PIN reset proves control of the phone. */
+  async forget(key: string): Promise<void> {
+    try {
+      await this.redis.ping();
+      await this.redis.client.del(rateKey(key));
+    } catch {
+      throw new ServiceUnavailableException("Rate limiting is unavailable");
+    }
   }
 
   /**

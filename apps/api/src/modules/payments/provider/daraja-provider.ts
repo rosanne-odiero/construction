@@ -87,7 +87,9 @@ export class DarajaProvider implements PaymentProvider {
 
   // OAuth --------------------------------------------------------------------------------------
 
-  private cacheKey(account: Pick<ProviderAccount, "tenantId" | "environment" | "credentialsVersion">) {
+  private cacheKey(
+    account: Pick<ProviderAccount, "tenantId" | "environment" | "credentialsVersion">,
+  ) {
     return `pmb:payments:daraja-token:${account.tenantId}:${account.environment}:${account.credentialsVersion}`;
   }
 
@@ -116,7 +118,10 @@ export class DarajaProvider implements PaymentProvider {
     }
     const { consumerKey, consumerSecret } = account.credentials;
     if (!consumerKey || !consumerSecret)
-      throw new ProviderNotReady("credentials-missing", "Consumer key and secret are not configured");
+      throw new ProviderNotReady(
+        "credentials-missing",
+        "Consumer key and secret are not configured",
+      );
     let response: Response;
     try {
       response = await fetch(`${this.runtime.baseUrl(account.environment)}${DARAJA_PATHS.oauth}`, {
@@ -136,18 +141,28 @@ export class DarajaProvider implements PaymentProvider {
     const token = typeof body?.access_token === "string" ? body.access_token : null;
     const expiresIn = Number(body?.expires_in ?? 0);
     if (!response.ok || !token || !Number.isFinite(expiresIn) || expiresIn <= 0)
-      throw new ProviderNotReady("token-unavailable", `Daraja refused the token request (${response.status})`);
+      throw new ProviderNotReady(
+        "token-unavailable",
+        `Daraja refused the token request (${response.status})`,
+      );
     const ttlSeconds = Math.max(60, Math.floor(expiresIn) - 120);
     this.memory.set(key, { token, expiresAt: now + ttlSeconds * 1000 });
     try {
-      await this.redis.client.set(key, this.crypto.sealAccessToken(account.tenantId, key, token), "EX", ttlSeconds);
+      await this.redis.client.set(
+        key,
+        this.crypto.sealAccessToken(account.tenantId, key, token),
+        "EX",
+        ttlSeconds,
+      );
     } catch {
       this.logger.warn("Could not share the Daraja access token through Valkey");
     }
     return token;
   }
 
-  async invalidateToken(account: Pick<ProviderAccount, "tenantId" | "environment" | "credentialsVersion">) {
+  async invalidateToken(
+    account: Pick<ProviderAccount, "tenantId" | "environment" | "credentialsVersion">,
+  ) {
     const key = this.cacheKey(account);
     this.memory.delete(key);
     try {
@@ -166,7 +181,11 @@ export class DarajaProvider implements PaymentProvider {
   }
 
   private async initiator(account: ProviderAccount) {
-    const name = this.require(account.credentials.initiatorName, "credentials-missing", "The initiator name");
+    const name = this.require(
+      account.credentials.initiatorName,
+      "credentials-missing",
+      "The initiator name",
+    );
     const password = this.require(
       account.credentials.initiatorPassword,
       "credentials-missing",
@@ -194,12 +213,23 @@ export class DarajaProvider implements PaymentProvider {
     };
   }
 
-  async prepareAttempt(account: ProviderAccount, instruction: AttemptInstruction): Promise<OutgoingCall> {
+  async prepareAttempt(
+    account: ProviderAccount,
+    instruction: AttemptInstruction,
+  ): Promise<OutgoingCall> {
     const amount = darajaAmount(instruction.amountMinor);
     switch (instruction.kind) {
       case "stk_push": {
-        const shortcode = this.require(account.shortcodes.stk, "shortcode-missing", "The STK shortcode");
-        const passkey = this.require(account.credentials.passkey, "credentials-missing", "The passkey");
+        const shortcode = this.require(
+          account.shortcodes.stk,
+          "shortcode-missing",
+          "The STK shortcode",
+        );
+        const passkey = this.require(
+          account.credentials.passkey,
+          "credentials-missing",
+          "The passkey",
+        );
         const msisdn = this.require(instruction.msisdn, "credentials-missing", "The phone number");
         const timestamp = stkTimestamp(new Date());
         return this.call(account, "stk_push", DARAJA_PATHS.stkPush, shortcode, {
@@ -217,7 +247,11 @@ export class DarajaProvider implements PaymentProvider {
         });
       }
       case "b2c": {
-        const shortcode = this.require(account.shortcodes.b2c, "shortcode-missing", "The B2C shortcode");
+        const shortcode = this.require(
+          account.shortcodes.b2c,
+          "shortcode-missing",
+          "The B2C shortcode",
+        );
         const msisdn = this.require(instruction.msisdn, "credentials-missing", "The phone number");
         const originator = this.require(
           instruction.originatorConversationId,
@@ -241,7 +275,11 @@ export class DarajaProvider implements PaymentProvider {
       }
       case "b2b_paybill":
       case "b2b_buygoods": {
-        const shortcode = this.require(account.shortcodes.b2b, "shortcode-missing", "The B2B shortcode");
+        const shortcode = this.require(
+          account.shortcodes.b2b,
+          "shortcode-missing",
+          "The B2B shortcode",
+        );
         const initiator = await this.initiator(account);
         return this.call(account, instruction.kind, DARAJA_PATHS.b2b, shortcode, {
           Initiator: initiator.name,
@@ -259,7 +297,11 @@ export class DarajaProvider implements PaymentProvider {
         });
       }
       case "reversal": {
-        const reversal = this.require(instruction.reversal, "credentials-missing", "The original receipt");
+        const reversal = this.require(
+          instruction.reversal,
+          "credentials-missing",
+          "The original receipt",
+        );
         const initiator = await this.initiator(account);
         return this.call(account, "reversal", DARAJA_PATHS.reversal, reversal.shortcode, {
           Initiator: initiator.name,
@@ -280,7 +322,11 @@ export class DarajaProvider implements PaymentProvider {
 
   async prepareTransactionStatus(
     account: ProviderAccount,
-    target: { originatorConversationId: string | null; receipt: string | null; shortcode: string | null },
+    target: {
+      originatorConversationId: string | null;
+      receipt: string | null;
+      shortcode: string | null;
+    },
   ): Promise<OutgoingCall> {
     const shortcode = this.require(target.shortcode, "shortcode-missing", "The shortcode");
     const initiator = await this.initiator(account);
@@ -289,7 +335,9 @@ export class DarajaProvider implements PaymentProvider {
       SecurityCredential: initiator.credential,
       CommandID: "TransactionStatusQuery",
       ...(target.receipt ? { TransactionID: target.receipt } : {}),
-      ...(target.originatorConversationId ? { OriginalConversationID: target.originatorConversationId } : {}),
+      ...(target.originatorConversationId
+        ? { OriginalConversationID: target.originatorConversationId }
+        : {}),
       PartyA: shortcode,
       IdentifierType: "4",
       ResultURL: account.callbackUrl("status_result"),
@@ -299,8 +347,15 @@ export class DarajaProvider implements PaymentProvider {
     });
   }
 
-  async prepareStkQuery(account: ProviderAccount, checkoutRequestId: string): Promise<OutgoingCall> {
-    const shortcode = this.require(account.shortcodes.stk, "shortcode-missing", "The STK shortcode");
+  async prepareStkQuery(
+    account: ProviderAccount,
+    checkoutRequestId: string,
+  ): Promise<OutgoingCall> {
+    const shortcode = this.require(
+      account.shortcodes.stk,
+      "shortcode-missing",
+      "The STK shortcode",
+    );
     const passkey = this.require(account.credentials.passkey, "credentials-missing", "The passkey");
     const timestamp = stkTimestamp(new Date());
     return this.call(account, "stk_query", DARAJA_PATHS.stkQuery, shortcode, {
@@ -334,7 +389,11 @@ export class DarajaProvider implements PaymentProvider {
     account: ProviderAccount,
     responseType: "Completed" | "Cancelled",
   ): Promise<OutgoingCall> {
-    const shortcode = this.require(account.shortcodes.c2b, "shortcode-missing", "The C2B shortcode");
+    const shortcode = this.require(
+      account.shortcodes.c2b,
+      "shortcode-missing",
+      "The C2B shortcode",
+    );
     return this.call(account, "c2b_register", DARAJA_PATHS.c2bRegister, shortcode, {
       ShortCode: shortcode,
       ResponseType: responseType,

@@ -1,10 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { checkPaymentLimits } from "@pm-buddy/domain";
 import { directionOfKind, type PaymentAttemptStatus } from "@pm-buddy/types";
-import type {
-  CreateTestPaymentRequest,
-  PaymentRequestDetailResponse,
-} from "@pm-buddy/validation";
+import type { CreateTestPaymentRequest, PaymentRequestDetailResponse } from "@pm-buddy/validation";
 import type { Request } from "express";
 import { uuidv7 } from "../../common/uuid.js";
 import type { PaymentAttempt, PaymentSettings, Prisma } from "../../generated/prisma/client.js";
@@ -41,7 +38,9 @@ type Tx = Prisma.TransactionClient;
 /** Midnight in Africa/Nairobi (UTC+3, no daylight saving) at or before `now`. */
 export function nairobiDayStart(now = new Date()): Date {
   const shifted = new Date(now.getTime() + 3 * 3_600_000);
-  return new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) - 3 * 3_600_000);
+  return new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) - 3 * 3_600_000,
+  );
 }
 
 /**
@@ -86,7 +85,12 @@ export class PaymentRequestsService {
     };
   }
 
-  async checkLimits(tx: Tx, settings: PaymentSettings, kind: Parameters<typeof checkPaymentLimits>[0], amountMinor: number) {
+  async checkLimits(
+    tx: Tx,
+    settings: PaymentSettings,
+    kind: Parameters<typeof checkPaymentLimits>[0],
+    amountMinor: number,
+  ) {
     const outbound = kind !== "stk_push";
     const problem = checkPaymentLimits(
       kind,
@@ -94,7 +98,11 @@ export class PaymentRequestsService {
       this.limits(settings),
       outbound ? await this.payoutsToday(tx, settings.tenantId) : 0,
     );
-    if (problem) throw paymentConflict(problem.code, "This payment is outside the company's configured limits.");
+    if (problem)
+      throw paymentConflict(
+        problem.code,
+        "This payment is outside the company's configured limits.",
+      );
   }
 
   /**
@@ -125,10 +133,14 @@ export class PaymentRequestsService {
     if (!settings) throw paymentConflict("payments-not-configured", "Configure payments first.");
     if ((settings.environment as string) === "production")
       throw paymentConflict("production-not-enabled", "Production M-Pesa is not enabled.");
-    const route = await tx.paymentCallbackRoute.findFirst({ where: { tenantId, status: "active" } });
+    const route = await tx.paymentCallbackRoute.findFirst({
+      where: { tenantId, status: "active" },
+    });
     if (!route) throw paymentConflict("payments-not-configured", "No callback route is active.");
     if (input.projectId) {
-      const project = await tx.project.findUnique({ where: { tenantId_id: { tenantId, id: input.projectId } } });
+      const project = await tx.project.findUnique({
+        where: { tenantId_id: { tenantId, id: input.projectId } },
+      });
       if (!project) throw notFound("Project");
     }
     await this.checkLimits(tx, settings, input.kind, input.amountMinor);
@@ -230,7 +242,11 @@ export class PaymentRequestsService {
           accountReference: "accountReference" in input ? input.accountReference : null,
           command: input.kind === "b2c" ? input.command : null,
           description:
-            input.kind === "stk_push" ? (input.description ?? null) : "remarks" in input ? input.remarks : null,
+            input.kind === "stk_push"
+              ? (input.description ?? null)
+              : "remarks" in input
+                ? input.remarks
+                : null,
           occasion: input.kind === "b2c" ? (input.occasion ?? null) : null,
           projectId: input.projectId ?? null,
           idempotencyKey: key!,
@@ -257,14 +273,20 @@ export class PaymentRequestsService {
       orderBy: { sequence: "desc" },
     });
     const latest = new Map<string, PaymentAttempt>();
-    for (const attempt of attempts) if (!latest.has(attempt.requestId)) latest.set(attempt.requestId, attempt);
+    for (const attempt of attempts)
+      if (!latest.has(attempt.requestId)) latest.set(attempt.requestId, attempt);
     return latest;
   }
 
   list(
     principal: Principal,
     req: Request,
-    query: { status?: string | undefined; kind?: string | undefined; limit: number; offset: number },
+    query: {
+      status?: string | undefined;
+      kind?: string | undefined;
+      limit: number;
+      offset: number;
+    },
   ) {
     return this.commands.read(principal, req, async (scope) => {
       await this.policy.require(scope, "payments.view");
@@ -275,18 +297,35 @@ export class PaymentRequestsService {
         ...(query.kind ? { kind: query.kind } : {}),
       };
       const [rows, total] = await Promise.all([
-        tx.paymentRequest.findMany({ where, orderBy: { createdAt: "desc" }, take: query.limit, skip: query.offset }),
+        tx.paymentRequest.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          take: query.limit,
+          skip: query.offset,
+        }),
         tx.paymentRequest.count({ where }),
       ]);
-      const latest = await this.latestAttempts(tx, access.tenantId, rows.map((row) => row.id));
-      const names = await displayNames(tx, rows.map((row) => row.createdBy));
-      return { requests: rows.map((row) => requestToWire(row, latest.get(row.id) ?? null, names)), total };
+      const latest = await this.latestAttempts(
+        tx,
+        access.tenantId,
+        rows.map((row) => row.id),
+      );
+      const names = await displayNames(
+        tx,
+        rows.map((row) => row.createdBy),
+      );
+      return {
+        requests: rows.map((row) => requestToWire(row, latest.get(row.id) ?? null, names)),
+        total,
+      };
     });
   }
 
   async detailOf(scope: Scope, requestId: string): Promise<PaymentRequestDetailResponse> {
     const { tx, access } = scope;
-    const request = await tx.paymentRequest.findUnique({ where: { tenantId_id: { tenantId: access.tenantId, id: requestId } } });
+    const request = await tx.paymentRequest.findUnique({
+      where: { tenantId_id: { tenantId: access.tenantId, id: requestId } },
+    });
     if (!request) throw notFound("Payment request");
     const attempts = await tx.paymentAttempt.findMany({
       where: { tenantId: access.tenantId, requestId },
@@ -294,11 +333,30 @@ export class PaymentRequestsService {
     });
     const attemptIds = attempts.map((attempt) => attempt.id);
     const [events, callbacks, cases, queries, transactions] = await Promise.all([
-      tx.paymentEvent.findMany({ where: { tenantId: access.tenantId, requestId }, orderBy: { createdAt: "asc" }, take: 500 }),
-      tx.paymentCallbackInbox.findMany({ where: { tenantId: access.tenantId, attemptId: { in: attemptIds } }, orderBy: { receivedAt: "asc" } }),
-      tx.paymentCase.findMany({ where: { tenantId: access.tenantId, OR: [{ requestId }, { attemptId: { in: attemptIds } }] }, orderBy: { openedAt: "asc" } }),
-      tx.providerQuery.findMany({ where: { tenantId: access.tenantId, attemptId: { in: attemptIds } }, orderBy: { createdAt: "asc" } }),
-      tx.providerTransaction.findMany({ where: { tenantId: access.tenantId, attemptId: { in: attemptIds } }, orderBy: { recordedAt: "asc" } }),
+      tx.paymentEvent.findMany({
+        where: { tenantId: access.tenantId, requestId },
+        orderBy: { createdAt: "asc" },
+        take: 500,
+      }),
+      tx.paymentCallbackInbox.findMany({
+        where: { tenantId: access.tenantId, attemptId: { in: attemptIds } },
+        orderBy: { receivedAt: "asc" },
+      }),
+      tx.paymentCase.findMany({
+        where: {
+          tenantId: access.tenantId,
+          OR: [{ requestId }, { attemptId: { in: attemptIds } }],
+        },
+        orderBy: { openedAt: "asc" },
+      }),
+      tx.providerQuery.findMany({
+        where: { tenantId: access.tenantId, attemptId: { in: attemptIds } },
+        orderBy: { createdAt: "asc" },
+      }),
+      tx.providerTransaction.findMany({
+        where: { tenantId: access.tenantId, attemptId: { in: attemptIds } },
+        orderBy: { recordedAt: "asc" },
+      }),
     ]);
     const names = await displayNames(tx, [
       request.createdBy,
@@ -320,13 +378,19 @@ export class PaymentRequestsService {
       timeline: events.map((event) => eventToWire(event, names)),
       callbacks: callbacks.map((callback) => callbackToWire(callback, requestId, names)),
       cases: cases.map((item) =>
-        caseToWire(item, item.attemptId ? (byId.get(item.attemptId) ?? null) : null, names, canReview && request.createdBy !== access.userId),
+        caseToWire(
+          item,
+          item.attemptId ? (byId.get(item.attemptId) ?? null) : null,
+          names,
+          canReview && request.createdBy !== access.userId,
+        ),
       ),
       queries: queries.map(queryToWire),
       transactions: transactions.map(transactionToWire),
       canReverse,
       canQueryStatus:
-        canReview && Boolean(latest && (latest.status === "unknown" || latest.status === "pending")),
+        canReview &&
+        Boolean(latest && (latest.status === "unknown" || latest.status === "pending")),
     };
   }
 
@@ -338,7 +402,9 @@ export class PaymentRequestsService {
   }
 
   private async attempt(tx: Tx, tenantId: string, attemptId: string) {
-    const attempt = await tx.paymentAttempt.findUnique({ where: { tenantId_id: { tenantId, id: attemptId } } });
+    const attempt = await tx.paymentAttempt.findUnique({
+      where: { tenantId_id: { tenantId, id: attemptId } },
+    });
     if (!attempt) throw notFound("Payment attempt");
     return attempt;
   }
@@ -348,7 +414,12 @@ export class PaymentRequestsService {
    * a fresh step-up, a reason and someone other than the request's creator. The reversal call is
    * gated by the payout switch like any outbound call.
    */
-  requestReversal(principal: Principal, req: Request, attemptId: string, input: { version: number; reason: string }) {
+  requestReversal(
+    principal: Principal,
+    req: Request,
+    attemptId: string,
+    input: { version: number; reason: string },
+  ) {
     return this.commands.run(
       principal,
       req,
@@ -363,15 +434,32 @@ export class PaymentRequestsService {
           where: { tenantId_id: { tenantId: access.tenantId, id: original.requestId } },
         });
         if (request.createdBy === access.userId)
-          throw paymentConflict("same-person", "Someone other than the person who created the payment must reverse it.");
+          throw paymentConflict(
+            "same-person",
+            "Someone other than the person who created the payment must reverse it.",
+          );
         if (original.version !== input.version) throw versionConflict();
         if (original.kind === "reversal" || original.status !== "confirmed")
-          throw paymentConflict("attempt-not-confirmed", "Only a confirmed payment can be reversed.");
-        const settings = await tx.paymentSettings.findUniqueOrThrow({ where: { tenantId: access.tenantId } });
+          throw paymentConflict(
+            "attempt-not-confirmed",
+            "Only a confirmed payment can be reversed.",
+          );
+        const settings = await tx.paymentSettings.findUniqueOrThrow({
+          where: { tenantId: access.tenantId },
+        });
         await this.checkLimits(tx, settings, "reversal", minor(original.amountMinor));
-        const route = await tx.paymentCallbackRoute.findFirst({ where: { tenantId: access.tenantId, status: "active" } });
-        if (!route) throw paymentConflict("payments-not-configured", "No callback route is active.");
-        const pending = await this.ledger.transition(tx, original, "reversal_pending", "reversal_requested", access.userId);
+        const route = await tx.paymentCallbackRoute.findFirst({
+          where: { tenantId: access.tenantId, status: "active" },
+        });
+        if (!route)
+          throw paymentConflict("payments-not-configured", "No callback route is active.");
+        const pending = await this.ledger.transition(
+          tx,
+          original,
+          "reversal_pending",
+          "reversal_requested",
+          access.userId,
+        );
         if (!pending) throw versionConflict();
         const last = await tx.paymentAttempt.findFirst({
           where: { tenantId: access.tenantId, requestId: original.requestId },
@@ -417,31 +505,46 @@ export class PaymentRequestsService {
 
   /** A reviewer asks for another status query now (bounded per attempt by the worker). */
   queryStatus(principal: Principal, req: Request, attemptId: string) {
-    return this.commands.run(principal, req, "payments.attempt.status_query", { attemptId }, async (scope) => {
-      await this.policy.require(scope, "payments.review");
-      const { tx, access } = scope;
-      const attempt = await this.attempt(tx, access.tenantId, attemptId);
-      const status = attempt.status as PaymentAttemptStatus;
-      if (status !== "unknown" && status !== "pending")
-        throw paymentConflict("invalid-transition", "Only pending or unknown payments are queried.");
-      if (!this.ledger.statusQuerySupported(attempt))
-        throw paymentConflict(
-          "status-query-unavailable",
-          "The provider gave no identifier to query; reconcile against the M-Pesa statement.",
-        );
-      await this.ledger.enqueue(tx, access.tenantId, "attempt.status_query", attempt.id);
-      await this.ledger.audit(tx, "payments.status_query_requested", attempt.id, { status });
-      this.relay.kick();
-      return this.detailOf(scope, attempt.requestId);
-    });
+    return this.commands.run(
+      principal,
+      req,
+      "payments.attempt.status_query",
+      { attemptId },
+      async (scope) => {
+        await this.policy.require(scope, "payments.review");
+        const { tx, access } = scope;
+        const attempt = await this.attempt(tx, access.tenantId, attemptId);
+        const status = attempt.status as PaymentAttemptStatus;
+        if (status !== "unknown" && status !== "pending")
+          throw paymentConflict(
+            "invalid-transition",
+            "Only pending or unknown payments are queried.",
+          );
+        if (!this.ledger.statusQuerySupported(attempt))
+          throw paymentConflict(
+            "status-query-unavailable",
+            "The provider gave no identifier to query; reconcile against the M-Pesa statement.",
+          );
+        await this.ledger.enqueue(tx, access.tenantId, "attempt.status_query", attempt.id);
+        await this.ledger.audit(tx, "payments.status_query_requested", attempt.id, { status });
+        this.relay.kick();
+        return this.detailOf(scope, attempt.requestId);
+      },
+    );
   }
 
   /** Advisory float check (Account Balance); it races with other payouts and reserves nothing. */
-  requestBalance(principal: Principal, req: Request, assertAccess: (scope: Scope) => Promise<void>) {
+  requestBalance(
+    principal: Principal,
+    req: Request,
+    assertAccess: (scope: Scope) => Promise<void>,
+  ) {
     return this.commands.run(principal, req, "payments.balance.check", {}, async (scope) => {
       await assertAccess(scope);
       const { tx, access } = scope;
-      const settings = await tx.paymentSettings.findUnique({ where: { tenantId: access.tenantId } });
+      const settings = await tx.paymentSettings.findUnique({
+        where: { tenantId: access.tenantId },
+      });
       if (!settings) throw paymentConflict("payments-not-configured", "Configure payments first.");
       const recent = await tx.providerQuery.findFirst({
         where: {
@@ -454,7 +557,12 @@ export class PaymentRequestsService {
       const query =
         recent ??
         (await tx.providerQuery.create({
-          data: { tenantId: access.tenantId, kind: "account_balance", status: "sent", requestedBy: access.userId },
+          data: {
+            tenantId: access.tenantId,
+            kind: "account_balance",
+            status: "sent",
+            requestedBy: access.userId,
+          },
         }));
       if (!recent) {
         await this.ledger.enqueue(tx, access.tenantId, "balance.query", query.id);

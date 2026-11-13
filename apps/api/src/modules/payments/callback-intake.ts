@@ -45,7 +45,12 @@ export class CallbackIntake {
     private readonly relay: PaymentsRelay,
   ) {}
 
-  async receive(token: string, segment: string, raw: Buffer, sourceIp: string | undefined): Promise<CallbackAck> {
+  async receive(
+    token: string,
+    segment: string,
+    raw: Buffer,
+    sourceIp: string | undefined,
+  ): Promise<CallbackAck> {
     const kind = callbackKindFromSegment(segment);
     if (!kind || !TOKEN.test(token)) throw new NotFoundException("Not found");
     if (!allowedSource(this.runtime.allowList, sourceIp))
@@ -86,7 +91,11 @@ export class CallbackIntake {
     const bodySha256 = sha256(raw);
     const fingerprint = sha256(`${kind}:${bodySha256}`);
     return this.db.run(
-      { userId: PAYMENTS_SYSTEM_ACTOR, tenantId, requestId: `payments-callback-${bodySha256.slice(0, 12)}` },
+      {
+        userId: PAYMENTS_SYSTEM_ACTOR,
+        tenantId,
+        requestId: `payments-callback-${bodySha256.slice(0, 12)}`,
+      },
       async (tx) => {
         const duplicate = await tx.paymentCallbackInbox.findUnique({
           where: { tenantId_fingerprint: { tenantId, fingerprint } },
@@ -94,7 +103,11 @@ export class CallbackIntake {
         if (duplicate) {
           await tx.paymentCallbackInbox.update({
             where: { tenantId_id: { tenantId, id: duplicate.id } },
-            data: { duplicates: { increment: 1 }, lastDuplicateAt: new Date(), version: duplicate.version + 1 },
+            data: {
+              duplicates: { increment: 1 },
+              lastDuplicateAt: new Date(),
+              version: duplicate.version + 1,
+            },
           });
           await this.ledger.event(tx, tenantId, {
             subjectType: "callback",

@@ -4,7 +4,6 @@
  * packages/domain code, and every request and response goes through the shared schemas.
  */
 import { createHash, randomUUID } from "node:crypto";
-import type { z } from "zod";
 import {
   analyseSheet,
   buildBqImport,
@@ -19,11 +18,10 @@ import {
   templateFromMapping,
   headerSignature,
   type BqBuildResult,
-  type BqMapping,
   type BqResolutions,
   type WorkbookGrid,
 } from "@pm-buddy/domain";
-import { BQ_ISSUES, type BqImportStatus, type Permission } from "@pm-buddy/types";
+import { BQ_ISSUES, type BqImportStatus } from "@pm-buddy/types";
 import {
   applyBqTemplateRequestSchema,
   bqBillResponseSchema,
@@ -41,45 +39,39 @@ import {
   messageResponseSchema,
   saveBqMappingRequestSchema,
   saveBqResolutionsRequestSchema,
-  type BqBillWire,
   type BqImport,
-  type BqItemWire,
   type BqResponse,
   type BqTemplate,
   type Project,
 } from "@pm-buddy/validation";
 import { messyGrid, multiBillGrid } from "./mock-bq-grids.mts";
+import {
+  billItems,
+  billWires,
+  byKindOf,
+  contentFromBuild,
+  currentVersion,
+  emptyProjectBq,
+  idsFor,
+  mappingOf,
+  totalsOf,
+  VAT,
+  versionWire,
+  type BqDeps,
+  type BqState,
+  type MockImport,
+  type MockVersion,
+  type ProjectBq,
+  type Reply,
+} from "./mock-bq-model.mts";
+import { handleVersions } from "./mock-bq-versions.mts";
+import { handleVariations } from "./mock-variations.mts";
 
 const NOW = "2026-11-10T07:45:00.000Z";
 const OWNER = { id: "21000000-0000-4000-8000-000000000001", displayName: "Wanjiru Kamau" };
 const QS = { id: "21000000-0000-4000-8000-000000000004", displayName: "Faith Achieng" };
-const VAT = "16";
 
-type Reply = { status?: number; body: unknown; schema: z.ZodType<unknown> };
-type Fail = (status: number, code: string) => Error;
-type MockImport = { record: BqImport; grid: WorkbookGrid };
-type Version = {
-  id: string;
-  versionNo: number;
-  version: number;
-  status: "draft";
-  createdAt: string;
-  updatedAt: string;
-  bills: { bill: BqBillWire; items: BqItemWire[] }[];
-  result: BqBuildResult;
-  importId: string;
-};
-export type ProjectBq = { imports: MockImport[]; version: Version | null };
-export type BqState = { projects: Map<string, ProjectBq>; templates: BqTemplate[] };
-
-export type BqDeps = {
-  fail: Fail;
-  parse<T>(schema: z.ZodType<T>, body: unknown): T;
-  project(permission: Permission): Project;
-  permissions(): Permission[];
-};
-
-const mappingOf = (record: BqImport) => record.mapping as unknown as BqMapping;
+export type { BqDeps, BqState, ProjectBq } from "./mock-bq-model.mts";
 
 function report(result: BqBuildResult) {
   const total = Object.values(result.counts).reduce((sum, count) => sum + (count ?? 0), 0);
@@ -114,6 +106,7 @@ function newImport(
   fileName: string,
   size: number,
   templates: BqTemplate[],
+  uploader: { id: string; displayName: string } = OWNER,
 ): MockImport {
   const analyses = grid.sheets.map((sheet, index) => analyseSheet(sheet, index));
   const { mapping, templateMatches } = proposeMapping(
@@ -138,7 +131,7 @@ function newImport(
       scanStatus: "not_scanned",
       scanEngine: "development-noop",
       failureCode: null,
-      uploadedBy: OWNER,
+      uploadedBy: uploader,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       committedAt: null,
@@ -171,70 +164,38 @@ function newImport(
   };
 }
 
-function toVersion(entry: MockImport, result: BqBuildResult, previous: Version | null): Version {
-  let itemIndex = 0;
-  const bills = result.bills.map((bill) => {
-    const billId = randomUUID();
-    const sections = bill.sections.map((section) => ({ id: randomUUID(), section }));
-    const items: BqItemWire[] = sections.flatMap(({ id: sectionId, section }) =>
-      section.items.map((item) => ({
-        id: `00000000-0000-4000-8000-${String(++itemIndex).padStart(12, "0")}`,
-        sectionId,
-        ref: item.ref,
-        description: item.description,
-        unit: item.unit,
-        unitRaw: item.unitRaw,
-        quantity: item.quantity,
-        rate: item.rate,
-        amountMinor: item.amountMinor,
-        sheetAmountMinor: item.sheetAmountMinor,
-        amountSource: item.amountSource,
-        overrideReason: item.overrideReason,
-        kind: item.kind,
-        notes: item.notes,
-        sourceSheet: bill.sheetName,
-        sourceRow: item.sheetRow,
-        hasFormula: item.hasFormula,
-      })),
-    );
-    return {
-      bill: {
-        id: billId,
-        number: bill.number,
-        title: bill.title,
-        kind: bill.kind,
-        totalMinor: bill.totalMinor,
-        sheetTotalMinor: bill.sheetTotalMinor,
-        itemCount: bill.itemCount,
-        sections: sections.map(({ id: sectionId, section }) => ({
-          id: sectionId,
-          code: section.code,
-          title: section.title,
-          notes: section.notes,
-          totalMinor: section.totalMinor,
-          itemCount: section.items.length,
-        })),
-      },
-      items,
-    };
-  });
+/** Version 1 (draft) from a committed import, or the draft it replaces (same row, new content). */
+function importVersion(
+  entry: MockImport,
+  result: BqBuildResult,
+  previous: MockVersion | null,
+  actor: { id: string; displayName: string },
+): MockVersion {
   const now = new Date().toISOString();
+  const content = contentFromBuild(result);
   return {
     id: previous?.id ?? randomUUID(),
     versionNo: 1,
     version: (previous?.version ?? 0) + 1,
     status: "draft",
+    source: "import",
+    parentVersionId: null,
+    variation: null,
+    createdBy: previous?.createdBy ?? actor,
+    updatedBy: actor,
+    approvedBy: null,
+    approvedAt: null,
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
-    bills,
-    result,
+    content,
+    ids: idsFor(content),
     importId: entry.record.id,
   };
 }
 
 /** Ruiru starts with a committed BQ from the multi-bill workbook; other projects have none. */
 export function initialProjectBq(withBq: boolean, contractSumMinor: number | null): ProjectBq {
-  if (!withBq) return { imports: [], version: null };
+  if (!withBq) return emptyProjectBq();
   const entry = newImport(multiBillGrid(), "kenyan-multi-bill.xlsx", 19_414, []);
   const first = build(entry, contractSumMinor, { rows: [], accepted: [] }, false);
   const resolutions: BqResolutions = {
@@ -257,71 +218,92 @@ export function initialProjectBq(withBq: boolean, contractSumMinor: number | nul
     report: report(result),
     version: 4,
   };
-  const version = toVersion(entry, result, null);
+  const version = importVersion(entry, result, null, QS);
+  version.createdAt = NOW;
+  version.updatedAt = NOW;
   entry.record.bqVersionId = version.id;
-  return { imports: [entry], version };
+  return { ...emptyProjectBq(), imports: [entry], versions: [version] };
 }
 
 const canImport = (deps: BqDeps) => deps.permissions().includes("bq.import");
 
-function bqView(deps: BqDeps, project: Project, state: ProjectBq): BqResponse {
-  const permissions = { canImport: canImport(deps), canExport: true };
+const readOnly = (project: Project) =>
+  project.status === "closed" || project.status === "cancelled";
+
+/** People who prepared the draft baseline: none of them may approve it. */
+const makersOf = (entry: ProjectBq, version: MockVersion) => {
+  const source = entry.imports.find((candidate) => candidate.record.id === version.importId);
+  return new Set([
+    version.createdBy.id,
+    version.updatedBy.id,
+    source?.record.uploadedBy.id,
+    source?.record.committedBy?.id,
+  ]);
+};
+
+function baselineApproval(deps: BqDeps, project: Project, entry: ProjectBq) {
+  const version = currentVersion(entry);
+  if (!version) return { allowed: false, refusal: "no-bq" as const };
+  if (version.status !== "draft") return { allowed: false, refusal: "not-draft" as const };
+  if (readOnly(project)) return { allowed: false, refusal: "read-only" as const };
+  if (!deps.permissions().includes("bq.approve_variation"))
+    return { allowed: false, refusal: "permission" as const };
+  if (makersOf(entry, version).has(deps.actor.id))
+    return { allowed: false, refusal: "maker" as const };
+  return { allowed: true, refusal: null };
+}
+
+function bqView(deps: BqDeps, project: Project, entry: ProjectBq): BqResponse {
+  const permissions = {
+    canImport: canImport(deps) && !readOnly(project),
+    canExport: true,
+    canEdit: deps.permissions().includes("bq.edit") && !readOnly(project),
+    canApprove: deps.permissions().includes("bq.approve_variation") && !readOnly(project),
+  };
   const openImports = permissions.canImport
-    ? state.imports.filter((entry) => isImportResumable(entry.record.status)).length
+    ? entry.imports.filter((candidate) => isImportResumable(candidate.record.status)).length
     : 0;
-  const version = state.version;
-  if (!version) return { bq: null, permissions, openImports };
-  const source = state.imports.find((entry) => entry.record.id === version.importId)!.record;
-  const result = version.result;
+  const version = currentVersion(entry);
+  const approval = baselineApproval(deps, project, entry);
+  if (!version) return { bq: null, permissions, baselineApproval: approval, openImports };
+  const source = entry.imports.find(
+    (candidate) => candidate.record.id === version.importId,
+  )?.record;
   return {
     bq: {
       id: "40000000-0000-4000-8000-000000000001",
       name: "Bill of Quantities",
-      version: {
-        id: version.id,
-        versionNo: version.versionNo,
-        status: version.status,
-        source: "import",
-        vatRatePercent: VAT,
-        vatRuleKey: "bq.vat.rate",
-        vatRuleStatus: "compliance_review",
-        rounding: "half_up_line",
-        subtotalMinor: result.totals.subtotalMinor,
-        vatMinor: result.totals.vatMinor,
-        grandTotalMinor: result.totals.grandTotalMinor,
-        billCount: result.totals.billCount,
-        itemCount: result.totals.itemCount,
-        createdAt: version.createdAt,
-        updatedAt: version.updatedAt,
-        version: version.version,
-      },
-      bills: version.bills.map((entry) => entry.bill),
-      byKind: result.totals.byKind,
+      version: versionWire(entry, version),
+      bills: billWires(version),
+      byKind: byKindOf(version),
       contractSumMinor: project.contractSumMinor,
-      source: {
-        importId: source.id,
-        fileName: source.fileName,
-        fileType: source.fileType,
-        committedAt: source.committedAt!,
-        committedBy: source.committedBy!,
-        counts: source.report?.counts ?? {},
-        accepted: source.resolutions.accepted,
-        overrides: source.resolutions.rows.map((entry) => {
-          const findings = (source.report?.issues ?? []).filter(
-            (issue) => issue.sheetIndex === entry.sheetIndex && issue.row === entry.row,
-          );
-          return {
-            sheet: source.sheets?.[entry.sheetIndex]?.name ?? "Sheet",
-            row: entry.row,
-            ref: findings.find((issue) => issue.ref)?.ref ?? null,
-            action: entry.action,
-            reason: entry.reason ?? null,
-            codes: [...new Set(findings.map((issue) => issue.code))],
-          };
-        }),
-      },
+      source: source
+        ? {
+            importId: source.id,
+            fileName: source.fileName,
+            fileType: source.fileType,
+            committedAt: source.committedAt!,
+            committedBy: source.committedBy!,
+            counts: source.report?.counts ?? {},
+            accepted: source.resolutions.accepted,
+            overrides: source.resolutions.rows.map((row) => {
+              const findings = (source.report?.issues ?? []).filter(
+                (issue) => issue.sheetIndex === row.sheetIndex && issue.row === row.row,
+              );
+              return {
+                sheet: source.sheets?.[row.sheetIndex]?.name ?? "Sheet",
+                row: row.row,
+                ref: findings.find((issue) => issue.ref)?.ref ?? null,
+                action: row.action,
+                reason: row.reason ?? null,
+                codes: [...new Set(findings.map((issue) => issue.code))],
+              };
+            }),
+          }
+        : null,
     },
     permissions,
+    baselineApproval: approval,
     openImports,
   };
 }
@@ -350,7 +332,7 @@ export async function handleBq(
     const project = deps.project("bq.view");
     let entry = state.projects.get(project.id);
     if (!entry) {
-      entry = { imports: [], version: null };
+      entry = emptyProjectBq();
       state.projects.set(project.id, entry);
     }
     return { project, entry };
@@ -382,19 +364,27 @@ export async function handleBq(
     const { project, entry } = projectBq();
     return { body: bqView(deps, project, entry), schema: bqResponseSchema };
   }
-  const bill = /^bq\/bills\/([^/]+)$/.exec(rest);
+  const bill = /^bq\/(?:versions\/([^/]+)\/)?bills\/([^/]+)$/.exec(rest);
   if (bill && method === "GET") {
     const { entry } = projectBq();
-    const found = entry.version?.bills.find((candidate) => candidate.bill.id === bill[1]);
-    if (!found) throw deps.fail(404, "not-found");
-    return { body: found, schema: bqBillResponseSchema };
+    const version = bill[1]
+      ? entry.versions.find((candidate) => candidate.id === bill[1])
+      : currentVersion(entry);
+    const found = version ? billWires(version).find((candidate) => candidate.id === bill[2]) : null;
+    if (!version || !found) throw deps.fail(404, "not-found");
+    return {
+      body: { bill: found, items: billItems(state, entry, version, found.lineageId) },
+      schema: bqBillResponseSchema,
+    };
   }
   if (rest === "bq/search" && method === "GET") {
     const { entry } = projectBq();
     const text = (query.get("q") ?? "").trim().toLowerCase();
     if (text.length < 2) throw deps.fail(400, "validation-error");
-    const items = (entry.version?.bills ?? []).flatMap(({ bill: wire, items: list }) =>
-      list
+    const version = currentVersion(entry);
+    const wires = version ? billWires(version) : [];
+    const items = wires.flatMap((wire) =>
+      billItems(state, entry, version!, wire.lineageId)
         .filter(
           (item) =>
             item.description.toLowerCase().includes(text) || item.ref?.toLowerCase().includes(text),
@@ -441,6 +431,7 @@ export async function handleBq(
       file.name,
       file.size,
       state.templates,
+      deps.actor,
     );
     entry.imports.push(created);
     return reply(created.record, 201);
@@ -565,10 +556,10 @@ export async function handleBq(
     if (action === "preview" && method === "GET") {
       if (record.status !== "validated") throw deps.fail(409, "invalid-import-state");
       const result = build(found, project.contractSumMinor, record.resolutions);
-      const current = entry.version;
+      const current = currentVersion(entry);
       const differences = current
         ? (() => {
-            const before = new Map(current.bills.map(({ bill: wire }) => [wire.number, wire]));
+            const before = new Map(billWires(current).map((wire) => [wire.number, wire]));
             type Difference = {
               billNumber: string;
               title: string;
@@ -627,8 +618,8 @@ export async function handleBq(
             ? {
                 versionId: current.id,
                 versionNo: current.versionNo,
-                grandTotalMinor: current.result.totals.grandTotalMinor,
-                itemCount: current.result.totals.itemCount,
+                grandTotalMinor: totalsOf(current).grandTotalMinor,
+                itemCount: current.content.items.length,
                 sourceFileName:
                   entry.imports.find((candidate) => candidate.record.id === current.importId)
                     ?.record.fileName ?? null,
@@ -645,18 +636,20 @@ export async function handleBq(
       if (record.version !== input.version) throw deps.fail(409, "version-conflict");
       const result = build(found, project.contractSumMinor, record.resolutions, false);
       if (!result.readiness.canCommit) throw deps.fail(409, "commit-blocked");
-      const previous = entry.version;
+      const previous = currentVersion(entry);
+      if (previous && previous.status !== "draft") throw deps.fail(409, "bq-not-draft");
       if (previous) {
         const old = entry.imports.find((candidate) => candidate.record.id === previous.importId);
         if (old) old.record.status = "superseded";
       }
-      entry.version = toVersion(found, result, previous);
+      const next = importVersion(found, result, previous, deps.actor);
+      entry.versions = [next];
       touch(record, input.version);
       Object.assign(record, {
         status: "committed",
         committedAt: new Date().toISOString(),
-        committedBy: OWNER,
-        bqVersionId: entry.version.id,
+        committedBy: deps.actor,
+        bqVersionId: next.id,
       });
       return reply(record);
     }
@@ -669,6 +662,10 @@ export async function handleBq(
     }
     throw deps.fail(404, "not-found");
   }
+  const d23 = handleVersions(deps, state, method, rest, query, body, projectBq);
+  if (d23) return d23;
+  const variations = handleVariations(deps, state, method, rest, query, body, projectBq);
+  if (variations) return variations;
   if (rest === "bq/templates" && method === "GET") {
     importer();
     return { body: { templates: state.templates }, schema: bqTemplatesResponseSchema };
@@ -690,7 +687,7 @@ export async function handleBq(
       signature: headerSignature(sheet, sheetMapping.headerRow),
       ...templateFromMapping(sheet, sheetMapping),
       createdAt: new Date().toISOString(),
-      createdBy: OWNER,
+      createdBy: deps.actor,
     };
     state.templates.push(template);
     return { status: 201, body: { template }, schema: bqTemplateResponseSchema };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildupRate,
   isOldEnoughToRegister,
   normaliseGeofence,
   normaliseIdNumber,
@@ -7,7 +8,8 @@ import {
   normalizeKenyanPhone,
   validateGeofence,
 } from "@pm-buddy/domain";
-import { assertSeedAllowed, DEMO_ACCOUNTS, DEMO_PROJECTS } from "./demo-seed.js";
+import { DEMO_SUPPLIERS, DEMO_TEST_MSISDN } from "./demo-procurement.js";
+import { assertSeedAllowed, DEMO_ACCOUNTS, DEMO_BUILDUP, DEMO_PROJECTS } from "./demo-seed.js";
 import { DEMO_DAY_RATES_KES, DEMO_GANGS, DEMO_LABOURERS, demoIdentifiers } from "./labour-seed.js";
 
 describe("development seed", () => {
@@ -36,6 +38,28 @@ describe("development seed", () => {
       for (const node of project.wbs)
         if (node.children) expect(sum(node.children), node.code).toBe(10_000);
     }
+  });
+
+  it("ships a build-up example that is clearly synthetic and fully priced", () => {
+    expect(DEMO_BUILDUP.name).toMatch(/synthetic/i);
+    expect(DEMO_BUILDUP.assumptions).toMatch(/^SYNTHETIC EXAMPLE VALUES/);
+    expect(DEMO_BUILDUP.lines.some((line) => /lorry|trip/i.test(line.unit))).toBe(false);
+    // 6.5×1.05×850 + 0.7×1.1×2,500 + 1.4×1.05×2,200 + 4.5×350 + 0.5×1,500 = KES 13,285.25
+    expect(buildupRate(DEMO_BUILDUP.lines).rateMinor).toBe(1_328_525);
+  });
+});
+
+describe("procurement demo data (D5.1)", () => {
+  it("uses synthetic supplier identifiers and Daraja sandbox values only", () => {
+    for (const supplier of DEMO_SUPPLIERS) {
+      expect(supplier.legalName).toMatch(/\(synthetic\)$/);
+      if (supplier.kraPin) expect(supplier.kraPin).toMatch(/^P0{8}\d[A-Z]$/);
+      if (supplier.contact?.phone) expect(supplier.contact.phone).toBe(DEMO_TEST_MSISDN);
+      if (supplier.contact) expect(supplier.contact.email).toMatch(/\.example\.test$/);
+      if (supplier.payout?.bank) expect(supplier.payout.bank.accountNumber).toMatch(/^0{10,}\d+$/);
+    }
+    expect(DEMO_TEST_MSISDN).toBe("254708374149");
+    expect(DEMO_ACCOUNTS.map((account) => account.role)).toContain("finance");
   });
 
   it("seeds 40 synthetic adult labourers with synthetic identifiers", () => {

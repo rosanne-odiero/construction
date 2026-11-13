@@ -61,11 +61,7 @@ export type AttemptInstruction = {
  */
 export type OutgoingCall = {
   operation:
-    | PaymentAttemptKind
-    | "transaction_status"
-    | "stk_query"
-    | "account_balance"
-    | "c2b_register";
+    PaymentAttemptKind | "transaction_status" | "stk_query" | "account_balance" | "c2b_register";
   shortcode: string | null;
   url: string;
   authorization: string;
@@ -94,7 +90,11 @@ export interface PaymentProvider {
   prepareAttempt(account: ProviderAccount, instruction: AttemptInstruction): Promise<OutgoingCall>;
   prepareTransactionStatus(
     account: ProviderAccount,
-    target: { originatorConversationId: string | null; receipt: string | null; shortcode: string | null },
+    target: {
+      originatorConversationId: string | null;
+      receipt: string | null;
+      shortcode: string | null;
+    },
   ): Promise<OutgoingCall>;
   prepareStkQuery(account: ProviderAccount, checkoutRequestId: string): Promise<OutgoingCall>;
   prepareAccountBalance(account: ProviderAccount): Promise<OutgoingCall>;
@@ -105,7 +105,9 @@ export interface PaymentProvider {
   send(call: OutgoingCall): Promise<SubmissionTransport>;
   parseCallback(kind: CallbackKind, body: unknown): ParseResult;
   /** Forget a cached access token (after the provider said it is invalid, or credentials changed). */
-  invalidateToken(account: Pick<ProviderAccount, "tenantId" | "environment" | "credentialsVersion">): Promise<void>;
+  invalidateToken(
+    account: Pick<ProviderAccount, "tenantId" | "environment" | "credentialsVersion">,
+  ): Promise<void>;
 }
 
 export const PAYMENT_PROVIDER = Symbol("PAYMENT_PROVIDER");

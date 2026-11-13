@@ -13,6 +13,7 @@ export const SYSTEM_ROLES = [
   "client",
   "consultant",
   "supplier",
+  "labourer",
 ] as const;
 
 export type SystemRole = (typeof SYSTEM_ROLES)[number];
@@ -48,8 +49,11 @@ export const SYSTEM_ROLE_PERMISSIONS: Readonly<Record<SystemRole, readonly Permi
     "timesheets.submit",
     "timesheets.approve",
     "timesheets.manage_rules",
+    "payroll.view",
     "payroll.prepare",
     "payroll.review",
+    "advances.request",
+    "advances.approve",
     "payments.view",
     "procurement.requisition",
     "procurement.approve",
@@ -71,6 +75,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Readonly<Record<SystemRole, readonly Permi
     "attendance.record",
     "attendance.confirm",
     "timesheets.submit",
+    "advances.request",
     "procurement.requisition",
     "site.diary",
     "site.photos",
@@ -84,6 +89,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Readonly<Record<SystemRole, readonly Permi
     "labour.consent",
     "attendance.view",
     "attendance.record",
+    "advances.request",
     "site.diary",
     "site.photos",
   ],
@@ -104,7 +110,12 @@ export const SYSTEM_ROLE_PERMISSIONS: Readonly<Record<SystemRole, readonly Permi
     "labour.view_sensitive",
     "attendance.view",
     "timesheets.approve",
+    "payroll.view",
     "payroll.review",
+    "payroll.manage_rules",
+    "payroll.verify_rules",
+    "payroll.export",
+    "advances.approve",
     "payments.view",
     "payments.approve",
     "payments.disburse",
@@ -128,6 +139,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Readonly<Record<SystemRole, readonly Permi
     "reports.view",
   ],
   supplier: ["projects.view", "portal.supplier"],
+  // Labourers see only their own portal (assigned sites, later attendance and pay); never
+  // project details such as contract sums, teams or diaries.
+  labourer: ["portal.worker"],
 };
 
 /**

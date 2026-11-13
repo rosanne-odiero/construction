@@ -42,7 +42,7 @@ export function allowedSource(entries: readonly AllowEntry[], ip: string | undef
   return entries.some((entry) =>
     "address" in entry
       ? entry.address === address
-      : numeric !== null && ((numeric & entry.mask) >>> 0) === entry.network,
+      : numeric !== null && (numeric & entry.mask) >>> 0 === entry.network,
   );
 }
 

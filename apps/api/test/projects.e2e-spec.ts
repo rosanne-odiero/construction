@@ -3,7 +3,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { PROJECT_ASSIGNABLE_PERMISSIONS } from "@pm-buddy/types";
+import { KENYA_STATUTORY_SEED, PROJECT_ASSIGNABLE_PERMISSIONS } from "@pm-buddy/types";
 import {
   auditEventsResponseSchema,
   geofenceHistoryResponseSchema,
@@ -24,6 +24,7 @@ import {
 import { AppModule } from "../src/app.module.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { configureApp } from "../src/app.setup.js";
+import { BatchBuilder } from "../src/modules/payroll/batch-builder.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
@@ -1178,6 +1179,20 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         milestones: await tx.milestone.count({ where: { tenantId } }),
         history: await tx.projectStatusChange.count({ where: { tenantId } }),
         assignments: await tx.projectMembership.count({ where: { tenantId } }),
+        buildups: await tx.rateBuildup.count({ where: { tenantId } }),
+        buildupLines: await tx.rateBuildupLine.count({ where: { tenantId } }),
+        materials: await tx.material.count({ where: { tenantId } }),
+        conversions: await tx.unitConversion.count({ where: { tenantId } }),
+        suppliers: await tx.supplier.count({ where: { tenantId } }),
+        prices: await tx.materialPrice.count({ where: { tenantId } }),
+        alerts: await tx.materialPrice.count({
+          where: { tenantId, alertState: "above_threshold" },
+        }),
+        payouts: await tx.supplierPayoutVersion.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { status: "asc" },
+        }),
         labourers: await tx.labourer.count({ where: { tenantId } }),
         consents: await tx.labourerConsent.count({ where: { tenantId } }),
         engagements: await tx.labourEngagement.count({ where: { tenantId } }),
@@ -1194,6 +1209,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         adjustments: await tx.timesheetAdjustment.count({ where: { tenantId } }),
         rules: await tx.timesheetRuleVersion.count({ where: { tenantId } }),
         holidays: await tx.publicHoliday.count({ where: { tenantId } }),
+        requisitions: await tx.requisition.count({ where: { tenantId } }),
+        quotations: await tx.quotation.count({ where: { tenantId } }),
+        lpos: await tx.lpo.findMany({ where: { tenantId }, select: { status: true } }),
+        grns: await tx.grn.count({ where: { tenantId } }),
+        invoices: await tx.supplierInvoice.findMany({
+          where: { tenantId },
+          select: { invoiceNumber: true, status: true },
+          orderBy: { invoiceNumber: "asc" },
+        }),
+        payables: await tx.invoicePayable.count({ where: { tenantId } }),
+        settlements: await tx.invoiceSettlement.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1204,7 +1230,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     const { attendanceDays, attendanceRecords, periods, timesheetLines, anomalies, ...registry } =
       afterFirst;
     expect(registry).toEqual({
-      members: 3,
+      members: 4,
       projects: 3,
       sites: 3,
       geofences: 3,
@@ -1212,6 +1238,18 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       milestones: 9,
       history: 2,
       assignments: 3,
+      buildups: 1,
+      buildupLines: 5,
+      // D5.1: the starter catalogue (21 materials, 6 factors) plus 2 supplier trip factors; three
+      // suppliers; 8 prices with one alert (cement KES 800 → 900: +12.5 %); one Paybill
+      // verified by the finance user and one Till/bank proposal pending.
+      materials: 21,
+      conversions: 8,
+      suppliers: 3,
+      // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold.
+      prices: 14,
+      alerts: 1,
+      payouts: [{ status: "pending" }, { status: "verified" }],
       labourers: 40,
       consents: 40,
       engagements: 40,
@@ -1223,6 +1261,18 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       adjustments: 1,
       rules: 1,
       holidays: 23,
+      // D5.2: REQ → RFQ (3 quotations) → approved LPO → partial GRN → one invoice matched,
+      // approved and settled, one blocked by the three-way match (ballast not yet delivered).
+      requisitions: 1,
+      quotations: 3,
+      lpos: [{ status: "approved" }],
+      grns: 1,
+      invoices: [
+        { invoiceNumber: "MQ-INV-1001", status: "settled" },
+        { invoiceNumber: "MQ-INV-1002", status: "disputed" },
+      ],
+      payables: 1,
+      settlements: 1,
     });
     // Nine weeks of muster rolls on two projects: past periods approved (with their snapshot
     // lines), the last complete one awaiting approval and the current one open.
@@ -1282,8 +1332,65 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       ["KIT-BNG", "active", false],
       ["SYO-TWN", "planning", false],
     ]);
+    expect(second.buildups).toEqual([
+      {
+        code: "CONC-C25-SYN",
+        name: "Concrete class 25 (1:2:4), per m³ (synthetic example)",
+        rateMinor: 1_328_525,
+        created: false,
+      },
+    ]);
+    expect(second.procurement).toEqual({
+      materials: { created: 0, existing: 21 },
+      suppliers: [
+        { code: "SUP-0001", name: "Mlolongo Quarry (synthetic)", created: false },
+        { code: "SUP-0002", name: "Athi River Steel (synthetic)", created: false },
+        { code: "SUP-0003", name: "Kitengela Hardware (synthetic)", created: false },
+      ],
+    });
     expect(second.labour).toMatchObject({ labourersCreated: 0, labourersTotal: 40, rates: 0 });
     expect(second.attendance).toEqual({ ...first.attendance, created: false });
+    // Payroll (D4.1): unverified statutory rules, minimum wages, allowances, piece-rate output,
+    // two advances, one submitted and three draft batches; the submitted snapshot matches its digest.
+    expect(first.payroll).toMatchObject({
+      ruleVersions: KENYA_STATUTORY_SEED.length,
+      minimumWages: 18,
+      allowances: 3,
+      outputs: 2,
+      advances: 2,
+      submittedBatches: 1,
+      draftBatches: 3,
+    });
+    expect(second.payroll).toEqual({ ...first.payroll, created: false });
+    await db.run(
+      { tenantId: first.company.id, userId: ownerId, requestId: "seed-payroll" },
+      async (tx) => {
+        expect(
+          await tx.statutoryRuleVersion.count({
+            where: { tenantId: first.company.id, status: { not: "unverified" } },
+          }),
+        ).toBe(0);
+        const submitted = await tx.payrollBatch.findFirstOrThrow({
+          where: { tenantId: first.company.id, status: "submitted" },
+        });
+        expect(submitted.unverifiedRules).toBe(true);
+        const stored = await app
+          .get(BatchBuilder)
+          .storedSnapshot(tx, first.company.id, submitted.id);
+        expect(stored.digest).toBe(submitted.digest);
+      },
+    );
+    expect(second.procureToPay).toEqual({
+      created: false,
+      requisition: "REQ-0001",
+      rfq: "RFQ-0001",
+      lpo: "LPO-0001",
+      grn: "GRN-0001",
+      invoices: [
+        { number: "MQ-INV-1001", status: "settled" },
+        { number: "MQ-INV-1002", status: "disputed" },
+      ],
+    });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
   });
 });

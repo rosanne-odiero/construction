@@ -76,15 +76,15 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D2.1 | **Projects, sites and geofences**: polygon or radius geofences drawn on a map; WBS/phases; milestones; team assignment by role; project dashboard shell | Project list and detail, site map editor, team tab | Projects and sites with geofences persist and are tenant-isolated | M | ⏳ |
-| D2.2 | **BQ import**:<br/>• `.xlsx` upload; sheet and header detection; column-mapping screen; saved mapping templates<br/>• Bill → Section → Item hierarchy<br/>• Preliminaries, provisional sums, PC sums, contingencies, dayworks and VAT<br/>• Totals reconciliation; BQ viewer; Excel and PDF export | Import wizard, BQ tree table, totals check | **A real Excel BQ imports correctly and totals match** | L | ⏳ |
-| D2.3 | **BQ versions and variations**: Architect's/Engineer's Instructions; Variation Orders with an approval workflow; original vs revised contract sum; rate build-up library | VO list and approval, version compare, rate build-up editor | **Phase 2 acceptance** | M | ⬜ |
+| D2.1 | **Projects, sites and geofences**: polygon or radius geofences drawn on a map; WBS/phases; milestones; team assignment by role; project dashboard shell | Project list and detail, site map editor, team tab | Projects and sites with geofences persist and are tenant-isolated | M | ✅ |
+| D2.2 | **BQ import**:<br/>• `.xlsx` upload; sheet and header detection; column-mapping screen; saved mapping templates<br/>• Bill → Section → Item hierarchy<br/>• Preliminaries, provisional sums, PC sums, contingencies, dayworks and VAT<br/>• Totals reconciliation; BQ viewer; Excel and PDF export | Import wizard, BQ tree table, totals check | **A real Excel BQ imports correctly and totals match** | L | ✅ |
+| D2.3 | **BQ versions and variations**: Architect's/Engineer's Instructions; Variation Orders with an approval workflow; original vs revised contract sum; rate build-up library | VO list and approval, version compare, rate build-up editor | **Phase 2 acceptance** | M | ✅ |
 
 ### Phase 3: Labour and attendance
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D3.1 | **Labourer registry**:<br/>• Registration that blocks anyone under 18<br/>• Field-level encryption for IDs, PINs and phone numbers<br/>• Trades, skill levels and rates<br/>• NCA accreditation with expiry alerts<br/>• Gangs<br/>• Consent capture (EN/SW)<br/>• Do-not-rehire flag | Registry table with saved views, worker side panel, registration form, consent screen | Registry works; encryption and under-18 tests pass | L | ⏳ |
+| D3.1 | **Labourer registry**:<br/>• Registration that blocks anyone under 18<br/>• Field-level encryption for IDs, PINs and phone numbers<br/>• Trades, skill levels and rates<br/>• NCA accreditation with expiry alerts<br/>• Gangs<br/>• Consent capture (EN/SW)<br/>• Do-not-rehire flag | Registry table with saved views, worker side panel, registration form, consent screen | Registry works; encryption and under-18 tests pass | L | ✅ |
 | D3.2 | **Site app foundation (Expo, Android-first)**: login with device binding; kiosk mode; encrypted SQLite; push/pull sync engine; sync status UI | Expo app on your Android phone (Expo Go) or an emulator, plus a web preview | The app works offline and syncs when back online | L | ⬜ |
 | D3.3 | **Attendance, fallback method first**:<br/>• QR/NFC worker card + photo + supervisor confirmation<br/>• Geofence checks; signed offline records; clock-drift detection<br/>• Anomaly rules: duplicates, two sites, impossible travel<br/>• Override workflow<br/>• Timesheet rules and public holidays<br/>• Muster roll in the web app | Kiosk check-in on the device, muster roll with flags, anomaly review | A foreman records attendance offline; it syncs correctly and anomalies are flagged | L | ⏳ |
 | D3.4 | **Attendance, first biometric method** (chosen in [QUESTIONS.md](./QUESTIONS.md)):<br/>• Uses the `CaptureMethod` interface<br/>• Gated per tenant behind a signed-off DPIA<br/>• Template-only encrypted storage<br/>• Retention and deletion jobs | Enrolment and identification on the kiosk, consent and DPIA gate, deletion log | **Phase 3 acceptance** | XL | ⬜ |
@@ -95,7 +95,7 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D4.1 | **Payroll engine**:<br/>• Daily, weekly, fortnightly or monthly pay periods<br/>• Gross pay from attendance, overtime, piece-rate output and allowances<br/>• Versioned statutory rules (PAYE, NSSF, SHIF, Housing Levy, NITA)<br/>• Advances with automatic recovery<br/>• Payslip preview; statutory export CSVs | Payroll batch builder, payslip preview, rule versions screen | Unit tests cover every rule boundary; seed rules are flagged `COMPLIANCE-REVIEW` | L | ⬜ |
+| D4.1 | **Payroll engine**:<br/>• Daily, weekly, fortnightly or monthly pay periods<br/>• Gross pay from attendance, overtime, piece-rate output and allowances<br/>• Versioned statutory rules (PAYE, NSSF, SHIF, Housing Levy, NITA)<br/>• Advances with automatic recovery<br/>• Payslip preview; statutory export CSVs | Payroll batch builder, payslip preview, rule versions screen | Unit tests cover every rule boundary; seed rules are flagged `COMPLIANCE-REVIEW` | L | ⏳ |
 | D4.2 | **Daraja integration**:<br/>• `PaymentProvider` interface with `DarajaProvider`: OAuth, STK Push + query, C2B, B2C, B2B, transaction status, account balance, reversal<br/>• Per-tenant credentials<br/>• Outbox + BullMQ<br/>• Callback hardening<br/>• Local mock Daraja server for success, failure, timeout, duplicate and out-of-order callbacks | Payments console: requests, callbacks, state timeline, unknown-callback alerts | Mock and sandbox flows pass the integration suite | XL | ⬜ |
 | D4.3 | **Approvals and payouts**:<br/>• Maker-checker with step-up MFA and approval limits<br/>• Float check, then bulk B2C payout with per-worker status<br/>• Recipient name check<br/>• SMS payslips<br/>• Daily reconciliation and statement upload<br/>• M-Pesa charges booked as cost<br/>• Cash and bank payments; unusual-payout alerts | Approval flow, live payout statuses, reconciliation screen | **Phase 4 acceptance:** a weekly payroll for 40 workers pays out in sandbox with every callback reconciled; failed and duplicate cases are handled | L | ⬜ |
 
@@ -103,7 +103,7 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D5.1 | **Catalogue and suppliers**:<br/>• Materials with Kenyan units and conversions (bags, tonnes, lorry trips, steel by length/kg)<br/>• Suppliers: KRA PIN, eTIMS, Paybill/Till, bank details, terms<br/>• Price history | Catalogue, unit conversions, supplier profile | Conversions are unit-tested | M | ⬜ |
+| D5.1 | **Catalogue and suppliers**:<br/>• Materials with Kenyan units and conversions (bags, tonnes, lorry trips, steel by length/kg)<br/>• Suppliers: KRA PIN, eTIMS, Paybill/Till, bank details, terms<br/>• Price history | Catalogue, unit conversions, supplier profile | Conversions are unit-tested | M | ✅ |
 | D5.2 | **Procure-to-pay**:<br/>• Requisition → approval → RFQ and quote comparison → LPO<br/>• Goods Received Note in the site app (offline, photos, GPS, vehicle reg)<br/>• Supplier invoice with eTIMS<br/>• Three-way match; B2B or bank payment | End-to-end procurement flow; match screen | **The three-way match blocks bad payments** | XL | ⬜ |
 | D5.3 | **Stores**: stock ledger per site; issues to a BQ item or gang; returns and transfers; stock takes; wastage; low stock; theoretical vs actual consumption variance alerts | Stock ledger, stock take, variance alerts | **A variance alert fires on test data** | L | ⬜ |
 | D5.4 | **Spending and cash flow** (brief §5.8):<br/>• Cost tagging<br/>• Petty cash floats; expenses with receipts<br/>• M-Pesa SMS parser<br/>• Budget vs actual vs committed; cash-flow forecast; spend alerts | Petty cash, expense capture, budget and cash-flow views | **Phase 5 acceptance** | M | ⬜ |
@@ -112,7 +112,7 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D6.1 | **Site diary and quality**:<br/>• Daily diary with workforce auto-filled from attendance; sign-off and locking<br/>• Geotagged photos with server verification<br/>• Inspections and checklists; cube and slump tests<br/>• Snags; practical completion and defects liability period | Diary (site app and web), photo timeline, inspections, snags | A diary is locked after approval; photo metadata is verified | L | ⬜ |
+| D6.1 | **Site diary and quality**:<br/>• Daily diary with workforce auto-filled from attendance; sign-off and locking<br/>• Geotagged photos with server verification<br/>• Inspections and checklists; cube and slump tests<br/>• Snags; practical completion and defects liability period | Diary (site app and web), photo timeline, inspections, snags | A diary is locked after approval; photo metadata is verified | L | 🟨 Both done-when checks implemented/tested locally (locked approved diaries; server-verified photo GPS/time against the geofence in force). Attendance-backed workforce, in-app/offline capture, inspections, tests, snags and completion/DLP remain |
 | D6.2 | **Schedule**: Gantt with dependencies, milestones, baseline vs actual, delay log with causes | Gantt view, delay log | The baseline is frozen and variance is shown | M | ⬜ |
 | D6.3 | **Measurement and valuations**:<br/>• Progress measured against BQ items, with photos<br/>• Earned value (PV, EV, AC, CPI, SPI) and S-curve<br/>• Interim valuations and payment certificates; retention and its release<br/>• Subcontracts and piece-rate links (brief §5.14)<br/>• Cost to complete | Measurement entry, EVM dashboard, valuation and certificate PDF | **Phase 6 acceptance:** an interim payment certificate generates correctly from measured progress | XL | ⬜ |
 
@@ -120,9 +120,9 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D7.1 | **Client portal**:<br/>• Progress, S-curve and verified photo timeline; diary summaries<br/>• Certificates and statements; **pay via STK Push**; C2B Paybill instructions<br/>• Variation approvals<br/>• FX display (USD/GBP/EUR) | Client portal on mobile and desktop | A client can view progress and pay (sandbox) | L | ⬜ |
+| D7.1 | **Client portal**:<br/>• Progress, S-curve and verified photo timeline; diary summaries<br/>• Certificates and statements; **pay via STK Push**; C2B Paybill instructions<br/>• Variation approvals<br/>• FX display (USD/GBP/EUR) | Client portal on mobile and desktop | A client can view progress and pay (sandbox) | L | 🟨 Live client portal (assigned projects, milestones, approved diaries) built early on owner request; photos, certificates, STK Push, variations and FX remain |
 | D7.2 | **Supplier portal**: LPOs, deliveries, invoices with eTIMS, payment status, statements | Supplier portal | A supplier can see an LPO and submit an invoice | M | ⬜ |
-| D7.3 | **Labourer USSD/SMS and notifications**:<br/>• Africa's Talking USSD menu (EN/SW) with ID + PIN<br/>• Notification centre: templates (EN/SW), preferences, WhatsApp | USSD simulator, notification settings and templates | **Phase 7 acceptance:** a labourer can check pay via USSD | M | ⬜ |
+| D7.3 | **Labourer USSD/SMS and notifications**:<br/>• Africa's Talking USSD menu (EN/SW) with ID + PIN<br/>• Notification centre: templates (EN/SW), preferences, WhatsApp | USSD simulator, notification settings and templates | **Phase 7 acceptance:** a labourer can check pay via USSD | M | 🟨 Labourer web portal with phone + PIN built early on owner request (assigned sites only); USSD, pay, attendance and the real SMS provider remain |
 
 ### Phase 8: Reports, H&S, plant and compliance
 
@@ -202,6 +202,8 @@ These have legal or commercial lead times, so they should start early:
 | D1.4 | `phase-1/d1.4-tenancy-rbac-audit` |
 | D2.1 | `phase-2/d2.1-projects-sites` |
 | D2.2 | `phase-2/d2.2-bq-import` |
+| D2.3 | `phase-2/d2.3-bq-variations` |
+| D5.1 | `phase-5/d5.1-catalogue-suppliers` |
 | D3.1 | `phase-3/d3.1-labour-registry` |
 | D3.3 (web slice) | `phase-3/d3.3-web-timesheets` |
 | … | `phase-N/dN.x-<slug>` |

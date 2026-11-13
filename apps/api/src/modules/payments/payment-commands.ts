@@ -28,7 +28,11 @@ export class PaymentCommands {
     req: Request,
     operation: string,
     payload: unknown,
-    command: (scope: Scope, idempotencyKey: string | null, fingerprint: string | null) => Promise<T>,
+    command: (
+      scope: Scope,
+      idempotencyKey: string | null,
+      fingerprint: string | null,
+    ) => Promise<T>,
     requireKey = false,
   ): Promise<T> {
     const header = req.headers["idempotency-key"];
@@ -53,7 +57,11 @@ export class PaymentCommands {
           const fingerprint = requestFingerprint(operation, access.userId, payload);
           const stored = await tx.idempotencyRecord.findUnique({
             where: {
-              tenantId_operation_idempotencyKey: { tenantId: access.tenantId, operation, idempotencyKey: key },
+              tenantId_operation_idempotencyKey: {
+                tenantId: access.tenantId,
+                operation,
+                idempotencyKey: key,
+              },
             },
           });
           if (stored) {

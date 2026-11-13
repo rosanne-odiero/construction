@@ -19,7 +19,11 @@ import type {
   PaymentDirection,
   QuarantineReason,
 } from "@pm-buddy/types";
-import type { PaymentAttempt, PaymentCallbackInbox, Prisma } from "../../generated/prisma/client.js";
+import type {
+  PaymentAttempt,
+  PaymentCallbackInbox,
+  Prisma,
+} from "../../generated/prisma/client.js";
 import { TenantDatabase } from "../identity/tenant-database.service.js";
 import { PaymentAccounts } from "./payment-accounts.js";
 import { PaymentLedger, type OutboxTopic } from "./payment-ledger.js";
@@ -83,7 +87,11 @@ export class PaymentProcessor {
 
   run<T>(tenantId: string, label: string, work: (tx: Tx) => Promise<T>): Promise<T> {
     return this.db.run(
-      { userId: PAYMENTS_SYSTEM_ACTOR, tenantId, requestId: `payments-${label}-${randomUUID().slice(0, 8)}` },
+      {
+        userId: PAYMENTS_SYSTEM_ACTOR,
+        tenantId,
+        requestId: `payments-${label}-${randomUUID().slice(0, 8)}`,
+      },
       work,
       20_000,
     );
@@ -108,7 +116,9 @@ export class PaymentProcessor {
       );
     } catch (error) {
       const retry =
-        error instanceof RetryLater ? error : new RetryLater(error instanceof Error ? error.name : "error");
+        error instanceof RetryLater
+          ? error
+          : new RetryLater(error instanceof Error ? error.name : "error");
       if (!(error instanceof RetryLater))
         this.logger.warn(`Payment work ${row.topic} failed (${retry.code}); it will be retried`);
       await this.reschedule(tenantId, row.id, row.topic, row.refId, row.attempts, retry);
@@ -140,15 +150,24 @@ export class PaymentProcessor {
       if (dead) {
         // Dead-lettered for review: an alert, never a silent drop. A queued attempt stays queued.
         await this.ledger.event(tx, tenantId, {
-          subjectType: topic.startsWith("callback") ? "callback" : topic.startsWith("attempt") ? "attempt" : "query",
+          subjectType: topic.startsWith("callback")
+            ? "callback"
+            : topic.startsWith("attempt")
+              ? "attempt"
+              : "query",
           subjectId: refId,
           event: "outbox.dead_lettered",
           reason: retry.code.slice(0, 40),
           actorId: SYSTEM,
           detail: { topic, attempts: count },
         });
-        await this.ledger.audit(tx, "payments.outbox_dead_lettered", id, { topic, code: retry.code });
-        this.logger.error(`ALERT payments outbox ${topic} dead-lettered after ${count} attempts (${retry.code})`);
+        await this.ledger.audit(tx, "payments.outbox_dead_lettered", id, {
+          topic,
+          code: retry.code,
+        });
+        this.logger.error(
+          `ALERT payments outbox ${topic} dead-lettered after ${count} attempts (${retry.code})`,
+        );
       }
     });
   }
@@ -183,11 +202,14 @@ export class PaymentProcessor {
     return {
       kind: attempt.kind as PaymentAttemptKind,
       amountMinor: minor(attempt.amountMinor),
-      msisdn: request.msisdnEnc ? this.crypto.openMsisdn(attempt.tenantId, request.id, request.msisdnEnc) : null,
+      msisdn: request.msisdnEnc
+        ? this.crypto.openMsisdn(attempt.tenantId, request.id, request.msisdnEnc)
+        : null,
       partyB: request.partyB,
       accountReference: request.accountReference,
       command: request.command,
-      description: attempt.kind === "reversal" ? `Reversal ${request.reference}` : request.description,
+      description:
+        attempt.kind === "reversal" ? `Reversal ${request.reference}` : request.description,
       occasion: request.occasion,
       originatorConversationId: attempt.originatorConversationId,
       reversal,
@@ -206,7 +228,9 @@ export class PaymentProcessor {
    */
   async submit(tenantId: string, attemptId: string): Promise<void> {
     const prepared = await this.run(tenantId, "submit-prepare", async (tx) => {
-      const attempt = await tx.paymentAttempt.findUnique({ where: { tenantId_id: { tenantId, id: attemptId } } });
+      const attempt = await tx.paymentAttempt.findUnique({
+        where: { tenantId_id: { tenantId, id: attemptId } },
+      });
       if (!attempt || attempt.status !== "queued") return null;
       const loaded = await this.accounts.load(tx, tenantId, attempt.routeId);
       if (!loaded) throw new RetryLater("payments-not-configured");
@@ -230,15 +254,23 @@ export class PaymentProcessor {
       const settings = await tx.paymentSettings.findUniqueOrThrow({ where: { tenantId } });
       if (this.payoutGated(prepared.attempt) && !settings.payoutsEnabled) return null;
       const now = new Date();
-      return this.ledger.transition(tx, prepared.attempt, "submitting", "submission_started", SYSTEM, {
-        leaseOwner: this.workerId,
-        leaseExpiresAt: new Date(now.getTime() + this.runtime.leaseSeconds * 1000),
-        submittedAt: now,
-        requestDigest: call.digest,
-      });
+      return this.ledger.transition(
+        tx,
+        prepared.attempt,
+        "submitting",
+        "submission_started",
+        SYSTEM,
+        {
+          leaseOwner: this.workerId,
+          leaseExpiresAt: new Date(now.getTime() + this.runtime.leaseSeconds * 1000),
+          submittedAt: now,
+          requestDigest: call.digest,
+        },
+      );
     });
     if (!leased) {
-      if (this.payoutGated(prepared.attempt)) throw new RetryLater("payouts-disabled", 30_000, false);
+      if (this.payoutGated(prepared.attempt))
+        throw new RetryLater("payouts-disabled", 30_000, false);
       return;
     }
 
@@ -258,7 +290,11 @@ export class PaymentProcessor {
       transport,
       leased.kind === "b2c" ? leased.originatorConversationId : null,
     );
-    if (outcome.outcome === "failed" && outcome.providerCode && TOKEN_ERRORS.has(outcome.providerCode))
+    if (
+      outcome.outcome === "failed" &&
+      outcome.providerCode &&
+      TOKEN_ERRORS.has(outcome.providerCode)
+    )
       await this.provider.invalidateToken(account);
     await this.run(tenantId, "submit-record", async (tx) => {
       const attempt = await this.lockAttempt(tx, tenantId, leased.id);
@@ -319,16 +355,26 @@ export class PaymentProcessor {
         return;
       }
       if (outcome.outcome === "failed") {
-        await this.ledger.fail(tx, attempt, { resultCode: null, resultDesc: null, providerCode: outcome.providerCode }, outcome.reason, SYSTEM);
+        await this.ledger.fail(
+          tx,
+          attempt,
+          { resultCode: null, resultDesc: null, providerCode: outcome.providerCode },
+          outcome.reason,
+          SYSTEM,
+        );
         return;
       }
-      await this.ledger.markUnknown(tx, attempt, outcome.reason, SYSTEM, { providerCode: outcome.providerCode });
+      await this.ledger.markUnknown(tx, attempt, outcome.reason, SYSTEM, {
+        providerCode: outcome.providerCode,
+      });
     });
   }
 
   private async lockAttempt(tx: Tx, tenantId: string, attemptId: string) {
     await tx.$queryRaw`SELECT id FROM payment_attempts WHERE tenant_id = ${tenantId}::uuid AND id = ${attemptId}::uuid FOR UPDATE`;
-    return tx.paymentAttempt.findUniqueOrThrow({ where: { tenantId_id: { tenantId, id: attemptId } } });
+    return tx.paymentAttempt.findUniqueOrThrow({
+      where: { tenantId_id: { tenantId, id: attemptId } },
+    });
   }
 
   /**
@@ -362,9 +408,17 @@ export class PaymentProcessor {
     await this.run(tenantId, "watchdog", async (tx) => {
       const attempt = await this.lockAttempt(tx, tenantId, attemptId);
       const now = Date.now();
-      if (attempt.status === "submitting" && attempt.leaseExpiresAt && attempt.leaseExpiresAt.getTime() < now)
+      if (
+        attempt.status === "submitting" &&
+        attempt.leaseExpiresAt &&
+        attempt.leaseExpiresAt.getTime() < now
+      )
         await this.ledger.markUnknown(tx, attempt, "lease_expired", SYSTEM);
-      else if (attempt.status === "pending" && attempt.resultDueAt && attempt.resultDueAt.getTime() < now)
+      else if (
+        attempt.status === "pending" &&
+        attempt.resultDueAt &&
+        attempt.resultDueAt.getTime() < now
+      )
         await this.ledger.markUnknown(tx, attempt, "result_overdue", SYSTEM);
     });
   }
@@ -377,7 +431,9 @@ export class PaymentProcessor {
    */
   async statusQuery(tenantId: string, attemptId: string): Promise<void> {
     const prepared = await this.run(tenantId, "status-prepare", async (tx) => {
-      const attempt = await tx.paymentAttempt.findUnique({ where: { tenantId_id: { tenantId, id: attemptId } } });
+      const attempt = await tx.paymentAttempt.findUnique({
+        where: { tenantId_id: { tenantId, id: attemptId } },
+      });
       if (!attempt || (attempt.status !== "unknown" && attempt.status !== "pending")) return null;
       if (!this.ledger.statusQuerySupported(attempt)) return null;
       const loaded = await this.accounts.load(tx, tenantId, attempt.routeId);
@@ -438,16 +494,47 @@ export class PaymentProcessor {
         transport.type === "response" && transport.body && typeof transport.body === "object"
           ? (transport.body as Record<string, unknown>)
           : null;
-      const ok = transport.type === "response" && transport.httpStatus === 200 && body && String(body["ResponseCode"]) === "0";
+      const ok =
+        transport.type === "response" &&
+        transport.httpStatus === 200 &&
+        body &&
+        String(body["ResponseCode"]) === "0";
       if (query.kind === "stk_query") {
-        const resultCode = ok && body?.["ResultCode"] !== undefined ? String(body?.["ResultCode"]) : null;
+        const resultCode =
+          ok && body?.["ResultCode"] !== undefined ? String(body?.["ResultCode"]) : null;
         const answer = interpretStkQuery(resultCode);
-        await this.answerQuery(tx, query.id, query.version, answer === "undetermined" ? "unknown" : "answered", resultCode, `STK query: ${answer}`);
+        await this.answerQuery(
+          tx,
+          query.id,
+          query.version,
+          answer === "undetermined" ? "unknown" : "answered",
+          resultCode,
+          `STK query: ${answer}`,
+        );
         if (answer === "failed" && (current.status === "unknown" || current.status === "pending")) {
-          await this.ledger.fail(tx, current, { resultCode, resultDesc: typeof body?.["ResultDesc"] === "string" ? String(body["ResultDesc"]).slice(0, 300) : null }, "status_query_failure", SYSTEM);
+          await this.ledger.fail(
+            tx,
+            current,
+            {
+              resultCode,
+              resultDesc:
+                typeof body?.["ResultDesc"] === "string"
+                  ? String(body["ResultDesc"]).slice(0, 300)
+                  : null,
+            },
+            "status_query_failure",
+            SYSTEM,
+          );
         } else if (answer === "completed") {
           // No amount or receipt in the answer: success is reported, not proven (manual review).
-          await this.ledger.openCase(tx, tenantId, "unverified_success", "stk_query_success", { requestId: current.requestId, attemptId: current.id }, SYSTEM);
+          await this.ledger.openCase(
+            tx,
+            tenantId,
+            "unverified_success",
+            "stk_query_success",
+            { requestId: current.requestId, attemptId: current.id },
+            SYSTEM,
+          );
         } else {
           await this.scheduleNextQuery(tx, current);
         }
@@ -457,15 +544,25 @@ export class PaymentProcessor {
         await tx.providerQuery.update({
           where: { tenantId_id: { tenantId, id: query.id } },
           data: {
-            conversationId: typeof body["ConversationID"] === "string" ? body["ConversationID"] : null,
+            conversationId:
+              typeof body["ConversationID"] === "string" ? body["ConversationID"] : null,
             originatorConversationId:
-              typeof body["OriginatorConversationID"] === "string" ? body["OriginatorConversationID"] : null,
+              typeof body["OriginatorConversationID"] === "string"
+                ? body["OriginatorConversationID"]
+                : null,
             version: query.version + 1,
           },
         });
         return;
       }
-      await this.answerQuery(tx, query.id, query.version, transport.type === "response" ? "failed" : "unknown", body ? String(body["errorCode"] ?? body["ResponseCode"] ?? "") || null : null, "Transaction Status request not accepted");
+      await this.answerQuery(
+        tx,
+        query.id,
+        query.version,
+        transport.type === "response" ? "failed" : "unknown",
+        body ? String(body["errorCode"] ?? body["ResponseCode"] ?? "") || null : null,
+        "Transaction Status request not accepted",
+      );
       await this.scheduleNextQuery(tx, current);
     });
   }
@@ -507,8 +604,11 @@ export class PaymentProcessor {
 
   async providerQuery(tenantId: string, queryId: string): Promise<void> {
     const prepared = await this.run(tenantId, "query-prepare", async (tx) => {
-      const query = await tx.providerQuery.findUnique({ where: { tenantId_id: { tenantId, id: queryId } } });
-      if (!query || query.status !== "sent" || query.conversationId || query.resultCode) return null;
+      const query = await tx.providerQuery.findUnique({
+        where: { tenantId_id: { tenantId, id: queryId } },
+      });
+      if (!query || query.status !== "sent" || query.conversationId || query.resultCode)
+        return null;
       const loaded = await this.accounts.load(tx, tenantId);
       if (!loaded) throw new RetryLater("payments-not-configured");
       return { query, account: loaded.account };
@@ -523,7 +623,14 @@ export class PaymentProcessor {
     } catch (error) {
       if (error instanceof ProviderNotReady) {
         await this.run(tenantId, "query-failed", (tx) =>
-          this.answerQuery(tx, queryId, prepared.query.version, "failed", error.code, error.message),
+          this.answerQuery(
+            tx,
+            queryId,
+            prepared.query.version,
+            "failed",
+            error.code,
+            error.message,
+          ),
         );
         return;
       }
@@ -531,30 +638,55 @@ export class PaymentProcessor {
     }
     const transport = await this.provider.send(call);
     await this.run(tenantId, "query-record", async (tx) => {
-      const query = await tx.providerQuery.findUniqueOrThrow({ where: { tenantId_id: { tenantId, id: queryId } } });
+      const query = await tx.providerQuery.findUniqueOrThrow({
+        where: { tenantId_id: { tenantId, id: queryId } },
+      });
       const body =
         transport.type === "response" && transport.body && typeof transport.body === "object"
           ? (transport.body as Record<string, unknown>)
           : null;
-      const accepted = transport.type === "response" && transport.httpStatus === 200 && body && String(body["ResponseCode"]) === "0";
+      const accepted =
+        transport.type === "response" &&
+        transport.httpStatus === 200 &&
+        body &&
+        String(body["ResponseCode"]) === "0";
       if (query.kind === "c2b_register") {
-        await this.answerQuery(tx, query.id, query.version, accepted ? "answered" : transport.type === "response" ? "failed" : "unknown", body ? String(body["ResponseCode"] ?? body["errorCode"] ?? "") || null : null, accepted ? "C2B URLs registered" : "C2B URL registration refused");
-        await this.ledger.audit(tx, "payments.c2b_registration_answered", query.id, { accepted: Boolean(accepted) });
+        await this.answerQuery(
+          tx,
+          query.id,
+          query.version,
+          accepted ? "answered" : transport.type === "response" ? "failed" : "unknown",
+          body ? String(body["ResponseCode"] ?? body["errorCode"] ?? "") || null : null,
+          accepted ? "C2B URLs registered" : "C2B URL registration refused",
+        );
+        await this.ledger.audit(tx, "payments.c2b_registration_answered", query.id, {
+          accepted: Boolean(accepted),
+        });
         return;
       }
       if (accepted && body && (body["ConversationID"] || body["OriginatorConversationID"])) {
         await tx.providerQuery.update({
           where: { tenantId_id: { tenantId, id: query.id } },
           data: {
-            conversationId: typeof body["ConversationID"] === "string" ? body["ConversationID"] : null,
+            conversationId:
+              typeof body["ConversationID"] === "string" ? body["ConversationID"] : null,
             originatorConversationId:
-              typeof body["OriginatorConversationID"] === "string" ? body["OriginatorConversationID"] : null,
+              typeof body["OriginatorConversationID"] === "string"
+                ? body["OriginatorConversationID"]
+                : null,
             version: query.version + 1,
           },
         });
         return;
       }
-      await this.answerQuery(tx, query.id, query.version, transport.type === "response" ? "failed" : "unknown", body ? String(body["errorCode"] ?? "") || null : null, "Account balance request not accepted");
+      await this.answerQuery(
+        tx,
+        query.id,
+        query.version,
+        transport.type === "response" ? "failed" : "unknown",
+        body ? String(body["errorCode"] ?? "") || null : null,
+        "Account balance request not accepted",
+      );
     });
   }
 
@@ -587,13 +719,18 @@ export class PaymentProcessor {
     return matched;
   }
 
-  private async findAttempt(tx: Tx, tenantId: string, parsed: ParsedCallback): Promise<PaymentAttempt | null> {
+  private async findAttempt(
+    tx: Tx,
+    tenantId: string,
+    parsed: ParsedCallback,
+  ): Promise<PaymentAttempt | null> {
     const ids = parsed.identifiers;
     const or: Prisma.PaymentAttemptWhereInput[] = [];
     if (parsed.kind === "stk") {
       if (ids.checkoutRequestId) or.push({ checkoutRequestId: ids.checkoutRequestId });
     } else {
-      if (ids.originatorConversationId) or.push({ originatorConversationId: ids.originatorConversationId });
+      if (ids.originatorConversationId)
+        or.push({ originatorConversationId: ids.originatorConversationId });
       if (ids.conversationId) or.push({ conversationId: ids.conversationId });
     }
     if (or.length === 0) return null;
@@ -608,7 +745,11 @@ export class PaymentProcessor {
     reason: QuarantineReason,
     link: { attemptId?: string | null; requestId?: string | null; queryId?: string | null } = {},
   ) {
-    if (row.status === "received" || row.quarantineReason !== reason || row.attemptId !== (link.attemptId ?? row.attemptId)) {
+    if (
+      row.status === "received" ||
+      row.quarantineReason !== reason ||
+      row.attemptId !== (link.attemptId ?? row.attemptId)
+    ) {
       await tx.paymentCallbackInbox.update({
         where: { tenantId_id: { tenantId: row.tenantId, id: row.id } },
         data: {
@@ -629,7 +770,11 @@ export class PaymentProcessor {
       row.tenantId,
       caseKind,
       reason,
-      { requestId: link.requestId ?? null, attemptId: caseKind === "conflicting_evidence" ? (link.attemptId ?? null) : null, callbackId: row.id },
+      {
+        requestId: link.requestId ?? null,
+        attemptId: caseKind === "conflicting_evidence" ? (link.attemptId ?? null) : null,
+        callbackId: row.id,
+      },
       SYSTEM,
     );
     if (row.status === "received") {
@@ -644,7 +789,10 @@ export class PaymentProcessor {
         actorId: SYSTEM,
         detail: { kind: row.kind },
       });
-      await this.ledger.audit(tx, "payments.callback_quarantined", row.id, { kind: row.kind, reason });
+      await this.ledger.audit(tx, "payments.callback_quarantined", row.id, {
+        kind: row.kind,
+        reason,
+      });
       // An alert for the reconciliation owner; identifiers only (no personal data).
       this.logger.warn(`ALERT payment callback ${row.id} (${row.kind}) quarantined: ${reason}`);
     }
@@ -680,10 +828,23 @@ export class PaymentProcessor {
     if (row.status === "quarantined") {
       // A previously unmatched callback now matched: its review case is settled by the evidence.
       const open = await tx.paymentCase.findMany({
-        where: { tenantId: row.tenantId, callbackId: row.id, status: "open", kind: "quarantined_callback" },
+        where: {
+          tenantId: row.tenantId,
+          callbackId: row.id,
+          status: "open",
+          kind: "quarantined_callback",
+        },
       });
       for (const item of open)
-        await this.ledger.closeCase(tx, row.tenantId, item.id, item.version, "no_payment_effect", "Matched after the acknowledgement arrived", SYSTEM);
+        await this.ledger.closeCase(
+          tx,
+          row.tenantId,
+          item.id,
+          item.version,
+          "no_payment_effect",
+          "Matched after the acknowledgement arrived",
+          SYSTEM,
+        );
     }
   }
 
@@ -691,7 +852,9 @@ export class PaymentProcessor {
   async processCallback(tenantId: string, callbackId: string): Promise<void> {
     await this.run(tenantId, "callback", async (tx) => {
       await tx.$queryRaw`SELECT id FROM payment_callback_inbox WHERE tenant_id = ${tenantId}::uuid AND id = ${callbackId}::uuid FOR UPDATE`;
-      const row = await tx.paymentCallbackInbox.findUnique({ where: { tenantId_id: { tenantId, id: callbackId } } });
+      const row = await tx.paymentCallbackInbox.findUnique({
+        where: { tenantId_id: { tenantId, id: callbackId } },
+      });
       if (!row || (row.status !== "received" && row.status !== "quarantined")) return;
       let body: unknown;
       try {
@@ -742,14 +905,17 @@ export class PaymentProcessor {
         completedAtRaw: parsed.completedAt,
       },
     });
-    await this.ledger.audit(tx, "payments.c2b_receipt_recorded", receipt.id, { callbackId: row.id });
+    await this.ledger.audit(tx, "payments.c2b_receipt_recorded", receipt.id, {
+      callbackId: row.id,
+    });
     return this.processed(tx, row, {}, "c2b_receipt");
   }
 
   private async queryAnswer(tx: Tx, row: PaymentCallbackInbox, parsed: ParsedCallback) {
     const ids = parsed.identifiers;
     const or: Prisma.ProviderQueryWhereInput[] = [];
-    if (ids.originatorConversationId) or.push({ originatorConversationId: ids.originatorConversationId });
+    if (ids.originatorConversationId)
+      or.push({ originatorConversationId: ids.originatorConversationId });
     if (ids.conversationId) or.push({ conversationId: ids.conversationId });
     const query = or.length
       ? await tx.providerQuery.findFirst({
@@ -761,7 +927,8 @@ export class PaymentProcessor {
         })
       : null;
     if (!query) return this.quarantine(tx, row, "unknown_request");
-    if (query.status === "answered") return this.processed(tx, row, { queryId: query.id }, "duplicate_answer");
+    if (query.status === "answered")
+      return this.processed(tx, row, { queryId: query.id }, "duplicate_answer");
     if (parsed.kind === "balance_result") {
       const kes = parsed.balances?.every((balance) => balance.currency === "KES") ?? true;
       if (!kes) return this.quarantine(tx, row, "currency_mismatch", { queryId: query.id });
@@ -786,27 +953,50 @@ export class PaymentProcessor {
       original.originatorConversationId !== attempt.originatorConversationId
     )
       return this.quarantine(tx, row, "kind_mismatch", link);
-    const answer = parsed.outcome === "failure" ? "undetermined" : interpretTransactionStatus(original?.status ?? null);
-    await this.answerQuery(tx, query.id, query.version, "answered", parsed.resultCode, `Transaction status: ${original?.status ?? parsed.resultDesc ?? "unknown"}`.slice(0, 300));
+    const answer =
+      parsed.outcome === "failure"
+        ? "undetermined"
+        : interpretTransactionStatus(original?.status ?? null);
+    await this.answerQuery(
+      tx,
+      query.id,
+      query.version,
+      "answered",
+      parsed.resultCode,
+      `Transaction status: ${original?.status ?? parsed.resultDesc ?? "unknown"}`.slice(0, 300),
+    );
     if (isFinalOutcome(attempt.status as PaymentAttemptStatus)) {
       const conflict =
         (answer === "completed" && attempt.status === "failed") ||
-        (answer === "failed" && (attempt.status === "confirmed" || attempt.status === "reversal_pending"));
+        (answer === "failed" &&
+          (attempt.status === "confirmed" || attempt.status === "reversal_pending"));
       if (conflict) return this.quarantine(tx, row, "conflicting_result", link);
       return this.processed(tx, row, link, "late_status_answer");
     }
     if (answer === "completed") {
       const expected = this.expected(attempt);
       const verified = verifySettlement(
-        { amountMinor: original?.amountMinor ?? null, currency: null, receipt: original?.receipt ?? null, shortcode: null },
+        {
+          amountMinor: original?.amountMinor ?? null,
+          currency: null,
+          receipt: original?.receipt ?? null,
+          shortcode: null,
+        },
         expected,
       );
       if (!verified.ok) return this.quarantine(tx, row, verified.reason, link);
-      if (await this.receiptTaken(tx, attempt, original!.receipt!)) return this.quarantine(tx, row, "duplicate_receipt", link);
+      if (await this.receiptTaken(tx, attempt, original!.receipt!))
+        return this.quarantine(tx, row, "duplicate_receipt", link);
       const confirmed = await this.ledger.confirm(
         tx,
         attempt,
-        { receipt: original!.receipt!, resultCode: "0", resultDesc: "Confirmed by Transaction Status", callbackId: row.id, completedAtRaw: null },
+        {
+          receipt: original!.receipt!,
+          resultCode: "0",
+          resultDesc: "Confirmed by Transaction Status",
+          callbackId: row.id,
+          completedAtRaw: null,
+        },
         "status_query_success",
         SYSTEM,
       );
@@ -814,7 +1004,13 @@ export class PaymentProcessor {
       return this.processed(tx, row, link, "status_confirmed");
     }
     if (answer === "failed") {
-      const failed = await this.ledger.fail(tx, attempt, { resultCode: parsed.resultCode, resultDesc: original?.status ?? null }, "status_query_failure", SYSTEM);
+      const failed = await this.ledger.fail(
+        tx,
+        attempt,
+        { resultCode: parsed.resultCode, resultDesc: original?.status ?? null },
+        "status_query_failure",
+        SYSTEM,
+      );
       if (!failed) throw new RetryLater("contention", 500, false);
       return this.processed(tx, row, link, "status_failed");
     }
@@ -844,19 +1040,30 @@ export class PaymentProcessor {
     if (!attempt && parsed.kind === "timeout") {
       // A queue timeout for a status or balance query: the query's outcome is unknown.
       const ids = parsed.identifiers;
-      const query = ids.originatorConversationId || ids.conversationId
-        ? await tx.providerQuery.findFirst({
-            where: {
-              tenantId: row.tenantId,
-              OR: [
-                ...(ids.originatorConversationId ? [{ originatorConversationId: ids.originatorConversationId }] : []),
-                ...(ids.conversationId ? [{ conversationId: ids.conversationId }] : []),
-              ],
-            },
-          })
-        : null;
+      const query =
+        ids.originatorConversationId || ids.conversationId
+          ? await tx.providerQuery.findFirst({
+              where: {
+                tenantId: row.tenantId,
+                OR: [
+                  ...(ids.originatorConversationId
+                    ? [{ originatorConversationId: ids.originatorConversationId }]
+                    : []),
+                  ...(ids.conversationId ? [{ conversationId: ids.conversationId }] : []),
+                ],
+              },
+            })
+          : null;
       if (query) {
-        if (query.status === "sent") await this.answerQuery(tx, query.id, query.version, "unknown", parsed.resultCode, "Queue timeout");
+        if (query.status === "sent")
+          await this.answerQuery(
+            tx,
+            query.id,
+            query.version,
+            "unknown",
+            parsed.resultCode,
+            "Queue timeout",
+          );
         return this.processed(tx, row, { queryId: query.id }, "query_timeout");
       }
     }
@@ -878,17 +1085,25 @@ export class PaymentProcessor {
     }
     if (parsed.outcome === "success") {
       if (status === "confirmed" || status === "reversal_pending" || status === "reversed") {
-        if (attempt.receipt === parsed.receipt) return this.processed(tx, row, link, "duplicate_result");
+        if (attempt.receipt === parsed.receipt)
+          return this.processed(tx, row, link, "duplicate_result");
         return this.quarantine(tx, row, "conflicting_result", link);
       }
       if (status === "failed") return this.quarantine(tx, row, "conflicting_result", link);
       if (status !== "submitting" && status !== "pending" && status !== "unknown")
         return this.quarantine(tx, row, "conflicting_result", link);
-      if (await this.receiptTaken(tx, attempt, parsed.receipt!)) return this.quarantine(tx, row, "duplicate_receipt", link);
+      if (await this.receiptTaken(tx, attempt, parsed.receipt!))
+        return this.quarantine(tx, row, "duplicate_receipt", link);
       const confirmed = await this.ledger.confirm(
         tx,
         attempt,
-        { receipt: parsed.receipt!, resultCode: parsed.resultCode, resultDesc: parsed.resultDesc, callbackId: row.id, completedAtRaw: parsed.completedAt },
+        {
+          receipt: parsed.receipt!,
+          resultCode: parsed.resultCode,
+          resultDesc: parsed.resultDesc,
+          callbackId: row.id,
+          completedAtRaw: parsed.completedAt,
+        },
         "provider_success",
         SYSTEM,
       );
@@ -901,7 +1116,13 @@ export class PaymentProcessor {
       return this.quarantine(tx, row, "conflicting_result", link);
     if (status !== "submitting" && status !== "pending" && status !== "unknown")
       return this.quarantine(tx, row, "conflicting_result", link);
-    const failed = await this.ledger.fail(tx, attempt, { resultCode: parsed.resultCode, resultDesc: parsed.resultDesc }, "provider_failure", SYSTEM);
+    const failed = await this.ledger.fail(
+      tx,
+      attempt,
+      { resultCode: parsed.resultCode, resultDesc: parsed.resultDesc },
+      "provider_failure",
+      SYSTEM,
+    );
     if (!failed) throw new RetryLater("contention", 500, false);
     return this.processed(tx, row, link, "failed");
   }

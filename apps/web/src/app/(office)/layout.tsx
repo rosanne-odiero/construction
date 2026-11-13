@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { PORTAL_HOME, portalFor } from "@pm-buddy/types";
 import { tenantRoleSchema } from "@pm-buddy/validation";
 import { AppSidebar } from "@/components/app-sidebar";
 import { PrototypeBanner } from "@/components/prototype-banner";
@@ -15,6 +17,9 @@ export default async function OfficeLayout({ children }: { children: React.React
   let account: OfficeAccount | null = null;
   if (state.status === "signed-in") {
     const { user, company } = state.session;
+    // The office app is for company staff; clients and labourers have their own portals.
+    const portal = portalFor(company.permissions);
+    if (portal !== "office") redirect(PORTAL_HOME[portal]);
     const system = tenantRoleSchema.safeParse(company.role);
     account = {
       displayName: user.displayName,

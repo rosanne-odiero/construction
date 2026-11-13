@@ -2,12 +2,15 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { INestApplicationContext } from "@nestjs/common";
 import { Secret, TOTP } from "otpauth";
 import {
+  buildupRate,
   geofenceMetrics,
   normaliseGeofence,
   validateGeofence,
+  type BuildupLineInput,
   type Geofence,
 } from "@pm-buddy/domain";
 import {
+  BUILDUP_ROUNDING,
   PROJECT_ASSIGNABLE_PERMISSIONS,
   SYSTEM_ROLE_PERMISSIONS,
   type ContractType,
@@ -20,17 +23,21 @@ import type { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../infra/prisma.service.js";
 import { AuthSecurity, hashPassword } from "../modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../modules/identity/tenant-database.service.js";
+import { seedProcurement, type ProcurementSeedSummary } from "./demo-procurement.js";
 import { LabourCrypto } from "../modules/labour/labour-support.js";
 import { seedAttendance, type AttendanceSeedSummary } from "./attendance-seed.js";
 import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
+import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
+import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
- * (password + TOTP), a project manager and a site agent, three projects with Kenyan sites,
- * geofences, WBS and milestones, and (D3.1) the labour registry: trades, rates, 40 synthetic
- * labourers with consent, gangs and NCA cards (labour-seed.ts), and (D3.3) nine weeks of synthetic
- * attendance with timesheet periods, anomalies and an adjustment (attendance-seed.ts). Idempotent:
- * existing records are kept as they are. Never runs in
+ * (password + TOTP), a project manager, a site agent and a finance user (TOTP), three projects with
+ * Kenyan sites, geofences, WBS and milestones, (D3.1) the labour registry: trades, rates, 40
+ * synthetic labourers with consent, gangs and NCA cards (labour-seed.ts), (D3.3) nine weeks of
+ * synthetic attendance with timesheet periods, anomalies and an adjustment (attendance-seed.ts),
+ * and (D5.1) the starter catalogue with synthetic suppliers, prices and payout details
+ * (demo-procurement.ts). Idempotent: existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
  */
@@ -47,7 +54,7 @@ type Audit = (
 ) => Promise<unknown>;
 
 type DemoAccount = {
-  key: "owner" | "projectManager" | "siteAgent";
+  key: "owner" | "projectManager" | "siteAgent" | "finance";
   role: TenantSystemRole;
   identifier: string;
   displayName: string;
@@ -74,6 +81,14 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     identifier: "site.agent@jenga-bora.example.test",
     displayName: "Kevin Kiprono",
     totp: false,
+  },
+  {
+    // D5.1: verifies supplier payout details proposed by the owner (maker-checker).
+    key: "finance",
+    role: "finance",
+    identifier: "finance@jenga-bora.example.test",
+    displayName: "Daniel Mwangi",
+    totp: true,
   },
 ];
 
@@ -251,6 +266,61 @@ export const DEMO_PROJECTS: readonly DemoProject[] = [
   },
 ];
 
+/**
+ * A worked rate build-up example for the library (D2.3). SYNTHETIC values, not market prices:
+ * concrete class 25 (1:2:4) per m³, with cement in 50 kg bags and sand and ballast in tonnes
+ * (never lorry trips, which are not a universal mass or volume; brief §15 G).
+ */
+export const DEMO_BUILDUP = {
+  code: "CONC-C25-SYN",
+  name: "Concrete class 25 (1:2:4), per m³ (synthetic example)",
+  unit: "m3",
+  assumptions:
+    "SYNTHETIC EXAMPLE VALUES, not market prices. Cement in 50 kg bags; sand and ballast in tonnes (convert lorry loads only with a measured, documented conversion). Waste allowances are illustrative.",
+  lines: [
+    {
+      kind: "material",
+      resourceName: "Cement, 50 kg bag",
+      unit: "bag (50 kg)",
+      quantity: "6.5",
+      wastePercent: "5",
+      unitCostMinor: 85_000,
+    },
+    {
+      kind: "material",
+      resourceName: "River sand",
+      unit: "t",
+      quantity: "0.7",
+      wastePercent: "10",
+      unitCostMinor: 250_000,
+    },
+    {
+      kind: "material",
+      resourceName: "Ballast 20 mm",
+      unit: "t",
+      quantity: "1.4",
+      wastePercent: "5",
+      unitCostMinor: 220_000,
+    },
+    {
+      kind: "labour",
+      resourceName: "Mason and two helpers",
+      unit: "hr",
+      quantity: "4.5",
+      wastePercent: null,
+      unitCostMinor: 35_000,
+    },
+    {
+      kind: "plant",
+      resourceName: "Concrete mixer (0.5 m³)",
+      unit: "hr",
+      quantity: "0.5",
+      wastePercent: null,
+      unitCostMinor: 150_000,
+    },
+  ] satisfies BuildupLineInput[],
+} as const;
+
 export type SeededAccount = {
   role: TenantSystemRole;
   identifier: string;
@@ -264,8 +334,12 @@ export type SeedSummary = {
   company: { id: string; name: string; created: boolean };
   accounts: SeededAccount[];
   projects: { code: string; name: string; status: string; created: boolean }[];
+  buildups: { code: string; name: string; rateMinor: number | null; created: boolean }[];
+  procurement: ProcurementSeedSummary;
   labour: LabourSeedSummary;
   attendance: AttendanceSeedSummary;
+  payroll: PayrollSeedSummary;
+  procureToPay: ProcureToPaySeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -377,6 +451,7 @@ export async function seedDemo(
     });
 
   const projects: SeedSummary["projects"] = [];
+  const buildups: SeedSummary["buildups"] = [];
   await db.run({ userId: owner.id, tenantId, requestId: "seed" }, async (tx) => {
     if (!found) {
       await tx.tenant.create({ data: { id: tenantId, name: DEMO_COMPANY, createdBy: owner.id } });
@@ -395,6 +470,15 @@ export async function seedDemo(
     }
     for (const demo of DEMO_PROJECTS)
       projects.push(await seedProject(tx, tenantId, owner.id, demo, userOf, audit));
+    buildups.push(await seedBuildup(tx, tenantId, owner.id, audit));
+  });
+
+  const procurement = await seedProcurement(app, tenantId, owner.id, userOf("finance").id);
+  const procureToPay = await seedProcureToPay(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    financeId: userOf("finance").id,
   });
 
   const crypto = app.get(LabourCrypto);
@@ -432,13 +516,94 @@ export async function seedDemo(
     },
     audit,
   );
+  const payroll = await seedPayroll(app, tenantId, {
+    ownerId: owner.id,
+    pmId: userOf("projectManager").id,
+    agentId: userOf("siteAgent").id,
+  });
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
     accounts: accounts.map(({ id: _id, key: _key, ...account }) => account),
     projects,
+    buildups,
+    procurement,
     labour,
     attendance,
+    payroll,
+    procureToPay,
+  };
+}
+
+/** The synthetic build-up example (version 1), unless the company already has it. */
+async function seedBuildup(
+  tx: Tx,
+  tenantId: string,
+  ownerId: string,
+  audit: Audit,
+): Promise<SeedSummary["buildups"][number]> {
+  const rate = buildupRate(DEMO_BUILDUP.lines);
+  const existing = await tx.rateBuildup.findUnique({
+    where: { tenantId_code: { tenantId, code: DEMO_BUILDUP.code } },
+  });
+  if (existing)
+    return { code: existing.code, name: existing.name, rateMinor: rate.rateMinor, created: false };
+  const id = randomUUID();
+  const versionId = randomUUID();
+  await tx.rateBuildup.create({
+    data: {
+      id,
+      tenantId,
+      code: DEMO_BUILDUP.code,
+      name: DEMO_BUILDUP.name,
+      unit: DEMO_BUILDUP.unit,
+      currentVersionNo: 1,
+      createdBy: ownerId,
+      updatedBy: ownerId,
+    },
+  });
+  await tx.rateBuildupVersion.create({
+    data: {
+      id: versionId,
+      tenantId,
+      buildupId: id,
+      versionNo: 1,
+      name: DEMO_BUILDUP.name,
+      unit: DEMO_BUILDUP.unit,
+      assumptions: DEMO_BUILDUP.assumptions,
+      rateMinor: rate.rateMinor === null ? null : BigInt(rate.rateMinor),
+      pricedMinor: BigInt(rate.pricedMinor),
+      unpricedLines: rate.unpricedLines,
+      lineCount: DEMO_BUILDUP.lines.length,
+      rounding: BUILDUP_ROUNDING,
+      createdBy: ownerId,
+    },
+  });
+  await tx.rateBuildupLine.createMany({
+    data: DEMO_BUILDUP.lines.map((line, index) => ({
+      id: randomUUID(),
+      tenantId,
+      versionId,
+      lineNo: index + 1,
+      kind: line.kind,
+      resourceName: line.resourceName,
+      unit: line.unit,
+      quantity: line.quantity,
+      wastePercent: line.wastePercent,
+      unitCostMinor: BigInt(line.unitCostMinor),
+      amountMinor: BigInt(rate.lineAmountsMinor[index]!),
+    })),
+  });
+  await audit(tx, "rate_buildup.created", id, {
+    ...SOURCE,
+    versionNo: 1,
+    lines: DEMO_BUILDUP.lines.length,
+  });
+  return {
+    code: DEMO_BUILDUP.code,
+    name: DEMO_BUILDUP.name,
+    rateMinor: rate.rateMinor,
+    created: true,
   };
 }
 

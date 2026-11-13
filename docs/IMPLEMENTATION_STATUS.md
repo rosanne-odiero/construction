@@ -21,6 +21,7 @@
 | `/sign-in` and office shell (D2.1) | Real API sign-in (password, TOTP/passkey/recovery-code step-up, company selection), signed-in user and company in the shell, sign-out; live pages redirect to `/sign-in?next=…` without a session |
 | `/projects` (D2.1) | Live project list and detail (overview KPI shell with "unavailable" figures, sites with versioned geofences and a map editor, team, WBS and milestones); other business screens stay prototype, now also under `/prototype/projects` |
 | `/projects/[id]/bq` and `/bq/import` (D2.2) | Live BQ viewer (tree, search, summary, import status, overrides, Excel/PDF export) and the 5-step Excel import wizard; imports tested with **synthetic** workbooks only (a real anonymised Kenyan BQ is still needed); the D0 BQ screens moved to `/prototype/projects/…/bq`; no ClamAV yet |
+| BQ versions, variations and build-ups (D2.3) | Live baseline approval and contract sums on `/projects/[id]/bq` and the project overview, `…/bq/variations` (list, editor, submit/approve/reject/reopen/cancel/rebase with step-up), `…/bq/instructions`, `…/bq/versions` (history and compare), `/rate-buildups` (company library, versions, item links) and `/bq`; browser tests run against the mock API; no approval limits by amount, no attachment upload, no theoretical consumption yet |
 | `/labour` (D3.1) | Live labourer registry (saved views, worker side panel with masked identifiers and audited reveal, registration with consent, consent screen, gangs, trades & rates, NCA alerts); the D0 labour screens moved to `/prototype/labour` and stay labelled. Built and verified locally on branch `phase-3/d3.1-labour-registry`; not pushed, not reviewed, not approved |
 | `/attendance` (D3.3, web slice) | Live attendance and timesheets: overview, daily muster roll per project/site/day (keyboard entry, bulk "present", gang filter, inline flags), submit and confirm by a different person, corrections, anomaly review, weekly timesheet periods (submit, approve with an immutable snapshot, reject, reopen), adjustments to approved periods, rules & holidays, and an attendance summary in the worker panel; the D0 attendance screens moved to `/prototype/attendance`. Web-manual capture only (no site app, QR/NFC, photos, GPS/geofence, offline or biometrics). Built and verified locally on branch `phase-3/d3.3-web-timesheets`; not pushed, not reviewed, not approved |
 | CI | Existing lint/type/test/build/API/security workflows retained; browser/a11y job added |
@@ -101,6 +102,7 @@ Also fixed: the primary button's hover colour blended into the page and fell to 
 - [Pilot design and proposed delivery order](./PILOT_PLAN.md) are approved; live pilot activation is not. All existing phases/modules remain on the roadmap.
 - No production onboarding, coherent restore rehearsal, real-device offline test, human accessibility/Kiswahili field review, verified cost estimate or named operations ownership has been completed here.
 - Only loopback development Mailpit messages were sent to synthetic identities; no external notifications or real payments, biometric collection, deployment or commit occurred.
+- CI browser job runs in the official `mcr.microsoft.com/playwright` image, pinned by digest, as runner UID 1001. Two consecutive PR #20 runs failed before any test because the hosted runner could not resolve its Ubuntu apt mirror during `playwright install --with-deps`; the image already carries the browser libraries and fonts. Bump the image tag with `@playwright/test`.
 
 ## Next step and demo
 
@@ -359,6 +361,129 @@ Status: built and verified locally; **not committed** (left for review). Design:
 - The deferred totals trigger relies on a per-transaction marker; a session that runs `SET CONSTRAINTS … IMMEDIATE` could check earlier than intended. Only direct database access could do that; the API never does.
 - VAT handling (rate, recompute-on-subtotal, inclusive/exclusive presentation) needs the tax review (CR-TAX-01). Kiswahili strings need a native speaker's review. The PDF layout has been checked by tests (structure, `%PDF`) but not yet by a person. GitHub CI has not run on this branch.
 
+## Independent review of D2.3
+
+A separate reviewer found three issues; all are fixed with a regression test (variations e2e 12/12; with the API rule removed the test fails, and the database still refuses the decision):
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | High | Maker-checker counted only a variation's creator and submitter, so a colleague could write all the lines and then approve them | `variation_orders.contributors`, kept by triggers on the variation and its lines (only ever grows); a decider on the list is refused by the API and by `variation_orders_state_check` |
+| 2 | Medium | Baseline approval ignored whoever mapped or resolved the import, which can change the contract sum | `bq_imports.contributors` (upload, mapping, resolutions, validation, commit), checked by the API and by `app.guard_bq_version` |
+| 3 | Medium | The database guard let content be re-pointed out of an approved version (`UPDATE bq_bills SET version_id = <draft>`), reproduced by the reviewer | The guard refuses any change of version or lineage and checks the row's current version; the totals check also re-validates the version a row left |
+
+## D2.3 BQ versions, instructions, variations and rate build-ups (branch `phase-2/d2.3-bq-variations`)
+
+Status: built and verified locally in a separate git worktree with its own Docker stack (`pmb-d23`: PostgreSQL on 55632); **not committed** (left for review). Design: [ARCHITECTURE §4.3](./ARCHITECTURE.md#43-bq-versions-variations-and-rate-build-ups-d23), §8 and decisions D-30 to D-33; implemented model in [ERD §4](./ERD.md#4-bq-variations-valuations-and-subcontracts); workflow additions in [WORKFLOWS](./WORKFLOWS.md#variation-as-implemented-d23); new invariants in [INVARIANTS](./INVARIANTS.md); acceptance rows and **Phase 2 acceptance** in [ACCEPTANCE_MATRIX](./ACCEPTANCE_MATRIX.md#phase-2-acceptance-projects-and-bq-d21d23); configuration (`bq.buildup.rounding`, `bq.buildup.limits`, `bq.variation.*`, build-up assumptions) in [CONFIGURATION](./CONFIGURATION.md); walkthrough in the [Phase 2 demo](./demos/phase-2.md#d23-bq-versions-instructions-variations-and-rate-build-ups). Every earlier security fix (D1.x reviews, the D2.1 and D2.2 review items) is untouched.
+
+**What changed**
+
+- **Dependencies.** None added or changed; `pnpm-lock.yaml`, every `package.json` and `.pnpmfile.mjs` are unchanged.
+- **Shared packages.** `types/variations.ts` (instruction issuer roles and statuses, variation statuses, actions, line actions, line issue codes, addable kinds and limits, build-up resource kinds, limits, output units and `BUILDUP_ROUNDING`); `types/bq.ts` adds the amount sources `fixed` and `omitted` and `BQ_VERSION_SOURCES`. `domain/bq/variation-lifecycle.ts` (state machine), `variation.ts` (line pricing, `variationTotals`, `projectedTotals`, `versionTotals`, `applyVariation`, `variationSnapshotText`), `compare.ts` (`compareVersions`), `buildup.ts` (`buildupLineAmountMinor`, `buildupRate`, `unitsCompatible`). `validation/variations.ts` (every D2.3 request and response); `validation/bq.ts` gains lineage IDs, nullable source rows, version lineage and approval fields, `permissions.canEdit/canApprove`, `baselineApproval` and the item's build-up link. EN/SW namespaces `bqNav`, `bqIndex`, `contractSum`, `baseline`, `variations`, `variationDetail`, `instructions`, `bqVersions`, `rateBuildUps`, plus `liveBq` and `apiErrors` additions (`i18n:check`: 2,209 keys in each).
+- **Database.** Migration `20261110130000_bq_variations` (no existing migration edited): `lineage_id` on bills and sections (unique per version, like items); nullable paired `source_sheet/source_row`; amount sources `fixed`/`omitted`; version `parent_version_id`, `variation_id`, `approved_by/at` with lineage, approval and uniqueness constraints; tables `instructions`, `variation_orders`, `variation_lines`, `variation_status_changes`, `rate_buildups`, `rate_buildup_versions`, `rate_buildup_lines`, `bq_item_rate_links`, each with `tenant_id`, ENABLE + FORCE RLS with `WITH CHECK` on `app.current_tenant_id()` and composite `(tenant_id, …)` FKs (project, BQ, version, bill/section/item lineage, instruction, variation, build-up version); triggers `app.guard_bq_version`, `app.guard_variation_order`, deferred `app.check_variation_version`, `app.guard_variation_line`, deferred build-up totals and current-version checks, `app.guard_bq_item_rate_link`; DELETE revoked on the history tables and UPDATE on status changes and build-up versions/lines for `pmb_app`. `prisma/schema.prisma` models all of it (the partial unique index `bq_item_rate_links_one_active` lives in SQL only; Prisma does not model partial indexes).
+- **API.** `BqVersionsService`, `InstructionsService`, `VariationsService`, `BuildupsService`, `bq-content.ts`, `variation-digest.ts`; `BqVariationsController` (23 operations under `projects/:id/bq`) and `BuildupsController` (5 under `rate-buildups`), all OpenAPI-annotated (the e2e suite checks every operation ID). `BqAccess` gains `editable()`, `approver()` (permission + step-up) and the D2.3 problem codes; `AccessPolicy` gains `stepUp()`, `holdsSomewhere()` and `requireSomewhere()`; `BqVersionWriter.copyContent()`; the viewer returns lineage IDs, item build-up links, `canEdit/canApprove` and the baseline-approval state. Seed: one synthetic build-up `CONC-C25-SYN` (rate KES 13,285.25 per m³) with a summary line.
+- **Web.** Pages `projects/[id]/bq` (rewritten: contract sum, baseline approval, sub-navigation), `bq/variations`, `bq/variations/[variationId]`, `bq/instructions`, `bq/versions`, `rate-buildups`, `rate-buildups/new`, `rate-buildups/[buildupId]`, `bq`; components `bq-subnav`, `contract-sum-card`, `baseline-approve`, `link-buildup-dialog`, `variation-status-badge`, `create-variation`, `variation-actions`, `variation-editor`, `instruction-dialog`, `buildup-editor`, `buildup-assumptions`; the project overview shows the contract sum card for `bq.view` holders; the sidebar's BQ entry opens the live `/bq` (no longer the prototype); the BQ tree shows and changes build-up links.
+- **Tests.** Domain `bq/variation.test.ts`; validation `variations.test.ts`; API unit `variation-digest.spec.ts` and seed spec; API e2e `test/variations.e2e-spec.ts` (11 tests); web `test/variations.spec.ts` (5 tests) with new mock modules `mock-bq-model.mts`, `mock-bq-versions.mts`, `mock-variations.mts`, `mock-buildups.mts`.
+
+**Behaviour changes to note (existing code and tests)**
+
+- `apps/api/test/bq.e2e-spec.ts`: the BQ view's `permissions` now include `canEdit` and `canApprove`, and the QS's view reports `baselineApproval: { allowed: false, refusal: "permission" }`. `apps/api/test/projects.e2e-spec.ts`: the seed test expects the build-up (1 build-up, 5 lines, rate 1,328,525 minor units). `apps/api/test/support.ts` knows the D2.3 response contracts.
+- `apps/web/test/mock-api.mts` has a third persona (`pm`, Brian Otieno, project manager on Ruiru with MFA) and per-persona step-up; personas signed in with the same session part of the token share fixture state (`live-helpers.ts` `switchPersona`), so a test can prepare as one person and approve as another. `mock-bq.mts` keeps several versions per project. Ruiru's mock BQ starts as a draft imported by the QS, so the owner can approve it.
+- `apps/web/src/components/maps/geofence-map-inner.tsx` (D2.1 code): permanent fence labels now get `aria-label` (the visible site name, set as an attribute, never HTML) in Leaflet's synchronous `add` event. react-leaflet renders a tooltip's text through a portal one React render after Leaflet inserts the `role="tooltip"` element, so the element briefly had no name; under load axe caught it (`aria-tooltip-name` on `leaflet-tooltip-47`/`-50` in the second combined run below). A temporary probe spec (MutationObserver from page start, three loads of the Sites tab; deleted afterwards) recorded unnamed empty tooltips `leaflet-tooltip-47`, `-50`, `-47`, `-50`… with the original component and none with the fix.
+- `apps/web/test/projects.spec.ts`: the EN/SW × light/dark accessibility matrix test calls `test.slow()` (Playwright's 3× time budget); its assertions are unchanged. The trace of the failed run showed 7 page loads taking 19.4 s and the axe scans 5.5 s under the parallel suite (load average about 30, other sessions also running browsers); the same test alone took 7.8–8.6 s.
+
+**Commands run (from the worktree root unless noted; PATH set to the arm64 Node 24.22.2 and the pnpm shim) and actual results**
+
+| Command | Actual result |
+|---|---|
+| `docker exec pmb-d23-postgres-1 psql -U pmb_migrator -d pmb` with the migration inside `BEGIN … ROLLBACK` (during development) | Applied cleanly and rolled back; then applied with `db:migrate` |
+| `npx pnpm@12.17.0 format:check` | First final run **failed**: 13 new D2.3 files not yet formatted; formatted with `npx prettier --write` on those files, then "All matched files use Prettier code style!". A later run **failed** on 12 files under `.scratch/trace` (an unzipped Playwright trace used for the timing analysis); after deleting it: "All matched files use Prettier code style!" |
+| `npx pnpm@12.17.0 turbo run lint typecheck test i18n:check build` | **26 successful, 0 cached** (28.2 s). oxlint "Found 0 warnings and 0 errors" in `types`, `i18n`, `domain`, `validation`, `api`; ESLint clean in web. Unit tests: types 15, domain 149, i18n 3, validation 62, web 20, API 100 (**349**). "i18n OK: 2209 keys in en and sw, all ICU messages compile." `next build` compiled successfully. After the last web edits (map label, `projects.spec.ts`): 26 successful (22 cached; web lint, typecheck, test (20) and build re-ran) |
+| `npx pnpm@12.17.0 db:migrate` | "14 migrations found in prisma/migrations", "No pending migrations to apply." (the D2.3 migration was applied to the d23 development database earlier in the session) |
+| `npx pnpm@12.17.0 test:e2e` in `apps/api` (after the seed-test change) | **8 files, 109 tests passed** (`variations.e2e-spec.ts` 11) against `pmb_test` under `pmb_app` |
+| `PLAYWRIGHT_WEB_PORT=3410 PLAYWRIGHT_MOCK_API_PORT=3499 npx pnpm@12.17.0 turbo run test:e2e` | Run 1: API 109 passed; web **43 passed, 1 failed** (`projects.spec.ts` "live project pages are accessible in en, light": 30 s timeout, see above). Run 2 (after `test.slow()`): API 109 passed; web **43 passed, 1 failed** ("lists live projects…": axe `aria-tooltip-name` on empty Leaflet tooltips, see above). Run 3 (after the label fix): **7 successful** (both `test:e2e` tasks executed); API 8 files, **109 tests**; web **44 tests passed** in 1.6 min with 7 workers |
+| Earlier web-only runs during stabilisation: `npx playwright test` (same ports) | 41 passed, 3 failed (the projects accessibility matrix timing out while the machine's load average was about 150 from other sessions); `test/projects.spec.ts` alone on a cold dev server: 3 passed, 6 failed (route compilation timeouts), then warm: 9 passed |
+| `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` (in `apps/api`) | First attempt, straight after an e2e run: "Please make sure your database server is running at `localhost:55632`" although `pmb-d23-postgres-1` was up and healthy (transient connection refusal). Re-run: "No difference detected.", exit code 0 |
+| `grep -c 'integrity: sha1-' pnpm-lock.yaml`; `grep -c 'tarball:' pnpm-lock.yaml` | 0; 1 (the SheetJS CDN line only) |
+| `npx pnpm@12.17.0 install --frozen-lockfile` | Exit 0: "Lockfile passes supply-chain policies", "Lockfile is up to date, resolution step is skipped" |
+
+**Not done / limitations**
+
+- Approval limits by amount, client decisions on variations (portal), attachment upload for instructions, unit conversions and theoretical consumption (D5.x) are not implemented.
+- A variation is always based on the newest approved version; stale variations are rebased, never merged. Percentage lines (PC attendance and profit) are not recomputed when their PC sum changes.
+- Browser tests use the mock API (the mock reuses the shared domain functions for pricing and totals); the real API is covered by the API e2e suite. No real-API browser smoke was run for D2.3.
+- The seed build-up's quantities and costs are synthetic. A QS should review the variation line model and the build-up example, and a native speaker the Kiswahili wording.
+
+## Independent review of D5.1
+
+A separate reviewer traced the payout maker-checker, tenant isolation (RLS, composite keys), encryption contexts, reveal and lookup limits and the conversion maths and found nothing critical or high. Its low findings and two found while checking the screens are fixed, each with a regression test that fails when the fix is reverted:
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Low | A status reason of one or two characters passed validation and hit the database CHECK (500) | `statusReason` needs three characters (code points, as `char_length` counts); API e2e expects 400. The reviewer's emoji-name case was already a 400: Zod 4 counts code points |
+| 2 | Low | Unlimited company units made the conversion search quadratic (2,000 units: 0.6 s per call on the shared event loop) | At most 200 company units per company (`unit-limit`, 409); the resolver only takes standard steps that end at the target or at a unit with a factor (3,000 units in a few ms; same results) |
+| 3 | Low | Supplier and material pickers loaded only the first 200 records; a calculator link could not preselect a later material | Pickers follow the cursor (up to 10 pages) and the calculator fetches the linked material directly (`lib/procurement-server.ts`, `collectPages`) |
+| 4 | Low | A 5-character account number was masked as `••••2345` | Numbers shorter than ten characters show only the last two (`••••45`); the database mask CHECK accepts both forms |
+| 5 | Low | Comparable prices used the cent-rounded net, so a VAT-inclusive 800 → 900 showed +12.4989 % | The comparison uses the exact net and rounds once (`exactNetPrice`): +12.5 % |
+| 6 | Low | The calculator text described the factor order backwards (EN and SW) | Now "supplier first, then material, then standard" |
+
+## D5.1 catalogue and suppliers (branch `phase-5/d5.1-catalogue-suppliers`)
+
+Status: built and verified locally in the `construction-d23` worktree (based on the D2.3 branch tip) with its own Docker stack (`pmb-d23`: PostgreSQL on 55632); **not committed** (left for review). Design: [ARCHITECTURE §4.4](./ARCHITECTURE.md#44-catalogue-and-suppliers-d51), §8 (maker-checker), §10 (encryption as built) and decisions D-34/D-35; implemented model in [ERD §5](./ERD.md#5-materials-procurement-and-stores); invariants in [INVARIANTS](./INVARIANTS.md); acceptance rows in [ACCEPTANCE_MATRIX](./ACCEPTANCE_MATRIX.md); configuration (`materials.price_change_alert_pct`, `materials.conversion.rounding`, `materials.steel.mass_formula`, `materials.limits`, `suppliers.payout.contact_change_window_days`, `suppliers.reveal.rate_limit`, `FIELD_*` keys) in [CONFIGURATION](./CONFIGURATION.md); threats A-25 and A-28 in [THREAT_MODEL](./THREAT_MODEL.md); walkthrough in the [Phase 5 demo](./demos/phase-5.md). Earlier security fixes are untouched.
+
+**What changed**
+
+- **Dependencies.** None added or changed (`decimal.js` was not needed: the conversion engine uses `BigInt` ratios); `pnpm-lock.yaml` and `.pnpmfile.mjs` are unchanged; `packages/domain/package.json` changes only its description.
+- **Field cipher (shared with D3.1).** `apps/api/src/modules/labour/field-cipher.ts` and `field-cipher.spec.ts` are byte-identical copies of the D3.1 session's files (checked with `cmp`), with only its `packages/validation/src/env.ts` (`FIELD_ENCRYPTION_KEYS`, `FIELD_ENCRYPTION_ACTIVE_KEY_VERSION`, `FIELD_BLIND_INDEX_KEY`), `apps/api/.env.example` and `apps/api/vitest.config.e2e.ts` hunks applied, so both branches merge cleanly. It should move to a shared module once D3.1 merges. Local keys are in the git-ignored `apps/api/.env` (mode 600).
+- **Shared packages.** `types/procurement.ts` (dimensions, standard unit codes, categories, steel and roofing constants, conversion sources and derived rules, rounding, VAT treatments, price sources and alert states, supplier/eTIMS/payout statuses, verification methods, reveal fields, `PAYOUT_CONTACT_CHANGE_WINDOW_DAYS`, `PROCUREMENT_LIMITS`). `domain/materials/`: `ratio.ts` (exact `BigInt` rationals, half-up), `units.ts` (standard and company units, unit classes), `attributes.ts` (steel d²/162, piece length, cover width, timber section, mesh sheet/roll), `convert.ts` (resolver, effective dating, refusals, `checkConversionRule`), `prices.ts` (`splitVat`, `comparableUnitPrice`, `priceChange`), `identifiers.ts` (KRA PIN and account number normalisation and masks), `defaults.ts` (21-material Kenyan starter catalogue). `validation/procurement.ts` (every D5.1 request and response). EN/SW namespaces `catalogue`, `suppliers`, `nav.items.suppliers` and `apiErrors` additions (`i18n:check`: 2,670 keys in each).
+- **Database.** Migration `20261115090000_procurement_catalogue` (no existing migration edited): tables `units`, `materials`, `unit_conversions`, `material_prices`, `procurement_settings`, `suppliers`, `supplier_contacts`, `supplier_phone_changes`, `supplier_payout_versions`, each with `tenant_id`, ENABLE + FORCE RLS with `WITH CHECK`, composite `(tenant_id, …)` FKs and CHECKs; functions `app.standard_unit_dimension`, `app.unit_class`, triggers `app.guard_unit`, `app.guard_material`, `app.guard_supplier`, `app.guard_unit_conversion`, `app.guard_material_price`, `app.record_contact_phone_change`, `app.guard_payout_version`; DELETE revoked on all nine tables except contacts, UPDATE on prices and phone changes. Prisma models for all of it (partial unique indexes `supplier_payout_versions_one_current` and `supplier_contacts_one_primary` live in SQL only).
+- **API.** `modules/procurement`: `CatalogueController` (16 operations) and `SuppliersController` (8), OpenAPI-annotated (the e2e suite checks every operation ID); `CatalogueService`, `ConversionsService`, `PricesService`, `SuppliersService`, `PayoutsService`, `CatalogueStore` (codes `MAT-NNNN`/`SUP-NNNN` under a company row lock, monotonic UUIDv7 IDs, conversion context), `ProcurementAccess`, `SupplierCrypto`, `starter-catalogue.ts`, mappers. Seed: a finance account (Daniel Mwangi, TOTP), the starter catalogue and `seed/demo-procurement.ts` (three synthetic suppliers, quarry trip factors, eight prices with one alert, one verified and one pending payout version).
+- **Web.** Pages `catalogue` (list), `catalogue/[materialId]`, `catalogue/alerts`, `catalogue/convert`, `catalogue/units`, `suppliers`, `suppliers/new`, `suppliers/[supplierId]`, `suppliers/[supplierId]/edit`; components in `components/procurement/` (sub-navigation, material form, starter-catalogue button, conversion and end dialogs, price dialog, price chart (recharts, animation off), calculator, unit dialog and threshold form, supplier form, reveal button, payout panel); `lib/procurement.ts` (unit labels, exact money and factor formatting). The sidebar's **Materials** entry opens the live catalogue (no longer "Phase 5"); **Suppliers** is new under Commercial.
+- **Tests.** Domain `materials/convert.test.ts` and `prices.test.ts` (39); validation `procurement.test.ts` (9); web `lib/procurement.test.ts` (2); API unit `field-cipher.spec.ts` (copied) and the seed spec; API e2e `test/procurement.e2e-spec.ts` (12); web `test/procurement.spec.ts` (6) with the mock module `test/mock-procurement.mts`.
+
+**Decisions**
+
+- **Exact conversions:** rationals on `BigInt`, one half-up rounding to 6 decimals per result with an `exact` flag; resolution supplier → material → attribute formula → standard; a lorry trip and package units have no universal size; steel d²/162 kg/m and 12 m bars (within 0.15 % of BS 4449). Same-dimension explicit factors are refused.
+- **Prices compare net of VAT** per base unit on the exact net (rounded once to six decimals of a minor unit), so the seeded cement 800 → 900 (VAT-inclusive) is +12.5 %; the stored net and gross stay rounded to the cent. The alert is strictly above the threshold, and the threshold used is stored on the row.
+- **No new permission keys or role changes.** View: any of `procurement.manage_suppliers`, `procurement.requisition`, `procurement.approve`, `stores.manage`, `finance.view`; manage: `procurement.manage_suppliers`; reveal identifiers: manage or company-wide `finance.view_sensitive`; reveal bank account: `finance.view_sensitive`; verify/reject payouts: company-wide `payments.approve` (+ step-up to verify); settings: `config.manage`.
+- **Payout maker-checker in the database:** contributors include anyone who changed a supplier contact phone within 30 days (closes the "change the known number, then call it" path); the decider must be the signed-in user.
+- **Alerts are listed, not pushed:** there is no in-app notification centre yet (D1.3 channels deliver authentication messages only), so alerts appear on the alerts page, the material and the catalogue list.
+- **Forms:** React Hook Form is not in the repository; the forms follow the existing controlled-state + shared Zod schema pattern rather than adding a dependency.
+- **Kiswahili:** materials and company units have an optional Kiswahili name; unit and category names come from the i18n catalogues. Terms needing native review: *safari ya lori* (lorry trip), *nondo* (steel bars), *mabati ya paa* (roofing), *wavu wa BRC*, *kiwango* (threshold), the payout verification methods.
+
+**Behaviour changes to note (existing code and tests)**
+
+- `apps/api/test/projects.e2e-spec.ts`: the seed test expects a fourth tenant member (finance) and the procurement summary (21 materials, 8 conversions, 3 suppliers, 8 prices, 1 alert; payout states pending and verified). `apps/api/test/support.ts` knows the D5.1 response contracts.
+- `apps/web/test/mock-api.mts` has a fourth persona (`finance`, Daniel Mwangi, company-wide, MFA); non-company-wide personas get procurement access only through project assignments, like `AccessPolicy`. `use-problem-message.ts` maps the D5.1 problem codes.
+
+**Commands run (from the worktree root unless noted; PATH set to the arm64 Node 24.22.2 and the pnpm shim) and actual results**
+
+| Command | Actual result |
+|---|---|
+| `cmp` of the two cipher files against the D3.1 reference copies | Identical (checked again after formatting) |
+| `npx pnpm@12.17.0 format:check` | First run **failed** on 9 new D5.1 files; after `npx prettier --write` on them: "All matched files use Prettier code style!" (the cipher files were not reformatted) |
+| `npx pnpm@12.17.0 turbo run lint typecheck test i18n:check build` | **26 successful, 0 cached** (31.1 s). oxlint "Found 0 warnings and 0 errors" in `types`, `i18n`, `domain`, `validation`, `api`; ESLint clean in web. Unit tests: types 15, i18n 3, domain 188, validation 71, web 22, API 109 (**408**). "i18n OK: 2670 keys in en and sw, all ICU messages compile." `next build` compiled successfully |
+| `docker compose -p pmb-d23 … exec postgres psql -U postgres`: drop/create `pmb_test` owned by `pmb_migrator`, schema owner, `REVOKE CREATE`, `GRANT USAGE`, default privileges (tables, sequences, functions) as in `infra/docker/postgres/init/01-roles.sh` | Done before the final e2e run |
+| `PLAYWRIGHT_WEB_PORT=3410 PLAYWRIGHT_MOCK_API_PORT=3499 npx pnpm@12.17.0 turbo run test:e2e` | **7 successful** (2 m 39 s). API **9 files, 122 tests** (`procurement.e2e-spec.ts` 12, `projects.e2e-spec.ts` 15) against `pmb_test` under `pmb_app`; web **50 passed** (`procurement.spec.ts` 6) in 2.7 min |
+| `npx prisma migrate status`; `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` (in `apps/api`, dev database `pmb` migrated with `prisma migrate deploy`) | "15 migrations found", "Database schema is up to date!"; "No difference detected.", exit code 0 |
+| `grep -c 'integrity: sha1-' pnpm-lock.yaml`; `npx pnpm@12.17.0 install --frozen-lockfile` | 0; exit 0, "Lockfile passes supply-chain policies", "Lockfile is up to date" |
+| Mutation: API maker-checker check in `PayoutsService` disabled, `procurement.e2e-spec.ts` run, file restored | 12/12 still pass: the database CHECK and trigger refuse self-verification on their own (mapped to 403 `maker-checker`) |
+| Mutation: `divideHalfUp` replaced by truncation, `vitest run src/materials`, file restored | 9 tests fail (rounding, round-trip properties, steel, VAT split); restored: 39 pass |
+| During development | One API e2e run hit a transient "Can't reach database server at localhost:55632" while the container was healthy; the re-run passed. The first web spec runs failed on wrong expectations in the new spec (KES formatting, +12.5 % instead of the net-of-VAT +12.4989 %, ambiguous locators); the spec was corrected, not the code. A supplier-page column header ("Supplier" over the material names) was found in the screenshots and fixed |
+
+Screenshots (EN light catalogue, material and calculator; SW supplier profile; 360 px SW dark supplier profile) were taken with Playwright against the mock API and kept outside the repository.
+
+**Not done / limitations**
+
+- Supplier ratings, balances and statements (need supplier invoices, D5.2), prices written from quotations and invoices (D5.2), payment to verified details and a hold period before the first payment (D5.2/D4.3, OR-05), alert delivery by SMS, email or an in-app inbox (Phase 8), eTIMS checks with KRA (CR-TAX-02).
+- Browser tests use the mock API (which reuses the shared domain functions); the real API is covered by the API e2e suite. No real-API browser smoke was run.
+- The starter catalogue's densities and coverage factors are labelled ASSUMPTION and need QS review; the steel formula is the industry rule of thumb, not the BS 4449 table.
+
+**Open risks**
+
+- **Merge conflicts with D3.1** (labour registry, parallel session) are likely in `prisma/schema.prisma` (tenant relations), `app.module.ts`, `test/support.ts`, `demo-seed.ts`, the i18n JSON files, `nav-config.ts`, `mock-api.mts` and these docs (decision IDs D-34/D-35 and threat A-28 may collide). The cipher files and env hunks are byte-identical by design.
+- Key management is the env-key interim (no KMS yet); losing `FIELD_ENCRYPTION_KEYS` makes supplier identifiers unreadable (CONFIGURATION §8).
+- Partial unique indexes are in SQL only; a future `prisma migrate dev` must not drop them (the drift check passes because Prisma ignores them).
+
 ## D3.1 labourer registry (branch `phase-3/d3.1-labour-registry`)
 
 Status: **built and verified locally; committed on the branch, not pushed.** One independent review has happened (two defects, fixed below); no CI run or approval yet, so the roadmap shows ⏳. Design: [ARCHITECTURE §4.3](./ARCHITECTURE.md#43-labour-module-d31), §8 (role defaults), §10 (field encryption) and decisions D-30–D-36; implemented-model differences in [ERD §6](./ERD.md#6-labour-attendance-and-biometrics); API contract in [apps/api/README.md](../apps/api/README.md#labour-registry-d31); walkthrough in the [Phase 3 demo](./demos/phase-3.md). The branch is rebased onto `origin/main` at `42e93c9` (D2.2 BQ import merged) and also carries the commit "test: honour configured Mailpit and Playwright ports". An independent review found two defects, fixed in a follow-up commit (see "Independent review of D3.1" below). Work and checks ran in a separate git worktree with its own Docker stack (compose project `pmb-p34`: PostgreSQL 55532, Valkey 56479, RustFS 9100, Mailpit 1125/8125; API 4300, web 3300; Playwright 3310/3399), so another session on the main checkout was not disturbed.
@@ -516,3 +641,184 @@ Also: `@pm-buddy/types` exports `AUTOMATIC_ADJUSTMENT_REASON`; the web shows a t
 | Drop and recreate `pmb`, then `db:migrate`, `db:migrate`, `db:seed`, `db:seed` | All migrations applied, then "No pending migrations to apply."; seed run 1 "created": 1508 attendance records, 20 periods (16 approved), 29 open anomalies, 1 adjustment, 23 holidays; run 2 "already present" with the same counts |
 | `cd apps/api && npx --yes pnpm@12.17.0 exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` | "No difference detected.", exit 0 |
 
+
+## Phase 6 — increment 1: live site-diary foundation (11 November 2026)
+
+Owner selected **"Implement all Phase 6 incrementally, starting with its foundations"**.
+This increment starts D6.1; it does not mark D6.1 or Phase 6 accepted, and does not
+silently assume the attendance, stores or financial-ledger modules exist.
+
+Delivered:
+
+- `/diary` lists accessible projects; the sidebar opens it and legacy `/soon/diary`
+  redirects to it. `/projects/[projectId]?tab=diary` is live, not a prototype.
+- Daily site drafts capture work, weather, constraints and a **manual**, nullable
+  workforce count. Unknown remains null; zero explicitly means no workers. Site/day
+  is unique; future Nairobi dates and mismatched project/site IDs are refused.
+- Original-author edits, submission, independent `quality.manage` approval/rejection,
+  author reopening of rejection, expected-version conflicts and permanent approval
+  locking. Reads use `projects.view`; writing uses `site.diary`. All permissions use
+  the existing role ∩ assignment policy. EN/SW, mobile layout and explicit errors.
+- Persisted `site_diaries` with forced tenant RLS, composite tenant/project/site
+  reference, database actor/state/version/locking protections, safe-summary audit in
+  the same transaction, bounded cursor pagination and strict shared contracts.
+- Local development migration applied successfully; `prisma migrate diff
+  --from-config-datasource --to-schema prisma/schema.prisma --exit-code` reported
+  **No difference detected**. No production migration/deployment was performed.
+
+Executed evidence:
+
+| Command | Actual result |
+|---|---|
+| `pnpm --filter @pm-buddy/domain test` | 10 files, 133 tests passed |
+| `pnpm --filter @pm-buddy/validation test` | 7 files, 62 tests passed, including impossible sign-off response rejection |
+| `pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/diaries.e2e-spec.ts` | 10 tests passed against real PostgreSQL/runtime role: persistence, CSRF/auth, role/project scope, cross-tenant RLS and references, concurrent edits, author-only drafts, independent approval, rejection/reopen, immutable SQL backstops, pagination, audit redaction, revoked assignments and cancelled-project writes |
+| API integration regression run: diary + projects + identity | 3 files, 58 tests passed before the final cancelled-project test was added; final diary suite rerun separately as above |
+| `pnpm --filter @pm-buddy/web exec playwright test test/diaries.spec.ts` | 3 Chromium tests passed: live-route navigation, draft CRUD/submission, independent lock/reload, rejection reason, stale-version and malformed-success failures, EN/SW, 360px, dark theme and axe |
+| `pnpm --filter @pm-buddy/web test` | 5 files, 20 existing unit tests passed |
+| API/web `typecheck`, `lint`; domain/validation `lint` | Passed |
+| `pnpm --filter @pm-buddy/i18n i18n:check` | Passed: 1,855 EN/SW keys and ICU compilation |
+| `pnpm --filter @pm-buddy/api build` | Passed |
+| `PLAYWRIGHT_TEST=1 pnpm --filter @pm-buddy/web build` | Passed; includes `/diary` and project diary tab |
+
+Tooling used the already-cached pnpm 12.17.0 executable after the interactive PATH
+lacked pnpm/npx. Browser tests now use `.next-e2e` (`PLAYWRIGHT_TEST=1`) so they do not
+compete with the existing developer server. ESLint ignores generated browser build
+and test-output directories. Existing server at port 3200 was left running and
+remained responsive. The existing identity suite still emits its previously noted
+Node listener warning. No GitHub CI or all-project browser-suite run is claimed.
+The running API's OpenAPI document through port 3200 exposes all three diary paths;
+an unauthenticated diary read returns 401, and `/diary` redirects to sign-in. These
+are route/auth smoke checks, not a real-API authenticated browser workflow.
+
+Remaining Phase 6 work, in incremental delivery order:
+
+1. Finish D6.1: attendance-backed workforce snapshot with provenance; offline/site-app
+   capture; attachments and server photo verification; inspections/checklists,
+   cube/slump tests, snags, practical completion and defects-liability workflow.
+2. D6.2: schedule activities/dependencies, milestones, immutable baseline, actual
+   dates, variance/Gantt and reasoned delays.
+3. D6.3: approved-BQ-linked measurements/evidence, separate physical/earned/certified
+   values, cost inputs and unavailable ratios when undefined, S-curve, retention and
+   releases, subcontract/piece-rate linkage, cost-to-complete, independent certificate
+   review/issuance and immutable PDF snapshots. Prevent double billing materials on
+   site when incorporated. No EVM or certificate figures are fabricated today.
+
+See [Phase 6 demo](./demos/phase-6.md) and the [API contract](../apps/api/README.md#site-diary-foundation-d61-phase-6-increment-1).
+
+## Continue with Google (11 November 2026)
+
+Owner request: "allow login with gmail". Owner decisions: accept **Gmail and Google
+Workspace addresses** (Google-authoritative only), **link automatically** to an existing
+account with the same email, and **create a new verified account** for people without one.
+
+Delivered: "Continue with Google" on `/sign-in` (EN/SW), shown only when the API reports it
+configured; OpenID Connect code flow with PKCE, state and nonce via `openid-client@6.8.9`
+(pinned; adds `oauth4webapi@3.8.8`, reuses `jose@6.2.15`); ID token issuer, audience,
+expiry, nonce and signature checks; `user_identities` table (migration
+`20261116100000_google_sign_in`, unique per Google subject and per user); emailed notice on
+linking; takeover of an unverified pending registration discards its password; explicit
+`?google=` outcomes; PM-Buddy MFA, roles and tenancy unchanged. Off unless
+`AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` are set (see the
+[API README](../apps/api/README.md#continue-with-google)).
+
+| Command | Actual result |
+|---|---|
+| `pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/google.e2e-spec.ts` | 11 tests passed against a local fake provider with the real openid-client exchange and PostgreSQL |
+| `pnpm --filter @pm-buddy/api test` / `test:e2e` | 100 unit tests (17 files) and 119 integration tests (9 files) passed |
+| `pnpm --filter @pm-buddy/web exec playwright test test/sign-in.spec.ts` | 6 Chromium tests passed (4 existing, 2 new: button and safe `next`, EN/SW errors, hidden when off, MFA after Google, axe) |
+| API/web `typecheck` and `lint`; `i18n:check` | Passed (1,864 EN/SW keys) |
+| Local migration + `prisma migrate diff --exit-code` | Applied; no difference |
+| Running dev server (port 3200) | `GET /api/v1/auth/providers` → `{"google":false}`; `/auth/google/start` → 303 to `/sign-in?google=unavailable&next=%2Fdiary` |
+
+Not yet done: a sign-in against real Google (needs the owner's OAuth client and redirect URI
+registration); unlinking Google from an account; showing linked sign-in methods in the
+account console. Google sign-in does not reset password-lockout counters.
+
+## Independent review of the portals, Google and PIN sign-in
+
+Reviewed when this work was merged into main. Google sign-in (state, nonce and PKCE in a single-use encrypted cookie, issuer/audience/signature checks, linking by Google subject, MFA still enforced), the portals, diaries, photos and the migrations raised nothing. Three findings on the PIN sign-in:
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Medium | Every PIN attempt, right or wrong, counted against the 30-per-day budget per number, which was checked before the PIN and not cleared by a reset: 30 wrong guesses locked a labourer out for the day, even after resetting | Only wrong PINs count (`PIN_DAILY_FAILURES`, checked before verifying, recorded after); a spent budget answers `pin-reset-required` (429, EN/SW message pointing to "Forgot PIN?"); a PIN reset clears it. Portals e2e |
+| 2 | Medium | PIN sessions were limited with `portalFor`, which treats `projects.view`, `bq.view` and `portal.client` as non-staff, so a custom role with `portal.worker` plus those let a guessed PIN read BQ rates and contract sums | `pinAllowed` (packages/types): a PIN session's role must hold `portal.worker` and nothing else, checked when joining, accepting an invitation and on every tenant request. Unit test and portals e2e (join refused; a role that later gains view permissions loses PIN access) |
+| 3 | Low | PIN hashes use the password Argon2id settings without a server-side pepper; with 10⁶ PINs a database dump reveals them | **Open:** add an HMAC pepper held in the secrets manager / KMS (needs the key-management decision); until then PINs open only the worker portal |
+
+Also open: per-IP limits apply only when `TRUST_PROXY` is set, and there is no company- or platform-wide budget of PIN failures with alerting yet. Each fix was mutation-checked: reverting it fails a test.
+
+## Portals for clients, labourers and staff (11 November 2026)
+
+Owner request: "id like different portals for clients admin and labourers" (and Google sign-in,
+delivered above). Owner decisions: **admin = company staff** (the existing office app),
+**one sign-in page routing by role**, **labourers sign in with phone + PIN invited by a PM**, and
+**all three portals now with the live data that exists**. This adds a labourer web portal on top
+of the brief's USSD-only plan (§3); USSD remains D7.3.
+
+Delivered: `labourer` system role (`portal.worker` only); `portal.client`/`portal.worker`
+project-assignable (migration `20261116110000_portals`, backfilling existing clients); `portalFor`
+routing in sign-in, the office layout and both portal layouts; live `/portal` (assigned
+projects, milestones, approved diaries) and `/worker` (assigned projects and sites, attendance
+and pay explicitly "coming"); `/worker/join` and `/worker/pin`; **Labourer PIN** tab on
+`/sign-in`; **Invite a labourer** on a project's Team tab (`labour.manage`); PIN accounts
+(Argon2id, weak-PIN rules, shared lockout, per-number limits) with `sessions.auth_method` and
+PIN sessions limited to the labourer portal; site-diary lists restricted to staff permissions so
+clients never see drafts; the mock client-portal prototype moved to `/prototype/portal`.
+
+| Command | Actual result |
+|---|---|
+| `pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/portals.e2e-spec.ts` | 9 tests passed (real PostgreSQL, `pmb_app` role) |
+| `pnpm --filter @pm-buddy/api test` / `test:e2e` (after the API changes) | 100 unit tests (17 files) and 128 integration tests (10 files) passed |
+| `pnpm --filter @pm-buddy/web exec playwright test` | Full browser suite: 53 passed, including 8 new portal tests |
+| `pnpm --filter @pm-buddy/web test`, `typecheck`, `lint`, `PLAYWRIGHT_TEST=1 … build` | Passed (20 unit tests; build lists `/portal`, `/worker`, `/worker/join`, `/worker/pin`, `/prototype/portal`) |
+| Shared packages: types 16, domain 138, validation 62, i18n 3 tests; `i18n:check` | Passed (1,951 EN/SW keys) |
+| `pnpm exec prettier --check packages apps/api/src apps/api/test apps/web/src apps/web/test` | Passed |
+| Dev database: `pnpm db:migrate`, `prisma migrate diff --exit-code` | Applied; no difference |
+| Running dev servers (port 3200) | Portal APIs 401 signed out; `/portal`, `/worker` redirect to sign-in; `/worker/join`, `/worker/pin`, `/prototype/portal` 200; OpenAPI lists all seven new operations |
+
+Limitations: production SMS (invitation and PIN-reset links) is unavailable until the D7.3
+provider is approved; no USSD; no attendance or pay data; client photos, certificates, payments,
+variations and FX are not built; no supplier portal; a six-digit PIN is a low-entropy secret,
+which is why PIN sessions are confined to labourer data. Kiswahili strings need a native
+speaker's review. No real-API browser smoke of the portals and no GitHub CI run are claimed.
+
+## Phase 6 — increment 2: verified site photos (11 November 2026)
+
+Owner instruction: "continue" (Phase 6, incrementally). This increment delivers D6.1's second
+done-when check, "photo metadata is verified"; with locked approved diaries (increment 1) both
+D6.1 checks now pass locally. D6.1 is still not complete: attendance-backed workforce, in-app and
+offline capture, inspections/checklists, cube/slump tests, snags and completion/DLP remain.
+
+Delivered: project **Photos** tab (upload from the phone camera, timeline with Verified / Not
+verified and reasons, EN/SW); `site_photos` (migration `20261116120000_site_photos`: forced RLS,
+composite site and draft-diary references, CHECKs binding `verified` to the checks and keys to
+tenant/project/photo, insert-only for the runtime role, unique SHA-256 per project); EXIF reading
+(`sharp@0.35.5`, `exif-reader@2.0.3`, both pinned); `verifyPhotoEvidence` against the geofence
+version in force at capture; private originals and metadata-free thumbnails; `liveUpload`
+can send form fields.
+
+| Command | Actual result |
+|---|---|
+| `pnpm --filter @pm-buddy/domain test` | 142 tests passed (photo evidence: tolerance, distance outside, missing data, future/stale, Nairobi diary day) |
+| `pnpm --filter @pm-buddy/validation test` | 65 tests passed |
+| `pnpm --filter @pm-buddy/api test` | 103 unit tests passed (EXIF reader against generated JPEGs) |
+| `pnpm --filter @pm-buddy/api test:e2e` | 11 files, 137 tests passed, including 9 photo tests (real PostgreSQL, object storage, generated EXIF JPEGs: verified/outside/missing/stale/future/assumed zone, geofence version in force, draft-diary only, duplicate, PNG, corrupt, 56-megapixel and 15 MB+ refusals, permissions, cross-company 404s, append-only SQL, pagination, audit redaction) |
+| `pnpm --filter @pm-buddy/web exec playwright test --workers=3` | 55 passed, including 2 photo tests (badges and reasons, upload/duplicate/unverified outcomes, EN/SW, 360 px, axe) |
+| Web `typecheck`, `lint`, unit tests (20), `PLAYWRIGHT_TEST=1 … build`; API/domain/validation lint; `i18n:check` (1,995 keys); `prettier --check` | Passed |
+| Dev database migration + `prisma migrate diff --exit-code` | Applied; no difference |
+| Running dev API (port 3200) | Photo list 401 signed out; OpenAPI lists the four photo operations |
+
+Test notes: a concurrent labourer-join test from the portals increment expected exactly 409 for
+the losing request; it can correctly be 401 when it arrives after the invitation is spent (the
+invariant, one account, held). The assertion now accepts either. The 7-page project
+accessibility sweep is marked slow (it took 24 s alone against a 30 s limit). Default-parallel
+browser runs were unstable while another checkout (`construction-p34`) ran its own Playwright
+suite on this machine (load average ~170); with three workers the full suite passed.
+
+Limitations: no in-app capture proof (web uploads can come from the gallery) and no perceptual
+reuse detection, so the badge is weaker than THREAT_MODEL A-13's target; HEIC is refused;
+thumbnails are generated in the API process; no client-portal photo timeline yet (D7.1).
+
+Remaining Phase 6 work: rest of D6.1 (inspections/checklists, cube/slump tests, snags,
+completion/DLP; attendance-backed workforce and site-app capture after Phase 3), D6.2 schedule
+(baseline, actuals, variance, delay log), D6.3 measurement, EVM and interim payment certificates.

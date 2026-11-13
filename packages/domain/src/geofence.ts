@@ -264,3 +264,11 @@ export function isInsideGeofence(point: LatLng, geofence: Geofence, toleranceM =
   if (isInPolygon(point, geofence.vertices)) return true;
   return toleranceM > 0 && distanceToBoundaryM(point, geofence.vertices) <= toleranceM;
 }
+
+/** How far outside a geofence a point lies, in metres (0 when inside or on the boundary). */
+export function distanceOutsideGeofenceM(point: LatLng, geofence: Geofence): number {
+  if (geofence.kind === "radius")
+    return Math.max(0, haversineMeters(point, geofence.center) - geofence.radiusM);
+  if (isInPolygon(point, geofence.vertices)) return 0;
+  return distanceToBoundaryM(point, geofence.vertices);
+}

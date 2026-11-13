@@ -44,7 +44,8 @@ export function verifyCallback(parsed: ParsedCallback, expected: ExpectedOutcome
   const direction = callbackDirection(parsed.kind);
   if (direction && direction !== expected.direction && expected.kind !== "reversal")
     return { ok: false, reason: "direction_mismatch" };
-  if (!COMPATIBLE[expected.kind].includes(parsed.kind)) return { ok: false, reason: "kind_mismatch" };
+  if (!COMPATIBLE[expected.kind].includes(parsed.kind))
+    return { ok: false, reason: "kind_mismatch" };
   if (parsed.outcome !== "success") return { ok: true };
   return verifySettlement(
     {
@@ -68,10 +69,15 @@ export function verifySettlement(
   expected: Pick<ExpectedOutcome, "amountMinor" | "currency" | "shortcode">,
 ): Verification {
   if (evidence.amountMinor === null || !evidence.receipt) return { ok: false, reason: "malformed" };
-  if (evidence.amountMinor !== expected.amountMinor) return { ok: false, reason: "amount_mismatch" };
+  if (evidence.amountMinor !== expected.amountMinor)
+    return { ok: false, reason: "amount_mismatch" };
   if (evidence.currency !== null && evidence.currency.toUpperCase() !== expected.currency)
     return { ok: false, reason: "currency_mismatch" };
-  if (evidence.shortcode !== null && expected.shortcode && evidence.shortcode !== expected.shortcode)
+  if (
+    evidence.shortcode !== null &&
+    expected.shortcode &&
+    evidence.shortcode !== expected.shortcode
+  )
     return { ok: false, reason: "shortcode_mismatch" };
   return { ok: true };
 }

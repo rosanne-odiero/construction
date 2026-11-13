@@ -17,11 +17,7 @@ import { minor } from "./payments-support.js";
 
 type Tx = Prisma.TransactionClient;
 export type OutboxTopic =
-  | "attempt.submit"
-  | "attempt.status_query"
-  | "callback.process"
-  | "balance.query"
-  | "c2b.register";
+  "attempt.submit" | "attempt.status_query" | "callback.process" | "balance.query" | "c2b.register";
 
 /** Settlement evidence from a verified callback, a status answer or a reviewed statement entry. */
 export type SettlementEvidence = {
@@ -91,7 +87,13 @@ export class PaymentLedger {
   }
 
   /** Durable work for the relay; at most one pending row per topic and subject. */
-  async enqueue(tx: Tx, tenantId: string, topic: OutboxTopic, refId: string, availableAt = new Date()) {
+  async enqueue(
+    tx: Tx,
+    tenantId: string,
+    topic: OutboxTopic,
+    refId: string,
+    availableAt = new Date(),
+  ) {
     await tx.paymentOutbox.createMany({
       data: [{ id: uuidv7(), tenantId, topic, refId, availableAt }],
       skipDuplicates: true,
@@ -211,7 +213,9 @@ export class PaymentLedger {
       },
     });
     if (updated.count === 0) return false;
-    const row = await tx.paymentCase.findUniqueOrThrow({ where: { tenantId_id: { tenantId, id: caseId } } });
+    const row = await tx.paymentCase.findUniqueOrThrow({
+      where: { tenantId_id: { tenantId, id: caseId } },
+    });
     await this.event(tx, tenantId, {
       subjectType: "case",
       subjectId: caseId,
@@ -349,13 +353,35 @@ export class PaymentLedger {
         where: { tenantId_id: { tenantId: confirmed.tenantId, id: confirmed.reversesAttemptId } },
       });
       if (original.status === "reversal_pending") {
-        await this.transition(tx, original, "reversed", "reversal_confirmed", actorId, {}, {
-          reversalAttemptId: confirmed.id,
-        });
-        await this.dispatch(tx, original, request.purpose, request.purposeRef, "reversed", original.receipt);
+        await this.transition(
+          tx,
+          original,
+          "reversed",
+          "reversal_confirmed",
+          actorId,
+          {},
+          {
+            reversalAttemptId: confirmed.id,
+          },
+        );
+        await this.dispatch(
+          tx,
+          original,
+          request.purpose,
+          request.purposeRef,
+          "reversed",
+          original.receipt,
+        );
       }
     } else {
-      await this.dispatch(tx, confirmed, request.purpose, request.purposeRef, "confirmed", evidence.receipt);
+      await this.dispatch(
+        tx,
+        confirmed,
+        request.purpose,
+        request.purposeRef,
+        "confirmed",
+        evidence.receipt,
+      );
     }
     return confirmed;
   }
@@ -364,7 +390,11 @@ export class PaymentLedger {
   async fail(
     tx: Tx,
     attempt: PaymentAttempt,
-    evidence: { resultCode: string | null; resultDesc: string | null; providerCode?: string | null },
+    evidence: {
+      resultCode: string | null;
+      resultDesc: string | null;
+      providerCode?: string | null;
+    },
     reason: PaymentReasonCode,
     actorId: string | null,
   ): Promise<PaymentAttempt | null> {
@@ -384,9 +414,17 @@ export class PaymentLedger {
         where: { tenantId_id: { tenantId: failed.tenantId, id: failed.reversesAttemptId } },
       });
       if (original.status === "reversal_pending")
-        await this.transition(tx, original, "confirmed", "reversal_rejected", actorId, {}, {
-          reversalAttemptId: failed.id,
-        });
+        await this.transition(
+          tx,
+          original,
+          "confirmed",
+          "reversal_rejected",
+          actorId,
+          {},
+          {
+            reversalAttemptId: failed.id,
+          },
+        );
     } else {
       await this.dispatch(tx, failed, request.purpose, request.purposeRef, "failed", null);
     }

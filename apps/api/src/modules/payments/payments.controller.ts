@@ -61,7 +61,11 @@ const required = {
   description:
     "Required, 8–128 letters, digits, '-' or '_'. A retry with the same key and payload returns the original response (Idempotent-Replayed: true); another payload is 409 idempotency-key-reused.",
 };
-const optional = { ...required, required: false, description: `Optional. ${required.description.slice(10)}` };
+const optional = {
+  ...required,
+  required: false,
+  description: `Optional. ${required.description.slice(10)}`,
+};
 const stepUp = "Needs MFA verified within five minutes (403 step-up-required).";
 const versioned = "Send the version you read (409 version-conflict otherwise).";
 
@@ -122,9 +126,15 @@ export class PaymentsController {
   @ApiHeader(optional)
   @ApiBody({ schema: openApi(updatePaymentSettingsRequestSchema) })
   @ApiOkResponse({ schema: openApi(paymentSettingsResponseSchema) })
-  @ApiConflictResponse({ description: "production-not-enabled, environment-unavailable, version-conflict" })
+  @ApiConflictResponse({
+    description: "production-not-enabled, environment-unavailable, version-conflict",
+  })
   async updateSettings(@Body() body: unknown, @Req() req: CallbackRequest) {
-    return this.settings.update(await this.auth.principal(req), req, updatePaymentSettingsRequestSchema.parse(body));
+    return this.settings.update(
+      await this.auth.principal(req),
+      req,
+      updatePaymentSettingsRequestSchema.parse(body),
+    );
   }
 
   @Put("settings/credentials")
@@ -154,7 +164,11 @@ export class PaymentsController {
   @ApiBody({ schema: openApi(payoutSwitchRequestSchema) })
   @ApiOkResponse({ schema: openApi(paymentSettingsResponseSchema) })
   async payouts(@Body() body: unknown, @Req() req: CallbackRequest) {
-    return this.settings.setPayouts(await this.auth.principal(req), req, payoutSwitchRequestSchema.parse(body));
+    return this.settings.setPayouts(
+      await this.auth.principal(req),
+      req,
+      payoutSwitchRequestSchema.parse(body),
+    );
   }
 
   @Post("settings/callback-token")
@@ -168,7 +182,11 @@ export class PaymentsController {
   @ApiBody({ schema: openApi(rotateCallbackTokenRequestSchema) })
   @ApiOkResponse({ schema: openApi(paymentSettingsResponseSchema) })
   async rotate(@Body() body: unknown, @Req() req: CallbackRequest) {
-    return this.settings.rotateToken(await this.auth.principal(req), req, rotateCallbackTokenRequestSchema.parse(body));
+    return this.settings.rotateToken(
+      await this.auth.principal(req),
+      req,
+      rotateCallbackTokenRequestSchema.parse(body),
+    );
   }
 
   @Post("settings/c2b-registration")
@@ -203,10 +221,17 @@ export class PaymentsController {
   // Requests and attempts -----------------------------------------------------------------------
 
   @Get("requests")
-  @ApiOperation({ summary: "Payment requests with their latest attempt", operationId: "listPaymentRequests" })
+  @ApiOperation({
+    summary: "Payment requests with their latest attempt",
+    operationId: "listPaymentRequests",
+  })
   @ApiOkResponse({ schema: openApi(paymentRequestsResponseSchema) })
   async list(@Query() query: unknown, @Req() req: CallbackRequest) {
-    return this.requests.list(await this.auth.principal(req), req, paymentRequestListQuerySchema.parse(query));
+    return this.requests.list(
+      await this.auth.principal(req),
+      req,
+      paymentRequestListQuerySchema.parse(query),
+    );
   }
 
   @Post("requests")
@@ -219,14 +244,22 @@ export class PaymentsController {
   @ApiHeader(required)
   @ApiBody({ schema: openApi(createTestPaymentRequestSchema) })
   @ApiCreatedResponse({ schema: openApi(paymentRequestResponseSchema) })
-  @ApiConflictResponse({ description: "amount-above-limit, daily-limit-exceeded, payments-not-configured, idempotency-key-reused" })
+  @ApiConflictResponse({
+    description:
+      "amount-above-limit, daily-limit-exceeded, payments-not-configured, idempotency-key-reused",
+  })
   async create(@Body() body: unknown, @Req() req: CallbackRequest) {
-    return this.requests.createTest(await this.auth.principal(req), req, createTestPaymentRequestSchema.parse(body));
+    return this.requests.createTest(
+      await this.auth.principal(req),
+      req,
+      createTestPaymentRequestSchema.parse(body),
+    );
   }
 
   @Get("requests/:id")
   @ApiOperation({
-    summary: "A payment request with attempts, state timeline, callbacks (redacted), cases and receipts",
+    summary:
+      "A payment request with attempts, state timeline, callbacks (redacted), cases and receipts",
     operationId: "getPaymentRequest",
   })
   @ApiOkResponse({ schema: openApi(paymentRequestDetailResponseSchema) })
@@ -269,17 +302,28 @@ export class PaymentsController {
   // Callbacks and reconciliation -------------------------------------------------------------
 
   @Get("callbacks")
-  @ApiOperation({ summary: "Callback inbox (redacted bodies) and open alerts", operationId: "listPaymentCallbacks" })
+  @ApiOperation({
+    summary: "Callback inbox (redacted bodies) and open alerts",
+    operationId: "listPaymentCallbacks",
+  })
   @ApiOkResponse({ schema: openApi(paymentCallbacksResponseSchema) })
   async callbacks(@Query() query: unknown, @Req() req: CallbackRequest) {
-    return this.reconciliation.listCallbacks(await this.auth.principal(req), req, callbackListQuerySchema.parse(query));
+    return this.reconciliation.listCallbacks(
+      await this.auth.principal(req),
+      req,
+      callbackListQuerySchema.parse(query),
+    );
   }
 
   @Get("callbacks/:id")
   @ApiOperation({ summary: "One callback (redacted)", operationId: "getPaymentCallback" })
   @ApiOkResponse({ schema: openApi(paymentCallbackResponseSchema) })
   async callback(@Param("id") id: string, @Req() req: CallbackRequest) {
-    return this.reconciliation.getCallback(await this.auth.principal(req), req, uuidSchema.parse(id));
+    return this.reconciliation.getCallback(
+      await this.auth.principal(req),
+      req,
+      uuidSchema.parse(id),
+    );
   }
 
   @Post("callbacks/:id/review")
@@ -292,7 +336,11 @@ export class PaymentsController {
   @ApiHeader(optional)
   @ApiBody({ schema: openApi(reviewCallbackRequestSchema) })
   @ApiOkResponse({ schema: openApi(paymentCallbackResponseSchema) })
-  async reviewCallback(@Param("id") id: string, @Body() body: unknown, @Req() req: CallbackRequest) {
+  async reviewCallback(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @Req() req: CallbackRequest,
+  ) {
     return this.reconciliation.reviewCallback(
       await this.auth.principal(req),
       req,
@@ -305,11 +353,18 @@ export class PaymentsController {
   @ApiOperation({ summary: "Reconciliation cases", operationId: "listReconciliationCases" })
   @ApiOkResponse({ schema: openApi(reconciliationCasesResponseSchema) })
   async cases(@Query() query: unknown, @Req() req: CallbackRequest) {
-    return this.reconciliation.listCases(await this.auth.principal(req), req, caseListQuerySchema.parse(query));
+    return this.reconciliation.listCases(
+      await this.auth.principal(req),
+      req,
+      caseListQuerySchema.parse(query),
+    );
   }
 
   @Get("cases/:id")
-  @ApiOperation({ summary: "A reconciliation case with its history", operationId: "getReconciliationCase" })
+  @ApiOperation({
+    summary: "A reconciliation case with its history",
+    operationId: "getReconciliationCase",
+  })
   @ApiOkResponse({ schema: openApi(reconciliationCaseResponseSchema) })
   async getCase(@Param("id") id: string, @Req() req: CallbackRequest) {
     return this.reconciliation.getCase(await this.auth.principal(req), req, uuidSchema.parse(id));

@@ -7,6 +7,18 @@ import { expect } from "vitest";
 import { z } from "zod";
 import {
   bqBillResponseSchema,
+  bqCompareResponseSchema,
+  bqContractSumResponseSchema,
+  bqItemLinkResponseSchema,
+  bqVersionResponseSchema,
+  bqVersionsResponseSchema,
+  buildupResponseSchema,
+  buildupsResponseSchema,
+  buildupVersionResponseSchema,
+  instructionResponseSchema,
+  instructionsResponseSchema,
+  variationResponseSchema,
+  variationsResponseSchema,
   bqImportResponseSchema,
   bqImportsResponseSchema,
   bqPreviewResponseSchema,
@@ -16,8 +28,13 @@ import {
   bqTemplateResponseSchema,
   bqTemplatesResponseSchema,
   auditEventsResponseSchema,
+  authProvidersResponseSchema,
   authResponseSchema,
+  clientProjectResponseSchema,
+  clientProjectsResponseSchema,
   csrfResponseSchema,
+  diariesResponseSchema,
+  diaryResponseSchema,
   invitationResponseSchema,
   membersResponseSchema,
   messageResponseSchema,
@@ -44,6 +61,34 @@ import {
   sessionsResponseSchema,
   tenantCreatedResponseSchema,
   tenantsResponseSchema,
+  conversionResponseSchema,
+  conversionResultResponseSchema,
+  loadDefaultsResponseSchema,
+  materialDetailResponseSchema,
+  materialResponseSchema,
+  materialsResponseSchema,
+  priceAlertsResponseSchema,
+  priceResponseSchema,
+  procurementSettingsResponseSchema,
+  supplierDetailResponseSchema,
+  supplierRevealResponseSchema,
+  suppliersResponseSchema,
+  commitmentsResponseSchema,
+  grnResponseSchema,
+  grnsResponseSchema,
+  inboxResponseSchema,
+  invoiceDetailResponseSchema,
+  invoicesResponseSchema,
+  lpoDetailResponseSchema,
+  lposResponseSchema,
+  procurementDocumentResponseSchema,
+  receivableLposResponseSchema,
+  requisitionDetailResponseSchema,
+  requisitionsResponseSchema,
+  rfqDetailResponseSchema,
+  rfqsResponseSchema,
+  unitResponseSchema,
+  unitsResponseSchema,
   accreditationAlertsResponseSchema,
   gangDetailResponseSchema,
   gangsResponseSchema,
@@ -83,6 +128,25 @@ import {
   paymentsOverviewResponseSchema,
   reconciliationCaseResponseSchema,
   reconciliationCasesResponseSchema,
+  advanceResponseSchema,
+  advancesResponseSchema,
+  allowanceResponseSchema,
+  allowancesResponseSchema,
+  batchDetailResponseSchema,
+  batchSnapshotResponseSchema,
+  exportSummaryResponseSchema,
+  minimumWageResponseSchema,
+  outputResponseSchema,
+  outputsResponseSchema,
+  payCalendarResponseSchema,
+  payrollOverviewResponseSchema,
+  payrollRulesResponseSchema,
+  payrollSettingsResponseSchema,
+  payslipResponseSchema,
+  projectPayrollResponseSchema,
+  statutoryRuleResponseSchema,
+  workerPortalResponseSchema,
+  sitePhotosResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -97,6 +161,7 @@ export const notifications = new Map<string, { subject: string; text: string }[]
 export function responseContract(method: string, target: string) {
   const path = target.split("?")[0]!;
   if (path === "auth/csrf") return csrfResponseSchema;
+  if (path === "auth/providers") return authProvidersResponseSchema;
   if (path === "auth/mfa/enroll") return mfaEnrollmentResponseSchema;
   if (path === "auth/mfa/verify") return mfaVerificationResponseSchema;
   if (path === "auth/sessions" && method === "get") return sessionsResponseSchema;
@@ -113,6 +178,8 @@ export function responseContract(method: string, target: string) {
       "auth/mfa/step-up",
       "auth/mfa/recover",
       "auth/passkeys/step-up",
+      "auth/pin/login",
+      "auth/pin/join",
     ].includes(path) ||
     /^tenants\/[^/]+\/select$/.test(path)
   )
@@ -127,7 +194,16 @@ export function responseContract(method: string, target: string) {
     return method === "get" ? rolesResponseSchema : roleResponseSchema;
   if (/^tenants\/current\/roles\/[^/]+$/.test(path) && method === "patch")
     return roleResponseSchema;
+  if (path === "portal/client/projects") return clientProjectsResponseSchema;
+  if (/^portal\/client\/projects\/[^/]+$/.test(path)) return clientProjectResponseSchema;
+  if (path === "portal/worker") return workerPortalResponseSchema;
+  if (/^projects\/[^/]+\/labourers\/invitations$/.test(path)) return invitationResponseSchema;
   if (path === "projects") return method === "get" ? projectsResponseSchema : projectResponseSchema;
+  if (/^projects\/[^/]+\/photos(\?.*)?$/.test(path) && method === "get")
+    return sitePhotosResponseSchema;
+  if (/^projects\/[^/]+\/diaries$/.test(path))
+    return method === "get" ? diariesResponseSchema : diaryResponseSchema;
+  if (/^projects\/[^/]+\/diaries\/[^/]+(\/actions)?$/.test(path)) return diaryResponseSchema;
   if (/^projects\/[^/]+$/.test(path))
     return method === "get" ? projectDetailResponseSchema : projectResponseSchema;
   if (/^projects\/[^/]+\/status$/.test(path)) return projectResponseSchema;
@@ -164,13 +240,36 @@ export function responseContract(method: string, target: string) {
       return bqImportResponseSchema;
     if (bq === "/templates")
       return method === "get" ? bqTemplatesResponseSchema : bqTemplateResponseSchema;
+    if (bq === "/versions") return bqVersionsResponseSchema;
+    if (bq === "/versions/compare") return bqCompareResponseSchema;
+    if (/^\/versions\/[^/]+\/bills\/[^/]+$/.test(bq)) return bqBillResponseSchema;
+    if (/^\/versions\/[^/]+\/approve$/.test(bq)) return bqVersionResponseSchema;
+    if (bq === "/contract-sum") return bqContractSumResponseSchema;
+    if (bq === "/instructions")
+      return method === "get" ? instructionsResponseSchema : instructionResponseSchema;
+    if (/^\/instructions\/[^/]+$/.test(bq)) return instructionResponseSchema;
+    if (bq === "/variations")
+      return method === "get" ? variationsResponseSchema : variationResponseSchema;
+    if (/^\/variations\/[^/]+(\/(lines|submit|approve|reject|reopen|cancel|rebase))?$/.test(bq))
+      return variationResponseSchema;
+    if (/^\/items\/[^/]+\/rate-buildup$/.test(bq)) return bqItemLinkResponseSchema;
   }
+  if (path === "rate-buildups")
+    return method === "get" ? buildupsResponseSchema : buildupResponseSchema;
+  if (/^rate-buildups\/[^/]+$/.test(path)) return buildupResponseSchema;
+  if (/^rate-buildups\/[^/]+\/versions\/\d+$/.test(path)) return buildupVersionResponseSchema;
+  const procurement = procurementContract(method, path);
+  if (procurement) return procurement;
   const labour = labourContract(method, path);
   if (labour) return labour;
   const attendance = attendanceContract(path);
   if (attendance) return attendance;
   const payments = paymentsContract(method, path);
   if (payments) return payments;
+  const payroll = payrollContract(method, path);
+  if (payroll) return payroll;
+  const p2p = procureToPayContract(method, path);
+  if (p2p) return p2p;
   return messageResponseSchema;
 }
 
@@ -189,6 +288,86 @@ function paymentsContract(method: string, path: string) {
   if (/^payments\/callbacks\/[^/]+(\/review)?$/.test(path)) return paymentCallbackResponseSchema;
   if (path === "payments/cases") return reconciliationCasesResponseSchema;
   if (/^payments\/cases\/[^/]+(\/resolve)?$/.test(path)) return reconciliationCaseResponseSchema;
+  return null;
+}
+
+/** The D5.2 procure-to-pay endpoints' success contracts. */
+function procureToPayContract(method: string, path: string) {
+  const match = /^procurement\/(requisitions|rfqs|lpos|grns|invoices)(\/.*)?$/.exec(path);
+  if (path === "procurement/inbox") return inboxResponseSchema;
+  if (path === "procurement/commitments") return commitmentsResponseSchema;
+  if (/^procurement\/documents\/[^/]+$/.test(path)) return z.unknown();
+  if (!match) return null;
+  const [, area, rest = ""] = match;
+  if (/\/(document|photos)$/.test(rest)) return procurementDocumentResponseSchema;
+  if (area === "requisitions")
+    return rest === "" && method === "get"
+      ? requisitionsResponseSchema
+      : requisitionDetailResponseSchema;
+  if (area === "rfqs") {
+    if (rest === "" && method === "get") return rfqsResponseSchema;
+    return rest.endsWith("/award") ? lpoDetailResponseSchema : rfqDetailResponseSchema;
+  }
+  if (area === "lpos") return rest === "" ? lposResponseSchema : lpoDetailResponseSchema;
+  if (area === "grns") {
+    if (rest === "/receivable") return receivableLposResponseSchema;
+    return rest === "" && method === "get" ? grnsResponseSchema : grnResponseSchema;
+  }
+  return rest === "" && method === "get" ? invoicesResponseSchema : invoiceDetailResponseSchema;
+}
+
+/** The D5.1 catalogue and supplier endpoints' success contracts. */
+function procurementContract(method: string, path: string) {
+  if (path === "materials")
+    return method === "get" ? materialsResponseSchema : materialResponseSchema;
+  if (path === "materials/defaults") return loadDefaultsResponseSchema;
+  if (/^materials\/[^/]+$/.test(path))
+    return method === "get" ? materialDetailResponseSchema : materialResponseSchema;
+  if (/^materials\/[^/]+\/conversions(\/[^/]+\/end)?$/.test(path)) return conversionResponseSchema;
+  if (/^materials\/[^/]+\/prices(\/[^/]+\/corrections)?$/.test(path)) return priceResponseSchema;
+  if (path === "price-alerts") return priceAlertsResponseSchema;
+  if (path === "conversions/calculate") return conversionResultResponseSchema;
+  if (path === "units") return method === "get" ? unitsResponseSchema : unitResponseSchema;
+  if (/^units\/[^/]+$/.test(path)) return unitResponseSchema;
+  if (path === "procurement/settings") return procurementSettingsResponseSchema;
+  if (path === "suppliers")
+    return method === "get" ? suppliersResponseSchema : supplierDetailResponseSchema;
+  if (/^suppliers\/[^/]+\/reveal$/.test(path)) return supplierRevealResponseSchema;
+  if (/^suppliers\/[^/]+(\/payout-details(\/[^/]+\/(verify|reject))?)?$/.test(path))
+    return supplierDetailResponseSchema;
+  return null;
+}
+
+/** The D4.1 payroll endpoints' success contracts. */
+function payrollContract(method: string, path: string) {
+  if (!path.startsWith("payroll/")) return null;
+  const get = method === "get";
+  if (path === "payroll/overview") return payrollOverviewResponseSchema;
+  if (path === "payroll/settings") return payrollSettingsResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/calendar$/.test(path)) return payCalendarResponseSchema;
+  if (path === "payroll/rules")
+    return get ? payrollRulesResponseSchema : statutoryRuleResponseSchema;
+  if (path === "payroll/rules/defaults") return payrollRulesResponseSchema;
+  if (/^payroll\/rules\/[^/]+\/verify$/.test(path)) return statutoryRuleResponseSchema;
+  if (/^payroll\/rules\/[^/]+$/.test(path)) return messageResponseSchema;
+  if (path === "payroll/minimum-wages") return minimumWageResponseSchema;
+  if (/^payroll\/projects\/[^/]+$/.test(path)) return projectPayrollResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/batches$/.test(path)) return batchDetailResponseSchema;
+  if (/^payroll\/batches\/[^/]+(\/(recalculate|submit|cancel))?$/.test(path))
+    return batchDetailResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/lines\/[^/]+$/.test(path)) return payslipResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/snapshot$/.test(path)) return batchSnapshotResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/allowances$/.test(path))
+    return get ? allowancesResponseSchema : allowanceResponseSchema;
+  if (/^payroll\/allowances\/[^/]+\/end$/.test(path)) return allowanceResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/outputs$/.test(path))
+    return get ? outputsResponseSchema : outputResponseSchema;
+  if (/^payroll\/outputs\/[^/]+\/(approve|reject)$/.test(path)) return outputResponseSchema;
+  if (path === "payroll/advances") return advancesResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/advances$/.test(path)) return advanceResponseSchema;
+  if (/^payroll\/advances\/[^/]+\/(approve|reject|disburse|cancel)$/.test(path))
+    return advanceResponseSchema;
+  if (path === "payroll/exports") return get ? exportSummaryResponseSchema : z.unknown();
   return null;
 }
 
@@ -273,6 +452,7 @@ export class Browser {
     operation.set("Origin", origin);
     if (csrf) operation.set("X-CSRF-Token", this.csrf);
     for (const [key, value] of Object.entries(headers)) operation.set(key, value);
+    for (const [name, value] of Object.entries(headers)) operation.set(name, value);
     const res = body === undefined ? await operation : await operation.send(body);
     if (res.status >= 200 && res.status < 300) {
       expect(

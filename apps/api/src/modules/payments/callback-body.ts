@@ -20,7 +20,10 @@ const problem = (res: Response, status: number, code: string, title: string) =>
 export function callbackBodyReader(maxBytes: number) {
   return (req: CallbackRequest, res: Response, next: NextFunction) => {
     if (req.method !== "POST" || !req.path.startsWith(CALLBACK_PATH_PREFIX)) return next();
-    const type = String(req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+    const type = String(req.headers["content-type"] ?? "")
+      .split(";")[0]!
+      .trim()
+      .toLowerCase();
     if (type !== "application/json")
       return problem(res, 415, "unsupported-media-type", "Callbacks must be application/json");
     const declared = Number(req.headers["content-length"] ?? "0");

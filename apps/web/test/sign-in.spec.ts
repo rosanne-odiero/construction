@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { axeViolations, preferences, TENANT_ID } from "./live-helpers";
+import { axeViolations, BASE_URL, preferences, TENANT_ID } from "./live-helpers";
 
 /**
  * The real sign-in flow against mocked API answers (browser requests are intercepted, as in
@@ -236,4 +236,67 @@ test("resumes an expired access token through one refresh, then continues", asyn
   await expect(page).toHaveURL("/projects?search=ruiru");
   expect(refreshes).toBe(1);
   expect(calls.filter((call) => call === "POST /auth/login")).toEqual([]);
+});
+
+test("offers Google with the safe next path, explains refusals and still asks for MFA after Google", async ({
+  page,
+}) => {
+  const flags: Flags = { signedIn: false, mfa: true, verified: false, tenantId: null };
+  await mockAuth(page, {
+    "/auth/me": (route) =>
+      flags.signedIn ? json(route, account(flags)) : json(route, { code: "unauthorized" }, 401),
+  });
+  await page.goto("/sign-in?next=%2Fdiary&google=email-unsupported");
+  const google = page.getByRole("link", { name: "Continue with Google" });
+  await expect(google).toHaveAttribute("href", "/api/v1/auth/google/start?next=%2Fdiary");
+  await expect(formAlert(page)).toContainText("That Google account cannot be used");
+  expect(await axeViolations(page)).toEqual([]);
+
+  await page.goto("/sign-in?next=//evil.example/steal&google=unknown-outcome");
+  await expect(google).toHaveAttribute("href", "/api/v1/auth/google/start?next=%2Fprojects");
+  await expect(formAlert(page)).toHaveCount(0);
+
+  // The API's callback set a session and returned here: the form resumes it, and MFA still applies.
+  flags.signedIn = true;
+  await page.goto("/sign-in?next=%2Fdiary");
+  await expect(page.getByRole("heading", { name: "Two-step verification" })).toBeVisible();
+  await expect(page.locator("#password")).toHaveCount(0);
+});
+
+test("hides Google when the API does not offer it, and explains cancellation in Kiswahili", async ({
+  page,
+  context,
+}) => {
+  await preferences(context, page, "sw");
+  await mockAuth(page, {});
+  await page.goto("/sign-in?google=cancelled");
+  await expect(page.getByRole("link", { name: "Endelea na Google" })).toBeVisible();
+  await expect(formAlert(page)).toContainText("Kuingia kwa Google kumeghairiwa");
+  expect(await axeViolations(page)).toEqual([]);
+
+  await context.addCookies([{ name: "mock_google", value: "off", url: BASE_URL }]);
+  await page.goto("/sign-in");
+  await expect(page.getByRole("heading", { name: "Ingia", level: 2 })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Endelea na Google" })).toHaveCount(0);
+});
+
+test("offers Google on the create-account card, and hides it when the API does not", async ({
+  page,
+  context,
+}) => {
+  await mockAuth(page, {});
+  await page.goto("/foundation");
+  const register = page.locator("form").filter({ has: page.locator("#register-displayName") });
+  await expect(register).toBeVisible();
+  const card = page.locator("[data-slot=card]").filter({ has: register });
+  await expect(card.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
+    "href",
+    "/api/v1/auth/google/start?next=%2Ffoundation",
+  );
+  expect(await axeViolations(page)).toEqual([]);
+
+  await context.addCookies([{ name: "mock_google", value: "off", url: BASE_URL }]);
+  await page.goto("/foundation");
+  await expect(register).toBeVisible();
+  await expect(page.getByRole("link", { name: "Continue with Google" })).toHaveCount(0);
 });

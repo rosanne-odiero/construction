@@ -44,6 +44,12 @@ import { PaymentSettingsService } from "./settings.service.js";
     PaymentsRuntime,
     ReconciliationService,
   ],
-  exports: [PaymentOutcomeHandlers, PaymentRequestsService, PaymentsRelay, PaymentLedger, PAYMENT_PROVIDER],
+  exports: [
+    PaymentOutcomeHandlers,
+    PaymentRequestsService,
+    PaymentsRelay,
+    PaymentLedger,
+    PAYMENT_PROVIDER,
+  ],
 })
 export class PaymentsModule {}

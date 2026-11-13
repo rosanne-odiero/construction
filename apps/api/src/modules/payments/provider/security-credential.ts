@@ -1,5 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { constants, createPublicKey, publicEncrypt, X509Certificate, type KeyObject } from "node:crypto";
+import {
+  constants,
+  createPublicKey,
+  publicEncrypt,
+  X509Certificate,
+  type KeyObject,
+} from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { PaymentEnvironment } from "@pm-buddy/types";
 import { PaymentsRuntime } from "../payments-runtime.js";
@@ -21,10 +27,18 @@ export function securityCredential(initiatorPassword: string, publicKey: KeyObje
 }
 
 /** A PEM certificate (preferred, as Safaricom publishes) or a PEM public key. */
-export function publicKeyFromPem(pem: string): { key: KeyObject; fingerprint: string | null; validTo: string | null } {
+export function publicKeyFromPem(pem: string): {
+  key: KeyObject;
+  fingerprint: string | null;
+  validTo: string | null;
+} {
   if (pem.includes("BEGIN CERTIFICATE")) {
     const certificate = new X509Certificate(pem);
-    return { key: certificate.publicKey, fingerprint: certificate.fingerprint256, validTo: certificate.validTo };
+    return {
+      key: certificate.publicKey,
+      fingerprint: certificate.fingerprint256,
+      validTo: certificate.validTo,
+    };
   }
   return { key: createPublicKey(pem), fingerprint: null, validTo: null };
 }

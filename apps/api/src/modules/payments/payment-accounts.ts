@@ -1,5 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { callbackPathSegment, type PaymentEnvironment, type StkTransactionType } from "@pm-buddy/types";
+import {
+  callbackPathSegment,
+  type PaymentEnvironment,
+  type StkTransactionType,
+} from "@pm-buddy/types";
 import type { PaymentSettings, Prisma } from "../../generated/prisma/client.js";
 import { PaymentsCrypto } from "./payments-crypto.js";
 import { PaymentsRuntime } from "./payments-runtime.js";
@@ -18,9 +22,15 @@ export class PaymentAccounts {
     private readonly runtime: PaymentsRuntime,
   ) {}
 
-  async token(tx: Tx, tenantId: string, routeId?: string | null): Promise<{ routeId: string; token: string } | null> {
+  async token(
+    tx: Tx,
+    tenantId: string,
+    routeId?: string | null,
+  ): Promise<{ routeId: string; token: string } | null> {
     const route = routeId
-      ? await tx.paymentCallbackRoute.findUnique({ where: { tenantId_id: { tenantId, id: routeId } } })
+      ? await tx.paymentCallbackRoute.findUnique({
+          where: { tenantId_id: { tenantId, id: routeId } },
+        })
       : await tx.paymentCallbackRoute.findFirst({ where: { tenantId, status: "active" } });
     if (!route) return null;
     return { routeId: route.id, token: this.crypto.openToken(tenantId, route.id, route.tokenEnc) };

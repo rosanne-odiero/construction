@@ -1,4 +1,9 @@
-import { Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  type OnApplicationBootstrap,
+  type OnModuleDestroy,
+} from "@nestjs/common";
 import { Queue, Worker, type Job } from "bullmq";
 import { describeError } from "../../common/errors.js";
 import { AppConfig } from "../../config/app-config.js";
@@ -63,7 +68,8 @@ export class PaymentsRelay implements OnApplicationBootstrap, OnModuleDestroy {
     });
     this.worker = new Worker<JobData>(
       this.queueName,
-      (job: Job<JobData>) => this.processor.process(job.data.tenantId, job.data.work, job.data.refId),
+      (job: Job<JobData>) =>
+        this.processor.process(job.data.tenantId, job.data.work, job.data.refId),
       { connection, concurrency: 4, autorun: true },
     );
     this.queue.on("error", (error: Error) => this.queueDown(error));
@@ -90,7 +96,9 @@ export class PaymentsRelay implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   private due(batch = 100): Promise<Due[]> {
-    return this.prisma.$queryRaw<Due[]>`SELECT tenant_id::text AS tenant_id, work, ref_id::text AS ref_id FROM app.payment_due_work(${batch}::int)`;
+    return this.prisma.$queryRaw<
+      Due[]
+    >`SELECT tenant_id::text AS tenant_id, work, ref_id::text AS ref_id FROM app.payment_due_work(${batch}::int)`;
   }
 
   /** Signals new work after a commit (fast path); the interval is the safety net. */
@@ -107,7 +115,12 @@ export class PaymentsRelay implements OnApplicationBootstrap, OnModuleDestroy {
       for (const item of items) {
         const data: JobData = { tenantId: item.tenant_id, work: item.work, refId: item.ref_id };
         const enqueued = await this.enqueue(data);
-        if (!enqueued) await this.processor.process(data.tenantId, data.work, data.refId).catch((error: unknown) => this.logger.warn(`Direct payment work failed: ${describeError(error)}`));
+        if (!enqueued)
+          await this.processor
+            .process(data.tenantId, data.work, data.refId)
+            .catch((error: unknown) =>
+              this.logger.warn(`Direct payment work failed: ${describeError(error)}`),
+            );
       }
       return items.length;
     } catch (error) {
@@ -120,7 +133,11 @@ export class PaymentsRelay implements OnApplicationBootstrap, OnModuleDestroy {
 
   private markDispatched(data: JobData, at: Date | null) {
     return this.db.run(
-      { userId: PAYMENTS_SYSTEM_ACTOR, tenantId: data.tenantId, requestId: `payments-dispatch-${data.refId.slice(0, 8)}` },
+      {
+        userId: PAYMENTS_SYSTEM_ACTOR,
+        tenantId: data.tenantId,
+        requestId: `payments-dispatch-${data.refId.slice(0, 8)}`,
+      },
       (tx) =>
         tx.paymentOutbox.updateMany({
           where: { tenantId: data.tenantId, id: data.refId, processedAt: null, deadAt: null },
@@ -140,7 +157,9 @@ export class PaymentsRelay implements OnApplicationBootstrap, OnModuleDestroy {
     try {
       await Promise.race([
         this.queue.add(data.work, data, { jobId: `${data.work}-${data.refId}` }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("queue add timed out")), 2_000).unref()),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("queue add timed out")), 2_000).unref(),
+        ),
       ]);
       return true;
     } catch (error) {

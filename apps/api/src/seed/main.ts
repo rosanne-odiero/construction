@@ -30,6 +30,20 @@ function print(summary: SeedSummary) {
     lines.push(
       `  ${project.code}  ${project.name} — ${project.status} (${project.created ? "created" : "already present"})`,
     );
+  lines.push("", "Rate build-ups (synthetic example values):");
+  for (const buildup of summary.buildups)
+    lines.push(
+      `  ${buildup.code}  ${buildup.name} — ${buildup.created ? "created" : "already present"}`,
+    );
+  lines.push(
+    "",
+    `Materials: ${summary.procurement.materials.created} added, ${summary.procurement.materials.existing} already present`,
+    "Suppliers (synthetic):",
+  );
+  for (const supplier of summary.procurement.suppliers)
+    lines.push(
+      `  ${supplier.code}  ${supplier.name} — ${supplier.created ? "created" : "already present"}`,
+    );
   const { labour } = summary;
   lines.push(
     "",
@@ -44,6 +58,19 @@ function print(summary: SeedSummary) {
     `  ${attendance.records} attendance records; ${attendance.periods} timesheet periods (${attendance.approvedPeriods} approved)`,
     `  ${attendance.openAnomalies} open anomalies; ${attendance.adjustments} adjustment(s); ${attendance.holidays} public holidays`,
   );
+  const { payroll } = summary;
+  lines.push(
+    "",
+    `Payroll (synthetic; statutory rules unverified, not for filing; ${payroll.created ? "created" : "already present"}):`,
+    `  ${payroll.ruleVersions} statutory rule versions; ${payroll.minimumWages} minimum wages; ${payroll.allowances} allowances`,
+    `  ${payroll.outputs} piece-rate outputs; ${payroll.advances} advances; ${payroll.submittedBatches} submitted and ${payroll.draftBatches} draft batches (${payroll.lines} lines)`,
+  );
+  const p2p = summary.procureToPay;
+  lines.push(
+    "",
+    `Procure-to-pay (synthetic, ${p2p.created ? "created" : "already present"}): ${p2p.requisition} → ${p2p.rfq} → ${p2p.lpo} → ${p2p.grn}`,
+  );
+  for (const invoice of p2p.invoices) lines.push(`  invoice ${invoice.number} — ${invoice.status}`);
   console.log(lines.join("\n"));
 }
 

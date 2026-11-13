@@ -77,6 +77,11 @@ export class AuthSecurity implements OnModuleInit {
     if (config.isProduction && new URL(config.get("WEB_ORIGIN")).protocol !== "https:") {
       throw new Error("Production WEB_ORIGIN must use HTTPS");
     }
+    // Without a trusted proxy reporting the client address there are no per-address limits on
+    // password, PIN and code guessing.
+    if (config.isProduction && trustProxySetting(config.get("TRUST_PROXY")) === false) {
+      throw new Error("Production requires TRUST_PROXY (the edge proxy that reports client IPs)");
+    }
     this.encryptionKey = Buffer.from(key, "hex");
     this.keys = signingKey
       ? this.importSigningKey(signingKey)

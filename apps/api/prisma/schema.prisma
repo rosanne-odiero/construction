@@ -19,6 +19,7 @@ model User {
   passwordHash        String               @map("password_hash")
   // A labourer's six-digit sign-in PIN (Argon2id); null for staff and client accounts.
   pinHash             String?              @map("pin_hash")
+  pinPepperVersion    Int?                 @map("pin_pepper_version") @db.SmallInt
   verifiedAt          DateTime?            @map("verified_at") @db.Timestamptz
   failedLogins        Int                  @default(0) @map("failed_logins")
   lockedUntil         DateTime?            @map("locked_until") @db.Timestamptz

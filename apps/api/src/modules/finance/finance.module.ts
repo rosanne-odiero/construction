@@ -47,5 +47,6 @@ import { SpendingReportService } from "./spending-report.service.js";
     CashFlowService,
     SpendAlertsService,
   ],
+  exports: [SpendingReportService, CashFlowService, SpendAlertsService],
 })
 export class FinanceModule {}

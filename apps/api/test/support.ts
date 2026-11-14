@@ -255,6 +255,13 @@ import {
   supplierPortalUserResponseSchema,
   supplierPortalUsersResponseSchema,
   supplierStatementResponseSchema,
+  dashboardResponseSchema,
+  reportModelSchema,
+  reportOptionsResponseSchema,
+  reportsResponseSchema,
+  reportSubscriptionResponseSchema,
+  reportSubscriptionsResponseSchema,
+  runDueResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -395,7 +402,24 @@ export function responseContract(method: string, target: string) {
   if (safety) return safety;
   const plant = plantContract(method, path);
   if (plant) return plant;
+  const reports = reportsContract(method, path);
+  if (reports) return reports;
   return messageResponseSchema;
+}
+
+/** The D8.1 dashboard, reports and subscription endpoints' success contracts. */
+function reportsContract(method: string, path: string) {
+  if (path === "dashboard") return dashboardResponseSchema;
+  if (!path.startsWith("reports")) return null;
+  if (path === "reports") return reportsResponseSchema;
+  if (path === "reports/subscriptions")
+    return method === "get" ? reportSubscriptionsResponseSchema : reportSubscriptionResponseSchema;
+  if (path === "reports/subscriptions/run-due") return runDueResponseSchema;
+  if (/^reports\/subscriptions\/[^/]+(\/delete)?$/.test(path))
+    return reportSubscriptionResponseSchema;
+  if (/^reports\/[^/]+\/options$/.test(path)) return reportOptionsResponseSchema;
+  if (/^reports\/[^/]+$/.test(path)) return reportModelSchema;
+  return null;
 }
 
 /** The D7.2 supplier portal endpoints' success contracts (supplier and staff sides). */

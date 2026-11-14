@@ -558,3 +558,30 @@ stateDiagram-v2
 | Contract settings changed | `finance.manage`; values in range | New version; drafts recompute; a submitted valuation becomes stale until returned and resubmitted; `valuation.settings_updated` | Expected settings version |
 | Certificate PDF / Excel | a certificate reader | Generated on demand (watermark until certified); `valuation.exported`; rate-limited | Repeatable |
 
+## Report subscriptions (D8.1)
+
+Implemented in D8.1 ([ARCHITECTURE §4.14](./ARCHITECTURE.md#414-dashboards-and-reports-d81), D-126, D-127). A person subscribes **themselves** to a report they may run now; the email carries a sign-in link, never report data.
+
+```mermaid
+stateDiagram-v2
+  [*] --> active: subscribe (reports.view and the report's rule for these parameters now)
+  active --> paused: pause (the subscriber)
+  paused --> active: resume (next slot after now)
+  active --> deleted: delete (the subscriber)
+  paused --> deleted: delete (the subscriber)
+  deleted --> [*]
+```
+
+1. **Subscribe.** From a report's page, *Email me this report*: weekly (a weekday) or monthly (a day of the month; 29–31 run on the last day of shorter months), email language. The fixed parameters (project, site, store, batch, person, action) are kept as IDs; the period follows each run. Refused without an email address (422 `email-required`), above 20 per person or 200 per company (409 `subscription-limit`), or for the same report, parameters and schedule twice (409 `subscription-exists`).
+2. **Due.** `next_run_at` is the next 07:00 Nairobi on the chosen day. Every minute one API instance (the holder of the advisory lock) takes up to 25 due subscriptions.
+3. **Claim.** Each due subscription is handled in its own transaction in the subscriber's company context: the row is locked `FOR UPDATE SKIP LOCKED` and must still be active and due (another instance or a manual run skips it).
+4. **Check.** The subscriber must still be a member with an email address, and must be able to run the report with its parameters **now** (`reports.view` + the source permission on the project; parameters still valid). Otherwise the run is **skipped** with the reason (`membership-ended`, `no-email-address`, `permission-lost`, `report-unavailable`) and nothing is sent.
+5. **Send.** The email names the report, the company and the period (weekly: the last whole Monday–Sunday week; monthly: the previous month; as-at reports: the run date) and links to `/reports/<id>?…`. Opening the link needs sign-in and runs the report with that moment's permissions. A delivery error records **failed** (`delivery-failed`).
+6. **Record.** One append-only run per subscription and due time (sent, skipped or failed), `last_run_at`, the next `next_run_at` (the next slot after now: missed slots are not replayed), and the audit event `report.subscription_run`.
+
+| Action | Who | Effect |
+|---|---|---|
+| Subscribe | the person, for themselves only | `report.subscription_created` |
+| Pause / resume / delete | the subscriber only (expected version) | `report.subscription_paused` / `_resumed` / `_deleted`; deleted is final and kept with its runs |
+| See the company's subscriptions and runs | `config.manage` | read only |
+| Send due emails now | `config.manage` | the same cycle for the company; `report.run_due_requested` |

@@ -19,6 +19,8 @@ export default defineConfig({
       FIELD_BLIND_INDEX_KEY: randomBytes(32).toString("hex"),
       AUTH_PIN_PEPPER_KEYS: `1:${randomBytes(32).toString("hex")}`,
       DATABASE_URL: testDatabaseUrls().appUrl,
+      // Tests run due report subscriptions themselves (ReportSchedulerService.runDue).
+      REPORT_SCHEDULER: "off",
     },
     testTimeout: 20_000,
     hookTimeout: 60_000,

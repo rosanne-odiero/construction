@@ -815,6 +815,34 @@ Rules: meter readings never go backwards in time unless a meter reset lies betwe
 never proof of theft; nothing posts to the cost or stores ledgers. Problem codes are listed in
 ARCHITECTURE §4.11.
 
+## Dashboards and reports (D8.1)
+
+Paths are relative to `/api/v1`. Authentication, the selected company and the CSRF guard apply.
+Every report needs `reports.view` **and** the permission of the screen its data comes from, both on
+the same project (role ∩ assignment); company reports need their company permission (the audit log:
+`audit.view` with a recent MFA check). A section of the dashboard the caller may not see is absent.
+Money is KES minor units, quantities and percentages decimal strings, dates `YYYY-MM-DD`. Design:
+[ARCHITECTURE §4.14](../../docs/ARCHITECTURE.md#414-dashboards-and-reports-d81).
+
+| Method / path                                                                | Input                                                                                                                                                                             |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET `/dashboard`                                                             | — (sections per permission; ratios `null` when undefined)                                                                                                                         |
+| GET `/reports`                                                               | `locale?` (403 `report-forbidden` without `reports.view` anywhere)                                                                                                                |
+| GET `/reports/:reportId/options`                                             | `projectId?` (sites, stores, payroll batches or people)                                                                                                                           |
+| GET `/reports/:reportId`                                                     | the report's parameters (`projectId`, `siteId`, `storeId`, `batchId`, `actorId`, `action`, `from`, `to`, `asAt`), `locale?`; at most 200 rows per section; 60 per user per minute |
+| GET `/reports/:reportId/export/pdf`, `/export/xlsx`                          | the same; PDF ≤ 5,000 rows (422 `use-excel`), any report ≤ 20,000 rows (422 `report-too-large`); 60 per user per 10 minutes                                                       |
+| GET `/reports/subscriptions`                                                 | `scope?` (`mine`, or `company` with `config.manage`), `locale?`                                                                                                                   |
+| POST `/reports/subscriptions`                                                | `{reportId, parameters, frequency: weekly / monthly, weekday? / dayOfMonth?, locale}` (for yourself only)                                                                         |
+| PATCH `/reports/subscriptions/:id`, POST `/reports/subscriptions/:id/delete` | `{version, status: active / paused}` / `{version}` (the subscriber only)                                                                                                          |
+| POST `/reports/subscriptions/run-due`                                        | — (`config.manage`; the scheduler's cycle for the company)                                                                                                                        |
+
+Reports: `muster-roll`, `payroll-register`, `cost-ledger`, `budget-vs-actual`, `stock`,
+`valuations-register`, `lpo-register`, `invoice-ageing`, `supplier-payments`, `petty-cash`,
+`safety-actions`, `audit-log`; `mpesa-reconciliation` answers 409 `report-not-available` until
+D4.3. Views and exports are audited (`report.viewed`, `report.exported`) with the report, format
+and parameter IDs only. Scheduled emails (`REPORT_SCHEDULER`, on by default outside tests) carry a
+sign-in link, never report data.
+
 ## Development seed
 
 `npx pnpm@12.17.0 db:seed` (root; it builds the API first) creates the synthetic company
@@ -849,7 +877,9 @@ flags show), the site agent and a visitor; three toolbox talks (two confirmed, o
 issues (some due for replacement, one returned); a closed near miss with a verified action and an
 investigated injury with one verified and one overdue corrective action; two first-aid kits (one
 with its check overdue), a first-aider and a treatment linked to the injury; skipped when Ruiru
-Heights already has a safety incident. It prints each account's identifier and, when it
+Heights already has a safety incident. Since D8.1 it also adds two report subscriptions through the
+real service (the owner's weekly cost ledger for Ruiru Heights on Mondays; the finance officer's
+monthly supplier invoice ageing on the 1st, in Kiswahili); skipped when the owner already has one. It prints each account's identifier and, when it
 creates the account, a generated password; for the owner also the TOTP secret and
 `otpauth://` URI. It is idempotent: a second run reports "already present" and leaves
 passwords unchanged. `npx pnpm@12.17.0 --filter @pm-buddy/api db:seed --reset-credentials`

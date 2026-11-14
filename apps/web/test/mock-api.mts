@@ -113,6 +113,13 @@ import {
 } from "./mock-valuations.mts";
 import { handleSafety, initialSafety, type SafetyState } from "./mock-safety.mts";
 import { handlePlant, initialPlant, type PlantState } from "./mock-plant.mts";
+import {
+  handleReports,
+  initialReports,
+  reportExport,
+  type ReportsDeps,
+  type ReportsState,
+} from "./mock-reports.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -212,6 +219,8 @@ type State = {
   supplierPortal: SupplierPortalStaffState;
   /** D8.3 plant and equipment (mock-plant.mts). */
   plant: PlantState;
+  /** D8.1 report subscriptions and their runs (mock-reports.mts). */
+  reports: ReportsState;
 };
 
 const states = new Map<string, State>();
@@ -462,6 +471,7 @@ function fixture(persona: Persona): State {
         agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
       },
     ),
+    reports: initialReports({ id: OWNER_ID, displayName: "Wanjiru Kamau" }, RUIRU_ID),
     photos,
     valuations: initialValuations(RUIRU_ID, [photos[0]!.id]),
     bq,
@@ -750,6 +760,48 @@ function teamView(state: State, entry: ProjectState) {
 
 type Reply = { status?: number; body: unknown; schema: z.ZodType<unknown> };
 
+/** What the reports mock needs to know about the caller and the fixture (D8.1). */
+function reportsDeps(state: State): ReportsDeps {
+  const user = PERSONAS[state.persona];
+  return {
+    companyName: "Jenga Bora Builders Ltd",
+    actor: {
+      id: user.id,
+      displayName: user.displayName,
+      email: user.identifier.includes("@") ? user.identifier : null,
+    },
+    tenantWide: isTenantWide(state.persona),
+    companyPermissions: rolePermissions(state),
+    projects: state.projects.map((entry) => ({
+      id: entry.project.id,
+      code: entry.project.code,
+      name: entry.project.name,
+      status: entry.project.status,
+      contractSumMinor: entry.project.contractSumMinor,
+      sites: entry.sites.map(({ site }) => ({ id: site.id, name: site.name })),
+      permissions: valuationPermissions(state, entry.project.id),
+    })),
+    stores: state.stores.stores.map((store) => ({
+      id: store.id,
+      name: store.name,
+      projectId: store.projectId,
+    })),
+    labourers: (projectId) =>
+      state.labour.labourers
+        .filter((labourer) =>
+          labourer.engagements.some((engagement) => engagement.projectId === projectId),
+        )
+        .map(({ workerNo, fullName }) => ({ workerNo, fullName })),
+    people: Object.values(PERSONAS).map(({ id: personId, displayName }) => ({
+      id: personId,
+      displayName,
+    })),
+    stepUp: () => requireStepUp(state),
+    fail: (status: number, code: string) => new HttpError(status, code),
+    parse,
+  };
+}
+
 async function handle(
   method: string,
   path: string,
@@ -826,6 +878,11 @@ async function handle(
       },
       schema: tenantsResponseSchema,
     };
+  if (path === "/dashboard" || path === "/reports" || path.startsWith("/reports/")) {
+    const reports = handleReports(reportsDeps(state), state.reports, method, path, query, body);
+    if (reports) return reports;
+    throw new HttpError(404, "not-found");
+  }
   // The labour and attendance mocks know two personas; anyone but the owner acts as the agent.
   const labour = handleLabour(
     {
@@ -1674,6 +1731,23 @@ const server = createServer((req, res) => {
         return res.end(file.content);
       } catch {
         return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
+    // Report PDF and Excel files (D8.1) are bytes too.
+    if (/^\/reports\/[^/]+\/export\/(pdf|xlsx)$/.test(path) && req.method === "GET") {
+      try {
+        const state = stateFor(req);
+        const file = reportExport(reportsDeps(state), state.reports, path, url.searchParams);
+        res.writeHead(200, {
+          "Content-Type": file.contentType,
+          "Content-Disposition": `attachment; filename="${file.filename}"`,
+          "Cache-Control": "no-store",
+        });
+        return res.end(file.content);
+      } catch (error) {
+        if (error instanceof HttpError)
+          return send(res, error.status, { status: error.status, code: error.code }, true);
+        return send(res, 500, { code: "internal-error" }, true);
       }
     }
     // Petty-cash receipt photos are downloaded as bytes too.

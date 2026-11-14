@@ -385,6 +385,21 @@ const codes: Record<string, ProblemKey> = {
   "usage-id-conflict": "usageIdConflict",
   "fuel-id-conflict": "fuelIdConflict",
   "plant-rule": "plantRule",
+  "report-forbidden": "reportForbidden",
+  "report-not-available": "reportNotAvailable",
+  "report-parameter-invalid": "reportParameterInvalid",
+  "project-required": "reportProjectRequired",
+  "batch-required": "reportBatchRequired",
+  "period-required": "reportPeriodRequired",
+  "period-invalid": "reportPeriodInvalid",
+  "period-too-long": "reportPeriodTooLong",
+  "use-excel": "reportUseExcel",
+  "report-too-large": "reportTooLarge",
+  "subscription-exists": "subscriptionExists",
+  "subscription-limit": "subscriptionLimit",
+  "email-required": "subscriptionEmailRequired",
+  "scheduler-busy": "schedulerBusy",
+  "report-rule": "reportRule",
 };
 
 /** EN/SW text for an API problem code; anything unknown is "unexpected" (never a success). */

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { navGroups } from "./nav-config";
+import { isLiveRoute, navGroups } from "./nav-config";
 
 const APP = join(import.meta.dirname, "..", "app");
 
@@ -29,5 +29,11 @@ describe("sidebar", () => {
       .filter((item) => !hasPage(APP, item.href.split("/").filter(Boolean)))
       .map((item) => item.href);
     expect(missing).toEqual([]);
+  });
+
+  it("treats the dashboard and the reports centre as live pages, not prototypes", () => {
+    for (const path of ["/dashboard", "/reports", "/reports/cost-ledger", "/reports/subscriptions"])
+      expect(isLiveRoute(path)).toBe(true);
+    expect(isLiveRoute("/reports/cost-ledger/extra")).toBe(false);
   });
 });

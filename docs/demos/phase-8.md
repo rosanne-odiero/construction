@@ -1,14 +1,14 @@
 # Phase 8 demo: health and safety (D8.2), plant and equipment (D8.3), dashboards and reports (D8.1), documents and compliance (D8.4)
 
-This walkthrough is **not** Phase 8 acceptance. It covers the health and safety module (D8.2):
+This walkthrough covers Phase 8. It starts with the health and safety module (D8.2):
 site inductions with flags from attendance, toolbox talks, the PPE register, incidents and near
 misses, corrective actions and first aid, and the done-when flow: incident → investigation →
 corrective actions → done → verified → incident closed and locked. Plant and equipment (D8.3),
 dashboards and reports (D8.1) and documents and the compliance register (D8.4) have their own
 walkthroughs [below](#plant-and-equipment-d83), [after it](#dashboards-and-reports-d81) and
-[further down](#documents-and-compliance-register-d84). With D8.1 and D8.4 merged, Phase 8
-acceptance ("all reports export to PDF and Excel") is met by D8.1's done-when test; offline/site-app
-capture remains pending. Notifying the regulator (DOSH) and the OSHA/WIBA registers are **COMPLIANCE-REVIEW**
+[further down](#documents-and-compliance-register-d84). **Phase 8 acceptance** ("all reports export to PDF and Excel") is met: every report in the
+registry exports to both (D8.1's done-when test and the [reports walkthrough](#dashboards-and-reports-d81)),
+and so does the compliance register (D8.4); offline/site-app capture remains pending. Notifying the regulator (DOSH) and the OSHA/WIBA registers are **COMPLIANCE-REVIEW**
 items (CR-HS-01 to CR-HS-04): the system records what you did; it files nothing.
 
 ## Start

@@ -12,6 +12,7 @@ import {
   costCodesResponseSchema,
   costLedgerResponseSchema,
   dashboardResponseSchema,
+  invoiceDetailResponseSchema,
   journalResponseSchema,
   projectResponseSchema,
   projectSpendingResponseSchema,
@@ -22,6 +23,7 @@ import {
   reportSubscriptionsResponseSchema,
   runDueResponseSchema,
   storesResponseSchema,
+  supplierDetailResponseSchema,
   type ReportModel,
 } from "@pm-buddy/validation";
 import { AppModule } from "../src/app.module.js";
@@ -30,6 +32,7 @@ import type { Prisma } from "../src/generated/prisma/client.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
+import { ReportsService } from "../src/modules/reports/reports.service.js";
 import { ReportSchedulerService } from "../src/modules/reports/report-scheduler.service.js";
 import { seedDemo, type SeedSummary } from "../src/seed/demo-seed.js";
 import { Browser, notifications } from "./support.js";
@@ -559,6 +562,69 @@ describe("Dashboards and reports (real runtime role)", () => {
     expect(totalsOf(ageing, "summary")["outstanding"]).toBe(Number(owed!.owed));
   });
 
+  it("reports a re-approved invoice's supplier payments once: approved in full, paid once", async () => {
+    // MQ-INV-2001 (demo): 9,744,000 approved, 4,000,000 paid today. A change of the supplier's
+    // payout details makes it need a fresh approval, which authorises only what is still owed.
+    const owner = people["owner"]!;
+    const finance = people["finance"]!;
+    const kit = projects["KIT-BNG"]!;
+    const invoice = await asOwnerA((tx) =>
+      tx.supplierInvoice.findFirstOrThrow({
+        where: { tenantId: tenantA(), invoiceNumber: "MQ-INV-2001" },
+      }),
+    );
+    const rowOf = async () => {
+      const model = await report(finance, "supplier-payments", { projectId: kit, ...last(31) });
+      const section = model.sections.find((entry) => entry.key === "invoices")!;
+      const row = section.rows.find((entry) => entry[0] === "MQ-INV-2001")!;
+      return Object.fromEntries(section.columns.map((column, index) => [column.key, row[index]]));
+    };
+    const before = await rowOf();
+    expect(before).toMatchObject({
+      approved: 9_744_000,
+      toDate: 4_000_000,
+      outstanding: 5_744_000,
+    });
+    await fresh(owner);
+    const current = supplierDetailResponseSchema.parse(
+      ok(await owner.call("get", `suppliers/${invoice.supplierId}`)),
+    );
+    const proposed = supplierDetailResponseSchema.parse(
+      ok(
+        await owner.call("post", `suppliers/${invoice.supplierId}/payout-details`, {
+          replaces: current.payout.current!.id,
+          mpesaKind: "till",
+          tillNumber: "174379",
+        }),
+        201,
+      ),
+    );
+    await fresh(finance);
+    ok(
+      await finance.call(
+        "post",
+        `suppliers/${invoice.supplierId}/payout-details/${proposed.payout.current!.id}/verify`,
+        { method: "call_back_known_number", note: "Called the number on file (test)." },
+      ),
+    );
+    await fresh(owner);
+    const detail = invoiceDetailResponseSchema.parse(
+      ok(await owner.call("get", `procurement/invoices/${invoice.id}`)),
+    );
+    const reapproved = invoiceDetailResponseSchema.parse(
+      ok(
+        await owner.call("post", `procurement/invoices/${invoice.id}/approve`, {
+          version: detail.invoice.version,
+          matchId: detail.payable!.matchId,
+          payoutVersionId: proposed.payout.current!.id,
+        }),
+      ),
+    );
+    expect(reapproved.payable).toMatchObject({ current: true, authorisedMinor: 5_744_000 });
+    // The report still shows the invoice approved in full and its payment once.
+    expect(await rowOf()).toEqual(before);
+  });
+
   it("builds the cost ledger from hand-computed journals and neutralises formulas in Excel", async () => {
     const last30 = await report(ownerB, "cost-ledger", { projectId: projectB, ...last(30) });
     expect(last30.sections[0]!.rowCount).toBe(3);
@@ -800,6 +866,10 @@ describe("Dashboards and reports (real runtime role)", () => {
     // A project without a budget has no used percentage (unavailable, not 0).
     for (const row of summary.projects)
       if (row.budgetMinor === null) expect(row.usedPercent).toBeNull();
+    // Reloading within a minute, with the same access, reuses the dashboard; another person's is
+    // their own.
+    expect((await dashboard(people["owner"]!)).generatedAt).toBe(owner.generatedAt);
+    expect(keys(await dashboard(people["storekeeper"]!))).toEqual(keys(keeper));
   });
 
   it("subscribes, pauses, resumes and deletes; only the subscriber changes it", async () => {
@@ -982,13 +1052,64 @@ describe("Dashboards and reports (real runtime role)", () => {
     expect(runs).toHaveLength(3);
     expect(new Set(runs.map((run) => run.dueAt.toISOString())).size).toBe(3);
 
-    // A failed delivery is recorded as failed, and the subscription moves on.
+    // The claim is committed before the email is sent: while sending, the subscription is
+    // already moved on (seen from another connection), so a slow or failed send never repeats.
     await makeDue(subscription.id, finance.auth.user.id);
-    notificationSpy.mockImplementationOnce(() => Promise.reject(new Error("smtp down")));
+    let nextWhileSending: Date | null = null;
+    notificationSpy.mockImplementationOnce(async () => {
+      nextWhileSending = (
+        await asOwnerA((tx) =>
+          tx.reportSubscription.findUniqueOrThrow({
+            where: { tenantId_id: { tenantId: tenantA(), id: subscription.id } },
+          }),
+        )
+      ).nextRunAt;
+      throw new Error("smtp down");
+    });
+    // A failed delivery is recorded as failed, and the subscription moves on.
     expect(await scheduler.runDue({ tenantId: tenantA() })).toMatchObject({
       claimed: 1,
       failed: 1,
     });
+    expect(nextWhileSending!.getTime()).toBeGreaterThan(Date.now());
+    expect(await scheduler.runDue({ tenantId: tenantA() })).toMatchObject({ claimed: 0 });
+    const failedRuns = await asOwnerA((tx) =>
+      tx.reportSubscriptionRun.findMany({
+        where: { tenantId: tenantA(), subscriptionId: subscription.id, outcome: "failed" },
+      }),
+    );
+    expect(failedRuns.map((run) => run.reason)).toEqual(["delivery-failed"]);
+
+    // One subscription's error never stops the others in the same cycle.
+    const lpos = reportSubscriptionResponseSchema.parse(
+      ok(
+        await finance.call("post", "reports/subscriptions", {
+          reportId: "lpo-register",
+          parameters: { projectId: ruiru },
+          frequency: "monthly",
+          dayOfMonth: 1,
+          locale: "en",
+        }),
+        201,
+      ),
+    ).subscription;
+    await makeDue(subscription.id, finance.auth.user.id);
+    await makeDue(lpos.id, finance.auth.user.id);
+    const resolve = vi
+      .spyOn(app.get(ReportsService), "resolve")
+      .mockRejectedValueOnce(new Error("unexpected"));
+    try {
+      expect(await scheduler.runDue({ tenantId: tenantA() })).toEqual({
+        claimed: 1,
+        sent: 1,
+        skipped: 0,
+        failed: 1,
+      });
+    } finally {
+      resolve.mockRestore();
+    }
+    // The one that failed is still due and runs in the next cycle.
+    expect(await scheduler.runDue({ tenantId: tenantA() })).toMatchObject({ claimed: 1, sent: 1 });
 
     // Administrators can run the company's due subscriptions now; others cannot.
     refused(await finance.call("post", "reports/subscriptions/run-due", {}), 403);

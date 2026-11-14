@@ -92,6 +92,21 @@ export class ReportCaller {
     readonly projects: ReadonlyMap<string, ReportProject>,
   ) {}
 
+  /**
+   * Everything the caller's access depends on (company-wide or not, role permissions, each
+   * visible project with its status and effective permissions), as one stable string: equal
+   * fingerprints see exactly the same dashboard sections and projects.
+   */
+  get fingerprint(): string {
+    return JSON.stringify([
+      this.tenantWide,
+      [...this.role].sort(),
+      [...this.projects.values()]
+        .map((project) => [project.id, project.status, [...project.effective].sort()])
+        .sort(([a], [b]) => String(a).localeCompare(String(b))),
+    ]);
+  }
+
   /** reports.view and the source permission on the project. */
   canOn(projectId: string, rule: ReportRule): boolean {
     const project = this.projects.get(projectId);

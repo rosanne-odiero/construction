@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import type { Request } from "express";
 import { addCalendarDays, nairobiDate, percentOf } from "@pm-buddy/domain";
 import {
   PLANT_READ_PERMISSIONS,
   QUALITY_READ_PERMISSIONS,
+  REPORT_LIMITS,
   SAFETY_READ_PERMISSIONS,
   SPENDING_READ_PERMISSIONS,
   VALUATION_READ_PERMISSIONS,
@@ -15,6 +17,7 @@ import {
   type DashboardResponse,
 } from "@pm-buddy/validation";
 import type { Scope } from "../identity/access-policy.js";
+import { AuthSecurity } from "../identity/auth-security.service.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import { CashFlowService } from "../finance/cash-flow.service.js";
@@ -34,6 +37,8 @@ import { ReportsAccess, type ReportCaller } from "./reports-access.js";
 const DUE_SOON_DAYS = 7;
 /** Forecast weeks shown on the dashboard (the full forecast is on the spending page). */
 const FORECAST_WEEKS = 6;
+/** At most this many cached dashboards per API instance (oldest dropped first). */
+const DASHBOARD_CACHE_ENTRIES = 500;
 
 const somewhere = (
   caller: ReportCaller,
@@ -78,9 +83,52 @@ export class DashboardService {
     private readonly stores: StoresService,
     private readonly plant: PlantRegisterService,
     private readonly safety: SafetySettingsService,
+    private readonly security: AuthSecurity,
   ) {}
 
+  /** Recent dashboards per company, user and access fingerprint (see REPORT_LIMITS). */
+  private readonly cache = new Map<string, { expires: number; value: DashboardResponse }>();
+
+  /**
+   * The dashboard, rate-limited per user and reused for a minute while the caller's access is
+   * unchanged: it reads every visible project's summaries through the source services, so
+   * reloading the landing page must not repeat that work each time.
+   */
   async get(principal: Principal, req: Request): Promise<DashboardResponse> {
+    await this.security.limit(
+      `dashboard:${principal.user.id}`,
+      REPORT_LIMITS.dashboardsPerMinute,
+      60,
+    );
+    const fingerprint = await this.scope.run(
+      principal,
+      req,
+      async (scope) => (await this.access.caller(scope)).fingerprint,
+    );
+    const key = [
+      principal.session.activeTenantId,
+      principal.user.id,
+      createHash("sha256").update(fingerprint).digest("hex"),
+    ].join(":");
+    const cached = this.cache.get(key);
+    if (cached && cached.expires > Date.now() && cached.value.today === nairobiDate())
+      return cached.value;
+    const value = await this.build(principal, req);
+    this.remember(key, value);
+    return value;
+  }
+
+  private remember(key: string, value: DashboardResponse) {
+    const now = Date.now();
+    if (this.cache.size >= DASHBOARD_CACHE_ENTRIES)
+      for (const [entry, { expires }] of this.cache) if (expires <= now) this.cache.delete(entry);
+    while (this.cache.size >= DASHBOARD_CACHE_ENTRIES)
+      this.cache.delete(this.cache.keys().next().value!);
+    this.cache.delete(key);
+    this.cache.set(key, { expires: now + REPORT_LIMITS.dashboardCacheSeconds * 1000, value });
+  }
+
+  private async build(principal: Principal, req: Request): Promise<DashboardResponse> {
     const today = nairobiDate();
     const local = await this.scope.run(principal, req, async (scope) => {
       const caller = await this.access.caller(scope);

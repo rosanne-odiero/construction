@@ -18,6 +18,7 @@ import {
 } from "@pm-buddy/types";
 import type { RunDueResponse } from "@pm-buddy/validation";
 import { AppConfig } from "../../config/app-config.js";
+import type { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../../infra/prisma.service.js";
 import { AccessPolicy } from "../identity/access-policy.js";
 import { AuthSecurity } from "../identity/auth-security.service.js";
@@ -33,6 +34,18 @@ import { ReportsService } from "./reports.service.js";
 const LOCK_KEY = 0x706d622d72707473n;
 
 type DueRow = { tenant_id: string; id: string; next_run_at: Date };
+/** A claimed run: what to record, and the email to send after the claim commits (if any). */
+type Claim = {
+  run: {
+    subscriptionId: string;
+    userId: string;
+    reportId: string;
+    dueAt: Date;
+    periodFrom: Date | null;
+    periodTo: Date | null;
+  };
+  send: { to: string; subject: string; text: string } | null;
+};
 type ClaimedRow = {
   id: string;
   user_id: string;
@@ -119,7 +132,17 @@ export class ReportSchedulerService implements OnModuleInit, OnModuleDestroy {
             FROM app.due_report_subscriptions(${REPORT_LIMITS.schedulerBatch}::integer)`;
         const result: RunDueResponse = { claimed: 0, sent: 0, skipped: 0, failed: 0 };
         for (const row of due) {
-          const outcome = await this.runOne(row.tenant_id, row.id);
+          // One subscription's error never stops the others.
+          let outcome: ReportRunOutcome | null;
+          try {
+            outcome = await this.runOne(row.tenant_id, row.id);
+          } catch (error) {
+            this.logger.warn(
+              `Report subscription ${row.id} could not run: ${(error as Error).name}`,
+            );
+            result.failed += 1;
+            continue;
+          }
           if (!outcome) continue;
           result.claimed += 1;
           result[outcome] += 1;
@@ -133,11 +156,17 @@ export class ReportSchedulerService implements OnModuleInit, OnModuleDestroy {
   /**
    * Handles one due subscription in its company's context; null when another worker has it or it
    * is no longer due (paused, deleted or already run).
+   *
+   * The claim is committed before any email is sent: one short transaction claims the row
+   * (`FOR UPDATE SKIP LOCKED`), checks the subscriber's access as the subscriber, records a
+   * skipped run at once, and moves `next_run_at` on. Only then is the email sent, and its run
+   * (sent or failed) is recorded in a second transaction. A crash in between loses at most that
+   * one email; it never sends the same email again (decision D-126).
    */
   async runOne(tenantId: string, subscriptionId: string): Promise<ReportRunOutcome | null> {
-    return this.db.run(
+    const claim = await this.db.run(
       { userId: "", tenantId, requestId: "report-scheduler" },
-      async (tx) => {
+      async (tx): Promise<Claim | null> => {
         const [row] = await tx.$queryRaw<ClaimedRow[]>`
           SELECT id, user_id, report_id, parameters, frequency, weekday, day_of_month, locale,
                  next_run_at
@@ -158,16 +187,12 @@ export class ReportSchedulerService implements OnModuleInit, OnModuleDestroy {
             : null;
         const asAt = definition?.period === "as-at" ? runDate : undefined;
 
-        let outcome: ReportRunOutcome = "sent";
         let reason: ReportRunReason | null = null;
+        let send: Claim["send"] = null;
         const access = await this.policy.load(tx, tenantId, row.user_id);
-        if (!access) {
-          outcome = "skipped";
-          reason = "membership-ended";
-        } else if (!reportId || !definition?.available) {
-          outcome = "skipped";
-          reason = "report-unavailable";
-        } else {
+        if (!access) reason = "membership-ended";
+        else if (!reportId || !definition?.available) reason = "report-unavailable";
+        else {
           const scope = { tx, access, principal: undefined as unknown as Principal };
           try {
             const caller = await this.access.caller(scope);
@@ -181,52 +206,45 @@ export class ReportSchedulerService implements OnModuleInit, OnModuleDestroy {
             );
           } catch (error) {
             if (!(error instanceof HttpException) || error.getStatus() >= 500) throw error;
-            outcome = "skipped";
             reason =
               (error.getResponse() as { code?: string }).code === "report-not-available"
                 ? "report-unavailable"
                 : "permission-lost";
           }
-          if (outcome === "sent") {
+          if (!reason) {
             const user = await tx.user.findUnique({
               where: { id: row.user_id },
               select: { identifier: true },
             });
-            if (!user?.identifier.includes("@")) {
-              outcome = "skipped";
-              reason = "no-email-address";
-            } else {
+            if (!user?.identifier.includes("@")) reason = "no-email-address";
+            else {
               const company = await tx.tenant.findUniqueOrThrow({
                 where: { id: tenantId },
                 select: { name: true },
               });
-              const email = this.email(
-                row,
-                reportId,
-                company.name,
-                period ? { ...period } : null,
-                asAt ?? null,
-              );
-              try {
-                await this.security.notify(user.identifier, email.subject, email.text, "email");
-              } catch {
-                outcome = "failed";
-                reason = "delivery-failed";
-              }
+              send = {
+                to: user.identifier,
+                ...this.email(
+                  row,
+                  reportId,
+                  company.name,
+                  period ? { ...period } : null,
+                  asAt ?? null,
+                ),
+              };
             }
           }
         }
-        await tx.reportSubscriptionRun.create({
-          data: {
-            tenantId,
-            subscriptionId: row.id,
-            dueAt,
-            outcome,
-            reason,
-            periodFrom: period ? fromDay(period.from) : null,
-            periodTo: period ? fromDay(period.to) : null,
-          },
-        });
+        const run = {
+          subscriptionId: row.id,
+          userId: row.user_id,
+          reportId: row.report_id,
+          dueAt,
+          periodFrom: period ? fromDay(period.from) : null,
+          periodTo: period ? fromDay(period.to) : null,
+        };
+        // A skipped run is recorded with the claim; a run to send is recorded after the email.
+        if (!send) await this.recordRun(tx, tenantId, run, "skipped", reason);
         await tx.reportSubscription.update({
           where: { tenantId_id: { tenantId, id: row.id } },
           data: {
@@ -242,20 +260,62 @@ export class ReportSchedulerService implements OnModuleInit, OnModuleDestroy {
             lastRunAt: new Date(),
           },
         });
-        await tx.auditEvent.create({
-          data: {
-            tenantId,
-            actorId: row.user_id,
-            requestId: "report-scheduler",
-            action: "report.subscription_run",
-            resourceId: row.id,
-            metadata: { report: row.report_id, outcome, reason },
-          },
-        });
-        return outcome;
+        return { run, send };
       },
       30_000,
     );
+    if (!claim) return null;
+    if (!claim.send) return "skipped";
+    let outcome: "sent" | "failed" = "sent";
+    try {
+      await this.security.notify(claim.send.to, claim.send.subject, claim.send.text, "email");
+    } catch {
+      outcome = "failed";
+    }
+    await this.db.run(
+      { userId: claim.run.userId, tenantId, requestId: "report-scheduler" },
+      (tx) =>
+        this.recordRun(
+          tx,
+          tenantId,
+          claim.run,
+          outcome,
+          outcome === "failed" ? "delivery-failed" : null,
+        ),
+      10_000,
+    );
+    return outcome;
+  }
+
+  /** The append-only run row and its audit event (IDs, report, outcome and reason only). */
+  private async recordRun(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    run: Claim["run"],
+    outcome: ReportRunOutcome,
+    reason: ReportRunReason | null,
+  ) {
+    await tx.reportSubscriptionRun.create({
+      data: {
+        tenantId,
+        subscriptionId: run.subscriptionId,
+        dueAt: run.dueAt,
+        outcome,
+        reason,
+        periodFrom: run.periodFrom,
+        periodTo: run.periodTo,
+      },
+    });
+    await tx.auditEvent.create({
+      data: {
+        tenantId,
+        actorId: run.userId,
+        requestId: "report-scheduler",
+        action: "report.subscription_run",
+        resourceId: run.subscriptionId,
+        metadata: { report: run.reportId, outcome, reason },
+      },
+    });
   }
 
   /** The email: the report's name, period and a sign-in link with the IDs — no report data. */

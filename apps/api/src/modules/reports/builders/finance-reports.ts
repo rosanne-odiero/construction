@@ -223,10 +223,14 @@ type PaymentRow = {
 };
 
 /**
- * Supplier payments against approved invoices (D5.2 settlements): every invoice approved by the
- * end of the period that was still owed at its start or paid during it — approved (the current
- * payable's authorised amount), paid before, paid in the period, outstanding and the state — and
- * each payment recorded in the period. Same permission as the invoice screens.
+ * Supplier payments against approved invoices (D5.2 settlements): every invoice first approved by
+ * the end of the period that was still owed at its start or paid during it — approved, paid
+ * before, paid in the period, outstanding and the state — and each payment recorded in the period.
+ * Same permission as the invoice screens.
+ *
+ * A re-approval (e.g. after the supplier's payout details change) authorises only what was still
+ * owed (`total − settled`), so "approved" is the current payable's amount plus what was paid
+ * against the earlier payables, and the invoice counts from its first approval.
  */
 export async function supplierPayments(ctx: BuildContext): Promise<BuildResult> {
   const { tx, access } = ctx.scope;
@@ -237,7 +241,8 @@ export async function supplierPayments(ctx: BuildContext): Promise<BuildResult> 
     await tx.$queryRaw<InvoiceRow[]>`
       SELECT i.id, i.invoice_number, i.project_id,
              COALESCE(su.trading_name, su.legal_name) AS supplier,
-             p.authorised_minor,
+             (p.authorised_minor
+               + COALESCE(SUM(s.amount_minor) FILTER (WHERE s.payable_id <> p.id), 0))::bigint AS authorised_minor,
              COALESCE(SUM(s.amount_minor) FILTER (WHERE s.paid_on < ${fromDay(from)}::date), 0)::bigint AS before_minor,
              COALESCE(SUM(s.amount_minor) FILTER (WHERE s.paid_on >= ${fromDay(from)}::date AND s.paid_on <= ${fromDay(to)}::date), 0)::bigint AS during_minor
         FROM supplier_invoices i
@@ -247,9 +252,12 @@ export async function supplierPayments(ctx: BuildContext): Promise<BuildResult> 
        WHERE i.tenant_id = ${access.tenantId}::uuid
          AND i.project_id = ANY(${ids}::uuid[])
          AND i.status IN ('approved', 'partly_settled', 'settled')
-         AND (p.approved_at AT TIME ZONE 'Africa/Nairobi')::date <= ${fromDay(to)}::date
+         AND (SELECT (MIN(first.approved_at) AT TIME ZONE 'Africa/Nairobi')::date
+                FROM invoice_payables first
+               WHERE first.tenant_id = i.tenant_id AND first.invoice_id = i.id) <= ${fromDay(to)}::date
        GROUP BY i.id, su.id, p.id
-      HAVING p.authorised_minor > COALESCE(SUM(s.amount_minor) FILTER (WHERE s.paid_on < ${fromDay(from)}::date), 0)
+      HAVING p.authorised_minor + COALESCE(SUM(s.amount_minor) FILTER (WHERE s.payable_id <> p.id), 0)
+             > COALESCE(SUM(s.amount_minor) FILTER (WHERE s.paid_on < ${fromDay(from)}::date), 0)
           OR COUNT(s.id) FILTER (WHERE s.paid_on >= ${fromDay(from)}::date AND s.paid_on <= ${fromDay(to)}::date) > 0
        ORDER BY i.invoice_number, i.id
        LIMIT ${ctx.maxRows + 1}`,

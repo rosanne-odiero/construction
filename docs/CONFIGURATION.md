@@ -259,6 +259,7 @@ No company settings: limits are code constants (`REPORT_LIMITS`, `REPORT_DEFINIT
 | `reports.limits` | platform | Screen: 200 rows per section; PDF: **5,000** rows (above: 422 `use-excel`); any report: **20,000** rows (422 `report-too-large`); 60 previews per user per minute; 60 exports per user per 10 minutes; exports in a 30-second transaction; audit-log action filter ≤ 100 characters | D-122 | PRODUCT | D8.1 |
 | `reports.excel_money` | platform | Excel money as **numbers of shillings with two decimals** (`#,##0.00`); dates as Excel dates (`dd/mm/yyyy`), times as Nairobi wall-clock (`dd/mm/yyyy hh:mm`), percentages as fractions (`0.0%`); the screen and PDF show `KES 1,234.50` | D-122 | PRODUCT | D8.1 |
 | `reports.subscriptions` | platform | Weekly (ISO weekday) or monthly (day 1–31, clamped to the month's end), sent at **07:00 Africa/Nairobi**; at most **20** per person and **200** per company; the scheduler checks every **60 s** and takes at most **25** due subscriptions per cycle | D-126 | PRODUCT | D8.1 |
+| `reports.dashboard_cache` | platform | **30** dashboard loads per user per minute (429 above); a user's dashboard is reused for **60 seconds** while their access (role permissions, project assignments and statuses) is unchanged — any change builds a new one at once; at most 500 cached per API instance | D-121 | PRODUCT | D8.1 |
 | `reports.dashboard_due_soon_days` | platform | **7**: approved supplier invoices due within 7 days count as "due soon" on the dashboard | D-121 | PRODUCT | D8.1 |
 
 ### Documents and compliance register (D8.4)

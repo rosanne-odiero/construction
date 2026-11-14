@@ -205,6 +205,13 @@ export const REPORT_LIMITS = {
   previewsPerMinute: 60,
   /** PDF and Excel exports per user per ten minutes. */
   exportsPerTenMinutes: 60,
+  /** Dashboard loads per user per minute (each reads every visible project's summaries). */
+  dashboardsPerMinute: 30,
+  /**
+   * A user's dashboard is reused for this long while their access is unchanged (any change of
+   * role permissions or project assignments builds a new one at once).
+   */
+  dashboardCacheSeconds: 60,
   /** Active and paused subscriptions per user, and per company. */
   subscriptionsPerUser: 20,
   subscriptionsPerCompany: 200,

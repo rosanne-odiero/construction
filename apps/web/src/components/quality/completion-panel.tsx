@@ -44,7 +44,7 @@ type DialogState =
 /**
  * Practical completion, the defects liability period and final completion (D6.1). Certificates are
  * proposed (projects.manage) and certified by someone else holding quality.manage; the readiness
- * card shows what blocks them today. D6.3 releases retention against the certified certificates.
+ * card shows what blocks them today. D6.3 releases retention on release certificates once a completion is certified.
  */
 export function CompletionPanel({
   projectId,

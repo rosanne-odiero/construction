@@ -66,7 +66,7 @@ export const navGroups: {
       { key: "bq", href: "/bq", icon: FileSpreadsheet },
       { key: "suppliers", href: "/suppliers", icon: Truck },
       { key: "procurement", href: "/procurement", icon: ShoppingCart },
-      { key: "valuations", href: "/soon/valuations", icon: Calculator, phase: 6 },
+      { key: "valuations", href: "/valuations", icon: Calculator },
     ],
   },
   {
@@ -102,7 +102,6 @@ export const navGroups: {
 
 /** Sections that render the "coming in phase N" empty state. */
 export const comingSoonSections = {
-  valuations: 6,
   diary: 6,
   materials: 5,
   stores: 5,
@@ -121,8 +120,9 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
  * Routes backed by the real API: the projects list, project pages and site editors (D2.1), a
  * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1), attendance and
  * timesheets (D3.3 web slice), payroll (D4.1), the catalogue and suppliers (D5.1),
- * procure-to-pay (D5.2), stores (D5.3), spending and cash flow (D5.4) and quality (D6.1). The D0
- * labour, attendance and payroll prototypes live under /prototype.
+ * procure-to-pay (D5.2), stores (D5.3), spending and cash flow (D5.4), quality (D6.1) and
+ * measurement and valuations (D6.3). The D0 labour, attendance and payroll prototypes live under
+ * /prototype.
  */
 export function isLiveRoute(pathname: string): boolean {
   if (pathname === "/projects" || pathname === "/bq" || pathname === "/diary") return true;
@@ -141,6 +141,12 @@ export function isLiveRoute(pathname: string): boolean {
     return true;
   if (
     /^\/spending(\/(ledger|petty-cash|forecast|alerts|budgets|journals|settings)|\/petty-cash\/(expenses\/)?[0-9a-f-]{36}(\/expense)?|\/(budgets|journals)\/[0-9a-f-]{36}|\/projects\/[0-9a-f-]{36}(\/bills\/[0-9a-f-]{36})?)?$/.test(
+      pathname,
+    )
+  )
+    return true;
+  if (
+    /^\/valuations(\/(approvals|[0-9a-f-]{36})|\/projects\/[0-9a-f-]{36}(\/(measure|measurements\/[0-9a-f-]{36}))?)?$/.test(
       pathname,
     )
   )

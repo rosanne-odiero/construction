@@ -1957,21 +1957,40 @@ class Stores {
 
   // Measurements ----------------------------------------------------------------------------
 
+  /** D6.3 wire shape; review, photos and values live in mock-valuations (its own BQ fixture). */
   private measurementWire(measurement: MockMeasurement) {
+    const corrected = this.state.measurements.some(
+      (entry) => entry.correctsMeasurementId === measurement.id,
+    );
     return {
       id: measurement.id,
+      projectId: measurement.projectId,
       bqItem: this.item(measurement.lineageId)!,
       measuredOn: measurement.measuredOn,
       quantityToDate: measurement.quantityToDate,
       status: "recorded" as const,
+      state: corrected ? ("withdrawn" as const) : ("pending" as const),
+      basis: "quantity" as const,
+      itemQuantity: null,
+      itemAmountMinor: 0,
+      valueMinor: 0,
+      percentComplete: null,
+      overMeasured: false,
+      overMeasureReason: null,
       note: measurement.note,
       measuredBy: measurement.measuredBy,
       recordedAt: measurement.recordedAt,
       correctsMeasurementId: measurement.correctsMeasurementId,
       correctionReason: measurement.correctionReason,
-      corrected: this.state.measurements.some(
-        (entry) => entry.correctsMeasurementId === measurement.id,
-      ),
+      corrected,
+      photos: [],
+      review: null,
+      permissions: {
+        canApprove: false,
+        canReject: false,
+        canCorrect: !corrected,
+        canAddPhotos: false,
+      },
     };
   }
 
@@ -1986,7 +2005,10 @@ class Stores {
             (entry) => entry.projectId === projectId && (!lineage || entry.lineageId === lineage),
           )
           .map((entry) => this.measurementWire(entry)),
-        permissions: { canRecord: this.can(projectId, "bq.edit") },
+        permissions: {
+          canRecord: this.can(projectId, "bq.edit") || this.can(projectId, "site.diary"),
+          canApprove: this.can(projectId, "bq.edit"),
+        },
       },
       schema: measurementsResponseSchema,
     };
@@ -1995,7 +2017,7 @@ class Stores {
   measure(projectId: string, body: unknown): Reply {
     const held = this.held(projectId);
     if (!held.has("projects.view")) this.fail(404, "not-found");
-    if (!held.has("bq.edit")) this.fail(403, "forbidden");
+    if (!held.has("bq.edit") && !held.has("site.diary")) this.fail(403, "forbidden");
     const input = this.deps.parse(createMeasurementRequestSchema, body);
     const item = this.state.items.find(
       (entry) => entry.lineageId === input.bqItemLineageId && entry.projectId === projectId,
@@ -2022,7 +2044,7 @@ class Stores {
     this.state.measurements.push(measurement);
     return {
       status: 201,
-      body: { measurement: this.measurementWire(measurement) },
+      body: { measurement: this.measurementWire(measurement), replayed: false },
       schema: measurementResponseSchema,
     };
   }

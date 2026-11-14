@@ -95,6 +95,12 @@ import {
 } from "./mock-spending.mts";
 import { handleSchedule, initialSchedule, type ScheduleState } from "./mock-schedule.mts";
 import { handleQuality, initialQuality, type QualityState } from "./mock-quality.mts";
+import {
+  handleValuations,
+  initialValuations,
+  valuationExport,
+  type ValuationsState,
+} from "./mock-valuations.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -186,6 +192,8 @@ type State = {
   schedule: ScheduleState;
   /** D6.1 quality: templates, inspections, tests, snags, completion (mock-quality.mts). */
   quality: QualityState;
+  /** D6.3 measurements, valuations, certificates and earned value (mock-valuations.mts). */
+  valuations: ValuationsState;
 };
 
 const states = new Map<string, State>();
@@ -382,6 +390,7 @@ function fixture(persona: Persona): State {
     buildups: initialBuildups(),
   };
   const projects = [ruiru, syokimau];
+  const photos = initialPhotos(RUIRU_ID, MAIN_PLOT_ID);
   return {
     persona,
     stepUpAt: new Map(),
@@ -409,7 +418,8 @@ function fixture(persona: Persona): State {
         agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
       },
     ),
-    photos: initialPhotos(RUIRU_ID, MAIN_PLOT_ID),
+    photos,
+    valuations: initialValuations(RUIRU_ID, [photos[0]!.id]),
     bq,
     procurement,
     p2p: initialP2p(p2pBase(projects, procurement, bq)),
@@ -568,6 +578,13 @@ function projectPermissions(state: State, entry: ProjectState): Permission[] {
   const assignment =
     state.team.get(entry.project.id)?.find((member) => member.userId === user.id)?.assignment ?? [];
   return SYSTEM_ROLE_PERMISSIONS[user.role].filter((key) => assignment.includes(key));
+}
+
+/** Company-wide members (owner, finance) hold their role on every project, as in the API. */
+function valuationPermissions(state: State, projectId: string): readonly Permission[] {
+  const entry = state.projects.find((candidate) => candidate.project.id === projectId);
+  if (!entry) return [];
+  return isTenantWide(state.persona) ? rolePermissions(state) : projectPermissions(state, entry);
 }
 
 /** Projects with their sites, as the spending and stores mocks see them. */
@@ -833,6 +850,32 @@ async function handle(
     ]);
     return { status: 201, body: { project }, schema: projectResponseSchema };
   }
+  const valuations = handleValuations(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      projects: projectInfo(state.projects),
+      projectPermissions: (projectId) => valuationPermissions(state, projectId),
+      photo: (projectId, photoId) => {
+        const found = state.photos.find(
+          (candidate) => candidate.id === photoId && candidate.projectId === projectId,
+        );
+        return found ? { id: found.id, verified: found.verified, caption: found.caption } : null;
+      },
+      requireStepUp: () => requireStepUp(state),
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+    },
+    state.valuations,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (valuations) return valuations;
   const stores = handleStores(
     {
       fail: (status, code) => new HttpError(status, code),
@@ -1355,6 +1398,28 @@ const server = createServer((req, res) => {
         const file = p2pDocument(stateFor(req).p2p, download[1]!);
         if (!file) return send(res, 404, { code: "not-found" }, true);
         res.writeHead(200, { "Content-Type": file.contentType, "Cache-Control": "no-store" });
+        return res.end(file.content);
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
+    // Certificate PDF and Excel files are bytes too.
+    const certificate = /^\/valuations\/([^/]+)\/export\/(pdf|xlsx)$/.exec(path);
+    if (certificate && req.method === "GET") {
+      try {
+        const state = stateFor(req);
+        const file = valuationExport(
+          { projectPermissions: (projectId) => valuationPermissions(state, projectId) },
+          state.valuations,
+          certificate[1]!,
+          certificate[2]!,
+        );
+        if (!file) return send(res, 404, { code: "not-found" }, true);
+        res.writeHead(200, {
+          "Content-Type": file.contentType,
+          "Content-Disposition": `attachment; filename="certificate.${certificate[2]}"`,
+          "Cache-Control": "no-store",
+        });
         return res.end(file.content);
       } catch {
         return send(res, 401, { code: "unauthorized" }, true);

@@ -207,8 +207,9 @@ export function ReorderLevelsForm({
 }
 
 /**
- * Records the quantity completed to date of a BQ item (minimal measurement; D6.3 adds approval
- * and photos). The variance report uses the latest measurement.
+ * Records the quantity completed to date of a BQ item. It waits for an independent approval with
+ * photo evidence under Valuations (D6.3); the variance report uses the latest measurement that was
+ * not rejected.
  */
 export function MeasurementDialog({ projectId, item }: { projectId: string; item: StoresBqItem }) {
   const t = useTranslations("stores.measure");

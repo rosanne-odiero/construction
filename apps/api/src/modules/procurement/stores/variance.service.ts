@@ -113,7 +113,14 @@ export class VarianceService {
         _sum: { quantity: true },
       }),
       tx.progressMeasurement.findMany({
-        where: { tenantId: access.tenantId, projectId, correctedBy: { is: null } },
+        // The latest measurement that is neither corrected nor rejected (D6.3 review); a pending
+        // one still informs the estimate.
+        where: {
+          tenantId: access.tenantId,
+          projectId,
+          correctedBy: { is: null },
+          NOT: { review: { is: { decision: "rejected" } } },
+        },
         orderBy: [{ measuredOn: "desc" }, { recordedAt: "desc" }],
       }),
     ]);

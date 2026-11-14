@@ -195,6 +195,21 @@ The working calendar is a per-project setting (`schedule_settings`, one row per 
 | `schedule.limits` | platform | 500 activities and 2,000 dependencies per project; durations 1–1,000 working days; lags −60…365 working days; 50 baselines per project; 50 activities per delay; working days lost 0–1,000 in half days. Code constant `SCHEDULE_LIMITS` | ARCHITECTURE §4.6 | PRODUCT | D6.2 |
 | `schedule.progress_basis` | activity | `physical` (whole-percent estimate) or `quantity` (done ÷ total in a unit, rounded down to 0.01 %); project progress is weighted by planned duration | Brief §15 G | PRODUCT | D6.2 |
 
+### Valuations (D6.3)
+
+The contract terms of interim payment certificates are per-project, append-only versions (`contract_settings`; no row = the defaults below, shown as version 0). They are read with `GET projects/:id/valuations` (`settings`) and changed with `PUT projects/:id/contract-settings` (`finance.manage`, optimistic `version`). A new version applies to valuations not yet certified: drafts recompute and a submitted valuation becomes stale (409 `valuation-stale`) until it is returned and resubmitted. Every certificate stores the settings version, the five values and the rule version it used (ARCHITECTURE §11 reproducibility). All values are COMPLIANCE-REVIEW (CR-VAL-01–04).
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `valuations.retention_percent` | project | **10 %** (0–20, up to 2 decimals) of the gross valuation (work done + materials on site) | Common Kenyan building contracts (JBC); CR-VAL-01 | COMPLIANCE-REVIEW | D6.3 |
+| `valuations.retention_cap_percent` | project | **5 %** of the **original** contract sum (excluding VAT); empty = no limit (0–100) | JBC practice; CR-VAL-01 | COMPLIANCE-REVIEW | D6.3 |
+| `valuations.practical_release_percent` | project | **50 %** of the computed retention released at certified practical completion; the rest at certified final completion | JBC practice; CR-VAL-01 | COMPLIANCE-REVIEW | D6.3 |
+| `valuations.vat_percent` | project | **16 %** (0–30) on each certificate's amount due, shown separately (certified amounts are net of VAT) | VAT Act 2013 standard rate; CR-VAL-04, CR-TAX-01 | COMPLIANCE-REVIEW | D6.3 |
+| `valuations.materials_percent` | project | **100 %** (0–100) of materials on site at cost (the demo seed uses 100 % on RUI-HTS; tests use 80 %) | CR-VAL-03 | COMPLIANCE-REVIEW | D6.3 |
+| `valuations.rule_version` | platform | `KE-VAL-1` (formulas in ARCHITECTURE §4.10; half away from zero once per figure) | ARCHITECTURE §4.10 | COMPLIANCE-REVIEW | D6.3 |
+| `valuations.limits` | platform | 6 photos per measurement; 100 materials lines and 50 adjustments per valuation; 5,000 items valued per certificate (and per PDF); approval queue 200; S-curve 260 weeks; certificate exports 60 per user per 10 minutes. Code constants `VALUATION_LIMITS`, `CERTIFICATE_PDF_MAX_LINES` | ARCHITECTURE §4.10 | PRODUCT | D6.3 |
+| `valuations.evm_weighting` | platform | PV: each measurable item's contract value over the working days of its linked baseline tasks, else over the baseline span; the baseline's working weekdays and the company's public holidays. Not configurable | CR-VAL-05; D-87 | COMPLIANCE-REVIEW | D6.3 |
+
 ## 6. Security, auth and operations
 
 | Key | Scope | Seed / default | Source | Status | Used from |

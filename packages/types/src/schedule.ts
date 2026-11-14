@@ -1,4 +1,5 @@
 import type { IsoWeekday } from "./attendance.js";
+import type { Permission } from "./permissions.js";
 
 /**
  * Schedule vocabulary (D6.2, brief §5.9 and §15 G). The database CHECK constraints list the same
@@ -69,6 +70,40 @@ export type DelayStatus = (typeof DELAY_STATUSES)[number];
 
 /** The default working week on Kenyan sites: Monday to Saturday (ISO weekdays; a project setting). */
 export const DEFAULT_WORKING_WEEKDAYS: readonly IsoWeekday[] = [1, 2, 3, 4, 5, 6];
+
+/**
+ * Dates people plan with (project, milestone and schedule dates) lie in these years, so one mistyped
+ * year can never push the working-day arithmetic out of range for a whole project's schedule.
+ */
+export const PLANNING_DATE_RANGE = { min: "2000-01-01", max: "2099-12-31" } as const;
+
+/**
+ * Who may read the schedule and its baselines (on top of `projects.view`): anyone with a working
+ * permission on the project. Portal-only roles (client, supplier) hold none of these.
+ */
+export const SCHEDULE_READ_PERMISSIONS = [
+  "projects.manage",
+  "site.diary",
+  "reports.view",
+  "bq.edit",
+  "quality.manage",
+  "procurement.requisition",
+  "stores.manage",
+  "attendance.record",
+  "finance.view",
+] as const satisfies readonly Permission[];
+
+/**
+ * Who may read the delay log: the contractor's own staff only. Its claim flags and descriptions are
+ * the contractor's position on extensions of time, so clients, suppliers and consultants (the other
+ * side of a claim) never see it.
+ */
+export const DELAY_LOG_READ_PERMISSIONS = [
+  "projects.manage",
+  "site.diary",
+  "bq.edit",
+  "finance.manage",
+] as const satisfies readonly Permission[];
 
 export const SCHEDULE_LIMITS = {
   /** Tasks per project (milestone markers are not counted). */

@@ -1,6 +1,10 @@
 import { addCalendarDays, calendarDaysBetween, isoWeekday } from "@pm-buddy/domain";
-import type { DependencyType } from "@pm-buddy/types";
-import type { ScheduleItem, ScheduleResponse } from "@pm-buddy/validation";
+import {
+  DELAY_LOG_READ_PERMISSIONS,
+  SCHEDULE_READ_PERMISSIONS,
+  type DependencyType,
+} from "@pm-buddy/types";
+import type { ScheduleDelay, ScheduleItem, ScheduleResponse } from "@pm-buddy/validation";
 
 /**
  * Gantt geometry and display helpers for the schedule screens (D6.2). Pure functions on business
@@ -121,3 +125,38 @@ export function parseDaysLost(text: string): number | undefined {
 /** A label for an item: its code and name, or the milestone's name. */
 export const itemLabel = (item: Pick<ScheduleItem, "code" | "name">): string =>
   item.code ? `${item.code} ${item.name}` : item.name;
+
+/** A site diary the delay form can cite. */
+export type DiaryChoice = { id: string; date: string; site: string };
+
+/**
+ * The diaries the delay form offers: the recent ones plus every diary a delay already cites, newest
+ * first, so amending an older delay never silently drops its evidence.
+ */
+export function withCitedDiaries(
+  recent: readonly DiaryChoice[],
+  delays: readonly Pick<ScheduleDelay, "siteDiary">[],
+  siteNames: ReadonlyMap<string, string>,
+): DiaryChoice[] {
+  const choices = new Map(recent.map((diary) => [diary.id, diary]));
+  for (const { siteDiary } of delays)
+    if (siteDiary && !choices.has(siteDiary.id))
+      choices.set(siteDiary.id, {
+        id: siteDiary.id,
+        date: siteDiary.date,
+        site: siteNames.get(siteDiary.siteId) ?? "—",
+      });
+  return [...choices.values()].sort((left, right) => right.date.localeCompare(left.date));
+}
+
+/**
+ * What the schedule tab may show, with the API's rules: no schedule for portal-only roles (client,
+ * supplier) and the delay log, which holds the contractor's claim positions, for its staff only.
+ */
+export function scheduleAccess(projectPermissions: readonly string[]) {
+  const held = new Set(projectPermissions);
+  return {
+    schedule: SCHEDULE_READ_PERMISSIONS.some((permission) => held.has(permission)),
+    delays: DELAY_LOG_READ_PERMISSIONS.some((permission) => held.has(permission)),
+  };
+}

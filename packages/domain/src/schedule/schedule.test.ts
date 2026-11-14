@@ -98,7 +98,7 @@ describe("working calendar", () => {
     expect(index.onOrAfter("2026-02-22")).toBe(-6);
     expect(index.onOrBefore("2026-02-22")).toBe(-7);
     for (const at of [-40, -1, 0, 1, 250]) expect(index.onOrAfter(index.dateOf(at))).toBe(at);
-    expect(() => index.dateOf(6_000)).toThrow(RangeError);
+    expect(() => index.dateOf(40_001)).toThrow(RangeError);
     expect(() => new WorkdayIndex(monSat, "2026-03-02", 10).onOrAfter("2027-01-01")).toThrow(
       RangeError,
     );
@@ -247,6 +247,43 @@ describe("CPM forward and backward pass", () => {
     // Without predecessors a milestone sits on its due date (Sunday → the next working day).
     expect(item(result, "Loose")).toMatchObject({ finish: "2026-03-16", critical: true });
     expect(result.finish).toBe("2026-03-16");
+  });
+
+  it("reaches any planning date, even 100 years on with a seven-day week", () => {
+    const result = run([{ id: "Far", kind: "milestone", targetDate: "2099-12-31" }], [], {
+      calendar: workingCalendar([1, 2, 3, 4, 5, 6, 7]),
+      start: "2000-01-01",
+    });
+    expect(item(result, "Far")).toMatchObject({ finish: "2099-12-31" });
+  });
+
+  it("places a milestone linked from a task's start on the day that task starts", () => {
+    const result = run(
+      [
+        task("Z", 1),
+        task("A", 3),
+        { id: "Started", kind: "milestone", targetDate: "2026-03-02" },
+        { id: "Echo", kind: "milestone", targetDate: "2026-03-02" },
+        { id: "Handover", kind: "milestone", targetDate: "2026-03-02" },
+        task("B", 5),
+      ],
+      [
+        link("Z", "A"),
+        link("A", "Started", "SS"),
+        link("Started", "Echo", "SS"),
+        link("A", "Handover", "SF", 2),
+        link("Started", "B"),
+      ],
+    );
+    expect(item(result, "A")).toMatchObject({ start: "2026-03-03", finish: "2026-03-05" });
+    // SS lag 0 from A: the day A starts (not the Monday before); milestone to milestone: same day.
+    expect(item(result, "Started")).toMatchObject({ finish: "2026-03-03", critical: true });
+    expect(item(result, "Echo")).toMatchObject({ finish: "2026-03-03" });
+    expect(item(result, "Handover")).toMatchObject({ finish: "2026-03-05" });
+    expect(item(result, "B")).toMatchObject({ start: "2026-03-04", finish: "2026-03-09" });
+    // A's start drives the milestone that drives B, the last task: A and Z are critical.
+    expect(item(result, "A")).toMatchObject({ totalFloatDays: 0, critical: true });
+    expect(item(result, "Z")).toMatchObject({ totalFloatDays: 0, critical: true });
   });
 
   it("refuses cycles and names the loop; spots links that would close one", () => {

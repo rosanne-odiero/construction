@@ -33,10 +33,10 @@ import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { formatCalendarDate, formatDateTime } from "@/lib/format";
 import { liveRequest } from "@/lib/live-api";
 import { calendarInput, parseCalendarInput } from "@/lib/project-input";
-import { parseDaysLost } from "@/lib/schedule";
+import { parseDaysLost, type DiaryChoice } from "@/lib/schedule";
 import { FormError, selectClass, useScheduleMutation } from "./use-schedule-mutation";
 
-export type DiaryChoice = { id: string; date: string; site: string };
+export type { DiaryChoice };
 const delayNumber = (number: number) => `DLY-${String(number).padStart(3, "0")}`;
 const text = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
 

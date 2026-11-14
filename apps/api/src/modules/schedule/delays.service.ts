@@ -23,9 +23,10 @@ import { fromCalendarDate, toCalendarDate } from "../projects/project-mappers.js
 import {
   canEditSchedule,
   loadCalendar,
+  requireDelayLogReader,
   scheduleProblem,
-  scheduleVersionConflict,
   type ScheduleProject,
+  scheduleVersionConflict,
 } from "./schedule-model.js";
 
 type DelayRow = Prisma.ScheduleDelayGetPayload<{
@@ -61,6 +62,7 @@ export class DelaysService {
   list(principal: Principal, projectId: string, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       const { project, effective } = await this.access.load(scope, projectId, "projects.view");
+      requireDelayLogReader(effective);
       const rows = await scope.tx.scheduleDelay.findMany({
         where: { tenantId: scope.access.tenantId, projectId },
         include: delayInclude,
@@ -107,6 +109,7 @@ export class DelaysService {
   get(principal: Principal, projectId: string, delayId: string, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       const { project, effective } = await this.access.load(scope, projectId, "projects.view");
+      requireDelayLogReader(effective);
       return this.detail(scope, project, effective, delayId);
     });
   }
@@ -165,7 +168,12 @@ export class DelaysService {
         async (scope) => {
           const { project, effective } = await this.access.editable(scope, projectId);
           const current = await this.current(scope, projectId, delayId, input.version);
-          await this.validate(scope, projectId, input);
+          // Leaving siteDiaryId out keeps the cited diary; null removes it.
+          const content = {
+            ...input,
+            siteDiaryId: input.siteDiaryId === undefined ? current.siteDiaryId : input.siteDiaryId,
+          };
+          await this.validate(scope, projectId, content);
           const id = uuidv7();
           await this.write(scope, projectId, {
             id,
@@ -175,7 +183,7 @@ export class DelaysService {
             supersedesId: current.id,
             status: "recorded",
             changeReason: input.reason,
-            content: input,
+            content,
           });
           const before = {
             cause: current.cause,
@@ -191,8 +199,8 @@ export class DelaysService {
               .join(","),
           };
           const after = {
-            ...input,
-            siteDiaryId: input.siteDiaryId ?? null,
+            ...content,
+            siteDiaryId: content.siteDiaryId ?? null,
             claimFlag: input.claimFlag ?? "not_assessed",
             activityIds: [...input.activityIds].sort().join(","),
           };

@@ -195,6 +195,23 @@ type Node = {
   displayFinish: string;
 };
 
+/**
+ * A milestone at boundary b shows on working day b − 1 (the end of that day), while a task's start
+ * boundary is the beginning of its first day. A link from a task's start (SS or SF) to a milestone
+ * therefore adds one, so the milestone shows on the day the task starts, not the day before.
+ */
+function startToMilestone(
+  dependency: ScheduleDependencyInput,
+  predecessor: ScheduleItemInput,
+  successor: ScheduleItemInput,
+): number {
+  return (dependency.type === "SS" || dependency.type === "SF") &&
+    predecessor.kind === "task" &&
+    successor.kind === "milestone"
+    ? 1
+    : 0;
+}
+
 /** Runs the forward and backward passes. */
 export function computeSchedule(input: ScheduleInput): ScheduleResult {
   const ids = input.items.map((item) => item.id);
@@ -227,7 +244,14 @@ export function computeSchedule(input: ScheduleInput): ScheduleResult {
       const from =
         dependency.type === "FS" || dependency.type === "FF" ? predecessor.f : predecessor.s;
       const onFinish = dependency.type === "FF" || dependency.type === "SF";
-      return { id: dependency.id, value: from + dependency.lagDays - (onFinish ? planned : 0) };
+      return {
+        id: dependency.id,
+        value:
+          from +
+          dependency.lagDays -
+          (onFinish ? planned : 0) +
+          startToMilestone(dependency, predecessor.input, item),
+      };
     });
     const logic = bounds.length ? Math.max(...bounds.map((bound) => bound.value)) : null;
     let node: Node;
@@ -280,7 +304,7 @@ export function computeSchedule(input: ScheduleInput): ScheduleResult {
       const successor = nodes.get(dependency.successorId)!;
       if (successor.status !== "not_started" || successor.lf === null) continue;
       const ls = successor.lf - (successor.f - successor.s);
-      const lag = dependency.lagDays;
+      const lag = dependency.lagDays + startToMilestone(dependency, node.input, successor.input);
       const bound =
         dependency.type === "FS"
           ? ls - lag

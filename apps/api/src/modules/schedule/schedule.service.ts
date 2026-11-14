@@ -29,9 +29,10 @@ import {
   compute,
   loadCalendar,
   loadSchedule,
+  requireScheduleReader,
   scheduleProblem,
-  scheduleVersionConflict,
   type ScheduleProject,
+  scheduleVersionConflict,
 } from "./schedule-model.js";
 
 const codeTaken = () =>
@@ -63,6 +64,7 @@ export class ScheduleService {
   get(principal: Principal, projectId: string, baselineId: string | undefined, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       const { project, effective } = await this.access.load(scope, projectId, "projects.view");
+      requireScheduleReader(effective);
       return this.respond(scope, project, effective, baselineId);
     });
   }

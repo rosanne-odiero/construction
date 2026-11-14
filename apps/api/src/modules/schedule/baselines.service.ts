@@ -19,6 +19,7 @@ import {
   compute,
   loadSchedule,
   milestoneKey,
+  requireScheduleReader,
   scheduleProblem,
   scheduleVersionConflict,
   taskKey,
@@ -40,6 +41,7 @@ export class BaselinesService {
   list(principal: Principal, projectId: string, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       const { project, effective } = await this.access.load(scope, projectId, "projects.view");
+      requireScheduleReader(effective);
       const rows = await scope.tx.scheduleBaseline.findMany({
         where: { tenantId: scope.access.tenantId, projectId },
         orderBy: { baselineNo: "desc" },
@@ -58,7 +60,7 @@ export class BaselinesService {
 
   get(principal: Principal, projectId: string, baselineId: string, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
-      await this.access.load(scope, projectId, "projects.view");
+      requireScheduleReader((await this.access.load(scope, projectId, "projects.view")).effective);
       const { tenantId } = scope.access;
       const [row, current] = await Promise.all([
         scope.tx.scheduleBaseline.findFirst({ where: { tenantId, projectId, id: baselineId } }),

@@ -6,8 +6,10 @@ import {
   monthStarts,
   parseDaysLost,
   restDays,
+  scheduleAccess,
   varianceView,
   weekStarts,
+  withCitedDiaries,
   ZOOMS,
 } from "./schedule";
 
@@ -73,5 +75,49 @@ describe("display helpers", () => {
     expect(parseDaysLost("1.3")).toBeUndefined();
     expect(parseDaysLost("-1")).toBeUndefined();
     expect(parseDaysLost("")).toBeUndefined();
+  });
+});
+
+describe("diaries a delay can cite", () => {
+  it("keeps every diary a delay already cites, even beyond the recent ones", () => {
+    const recent = [{ id: "d-new", date: "2026-11-10", site: "Main plot" }];
+    const delays = [
+      { siteDiary: { id: "d-old", date: "2026-03-02", siteId: "s-1" } },
+      { siteDiary: { id: "d-new", date: "2026-11-10", siteId: "s-1" } },
+      { siteDiary: null },
+    ];
+    expect(withCitedDiaries(recent, delays, new Map([["s-1", "Main plot"]]))).toEqual([
+      { id: "d-new", date: "2026-11-10", site: "Main plot" },
+      { id: "d-old", date: "2026-03-02", site: "Main plot" },
+    ]);
+    // When the diary list could not be read, the cited diaries are still offered.
+    expect(withCitedDiaries([], delays, new Map()).map((diary) => diary.id)).toEqual([
+      "d-new",
+      "d-old",
+    ]);
+  });
+});
+
+describe("who sees the schedule tab", () => {
+  it("hides the schedule from portal-only roles and the delay log from outside parties", () => {
+    // Client and supplier roles: project view (and BQ view) plus their portal.
+    expect(scheduleAccess(["projects.view", "bq.view", "portal.client"])).toEqual({
+      schedule: false,
+      delays: false,
+    });
+    expect(scheduleAccess(["projects.view"])).toEqual({ schedule: false, delays: false });
+    // A consultant follows the programme but not the contractor's claim positions.
+    expect(scheduleAccess(["projects.view", "bq.view", "reports.view"])).toEqual({
+      schedule: true,
+      delays: false,
+    });
+    // Company finance: compensable delays are money, so it reads the log.
+    expect(
+      scheduleAccess(["projects.view", "finance.view", "finance.manage", "reports.view"]),
+    ).toEqual({ schedule: true, delays: true });
+    expect(scheduleAccess(["projects.view", "site.diary"])).toEqual({
+      schedule: true,
+      delays: true,
+    });
   });
 });

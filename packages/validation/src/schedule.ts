@@ -10,6 +10,7 @@ import {
   SCHEDULE_LIMITS,
 } from "@pm-buddy/types";
 import { z } from "zod";
+import { planningDateSchema } from "./primitives.js";
 
 /**
  * Schedule (D6.2): activities, dependencies, the working calendar, baselines with variance and
@@ -77,7 +78,7 @@ export const createActivityRequestSchema = z.strictObject({
   /** A BQ item lineage in the project's newest approved BQ version (optional). */
   bqItemLineageId: uuid.nullable().optional(),
   durationDays: duration,
-  startNoEarlierThan: calendarDate.nullable().optional(),
+  startNoEarlierThan: planningDateSchema.nullable().optional(),
 });
 export const updateActivityRequestSchema = z
   .strictObject({
@@ -86,7 +87,7 @@ export const updateActivityRequestSchema = z
     wbsNodeId: uuid.nullable().optional(),
     bqItemLineageId: uuid.nullable().optional(),
     durationDays: duration.optional(),
-    startNoEarlierThan: calendarDate.nullable().optional(),
+    startNoEarlierThan: planningDateSchema.nullable().optional(),
     version,
   })
   .refine(
@@ -103,8 +104,8 @@ const quantity = z
 export const activityProgressRequestSchema = z
   .strictObject({
     version,
-    actualStart: calendarDate.nullable(),
-    actualFinish: calendarDate.nullable(),
+    actualStart: planningDateSchema.nullable(),
+    actualFinish: planningDateSchema.nullable(),
     basis: progressBasisSchema,
     percentComplete: z.number().int().min(0).max(100).nullable().optional(),
     quantityDone: quantity.nullable().optional(),
@@ -318,9 +319,9 @@ const workingDaysLost = z
   .refine((value) => Number.isInteger(value * 2), "half_days_only");
 const delayContent = {
   cause: delayCauseSchema,
-  startDate: calendarDate,
+  startDate: planningDateSchema,
   /** Null while the delay is ongoing. */
-  endDate: calendarDate.nullable(),
+  endDate: planningDateSchema.nullable(),
   workingDaysLost,
   description: z.string().trim().min(3).max(2000),
   siteDiaryId: uuid.nullable().optional(),

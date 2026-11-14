@@ -1,4 +1,4 @@
-import { HttpException, InternalServerErrorException } from "@nestjs/common";
+import { ForbiddenException, HttpException, InternalServerErrorException } from "@nestjs/common";
 import {
   computeSchedule,
   isProjectReadOnly,
@@ -12,6 +12,8 @@ import {
 } from "@pm-buddy/domain";
 import {
   DEFAULT_WORKING_WEEKDAYS,
+  DELAY_LOG_READ_PERMISSIONS,
+  SCHEDULE_READ_PERMISSIONS,
   type DependencyType,
   type MilestoneStatus,
   type Permission,
@@ -99,6 +101,19 @@ export type ScheduleData = {
   /** Tasks named by any delay version (they cannot be deleted). */
   delayed: Set<string>;
 };
+
+/**
+ * 403 unless the caller holds one of `permissions` on the project (on top of `projects.view`):
+ * the schedule is for people working on the project, the delay log for the contractor's staff.
+ */
+function requireAnyOf(effective: ReadonlySet<Permission>, permissions: readonly Permission[]) {
+  if (!permissions.some((permission) => effective.has(permission)))
+    throw new ForbiddenException(`One of these permissions is required: ${permissions.join(", ")}`);
+}
+export const requireScheduleReader = (effective: ReadonlySet<Permission>) =>
+  requireAnyOf(effective, SCHEDULE_READ_PERMISSIONS);
+export const requireDelayLogReader = (effective: ReadonlySet<Permission>) =>
+  requireAnyOf(effective, DELAY_LOG_READ_PERMISSIONS);
 
 /** Whether the caller may change this project's schedule (role ∩ assignment, project open). */
 export const canEditSchedule = (

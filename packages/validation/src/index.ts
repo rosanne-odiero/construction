@@ -22,6 +22,7 @@ export {
   kenyanPhoneSchema,
   minorUnitsSchema,
   moneySchema,
+  planningDateSchema,
 } from "./primitives.js";
 export {
   csrfResponseSchema,

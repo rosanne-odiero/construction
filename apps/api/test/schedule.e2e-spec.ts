@@ -179,7 +179,7 @@ describe("Schedule (real runtime role)", () => {
     // Role ∩ assignment: the site agent's role lacks projects.manage even when assigned; the
     // project manager's role has it but the assignment does not.
     await join(agent, "site_agent", ["projects.view", "projects.manage", "site.diary"]);
-    await join(manager, "project_manager", ["projects.view"]);
+    await join(manager, "project_manager", ["projects.view", "site.diary"]);
   });
 
   afterAll(async () => {
@@ -772,8 +772,33 @@ describe("Schedule (real runtime role)", () => {
       (body) => scheduleDelayResponseSchema.parse(body),
     );
     expect(amended.delay).toMatchObject({ id: delayId, number: 1, version: 2, workingDaysLost: 3 });
-    expect(amended.history.map((entry) => entry.version)).toEqual([2, 1]);
-    expect(amended.history[1]).toMatchObject({ workingDaysLost: 2.5, claimFlag: "excusable" });
+    // Leaving the diary out of an amendment keeps it; null removes it.
+    const { siteDiaryId: _cited, ...withoutDiary } = content;
+    const kept = ok(
+      await owner.call("post", `${base()}/delays/${delayId}/amend`, {
+        ...withoutDiary,
+        workingDaysLost: 3,
+        claimFlag: "compensable",
+        version: 2,
+        reason: "Claim flag reviewed",
+      }),
+      (body) => scheduleDelayResponseSchema.parse(body),
+    );
+    expect(kept.delay).toMatchObject({ version: 3, siteDiary: { id: diary.id } });
+    const cleared = ok(
+      await owner.call("post", `${base()}/delays/${delayId}/amend`, {
+        ...content,
+        siteDiaryId: null,
+        workingDaysLost: 3,
+        claimFlag: "compensable",
+        version: 3,
+        reason: "Wrong diary cited",
+      }),
+      (body) => scheduleDelayResponseSchema.parse(body),
+    );
+    expect(cleared.delay).toMatchObject({ version: 4, siteDiary: null });
+    expect(cleared.history.map((entry) => entry.version)).toEqual([4, 3, 2, 1]);
+    expect(cleared.history[3]).toMatchObject({ workingDaysLost: 2.5, claimFlag: "excusable" });
     expect(
       (
         await owner.call("post", `${base()}/delays/${delayId}/amend`, {
@@ -784,26 +809,26 @@ describe("Schedule (real runtime role)", () => {
       ).body,
     ).toMatchObject({ code: "version-conflict" });
     expect(
-      (await owner.call("post", `${base()}/delays/${delayId}/amend`, { ...content, version: 2 }))
+      (await owner.call("post", `${base()}/delays/${delayId}/amend`, { ...content, version: 4 }))
         .status,
     ).toBe(400);
     const withdrawn = ok(
       await owner.call("post", `${base()}/delays/${delayId}/withdraw`, {
-        version: 2,
+        version: 4,
         reason: "Recorded against the wrong project",
       }),
       (body) => scheduleDelayResponseSchema.parse(body),
     );
     expect(withdrawn.delay).toMatchObject({
       status: "withdrawn",
-      version: 3,
+      version: 5,
       permissions: { canAmend: false, canWithdraw: false },
     });
     expect(
       (
         await owner.call("post", `${base()}/delays/${delayId}/amend`, {
           ...content,
-          version: 3,
+          version: 5,
           reason: "Try again",
         })
       ).body,
@@ -916,6 +941,51 @@ describe("Schedule (real runtime role)", () => {
         expect((await member.call(method, path, body)).status, `${method} ${path}`).toBe(403);
     }
     expect((await agent.call("get", `projects/${otherProject}/schedule`)).status).toBe(403);
+  });
+
+  it("keeps the schedule from portal users and the delay log from anyone outside the contractor", async () => {
+    const [client, supplier, consultant, viewer] = [0, 1, 2, 3].map(() => new Browser(app));
+    for (const browser of [client, supplier, consultant, viewer]) {
+      await browser.register();
+      await browser.enroll();
+    }
+    await join(client, "client", ["projects.view", "bq.view", "portal.client"]);
+    await join(supplier, "supplier", ["projects.view"]);
+    await join(consultant, "consultant", ["projects.view", "bq.view", "reports.view"]);
+    await join(viewer, "project_manager", ["projects.view"]);
+    const delayId = ok(await owner.call("get", `${base()}/delays`), (body) =>
+      scheduleDelaysResponseSchema.parse(body),
+    ).delays[0]!.id;
+    const baselineId = ok(await owner.call("get", `${base()}/baselines`), (body) =>
+      scheduleBaselinesResponseSchema.parse(body),
+    ).baselines[0]!.id;
+    const schedulePaths = [base(), `${base()}/baselines`, `${base()}/baselines/${baselineId}`];
+    const delayPaths = [`${base()}/delays`, `${base()}/delays/${delayId}`];
+    // Claim flags and delay descriptions are the contractor's position: never for the other side.
+    for (const member of [client, supplier, viewer])
+      for (const path of [...schedulePaths, ...delayPaths])
+        expect((await member.call("get", path)).status, path).toBe(403);
+    for (const path of schedulePaths)
+      expect((await consultant.call("get", path)).status, path).toBe(200);
+    for (const path of delayPaths)
+      expect((await consultant.call("get", path)).status, path).toBe(403);
+  });
+
+  it("computes a schedule with a milestone at the far end of the planning range", async () => {
+    const milestones = `projects/${otherProject}/milestones`;
+    await fresh();
+    expect(
+      (await owner.call("post", milestones, { name: "Too far", dueDate: "2100-01-01" })).status,
+    ).toBe(400);
+    expect(
+      (await owner.call("post", milestones, { name: "Far future", dueDate: "2099-12-31" })).status,
+    ).toBe(201);
+    const far = ok(await owner.call("get", `projects/${otherProject}/schedule`), (body) =>
+      scheduleResponseSchema.parse(body),
+    );
+    expect(far.items.find((entry) => entry.name === "Far future")).toMatchObject({
+      planned: { start: "2099-12-31", finish: "2099-12-31" },
+    });
   });
 
   it("isolates companies (RLS) and keeps closed projects read-only", async () => {

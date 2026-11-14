@@ -105,8 +105,11 @@ export class WorkdayIndex {
   constructor(
     readonly calendar: WorkingCalendar,
     anchor: string,
-    /** Refuses indices further than this from the anchor (about 16 years of six-day weeks). */
-    private readonly limit = 5_000,
+    /**
+     * Refuses indices further than this from the anchor: enough for any two planning dates
+     * (PLANNING_DATE_RANGE, 100 years) even with a seven-day working week.
+     */
+    private readonly limit = 40_000,
   ) {
     this.forward.push(nextWorkingDay(calendar, anchor));
   }

@@ -13,6 +13,7 @@ import { LiveUnavailable } from "@/components/projects/live-state";
 import { BaselinesPanel } from "@/components/schedule/baselines-panel";
 import { DelaysPanel, type DiaryChoice } from "@/components/schedule/delays-panel";
 import { ScheduleWorkspace } from "@/components/schedule/schedule-workspace";
+import { withCitedDiaries } from "@/lib/schedule";
 import { loadLive, serverApi } from "@/lib/server-api";
 import { cn } from "@/lib/utils";
 
@@ -30,12 +31,14 @@ export async function ScheduleTab({
   view,
   baselineId,
   canPickBq,
+  canReadDelays,
   returnTo,
 }: {
   project: Project;
   view: ScheduleView;
   baselineId: string | undefined;
   canPickBq: boolean;
+  canReadDelays: boolean;
   returnTo: string;
 }) {
   const t = await getTranslations("schedule");
@@ -77,13 +80,17 @@ export async function ScheduleTab({
         serverApi(`/projects/${project.id}/sites`, sitesResponseSchema),
       ]);
       const names = new Map(sites.ok ? sites.data.sites.map((site) => [site.id, site.name]) : []);
-      diaries = list.ok
-        ? list.data.diaries.map((diary) => ({
-            id: diary.id,
-            date: diary.date,
-            site: names.get(diary.siteId) ?? "—",
-          }))
-        : [];
+      diaries = withCitedDiaries(
+        list.ok
+          ? list.data.diaries.map((diary) => ({
+              id: diary.id,
+              date: diary.date,
+              site: names.get(diary.siteId) ?? "—",
+            }))
+          : [],
+        log.data.delays,
+        names,
+      );
     }
     body = (
       <DelaysPanel
@@ -112,7 +119,7 @@ export async function ScheduleTab({
       </div>
       <nav aria-label={t("subnav.label")}>
         <ul className="flex flex-wrap gap-2">
-          {SCHEDULE_VIEWS.map((key) => (
+          {SCHEDULE_VIEWS.filter((key) => key !== "delays" || canReadDelays).map((key) => (
             <li key={key}>
               <Link
                 href={key === "gantt" ? base : `${base}&view=${key}`}

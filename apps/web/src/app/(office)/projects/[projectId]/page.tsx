@@ -10,6 +10,7 @@ import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { StatusChangeButton } from "@/components/projects/status-change";
 import { StatusBadge } from "@/components/status-badge";
+import { scheduleAccess } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { serverApi, requireSession } from "@/lib/server-api";
 import { signInHref } from "@/lib/safe-next";
@@ -66,6 +67,8 @@ export default async function ProjectPage({
   const t = await getTranslations("projectDetail");
   const canManage = detail.permissions.includes("projects.manage");
   const canViewBq = detail.permissions.includes("bq.view");
+  // The same rules the API applies: portal-only roles see no schedule; the delay log is staff-only.
+  const { schedule: canReadSchedule, delays: canReadDelays } = scheduleAccess(detail.permissions);
   const readOnly = isProjectReadOnly(project.status);
   // Original vs revised contract sum on the overview, for people who can see the BQ.
   const sums =
@@ -103,7 +106,7 @@ export default async function ProjectPage({
       ) : null}
       <nav aria-label={t("sectionsLabel")} className="relative -mx-1 overflow-x-auto">
         <ul className="flex min-w-max gap-1 border-b px-1">
-          {TABS.map((key) => (
+          {TABS.filter((key) => key !== "schedule" || canReadSchedule).map((key) => (
             <li key={key}>
               <Link
                 href={`/projects/${project.id}${key === "overview" ? "" : `?tab=${key}`}`}
@@ -151,10 +154,12 @@ export default async function ProjectPage({
       {tab === "wbs" ? (
         <WbsTab project={project} canManage={canManage && !readOnly} returnTo={path} />
       ) : null}
-      {tab === "schedule" ? (
+      {tab === "schedule" && !canReadSchedule ? <LiveForbidden /> : null}
+      {tab === "schedule" && canReadSchedule ? (
         <ScheduleTab
           project={project}
-          view={view}
+          view={view === "delays" && !canReadDelays ? "gantt" : view}
+          canReadDelays={canReadDelays}
           baselineId={typeof baseline === "string" ? baseline : undefined}
           canPickBq={canViewBq}
           returnTo={path}

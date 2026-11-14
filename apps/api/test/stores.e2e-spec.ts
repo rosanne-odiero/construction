@@ -28,6 +28,10 @@ import {
   varianceResponseSchema,
   type BqImport,
   type StoreDetailResponse,
+  measurementResponseSchema,
+  sitePhotoResponseSchema,
+  valuationResponseSchema,
+  type ValuationDetail,
 } from "@pm-buddy/validation";
 import { AppModule } from "../src/app.module.js";
 import { configureApp } from "../src/app.setup.js";
@@ -35,6 +39,7 @@ import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
 import { Browser, notifications } from "./support.js";
+import { plainJpeg } from "./photo-fixtures.js";
 
 /**
  * D5.3 stores end to end under the real runtime role (pmb_app, forced RLS): GRN receipts into the
@@ -1052,15 +1057,26 @@ describe("Stores (real runtime role)", () => {
       400,
       "measurement-future",
     );
-    ok(
-      await pm.call("post", `projects/${projectId}/measurements`, {
-        bqItemLineageId: item.columnBases,
-        measuredOn: today,
-        quantityToDate: "10",
-        note: "Column bases cast (synthetic)",
-      }),
-      201,
-    );
+    const photo = await request(app.getHttpServer())
+      .post(`/api/v1/projects/${projectId}/photos`)
+      .set("Cookie", [...pm.cookies].map(([key, value]) => `${key}=${value}`).join("; "))
+      .set("Origin", "http://localhost:3000")
+      .set("X-CSRF-Token", pm.csrf)
+      .field("siteId", siteId)
+      .attach("file", await plainJpeg(), "IMG_0001.jpg");
+    expect(photo.status, JSON.stringify(photo.body)).toBe(201);
+    const cast = measurementResponseSchema.parse(
+      ok(
+        await pm.call("post", `projects/${projectId}/measurements`, {
+          bqItemLineageId: item.columnBases,
+          measuredOn: today,
+          quantityToDate: "10",
+          note: "Column bases cast (synthetic)",
+          photoIds: [sitePhotoResponseSchema.parse(photo.body).photo.id],
+        }),
+        201,
+      ),
+    ).measurement;
     report = await variance();
     const cement = forItem().find((row) => row.material?.id === material.cement)!;
     // Theoretical 10 m³ × 6.5 bags × 1.05 = 68.25; actual 60 + 30 (+5 −5 reversed) − 10 returned
@@ -1117,6 +1133,29 @@ describe("Stores (real runtime role)", () => {
     expect(forItemOf(await variance(keeper), item.columnBases, material.cement)!.canMeasure).toBe(
       false,
     );
+    // A correction that is rejected leaves the approved original in force (as in valuations).
+    ok(await owner.call("post", `projects/${projectId}/measurements/${cast.id}/approve`, {}));
+    const correction = measurementResponseSchema.parse(
+      ok(
+        await pm.call("post", `projects/${projectId}/measurements`, {
+          bqItemLineageId: item.columnBases,
+          measuredOn: today,
+          quantityToDate: "4",
+          correctsMeasurementId: cast.id,
+          correctionReason: "Recounted the bases (synthetic)",
+        }),
+        201,
+      ),
+    ).measurement;
+    ok(
+      await owner.call("post", `projects/${projectId}/measurements/${correction.id}/reject`, {
+        reason: "The bases were counted right the first time",
+      }),
+    );
+    expect(forItemOf(await variance(), item.columnBases, material.cement)).toMatchObject({
+      state: "alert",
+      measurement: { quantityToDate: "10" },
+    });
   });
 
   it("keeps companies apart and refuses the unpermitted", async () => {
@@ -1355,6 +1394,92 @@ describe("Stores (real runtime role)", () => {
         reason: "Test of counting in turns",
       }),
     );
+  });
+
+  it("values stock at cost on interim certificates, carries the choice forward and certifies taking it back", async () => {
+    // Independent of the valuation code: KE-VAL-1 percentages, half away from zero.
+    const pct = (amount: number, percent: number) =>
+      Math.sign(amount) * Math.floor((Math.abs(amount) * percent + 50) / 100);
+    const today = nairobiDate();
+    let onHand = 0;
+    for (const store of storesResponseSchema
+      .parse(ok(await owner.call("get", "stores")))
+      .stores.filter((entry) => entry.project.id === projectId))
+      onHand += storeDetailResponseSchema
+        .parse(ok(await owner.call("get", `stores/${store.id}`)))
+        .balances.filter((balance) => Number(balance.quantity) > 0)
+        .reduce((sum, balance) => sum + balance.valueMinor, 0);
+    expect(onHand).toBeGreaterThan(0);
+    const valuation = (res: request.Response, status = 200) =>
+      valuationResponseSchema.parse(ok(res, status)).valuation;
+    const create = (body: object) =>
+      pm.call("post", `projects/${projectId}/valuations`, {
+        kind: "interim",
+        valuationDate: today,
+        ...body,
+      });
+    const certify = async (draft: ValuationDetail) => {
+      const submitted = valuation(
+        await pm.call("post", `valuations/${draft.id}/submit`, { version: draft.version }),
+      );
+      await fresh(owner);
+      return valuation(
+        await owner.call("post", `valuations/${submitted.id}/certify`, {
+          version: submitted.version,
+          digest: submitted.digest,
+        }),
+      );
+    };
+
+    // IPC-0001: the approved 10 m³ of column bases at the BQ rate (KES 16,500) and the stock at cost.
+    const work = 16_500_000;
+    const first = valuation(await create({ materialsFromStores: true }), 201);
+    expect(first.materialsFromStores).toBe(true);
+    const cap = pct(first.contractSum!.originalMinor, 5);
+    const retention = Math.min(pct(work + onHand, 10), cap);
+    const due = work + onHand - retention;
+    const ipc1 = await certify(first);
+    expect(ipc1.figures).toMatchObject({
+      workDoneMinor: work,
+      materialsGrossMinor: onHand,
+      materialsMinor: onHand,
+      grossMinor: work + onHand,
+      retentionHeldMinor: retention,
+      amountDueMinor: due,
+      vatMinor: pct(due, 16),
+    });
+    expect(ipc1.lines.materials.every((line) => line.source === "stores")).toBe(true);
+
+    // The next interim keeps the stock unless asked otherwise (valuations are cumulative).
+    const carried = valuation(await create({}), 201);
+    expect(carried.materialsFromStores).toBe(true);
+    expect(carried.figures).toMatchObject({ materialsGrossMinor: onHand, amountDueMinor: 0 });
+    valuation(
+      await pm.call("post", `valuations/${carried.id}/cancel`, {
+        version: carried.version,
+        reason: "Nothing new to value",
+      }),
+    );
+
+    // Leaving the stock out takes it back: a warned, negative certificate with negative VAT.
+    const back = valuation(await create({ materialsFromStores: false }), 201);
+    expect(back.warnings.map((warning) => warning.code)).toEqual(
+      expect.arrayContaining(["materials-reduced", "negative-amount"]),
+    );
+    const ipc2 = await certify(back);
+    const held = Math.min(pct(work, 10), cap);
+    const takenBack = work - held - due;
+    expect(takenBack).toBeLessThan(0);
+    expect(ipc2.figures).toMatchObject({
+      workDoneMinor: work,
+      materialsGrossMinor: 0,
+      grossMinor: work,
+      retentionHeldMinor: held,
+      previousCertifiedMinor: due,
+      amountDueMinor: takenBack,
+      vatMinor: pct(takenBack, 16),
+      totalMinor: takenBack + pct(takenBack, 16),
+    });
   });
 
   it("documents every stores operation in OpenAPI", async () => {

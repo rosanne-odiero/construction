@@ -21,6 +21,7 @@ import { approvedBqVersion } from "../modules/finance/spending-common.js";
 import { TenantDatabase } from "../modules/identity/tenant-database.service.js";
 import { seedPrincipal } from "./demo-procure-to-pay.js";
 
+const SECURITY_JOURNAL_REASON = "Site security for last month paid by bank transfer (synthetic)";
 /**
  * D5.4 demo data (synthetic): company cost codes and spending settings (an entered opening cash
  * position), an approved Ruiru Heights budget (the BQ items plus cost-code lines, prepared by the
@@ -323,7 +324,7 @@ export async function seedSpending(
     finance,
     createJournalRequestSchema.parse({
       projectId: facts.projectId,
-      reason: "Site security for last month paid by bank transfer (synthetic)",
+      reason: SECURITY_JOURNAL_REASON,
       lines: (["accrued", "paid"] as const).map((measure) => ({
         measure,
         category: "preliminaries",
@@ -390,6 +391,8 @@ async function summarise(
     app.get(SpendAlertsService).list(finance, { projectId, limit: 1 }, seedRequest),
   ]);
   const budget = budgets.budgets.find((entry) => entry.current);
+  // Other demo seeds post their own journals to this project (D6.3 labour); report this one.
+  const journal = journals.journals.find((entry) => entry.reason === SECURITY_JOURNAL_REASON);
   return {
     created,
     budget: budget ? `v${budget.versionNo} (${budget.status})` : "none",
@@ -397,9 +400,7 @@ async function summarise(
     expenses: expenses.expenses.map((entry) => `${entry.number} (${entry.status})`).reverse(),
     topUps: topUps.topUps.map((entry) => `${entry.number} (${entry.status})`).reverse(),
     count: counts.counts[0] ? `${counts.counts[0].number} (${counts.counts[0].status})` : "none",
-    journal: journals.journals[0]
-      ? `${journals.journals[0].number} (${journals.journals[0].status})`
-      : "none",
+    journal: journal ? `${journal.number} (${journal.status})` : "none",
     alerts: alerts.counts,
   };
 }

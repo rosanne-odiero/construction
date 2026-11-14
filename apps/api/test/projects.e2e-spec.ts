@@ -1271,6 +1271,14 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
           where: { tenantId },
           select: { kind: true, status: true, dlpMonths: true },
         }),
+        measurementReviews: await tx.progressMeasurementReview.count({ where: { tenantId } }),
+        measurementPhotos: await tx.progressMeasurementPhoto.count({ where: { tenantId } }),
+        contractSettings: await tx.contractSettings.count({ where: { tenantId } }),
+        valuations: await tx.valuation.findMany({
+          where: { tenantId },
+          select: { kind: true, status: true, certificateNumber: true },
+          orderBy: [{ projectId: "asc" }, { number: "asc" }],
+        }),
         incidents: await tx.safetyIncident.findMany({
           where: { tenantId },
           select: { kind: true, status: true },
@@ -1362,7 +1370,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       movements: 3,
       transfers: [{ status: "disputed" }, { status: "dispatched" }],
       stockTakes: [{ status: "submitted" }],
-      measurements: 1,
+      // D5.3's one measurement plus D6.3's: RUI-HTS 3 + 2 approved and 1 pending, JUJ-DPX 3 + 5.
+      measurements: 15,
       mappings: 3,
       // D5.4: the default cost codes; an approved budget (3 BQ items + 4 cost-code lines); a float
       // with a paid and a requested top-up, five approved expenses (one with an M-Pesa charge)
@@ -1372,7 +1381,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       costCodes: 11,
       budgets: [{ status: "approved" }],
       budgetLines: 7,
-      costEntries: 18,
+      // D6.3 adds the three lines of the substructure labour journal.
+      costEntries: 21,
       floats: 1,
       floatEntries: 9,
       expenses: [
@@ -1383,7 +1393,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       receipts: 6,
       topUps: [{ status: "paid" }, { status: "requested" }],
       counts: [{ status: "approved" }],
-      journals: [{ status: "approved" }],
+      journals: [{ status: "approved" }, { status: "approved" }],
       cashFlowItems: 3,
       // D6.1: the seven starter templates; on RUI-HTS a signed-off and a failed (signed-off)
       // inspection and one awaiting sign-off, on JUJ-DPX a signed-off pre-handover inspection;
@@ -1409,6 +1419,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       cubeResults: 5,
       slumpTests: 3,
       completions: [{ kind: "practical", status: "certified", dlpMonths: 6 }],
+      // D6.3: every measurement but the pending one approved, one photo each; RUI-HTS contract
+      // settings; two certified interims on RUI-HTS and on JUJ-DPX plus JUJ-DPX's
+      // practical-completion retention release.
+      measurementReviews: 14,
+      measurementPhotos: 15,
+      contractSettings: 1,
+      valuations: expect.arrayContaining([
+        { kind: "interim", status: "certified", certificateNumber: 1 },
+        { kind: "interim", status: "certified", certificateNumber: 2 },
+        { kind: "retention_release", status: "certified", certificateNumber: 3 },
+      ]),
       // D8.2: on RUI-HTS a closed near miss and an investigated injury; three corrective actions
       // (two verified, one overdue); two confirmed toolbox talks and a draft; two kits; a treatment.
       incidents: [
@@ -1444,6 +1465,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       "VB-01": ["breakdown_open"],
     });
     expect(first.plant.fuelVarianceAlerts).toBe(1);
+    expect(afterFirst.valuations).toHaveLength(5);
+    expect(first.valuations).toMatchObject({
+      measurements: { approved: 14, pending: 1 },
+      certificates: [
+        "RUI-HTS IPC-0001 (interim)",
+        "RUI-HTS IPC-0002 (interim)",
+        "JUJ-DPX IPC-0001 (interim)",
+        "JUJ-DPX IPC-0002 (interim)",
+        "JUJ-DPX IPC-0003 (practical retention release)",
+      ],
+    });
     expect(first.safety).toMatchObject({
       flaggedLabourers: 2,
       actions: { total: 3, verified: 2, overdue: 1 },

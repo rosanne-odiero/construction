@@ -195,6 +195,15 @@ import {
   ledgerResponseSchema,
   measurementResponseSchema,
   measurementsResponseSchema,
+  measurementItemsResponseSchema,
+  measurementDetailResponseSchema,
+  approvalQueueResponseSchema,
+  projectValuationsResponseSchema,
+  valuationResponseSchema,
+  contractSettingsResponseSchema,
+  earnedValueResponseSchema,
+  costToCompleteResponseSchema,
+  valuationsOverviewResponseSchema,
   movementResponseSchema,
   movementsResponseSchema,
   stockTakeResponseSchema,
@@ -346,8 +355,8 @@ export function responseContract(method: string, target: string) {
   }
   if (/^rate-buildups\/[^/]+\/versions\/\d+\/materials(\/[^/]+)?$/.test(path))
     return buildupMaterialsResponseSchema;
-  if (/^projects\/[^/]+\/measurements$/.test(path))
-    return method === "get" ? measurementsResponseSchema : measurementResponseSchema;
+  const valuations = valuationsContract(method, path);
+  if (valuations) return valuations;
   const stores = storesContract(method, path);
   if (stores) return stores;
   if (path === "rate-buildups")
@@ -394,6 +403,30 @@ function plantContract(method: string, path: string) {
     return get ? plantFuelListResponseSchema : plantFuelResponseSchema;
   if (/^plant\/[^/]+\/fuel\/[^/]+\/corrections$/.test(path)) return plantFuelResponseSchema;
   return plantDetailResponseSchema;
+}
+
+/** The D6.3 measurement, valuation and earned-value endpoints' success contracts. */
+function valuationsContract(method: string, path: string) {
+  if (/^projects\/[^/]+\/measurements$/.test(path))
+    return method === "get" ? measurementsResponseSchema : measurementResponseSchema;
+  if (/^projects\/[^/]+\/measurements\/items$/.test(path)) return measurementItemsResponseSchema;
+  if (/^projects\/[^/]+\/measurements\/[^/]+$/.test(path)) return measurementDetailResponseSchema;
+  if (/^projects\/[^/]+\/measurements\/[^/]+\/(photos|approve|reject)$/.test(path))
+    return measurementResponseSchema;
+  if (path === "measurements/pending") return approvalQueueResponseSchema;
+  if (/^projects\/[^/]+\/valuations$/.test(path))
+    return method === "get" ? projectValuationsResponseSchema : valuationResponseSchema;
+  if (/^projects\/[^/]+\/contract-settings$/.test(path)) return contractSettingsResponseSchema;
+  if (/^projects\/[^/]+\/earned-value$/.test(path)) return earnedValueResponseSchema;
+  if (/^projects\/[^/]+\/cost-to-complete$/.test(path)) return costToCompleteResponseSchema;
+  if (path === "valuations") return valuationsOverviewResponseSchema;
+  if (
+    /^valuations\/[^/]+(\/(materials|adjustments)(\/[^/]+)?|\/(submit|certify|return|cancel))?$/.test(
+      path,
+    )
+  )
+    return valuationResponseSchema;
+  return null;
 }
 
 /** The D8.2 health and safety endpoints' success contracts. */

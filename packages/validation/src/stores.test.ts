@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   createIssueRequestSchema,
-  createMeasurementRequestSchema,
   createWastageRequestSchema,
   dispatchTransferRequestSchema,
   recordCountsRequestSchema,
@@ -79,24 +78,5 @@ describe("D5.3 stores schemas", () => {
         }),
       ),
     ).toEqual(["percent_too_large"]);
-    expect(
-      issues(
-        createMeasurementRequestSchema.safeParse({
-          bqItemLineageId: ID,
-          measuredOn: "2026-11-13",
-          quantityToDate: "12.5",
-          correctsMeasurementId: OTHER,
-        }),
-      ),
-    ).toEqual(["required"]);
-    expect(
-      issues(
-        createMeasurementRequestSchema.safeParse({
-          bqItemLineageId: ID,
-          measuredOn: "2026-11-13",
-          quantityToDate: "12.12345",
-        }),
-      ),
-    ).toEqual(["invalid_quantity"]);
   });
 });

@@ -1,10 +1,11 @@
-# Phase 6 demo: site diary, verified photos, quality and the schedule
+# Phase 6 demo: site diary, verified photos, quality, the schedule and valuations
 
-This walkthrough is **not** Phase 6 acceptance. It covers online web diaries (increment 1),
-verified photos (increment 2), the schedule (D6.2) and quality (D6.1: workforce from attendance,
-inspections, concrete tests, snags, practical completion and the defects liability period).
-Offline/site-app capture and valuations (D6.3) remain pending. No biometric collection, payouts,
-deployment or pilot is authorised.
+This walkthrough covers online web diaries (increment 1), verified photos (increment 2), the
+schedule (D6.2), quality (D6.1: workforce from attendance, inspections, concrete tests, snags,
+practical completion and the defects liability period) and measurement and valuations (D6.3 part
+A). The **Phase 6 acceptance walkthrough** is at the end. Offline/site-app capture, subcontracts
+and piece-rate links (D6.3 part B) remain pending. No biometric collection, payouts, deployment
+or pilot is authorised.
 
 ## Start
 
@@ -155,6 +156,59 @@ the same schedule read-only.
 7. Switch to Kiswahili and the dark theme, and narrow the window to 360 px: the page never
    scrolls sideways; the chart and tables scroll inside their own labelled regions.
 
+## D6.3 measurement and valuations: measured progress to a payment certificate
+
+Seeded data (synthetic): on **Ruiru Heights (RUI-HTS)** the contract settings are retention
+10 % limited to 5 % of the original contract sum, VAT 16 %, materials on site at 100 % of cost
+and half the retention released at practical completion. The site agent's measurements of BQ
+items A, B and C carry site photos and were approved by the project manager; **IPC-0001** (with a
+KES 50,000 mobilisation advance) and **IPC-0002** (materials in stores at cost, a KES 20,000
+advance recovery, netting off IPC-0001) were prepared by the project manager and certified by
+finance. One measurement of item C waits in the approval queue. Schedule tasks S02–S04 name items
+A, B and C, and a maker-checked labour journal gives earned value an actual cost: **CPI 1.37,
+SPI 0.63**, retention held **KES 56,940**. **Juja Road Duplex (JUJ-DPX)**, handed over, has two
+interim certificates and **IPC-0003, the practical-completion retention release** (held KES
+306,900 after it).
+
+1. **Site agent at 360 px** (Kevin Kiprono, `site.agent@…`): **Valuations → RUI-HTS → Record
+   measurement**. Pick a measured item (search by ref or words), type the quantity done **to
+   date** (not this period), take a photo or pick a recent site photo (the verified badge is shown), submit.
+   The measurement shows *Waiting for approval* and no approve button: the measurer never approves.
+   Type a quantity above the BQ quantity: a reason is required before it can be submitted. A
+   provisional sum is listed as *not measured*. Switch to Kiswahili and dark mode: nothing scrolls
+   sideways.
+2. **Project manager** (Brian Otieno, `pm@…`): **Valuations → Measurements to approve**. Check the
+   photo and approve the item C measurement (the value at BQ rates is in the dialog); reject one
+   with a reason to see it leave the queue. The measurement sheet shows approved quantity, %
+   complete and value per item (unavailable, never 0 %, where an item has no basis).
+3. **Project manager**: **Certificates → Start a valuation** (interim, today, optionally
+   materials from stores). The draft is a preview of the cumulative certificate: work done from
+   approved measurements up to the date, materials on site, retention (with its limit), agreed
+   adjustments to date, previous certificates, amount due, VAT shown separately and the total.
+   Add materials on site to an item whose work is almost complete: refused, they would be paid
+   twice. Add an *advance recovery* larger than the advance: refused. **Submit for
+   certification**: the figures and lines are frozen with a digest; there is no certify button for
+   the preparer.
+4. **Finance** (Daniel Mwangi, `finance@…`, TOTP): open the submitted valuation, **Certify**,
+   confirm your identity (step-up). It becomes **IPC-0003** for RUI-HTS, locked. If a measurement
+   had been approved after submission, certification would say the figures changed (stale).
+   Download the **PDF (English and Kiswahili)** and **Excel**: project, client, original and
+   revised contract sums, the valuation summary, lines, retention, previous certificates, amount
+   due, VAT and signature blocks; drafts carry a *NOT CERTIFIED* watermark.
+5. **Retention** tab: held and released amounts, completion dates and the ledger (each
+   certificate's movement). On **JUJ-DPX** the practical-completion release (IPC-0003) halved the
+   retention held; the final release becomes possible only after final completion is certified
+   (D6.1).
+6. **Earned value** tab (finance or owner): BAC, PV, EV, AC, CPI, SPI, CV, SV, EAC, ETC and VAC
+   with the formulas; physical progress (schedule), earned, certified, invoiced (unavailable until
+   D7.1) and cash received kept apart; the weekly **S-curve** (SVG, with the week-by-week table
+   for screen readers and phones); **cost to complete** by bill, then by item for a bill.
+7. **Contract settings** (finance): save a new version (e.g. materials on site 100 → 80 %):
+   certified certificates keep the terms they used; a draft recalculates.
+8. Sign in as a **client** or a **supplier** portal user, or open `/api/v1/valuations/<id>` as
+   one: nothing — certificates, measurements and earned value are internal (the API e2e
+   permission matrix covers clients, consultants, suppliers, site agents and another company).
+
 ## Automated evidence
 
 ```bash
@@ -170,9 +224,43 @@ pnpm --filter @pm-buddy/web exec playwright test test/quality.spec.ts test/diari
 pnpm --filter @pm-buddy/domain exec vitest run src/schedule
 pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/schedule.e2e-spec.ts
 pnpm --filter @pm-buddy/web exec playwright test test/schedule.spec.ts
+# D6.3 measurement and valuations (the Phase 6 done-when test is valuations.e2e-spec.ts)
+pnpm --filter @pm-buddy/domain exec vitest run src/valuations
+pnpm --filter @pm-buddy/validation exec vitest run src/valuations.test.ts
+pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/valuations.e2e-spec.ts
+pnpm --filter @pm-buddy/web exec playwright test test/valuations.spec.ts
 ```
 
 The API suite uses the separate `pmb_test` database and real non-owner runtime role.
 Browser tests use synthetic contract-mocked API data, not a real-API browser smoke.
 They run an isolated `.next-e2e` server and leave existing development servers alone.
 See [implementation status](../IMPLEMENTATION_STATUS.md) for actual local results.
+
+## Phase 6 acceptance walkthrough
+
+Phase 6 is accepted when D6.1–D6.3 work together on one freshly seeded company and **an interim
+payment certificate generates correctly from measured progress** (ROADMAP). Start from a fresh
+database (`db:migrate`, `db:seed`) and sign in as each person below (the seed output prints the
+synthetic accounts; finance and the owner need TOTP).
+
+| # | Step (who) | What to see | Deliverable |
+|---|---|---|---|
+| 1 | **Diary** (site agent, 360 px): today's RUI-HTS diary with the workforce from attendance and a verified photo; submit | Workforce snapshot by trade with its source; verified-photo badge from EXIF inside the geofence | D6.1 |
+| 2 | **Diary approval** (project manager): approve the agent's diary | Independent sign-off; the approved diary is locked | D6.1 |
+| 3 | **Quality** (project manager / owner): an inspection signed off by someone else; a cube set judged at 28 days; a snag fixed and verified; JUJ-DPX practical completion certified with its DLP end | Independent sign-offs; KE-CUBE-1; DLP end date | D6.1 |
+| 4 | **Schedule** (project manager): RUI-HTS Gantt with the critical path, baseline 1 and the slip in working days; the delay log | Baseline frozen; variance in working days; physical % labelled as not earned value | D6.2 |
+| 5 | **Measure** (site agent, 360 px): record a quantity to date with a site photo | Pending; the measurer cannot approve; over-measure needs a reason | D6.3 |
+| 6 | **Approve** (project manager): approve it in the queue | Approved measured value at BQ rates on the sheet | D6.3 |
+| 7 | **Interim valuation** (project manager): start, check the preview, submit | Work done from approved measurements; materials on site; retention with its limit; adjustments; previous certificates; amount due; VAT separate; frozen with a digest | D6.3 |
+| 8 | **Certify** (finance, step-up): certify the submitted valuation; download the PDF in Kiswahili | `IPC-NNNN`, locked; the PDF matches the screen | **D6.3 — Phase 6 acceptance** |
+| 9 | **Retention** (finance): RUI-HTS ledger; JUJ-DPX release IPC-0003 after the certified practical completion | Retention released only after a certified completion, never more than held | D6.3 + D6.1 |
+| 10 | **Earned value** (finance): CPI, SPI, EAC with formulas; the S-curve and its table; cost to complete by bill | Undefined ratios unavailable; earned, certified, invoiced and received kept apart | D6.3 + D6.2 + D5.4 |
+| 11 | **Outside parties**: a client or supplier cannot open certificates, measurements or earned value | 403/404; nothing internal leaks | D6.3 |
+
+Automated evidence for the same chain: API e2e `diaries`, `photos`, `quality`, `schedule` and
+`valuations` (the done-when test "generates IPC-0001 from measured progress, certified
+independently on the digest seen", with hand-computed figures) plus `projects` (demo seed counts)
+on the real runtime role; browser `diaries.spec.ts`, `photos.spec.ts`, `quality.spec.ts`,
+`schedule.spec.ts` and `valuations.spec.ts`. Actual results are in
+[IMPLEMENTATION_STATUS](../IMPLEMENTATION_STATUS.md#d63-measurement-and-valuations-branch-phase-6d63-valuations).
+

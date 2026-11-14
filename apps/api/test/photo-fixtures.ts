@@ -61,8 +61,15 @@ export async function jpegWithExif(spec: PhotoSpec = {}): Promise<Buffer> {
     .toBuffer();
 }
 
-/** A JPEG with no EXIF at all. */
+/** A JPEG with no EXIF at all; a random colour, so several uploads to a project never collide. */
 export const plainJpeg = () =>
-  sharp({ create: { width: 32, height: 32, channels: 3, background: "#456" } })
+  sharp({
+    create: {
+      width: 32,
+      height: 32,
+      channels: 3,
+      background: `#${randomUUID().replaceAll("-", "").slice(0, 6)}`,
+    },
+  })
     .jpeg({ quality: Math.floor(Math.random() * 40) + 50 })
     .toBuffer();

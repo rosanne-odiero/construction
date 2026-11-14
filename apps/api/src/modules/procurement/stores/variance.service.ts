@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { Request } from "express";
 import {
   consumptionVariance,
+  measurementBasis,
   nairobiDate,
   negateDecimal,
   Ratio,
@@ -14,6 +15,7 @@ import type { Scope } from "../../identity/access-policy.js";
 import type { Principal } from "../../identity/auth.service.js";
 import { TenantScope } from "../../identity/tenant-scope.service.js";
 import { materialWire, projectRef } from "../p2p/p2p-common.js";
+import { measurable } from "../../progress/valuations/valuation-common.js";
 import { peopleOf, personOf, toCalendarDate } from "../procurement-mappers.js";
 import { dec, decOrNull, StoresAccess } from "./stores-common.js";
 
@@ -113,7 +115,18 @@ export class VarianceService {
         _sum: { quantity: true },
       }),
       tx.progressMeasurement.findMany({
-        where: { tenantId: access.tenantId, projectId, correctedBy: { is: null } },
+        // The latest measurement that is not rejected and not superseded by a correction that
+        // still stands (pending or approved; a rejected correction leaves the original in force,
+        // as in valuations); a pending one still informs the estimate.
+        where: {
+          tenantId: access.tenantId,
+          projectId,
+          OR: [
+            { correctedBy: { is: null } },
+            { correctedBy: { is: { review: { is: { decision: "rejected" } } } } },
+          ],
+          NOT: { review: { is: { decision: "rejected" } } },
+        },
         orderBy: [{ measuredOn: "desc" }, { recordedAt: "desc" }],
       }),
     ]);
@@ -159,6 +172,7 @@ export class VarianceService {
         ref: item.ref,
         description: item.description,
         unit: item.unit,
+        basis: measurementBasis(measurable(item)),
       };
       const usage = new Map<string, { issued: string; returned: string }>();
       for (const entry of consumed.filter((candidate) => candidate.bqItemLineageId === lineage)) {

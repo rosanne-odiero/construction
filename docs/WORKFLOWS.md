@@ -372,6 +372,8 @@ stateDiagram-v2
 | reviewed → issued | Contract-authorised issuer; snapshot unchanged | Immutable certificate/receivable; `certificate.issued` | Unique issued version |
 | issued → partly_settled/settled; partly_settled → settled | Verified receipts allocation processor | Derived settlement state; `certificate.settlement_updated` | Allocation uniqueness |
 
+The certificate rows above are the design target. **D6.3 part A implements a simpler chain** (draft → submitted → certified by an independent `finance.manage` holder; return; cancel; no separate review or issue step, settlement in D7.1): see "Measurements and valuations (D6.3)" below.
+
 Approved invoices, issued LPOs and certificates use linked credits, cancellations or amendments with fresh approval rather than deletion. Detailed cancellation/return policies require QS/accounting review before their implementation.
 
 ### Variation as implemented (D2.3)
@@ -492,3 +494,45 @@ stateDiagram-v2
 | Expected receipt or payment (cash-flow line) | `finance.manage` on the project | Shown in the forecast on its expected date until received or cancelled; `cash_flow.item_created/updated/received/cancelled` | Expected version |
 
 Supplier invoices and settlements post to the cost ledger as part of their own workflow (D5.2): approval (matched → approved) posts the accrual net of VAT, each settlement posts the cost part of the cash paid; neither can be posted twice.
+
+## Measurements and valuations (D6.3)
+
+Implemented in D6.3 part A ([ARCHITECTURE §4.10](./ARCHITECTURE.md#410-measurement-valuations-and-earned-value-d63-part-a)). The valuation transition table lives in `packages/domain/src/valuations/lifecycle.ts` (`VALUATION_TRANSITIONS`) and is repeated by `app.guard_valuation`; a measurement's state is derived (`measurementState`) from its single review and the newest correction naming it. Changes are serialised per company (tenant row lock) and use the expected `version` where a record is edited.
+
+```mermaid
+stateDiagram-v2
+  state Measurement {
+    [*] --> m_pending : record (site.diary or bq.edit; photos now or later)
+    m_pending --> m_pending : add photos (≤ 6)
+    m_pending --> m_approved : approve (bq.edit, not the measurer, ≥ 1 photo)
+    m_pending --> m_rejected : reject (bq.edit, not the measurer, reason)
+    m_pending --> m_withdrawn : corrected before review (new row, same item and date)
+    m_approved --> m_superseded : an approved correction replaces it
+  }
+  state Valuation {
+    [*] --> v_draft : create (bq.edit; one open per project)
+    v_draft --> v_draft : edit date, notes, stores option; add / remove materials and adjustments
+    v_draft --> v_submitted : submit (figures, terms and lines frozen; digest)
+    v_submitted --> v_certified : certify on the digest (finance.manage + step-up, not a contributor; IPC-NNNN)
+    v_submitted --> v_draft : return (finance.manage, reason)
+    v_draft --> v_cancelled : cancel (reason)
+    v_submitted --> v_cancelled : cancel (reason)
+  }
+```
+
+| Workflow / transition | Actor, scope and preconditions | Side effects and audit event | Retry |
+|---|---|---|---|
+| Measurement recorded (pending) | `site.diary` or `bq.edit` on the project; open project; an item of the BQ in force that is measured (not a provisional/PC sum or contingency); date not in the future; quantity ≥ 0, percent ≤ 100; above the BQ quantity only with a reason; photos of the same project (≤ 6) | Row with basis, value derived on read; `progress.measured` (IDs, item lineage, basis, photo count) | Client ID + `Idempotency-Key` (replay returns the original, `replayed: true`); 409 `measurement-id-conflict`, `idempotency-key-reused` |
+| Photos added | a recorder; only while pending; same project; ≤ 6 in total | `progress.measurement_photos_added` (count) | Duplicate photos ignored |
+| pending → approved / rejected | `bq.edit`; **not the measurer** (403 `maker-checker`); approval needs ≥ 1 photo (422 `measurement-evidence-required`); reject needs a reason | One review row (database clock); approved measurements count in valuations and earned value from their measured date; `progress.measurement_approved/rejected` | One review per measurement (409 `measurement-not-pending`) |
+| Correction | a recorder; same item and date as the original, reason; the original must not already be corrected (409 `invalid-transition`) | New measurement; the original becomes `withdrawn` (pending) or `superseded` once the correction is approved | As recording |
+| Valuation created (draft) | `bq.edit`; approved BQ; one open valuation per project (409 `valuation-open`); date not before the last certificate nor in the future; a release needs its certified completion (409 `completion-not-certified`), a certified interim before it and retention held, once per stage | `VAL-NNNN`; figures previewed on every read; `valuation.created` | — |
+| Draft edited; materials and adjustments added or removed | `bq.edit` (the editor becomes a contributor); interim drafts only for inputs; materials against a measured item, within the item's remaining amount (409 `materials-exceed-remaining`); recoveries ≤ advances (409 `recovery-exceeds-advance`); both checked when added and again at submission (a later approved measurement can make materials exceed) | `valuation.updated`, `valuation.materials_added/removed`, `valuation.adjustment_added/removed` (IDs, kinds, counts) | Expected version |
+| draft → submitted | `bq.edit` (the submitter becomes a contributor) | Figures, terms, contract sums and lines frozen (revision + 1), digest stored; database re-verifies KE-VAL-1 and the lines at commit; `valuation.submitted` | Expected version |
+| submitted → certified | `finance.manage` + step-up; **not a contributor** (403 `maker-checker`); the digest quoted equals a fresh recomputation (409 `valuation-stale`) | `IPC-NNNN` assigned by the database; the row is frozen for every role; counts as a previous certificate from now on; `valuation.certified` | Expected version + digest |
+| submitted → draft (return) | `finance.manage`; reason | Frozen figures cleared (lines of the earlier revision kept); `valuation.returned` | Expected version |
+| draft / submitted → cancelled | a preparer (`bq.edit`) or certifier (`finance.manage`); reason | Number kept, never reused; `valuation.cancelled` | Expected version |
+| certified → anything | — | Refused (API 409 `invalid-transition`; database). A mistake is corrected on the next certificate (which may be negative) | — |
+| Contract settings changed | `finance.manage`; values in range | New version; drafts recompute; a submitted valuation becomes stale until returned and resubmitted; `valuation.settings_updated` | Expected settings version |
+| Certificate PDF / Excel | a certificate reader | Generated on demand (watermark until certified); `valuation.exported`; rate-limited | Repeatable |
+

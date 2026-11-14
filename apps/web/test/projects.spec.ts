@@ -71,7 +71,9 @@ test("lists live projects, filters them and opens every detail tab", async ({ pa
 
   await page.getByRole("link", { name: "WBS & milestones", exact: true }).click();
   await expect(page.getByText("Every group adds up to 100%")).toBeVisible();
-  await expect(page.getByText("(progress measurements arrive in D6.3)")).toBeVisible();
+  await expect(
+    page.getByText("(WBS progress from measurements is not available yet)"),
+  ).toBeVisible();
   await expect(page.getByRole("table", { name: "Milestones" }).getByRole("row")).toHaveCount(3);
   expect(await axeViolations(page)).toEqual([]);
 });

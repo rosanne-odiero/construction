@@ -59,7 +59,7 @@ function preparePdfmake() {
   pdfmakeReady = true;
 }
 
-type ExportData = {
+export type CertificateExportData = {
   companyName: string;
   clientName: string | null;
   valuation: ValuationDetail;
@@ -86,7 +86,7 @@ export class CertificateExportService {
     id: string,
     format: "pdf" | "xlsx",
     req: Request,
-  ): Promise<ExportData> {
+  ): Promise<CertificateExportData> {
     await this.security.limit(`ipc-export:${principal.user.id}`, 60, 600);
     return this.scope.run(
       principal,
@@ -127,13 +127,13 @@ export class CertificateExportService {
     );
   }
 
-  private fileName(data: ExportData, extension: string) {
+  private fileName(data: CertificateExportData, extension: string) {
     const { valuation } = data;
     return `${valuation.project.code}-${valuation.certificateNumber ?? valuation.number}-${valuation.status}.${extension}`;
   }
 
   /** The summary rows shared by the PDF and Excel: label and signed amount (minor units). */
-  private summary(data: ExportData, locale: Locale) {
+  private summary(data: CertificateExportData, locale: Locale) {
     const t = messages(locale).ipcExport;
     const { figures, terms } = data.valuation;
     const cap =
@@ -165,7 +165,7 @@ export class CertificateExportService {
     return rows;
   }
 
-  private title(data: ExportData, locale: Locale) {
+  private title(data: CertificateExportData, locale: Locale) {
     const t = messages(locale).ipcExport;
     const { valuation } = data;
     if (valuation.status !== "certified") return t.valuationTitle;
@@ -316,7 +316,14 @@ export class CertificateExportService {
 
   /** A4 PDF: header, contract sums, the certificate summary, lines, notes and signatures. */
   async pdf(principal: Principal, id: string, locale: Locale, req: Request) {
-    const data = await this.load(principal, id, "pdf", req);
+    return this.renderPdf(await this.load(principal, id, "pdf", req), locale);
+  }
+
+  /**
+   * Renders the certificate PDF from data the caller already authorised (the staff export above,
+   * or the client portal's certified-only download, D7.1).
+   */
+  async renderPdf(data: CertificateExportData, locale: Locale) {
     preparePdfmake();
     const t = messages(locale).ipcExport;
     const { valuation } = data;

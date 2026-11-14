@@ -1,20 +1,21 @@
 /**
  * Client and labourer personas for the mock API (cookie `pmb_at=client.<id>` or
- * `labourer.<id>`): the session, company list and portal responses the live portal pages read.
+ * `labourer.<id>`): the session, company list and portal responses the live portal pages read
+ * (the client portal itself is mock-client-portal.mts).
  * Everything else is refused with 403, as the real API refuses office data to these roles.
  * Synthetic data only; every response is checked against the shared schema by mock-api.mts.
  */
 import type { z } from "zod";
 import {
   authResponseSchema,
-  clientProjectResponseSchema,
-  clientProjectsResponseSchema,
   tenantsResponseSchema,
   workerPortalResponseSchema,
 } from "@pm-buddy/validation";
+import { handleClientPortal } from "./mock-client-portal.mts";
 
 export type PortalPersona = "client" | "labourer";
 type Reply = { status?: number; body: unknown; schema: z.ZodType<unknown> };
+type Parse = <T>(schema: z.ZodType<T>, body: unknown) => T;
 
 const TENANT = { id: "20000000-0000-4000-8000-000000000001", name: "Jenga Bora Builders Ltd" };
 const RUIRU = "30000000-0000-4000-8000-000000000001";
@@ -49,9 +50,13 @@ export const isPortalPersona = (value: string | undefined): value is PortalPerso
 
 export function handlePortalPersona(
   persona: PortalPersona,
+  session: string,
   method: string,
   path: string,
+  query: URLSearchParams,
+  body: unknown,
   fail: (status: number, code: string) => Error,
+  parse: Parse,
 ): Reply {
   const person = people[persona];
   if (method === "GET" && path === "/auth/me")
@@ -91,72 +96,8 @@ export function handlePortalPersona(
       },
       schema: tenantsResponseSchema,
     };
-  if (persona === "client" && method === "GET" && path === "/portal/client/projects")
-    return {
-      body: {
-        company: TENANT,
-        projects: [
-          {
-            ...ruiru,
-            startDate: "2026-03-02",
-            endDate: "2027-04-30",
-            contractSumMinor: 8_640_000_000,
-            currency: "KES",
-            milestones: { total: 3, achieved: 1 },
-          },
-        ],
-      },
-      schema: clientProjectsResponseSchema,
-    };
-  if (persona === "client" && method === "GET" && path === `/portal/client/projects/${RUIRU}`)
-    return {
-      body: {
-        project: {
-          ...ruiru,
-          startDate: "2026-03-02",
-          endDate: "2027-04-30",
-          contractSumMinor: 8_640_000_000,
-          currency: "KES",
-          milestones: { total: 3, achieved: 1 },
-        },
-        milestones: [
-          {
-            id: "32000000-0000-4000-8000-000000000001",
-            name: "Foundations complete",
-            dueDate: "2026-05-15",
-            status: "achieved",
-            actualDate: "2026-05-12",
-          },
-          {
-            id: "32000000-0000-4000-8000-000000000002",
-            name: "First floor slab",
-            dueDate: "2026-12-01",
-            status: "in_progress",
-            actualDate: null,
-          },
-          {
-            id: "32000000-0000-4000-8000-000000000003",
-            name: "Roof",
-            dueDate: "2027-02-15",
-            status: "planned",
-            actualDate: null,
-          },
-        ],
-        diaries: [
-          {
-            id: "33000000-0000-4000-8000-000000000001",
-            date: "2026-11-09",
-            siteName: "Main plot",
-            workPerformed: "Synthetic: first-floor columns cast and cured.",
-            weather: "Dry",
-            delays: null,
-            workforceCount: 18,
-            approvedAt: "2026-11-09T15:00:00.000Z",
-          },
-        ],
-      },
-      schema: clientProjectResponseSchema,
-    };
+  if (persona === "client" && path.startsWith("/portal/client/"))
+    return handleClientPortal(session, method, path, query, body, fail, parse);
   if (persona === "labourer" && method === "GET" && path === "/portal/worker")
     return {
       body: {

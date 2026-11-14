@@ -14,6 +14,7 @@ import { CatalogueStore } from "../catalogue-store.js";
 import { iso, materialWire } from "../p2p/p2p-common.js";
 import { peopleOf, personOf } from "../procurement-mappers.js";
 import { dec, decOrNull, storesConflict, storesProblem } from "./stores-common.js";
+import { refuseClientPortalMember } from "../../portals/client/client-portal-access.js";
 
 /**
  * Maps the material lines of a rate build-up version to catalogue materials (D5.3) so theoretical
@@ -35,6 +36,7 @@ export class BuildupMaterialsService {
   list(principal: Principal, buildupId: string, versionNo: number, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       await this.policy.requireSomewhere(scope, "bq.view");
+      refuseClientPortalMember(scope);
       return this.view(scope, await this.version(scope, buildupId, versionNo));
     });
   }

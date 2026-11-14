@@ -958,7 +958,15 @@ export const forecastLineSchema = z.strictObject({
   project: projectRefSchema,
   document: z
     .strictObject({
-      kind: z.enum(["payroll_batch", "pay_period", "invoice", "lpo", "top_up", "cash_flow_item"]),
+      kind: z.enum([
+        "payroll_batch",
+        "pay_period",
+        "invoice",
+        "lpo",
+        "top_up",
+        "cash_flow_item",
+        "certificate",
+      ]),
       id: uuid.nullable(),
       label: z.string(),
     })

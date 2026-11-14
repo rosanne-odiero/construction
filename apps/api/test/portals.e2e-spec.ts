@@ -6,8 +6,8 @@ import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   authResponseSchema,
-  clientProjectResponseSchema,
-  clientProjectsResponseSchema,
+  clientPortalOverviewResponseSchema,
+  clientPortalProjectsResponseSchema,
   diaryResponseSchema,
   projectResponseSchema,
   siteResponseSchema,
@@ -595,13 +595,13 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
   });
 
   it("shows clients their assigned projects with approved diaries only", async () => {
-    const list = clientProjectsResponseSchema.parse(
+    const list = clientPortalProjectsResponseSchema.parse(
       (await client.call("get", "portal/client/projects")).body,
     );
     expect(list.company.id).toBe(tenantA);
     expect(list.projects.map((value) => value.id)).toEqual([p1]);
     expect(list.projects[0]!.milestones).toEqual({ total: 1, achieved: 0 });
-    const detail = clientProjectResponseSchema.parse(
+    const detail = clientPortalOverviewResponseSchema.parse(
       (await client.call("get", `portal/client/projects/${p1}`)).body,
     );
     expect(detail.diaries.map((value) => value.id)).toEqual([approved]);
@@ -611,7 +611,8 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     expect(JSON.stringify(detail)).not.toContain(pm.auth.user.id);
     expect(detail.milestones.map((value) => value.name)).toEqual(["Slab"]);
 
-    expect((await client.call("get", `portal/client/projects/${p2}`)).status).toBe(403);
+    // An unassigned project of the company answers like an unknown one (D7.1).
+    expect((await client.call("get", `portal/client/projects/${p2}`)).status).toBe(404);
     expect((await client.call("get", `portal/client/projects/${otherCompanyProject}`)).status).toBe(
       404,
     );
@@ -619,7 +620,12 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
     expect((await client.call("get", "portal/worker")).status).toBe(403);
     expect((await pm.call("get", "portal/client/projects")).status).toBe(403);
     expect((await pm.call("get", `projects/${p1}/diaries`)).status).toBe(200);
-    expect((await ownerB.call("get", `portal/client/projects/${p1}`)).status).toBe(404);
+    // Staff are refused before any lookup: the client portal is for the project's client (D7.1).
+    const staff = await ownerB.call("get", `portal/client/projects/${p1}`);
+    expect([staff.status, (staff.body as { code?: string }).code]).toEqual([
+      403,
+      "client-portal-only",
+    ]);
   });
 
   it("reports each member's portal through their role permissions", async () => {

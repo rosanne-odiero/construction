@@ -32,6 +32,7 @@ import type {
   BqVersionWire,
   Instruction,
   Project,
+  StaffClientRequest,
 } from "@pm-buddy/validation";
 import type { WorkbookGrid } from "@pm-buddy/domain";
 
@@ -89,6 +90,8 @@ export type MockVariation = {
     at: string;
   }[];
   version: number;
+  /** D7.1 sendings of the current and earlier submissions to the client. */
+  clientRequests?: StaffClientRequest[];
 };
 export type MockLink = {
   buildupId: string;

@@ -111,7 +111,7 @@ export default async function ProjectsPage() {
                 </Button>
               ) : (
                 <Button asChild size="sm" variant="outline">
-                  <Link href="/prototype/portal">{t("openPortal")}</Link>
+                  <Link href="/portal">{t("openPortal")}</Link>
                 </Button>
               )}
             </CardFooter>

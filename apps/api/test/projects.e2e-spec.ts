@@ -1362,6 +1362,19 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
           where: { tenantId, jobId: { not: null } },
           select: { status: true },
         }),
+        variations: await tx.variationOrder.findMany({
+          where: { tenantId },
+          select: { number: true, status: true },
+        }),
+        clientTerms: await tx.projectClientSettings.count({ where: { tenantId } }),
+        paymentInstructions: await tx.clientPaymentInstructions.count({ where: { tenantId } }),
+        fxRates: await tx.fxRate.count({ where: { tenantId } }),
+        clientPayments: await tx.clientPayment.findMany({
+          where: { tenantId },
+          select: { kind: true, method: true },
+        }),
+        variationClientRequests: await tx.variationClientRequest.count({ where: { tenantId } }),
+        variationClientDecisions: await tx.variationClientDecision.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1373,8 +1386,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       afterFirst;
     expect(registry).toEqual({
       // D5.3 adds the storekeeper, assigned to Ruiru Heights and Kitengela; D7.2 the quarry's
-      // supplier portal user (no project assignment).
-      members: 6,
+      // supplier portal user (no project assignment); D7.1 Mavuno Homes' client (RUI-HTS).
+      members: 7,
       // D6.1 adds JUJ-DPX (handed over: activated and completed), assigned to the PM and agent.
       projects: 4,
       sites: 4,
@@ -1382,7 +1395,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       wbs: 16,
       milestones: 11,
       history: 4,
-      assignments: 7,
+      assignments: 8,
       buildups: 1,
       buildupLines: 5,
       // D5.1: the starter catalogue (21 materials, 6 factors) plus 2 supplier trip factors; three
@@ -1579,6 +1592,23 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       pieceRateJobs: [{ code: "PRJ-0001", status: "approved" }],
       // Walling: 96 m² of piece-rate output approved against 90 m² measured.
       flaggedItems: 1,
+      // D7.1 on RUI-HTS: client terms, the company's Paybill instructions and three indicative
+      // rates, a part payment of IPC-0001 by M-Pesa Paybill, and a submitted variation sent to
+      // the client and awaiting their decision.
+      variations: [{ number: "VO-001", status: "submitted" }],
+      clientTerms: 1,
+      paymentInstructions: 1,
+      fxRates: 3,
+      clientPayments: [{ kind: "receipt", method: "mpesa_paybill" }],
+      variationClientRequests: 1,
+      variationClientDecisions: 0,
+    });
+    expect(first.clientPortal).toMatchObject({
+      project: "RUI-HTS",
+      displayCurrency: "GBP",
+      paybill: "174379",
+      receipts: 1,
+      variation: { number: "VO-001", state: "awaiting_decision" },
     });
     expect(first.documents).toMatchObject({
       documents: 13,
@@ -1808,6 +1838,11 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       ].sort((a, b) => a.number.localeCompare(b.number)),
     });
     expect(second.subcontracts).toEqual({ ...first.subcontracts, created: false });
+    expect(second.clientPortal).toEqual({
+      ...first.clientPortal,
+      created: false,
+      account: { ...first.clientPortal.account, password: null, created: false },
+    });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
     // Seeds a whole company twice (about 7 s alone); parallel e2e files can triple that.
   }, 90_000);

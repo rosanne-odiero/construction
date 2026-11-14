@@ -1,11 +1,6 @@
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import {
-  clientProjectResponseSchema,
-  clientProjectsResponseSchema,
-  invitationResponseSchema,
-  workerPortalResponseSchema,
-} from "@pm-buddy/validation";
+import { invitationResponseSchema, workerPortalResponseSchema } from "@pm-buddy/validation";
 import type { Request } from "express";
 import { openApi } from "../../common/openapi.js";
 import { AuthService } from "../identity/auth.service.js";
@@ -23,33 +18,6 @@ export class PortalsController {
     private readonly portals: PortalsService,
     private readonly tenancy: TenancyService,
   ) {}
-
-  @Get("portal/client/projects")
-  @ApiOperation({
-    summary: "Client portal: the projects the client is assigned to",
-    description: "Requires portal.client (role ∩ project assignment).",
-    operationId: "listClientProjects",
-  })
-  @ApiOkResponse({ schema: openApi(clientProjectsResponseSchema) })
-  async clientProjects(@Req() req: Request) {
-    return this.portals.clientProjects(await this.auth.principal(req), req);
-  }
-
-  @Get("portal/client/projects/:id")
-  @ApiOperation({
-    summary: "Client portal: a project's milestones and approved site diaries",
-    description:
-      "Requires portal.client on the project. Drafts, rejections and reviewers are never included.",
-    operationId: "getClientProject",
-  })
-  @ApiOkResponse({ schema: openApi(clientProjectResponseSchema) })
-  async clientProject(@Param("id") id: string, @Req() req: Request) {
-    return this.portals.clientProjectDetail(
-      await this.auth.principal(req),
-      uuidSchema.parse(id),
-      req,
-    );
-  }
 
   @Get("portal/worker")
   @ApiOperation({

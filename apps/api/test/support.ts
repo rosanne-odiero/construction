@@ -145,6 +145,22 @@ import {
   scheduleDependencyResponseSchema,
   scheduleResponseSchema,
   sitePhotosResponseSchema,
+  buildupMaterialsResponseSchema,
+  issueOptionsResponseSchema,
+  ledgerResponseSchema,
+  measurementResponseSchema,
+  measurementsResponseSchema,
+  movementResponseSchema,
+  movementsResponseSchema,
+  stockTakeResponseSchema,
+  stockTakesResponseSchema,
+  storeDetailResponseSchema,
+  storesResponseSchema,
+  storesSettingsResponseSchema,
+  transferResponseSchema,
+  transfersResponseSchema,
+  transferTargetsResponseSchema,
+  varianceResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -252,6 +268,12 @@ export function responseContract(method: string, target: string) {
       return variationResponseSchema;
     if (/^\/items\/[^/]+\/rate-buildup$/.test(bq)) return bqItemLinkResponseSchema;
   }
+  if (/^rate-buildups\/[^/]+\/versions\/\d+\/materials(\/[^/]+)?$/.test(path))
+    return buildupMaterialsResponseSchema;
+  if (/^projects\/[^/]+\/measurements$/.test(path))
+    return method === "get" ? measurementsResponseSchema : measurementResponseSchema;
+  const stores = storesContract(method, path);
+  if (stores) return stores;
   if (path === "rate-buildups")
     return method === "get" ? buildupsResponseSchema : buildupResponseSchema;
   if (/^rate-buildups\/[^/]+$/.test(path)) return buildupResponseSchema;
@@ -313,6 +335,25 @@ function procureToPayContract(method: string, path: string) {
     return rest === "" && method === "get" ? grnsResponseSchema : grnResponseSchema;
   }
   return rest === "" && method === "get" ? invoicesResponseSchema : invoiceDetailResponseSchema;
+}
+
+/** The D5.3 stores endpoints' success contracts. */
+function storesContract(method: string, path: string) {
+  const get = method === "get";
+  if (path === "stores") return get ? storesResponseSchema : storeDetailResponseSchema;
+  if (path === "stores/settings") return storesSettingsResponseSchema;
+  if (path === "stores/variance") return varianceResponseSchema;
+  if (/^stores\/[^/]+\/ledger$/.test(path)) return ledgerResponseSchema;
+  if (/^stores\/[^/]+\/issue-options$/.test(path)) return issueOptionsResponseSchema;
+  if (/^stores\/[^/]+\/transfer-targets$/.test(path)) return transferTargetsResponseSchema;
+  if (/^stores\/[^/]+(\/reorder-levels)?$/.test(path)) return storeDetailResponseSchema;
+  if (path === "stock-movements") return movementsResponseSchema;
+  if (/^stock-movements\/.+$/.test(path)) return movementResponseSchema;
+  if (path === "stock-transfers") return get ? transfersResponseSchema : transferResponseSchema;
+  if (/^stock-transfers\/.+$/.test(path)) return transferResponseSchema;
+  if (path === "stock-takes") return get ? stockTakesResponseSchema : stockTakeResponseSchema;
+  if (/^stock-takes\/.+$/.test(path)) return stockTakeResponseSchema;
+  return null;
 }
 
 /** The D5.1 catalogue and supplier endpoints' success contracts. */

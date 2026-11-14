@@ -132,3 +132,67 @@ npx pnpm@12.17.0 --filter @pm-buddy/domain test      # match, pricing and state-
 cd apps/api && npx vitest run --config ./vitest.config.e2e.ts test/procure-to-pay.e2e-spec.ts
 cd apps/web && npx playwright test test/procure-to-pay.spec.ts
 ```
+
+---
+
+## D5.3: Stores
+
+This walkthrough takes about 20 minutes. **Stores** in the sidebar is live: stores per site with their stock value, the stock ledger, issues to a BQ item or gang, returns, wastage, transfers between sites, stock takes with independent approval, reorder levels and **consumption variance alerts**. Every figure below is synthetic.
+
+### 1. Run it
+
+Same prerequisites and commands as D5.1 (§1 above), on branch `phase-5/d5.3-stores`. `db:migrate` now includes `20261118090000_stores` (it also receives any GRNs already recorded on the database into their site's store), and `db:seed` adds a **storekeeper** account (Grace Wambui, `storekeeper@jenga-bora.example.test`, password printed like the others) and prints:
+
+```text
+Stores (synthetic, created): Bungalow plot store, Main plot store
+  RTN-0001, ISS-0001, WST-0001; transfers TRF-0001 (disputed), TRF-0002 (dispatched); stock take STK-0001 (submitted)
+  consumption variance alerts: 1; low-stock items: 2
+```
+
+| Record | What the seed did, and who |
+|---|---|
+| GRN-0002 (cement) | A second purchase on RUI-HTS (REQ-0002 → RFQ-0002 → LPO-0002) delivers 120 bags of cement at KES 790 a bag (net of VAT) into the **Main plot store**; GRN-0001's sand and ballast went in the same way |
+| BQ baseline | Items A (column bases, 24 m³) and B (ground floor slab, 36 m³) linked to the **CONC-C25-SYN** build-up, whose cement, sand and ballast lines are mapped to catalogue materials; approved by the project manager |
+| Measurement | The project manager measured **12.5 m³** of item A to date |
+| ISS-0001 | The storekeeper issued 110 bags of cement, 9 t of sand and 8 t of ballast to item A and the concrete gang |
+| RTN-0001, WST-0001 | 5 bags came back; 2 bags were damaged (wastage with a reason) |
+| Reorder levels | Cement 20 bags, sand 1 t, ballast 5 t: cement (13 left) and ballast (2 t) are **low** |
+| TRF-0001, TRF-0002 | 2 t of sand sent to the **Bungalow plot store** (KIT-BNG) and 1.8 t received: **disputed** (spillage); 1 t more is **in transit** |
+| STK-0001 | The storekeeper counted cement (12 against 13 on the books) and ballast, and submitted it for approval |
+
+The cement alert, worked by hand: 12.5 m³ × 6.5 bags per m³ × 1.05 (5 % waste) = **85.3125 bags** theoretical; actual = 110 issued − 5 returned = **105 bags**; 105 > 85.3125 × 1.10 = 93.84 (10 % threshold) → **+19.69 bags, 23.1 % over**. Sand (9 t against 9.625 t) and ballast (8 t against 18.375 t) are within.
+
+### 2. Stores home and a store (owner or storekeeper)
+
+1. **Stores**: total stock value, low-stock items, transfers in transit and "1 variance alert"; each store's value, materials, low and in-transit counts. *Low stock* lists cement (13 bags, reorder at 20) and ballast. Sites without a store can get one (**Create store**); a store is also created automatically when a site receives its first delivery.
+2. Open **Main plot store**: on-hand balances with average cost and value (cement 13 bags at KES 790 = KES 10,270), the reorder level, stock in transit to the Bungalow plot store, recent issues, returns and wastage. **Stock ledger** shows every entry in the base unit with its value, running balance and source (GRN, issue, return, wastage, transfer, stock take); filter by material or kind.
+
+### 3. Variance alerts (owner or project manager)
+
+1. **Stores → Consumption variance**: the note says these are estimates for review, not proof of theft. The alert row for item A shows every input: measured 12.5 m³ and its date, 6.5 bags per m³, 5 % waste, theoretical 85.3125 (limit 93.84375), issued 110, returned 5, actual 105, variance 19.6875 (23.1 %).
+2. Item B has no measurement: its rows say **Unavailable: not measured** (never zero). **Record measurement** (needs `bq.edit`) adds one; the rows become estimates.
+3. Open the build-up from a row (or **BQ and variations → Rate build-ups → CONC-C25-SYN**): *Materials for stores* shows each material line's mapping (for example "Cement 42.5N (50 kg bag): 1 bag (50 kg) = 1 bag (50 kg)"). **Remove mapping** on a line and the variance report shows it as "Build-up line not mapped"; map it again.
+4. **Stores → Settings** (`config.manage`): the variance threshold (default 10 %). At 25 % the cement row is within the threshold. The page also states the fixed policies: negative stock is never allowed, and stock is valued at weighted average cost.
+
+### 4. Issue, return and wastage on a phone (storekeeper, 360 px)
+
+1. Sign in as the storekeeper on a phone (or a 360 px window). **Main plot store → Issue**: find a BQ item, choose a gang, who took it, and a quantity in the base unit. More than is on hand is stopped on the form and refused by the API; there is no override.
+2. After recording, open the issue: **Record a return** allows at most what is still outstanding per line. **Reverse** (with a reason) posts reversing entries; nothing is edited.
+3. **Record wastage** needs a reason (damaged, expired, spilled, weather, theft suspected, other) and what happened.
+
+### 5. Transfers and the stock take (storekeeper, then project manager)
+
+1. **Transfers → TRF-0001**: sent 2 t, received 1.8 t with the reason, **Lost in transit** valued at the dispatch cost. The storekeeper cannot resolve it; the **project manager** (who neither sent nor received it) **Resolves** it with a note. TRF-0002 is still in transit; the Bungalow plot store can **Receive** it (a different quantity needs a reason).
+2. **Stock takes → STK-0001**: the count sheet shows the system quantity at the start, the movements since, the system quantity when counted, the count and the variance (cement −1 bag, about −KES 790). The storekeeper sees that someone else approves it. Sign in as the **project manager** → **Approve**: the variance is posted to the ledger as an adjustment. Counting does not freeze the store: an issue made while counting is not mistaken for a loss.
+
+### 6. What is not here yet
+
+Stores in the offline site app (the API contract is offline-ready: client IDs and `Idempotency-Key`, ARCHITECTURE §12.2); per-material variance thresholds; days-of-cover low-stock alerts; notifications for alerts; earned value and certificates (D6.3 extends the measurement); an authorised negative-stock override (deliberately not offered, D-50). Stock valuation (weighted average cost) is waiting for accountant review (COMPLIANCE_TODO CR-STK-01).
+
+### 7. Automated checks
+
+```bash
+npx pnpm@12.17.0 --filter @pm-buddy/domain test      # valuation, consumption and variance tests
+cd apps/api && npx vitest run --config ./vitest.config.e2e.ts test/stores.e2e-spec.ts
+cd apps/web && npx playwright test test/stores.spec.ts
+```

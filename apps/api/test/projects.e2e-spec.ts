@@ -1222,6 +1222,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         }),
         payables: await tx.invoicePayable.count({ where: { tenantId } }),
         settlements: await tx.invoiceSettlement.count({ where: { tenantId } }),
+        stores: await tx.store.count({ where: { tenantId } }),
+        stockEntries: await tx.stockLedgerEntry.count({ where: { tenantId } }),
+        movements: await tx.stockMovement.count({ where: { tenantId } }),
+        transfers: await tx.stockTransfer.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        stockTakes: await tx.stockTake.findMany({ where: { tenantId }, select: { status: true } }),
+        measurements: await tx.progressMeasurement.count({ where: { tenantId } }),
+        mappings: await tx.buildupLineMaterial.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1232,14 +1243,15 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     const { attendanceDays, attendanceRecords, periods, timesheetLines, anomalies, ...registry } =
       afterFirst;
     expect(registry).toEqual({
-      members: 4,
+      // D5.3 adds the storekeeper, assigned to Ruiru Heights and Kitengela.
+      members: 5,
       projects: 3,
       sites: 3,
       geofences: 3,
       wbs: 13,
       milestones: 9,
       history: 2,
-      assignments: 3,
+      assignments: 5,
       buildups: 1,
       buildupLines: 5,
       // D5.1: the starter catalogue (21 materials, 6 factors) plus 2 supplier trip factors; three
@@ -1248,8 +1260,9 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       materials: 21,
       conversions: 8,
       suppliers: 3,
-      // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold.
-      prices: 14,
+      // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold;
+      // D5.3 three cement quotations.
+      prices: 17,
       alerts: 1,
       payouts: [{ status: "pending" }, { status: "verified" }],
       labourers: 40,
@@ -1265,17 +1278,29 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       holidays: 23,
       // D5.2: REQ → RFQ (3 quotations) → approved LPO → partial GRN → one invoice matched,
       // approved and settled, one blocked by the three-way match (ballast not yet delivered).
-      requisitions: 1,
-      quotations: 3,
-      lpos: [{ status: "approved" }],
-      grns: 1,
+      // D5.3: a second REQ → RFQ → LPO → GRN for 120 bags of cement.
+      requisitions: 2,
+      quotations: 6,
+      lpos: [{ status: "approved" }, { status: "approved" }],
+      grns: 2,
       invoices: [
         { invoiceNumber: "MQ-INV-1001", status: "settled" },
         { invoiceNumber: "MQ-INV-1002", status: "disputed" },
       ],
       payables: 1,
       settlements: 1,
+      // D5.3: two stores; 3 receipts, 3 issue lines, a return, wastage and two transfers (out,
+      // in, out); a disputed and an in-transit transfer; a submitted stock take; one measurement
+      // and the build-up's three material lines mapped.
+      stores: 2,
+      stockEntries: 11,
+      movements: 3,
+      transfers: [{ status: "disputed" }, { status: "dispatched" }],
+      stockTakes: [{ status: "submitted" }],
+      measurements: 1,
+      mappings: 3,
     });
+    expect(first.stores).toMatchObject({ varianceAlerts: 1, lowStock: 2 });
     // Nine weeks of muster rolls on two projects: past periods approved (with their snapshot
     // lines), the last complete one awaiting approval and the current one open.
     // The test database is reused between runs, so the first call may find the data already there.

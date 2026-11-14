@@ -119,4 +119,5 @@ export {
   type PhotoTimeSource,
 } from "./photo-evidence.js";
 export * from "./procurement/index.js";
+export * from "./stores/index.js";
 export * from "./schedule/index.js";

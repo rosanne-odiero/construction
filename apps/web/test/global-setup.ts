@@ -39,6 +39,18 @@ const ROUTES = [
   "/procurement/invoices",
   "/procurement/invoices/new",
   "/catalogue/alerts",
+  "/stores",
+  "/stores/transfers",
+  "/stores/stock-takes",
+  "/stores/variance",
+  "/stores/settings",
+  "/stores/73000000-0000-4000-8000-000000000001",
+  "/stores/73000000-0000-4000-8000-000000000001/ledger",
+  "/stores/73000000-0000-4000-8000-000000000001/issue",
+  "/stores/73000000-0000-4000-8000-000000000001/wastage",
+  "/stores/73000000-0000-4000-8000-000000000001/transfer",
+  "/stores/73000000-0000-4000-8000-000000000001/reorder-levels",
+  "/rate-buildups/50000000-0000-4000-8000-000000000001",
   // Unknown IDs answer 404 but compile the procurement detail routes.
   "/procurement/requisitions/00000000-0000-4000-8000-000000000000",
   "/procurement/requisitions/00000000-0000-4000-8000-000000000000/edit",
@@ -48,6 +60,10 @@ const ROUTES = [
   "/procurement/grns/00000000-0000-4000-8000-000000000000",
   "/procurement/invoices/00000000-0000-4000-8000-000000000000",
   "/procurement/invoices/00000000-0000-4000-8000-000000000000/edit",
+  "/stores/movements/00000000-0000-4000-8000-000000000000",
+  "/stores/movements/00000000-0000-4000-8000-000000000000/return",
+  "/stores/transfers/00000000-0000-4000-8000-000000000000",
+  "/stores/stock-takes/00000000-0000-4000-8000-000000000000",
 ];
 
 export default async function warmUp(config: FullConfig) {

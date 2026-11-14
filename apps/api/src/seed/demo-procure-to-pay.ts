@@ -54,7 +54,7 @@ type SeedUsers = {
  * seed can take steps that need a step-up. Permissions, maker-checker and every database rule
  * still apply (the seed never bypasses the services or the triggers).
  */
-async function seedPrincipal(
+export async function seedPrincipal(
   prisma: PrismaService,
   userId: string,
   tenantId: string,

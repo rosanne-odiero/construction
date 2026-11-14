@@ -17,6 +17,8 @@ import { toGeofenceVersion } from "../../projects/project-mappers.js";
 import { assertUsableUnit } from "../catalogue.service.js";
 import { CatalogueStore, nextId } from "../catalogue-store.js";
 import { peopleOf, personOf, supplierRef } from "../procurement-mappers.js";
+import { StockLedger } from "../stores/stock-ledger.js";
+import { dec } from "../stores/stores-common.js";
 import { LposService } from "./lpos.service.js";
 import { toDocument } from "./p2p-documents.service.js";
 import {
@@ -47,6 +49,12 @@ const RECEIVERS = ["stores.manage", "procurement.requisition"] as const;
  * force (outside → flagged, never refused); photos are uploaded separately (resumable on a
  * device) and `evidenceComplete` shows whether both kinds arrived. GRNs never change; a mistaken
  * one is voided with a reason, unless an approved invoice relies on it.
+ *
+ * D5.3: the accepted quantities are received into the store of the GRN's site (created on first
+ * use) in the same transaction, in the base unit, at the LPO line's net price per base unit; a
+ * void posts the reversing entries (refused while the goods were already used: stock never goes
+ * negative). A GRN therefore needs a site: the one sent, else the LPO's delivery site, else the
+ * project's only site (400 site-required otherwise).
  */
 @Injectable()
 export class GrnsService {
@@ -55,6 +63,7 @@ export class GrnsService {
     private readonly access: P2pAccess,
     private readonly store: CatalogueStore,
     private readonly lpos: LposService,
+    private readonly ledger: StockLedger,
   ) {}
 
   list(
@@ -181,14 +190,25 @@ export class GrnsService {
               "lpo-not-approved",
               "Goods are received only against an approved LPO",
             );
-          const siteId = input.siteId ?? lpo.deliverySiteId;
-          if (siteId) {
-            const site = await tx.site.findUnique({
-              where: { tenantId_id: { tenantId: access.tenantId, id: siteId } },
+          let siteId = input.siteId ?? lpo.deliverySiteId;
+          if (!siteId) {
+            const sites = await tx.site.findMany({
+              where: { tenantId: access.tenantId, projectId: project.project.id },
+              select: { id: true },
+              take: 2,
             });
-            if (!site || site.projectId !== project.project.id)
-              throw p2pBadRequest("site-not-in-project", "The site is not part of this project");
+            if (sites.length === 1) siteId = sites[0]!.id;
           }
+          if (!siteId)
+            throw p2pBadRequest(
+              "site-required",
+              "Choose the site the goods were delivered to (they are received into its store)",
+            );
+          const site = await tx.site.findUnique({
+            where: { tenantId_id: { tenantId: access.tenantId, id: siteId } },
+          });
+          if (!site || site.projectId !== project.project.id)
+            throw p2pBadRequest("site-not-in-project", "The site is not part of this project");
           const lpoLines = await tx.lpoLine.findMany({
             where: { tenantId: access.tenantId, lpoId: lpo.id },
             include: { material: true },
@@ -249,12 +269,10 @@ export class GrnsService {
                 accuracyM: input.location.accuracyM,
               }
             : null;
-          const geofenceRow = siteId
-            ? await tx.siteGeofence.findFirst({
-                where: { tenantId: access.tenantId, siteId, effectiveFrom: { lte: new Date() } },
-                orderBy: { version: "desc" },
-              })
-            : null;
+          const geofenceRow = await tx.siteGeofence.findFirst({
+            where: { tenantId: access.tenantId, siteId, effectiveFrom: { lte: new Date() } },
+            orderBy: { version: "desc" },
+          });
           const geofence: Geofence | null = geofenceRow
             ? (toGeofenceVersion(geofenceRow).geofence as Geofence)
             : null;
@@ -293,6 +311,21 @@ export class GrnsService {
             },
           });
           await tx.grnLine.createMany({ data: lines });
+          const store = await this.ledger.ensureStore(scope, lpo.projectId, siteId);
+          let posted = 0;
+          for (const line of lines) {
+            if (!/[1-9]/.test(line.acceptedBaseQuantity)) continue;
+            const ordered = byId.get(line.lpoLineId)!;
+            await this.ledger.receive(
+              scope,
+              { storeId: store.id, projectId: lpo.projectId, material: ordered.material },
+              "receipt",
+              line.acceptedBaseQuantity,
+              dec(ordered.netUnitPriceBaseMinor),
+              { grnId: row.id, grnLineId: line.id },
+            );
+            posted += 1;
+          }
           // Coordinates, the vehicle and the receiver's name stay out of the audit log.
           await this.scope.audit(tx, "grn.recorded", row.id, {
             projectId: lpo.projectId,
@@ -301,6 +334,8 @@ export class GrnsService {
             locationState: location.state,
             overDelivery,
             source: input.source,
+            storeId: store.id,
+            stockEntries: posted,
           });
           return this.response(scope, row, false);
         },
@@ -340,12 +375,37 @@ export class GrnsService {
               voidReason: input.reason,
             },
           });
-          await this.scope.audit(tx, "grn.voided", id, { lpoId: row.lpoId, reasonGiven: true });
+          const receipts = await tx.stockLedgerEntry.findMany({
+            where: { tenantId: access.tenantId, grnId: id, reversesEntryId: null },
+            include: { material: true },
+            orderBy: { id: "asc" },
+          });
+          for (const receipt of receipts)
+            await this.ledger.reverse(scope, receipt, receipt.material).catch((error: unknown) => {
+              if (
+                (error as { response?: { code?: string } }).response?.code === "insufficient-stock"
+              )
+                throw p2pConflict(
+                  "grn-stock-consumed",
+                  "Goods from this GRN were already issued or moved; return or adjust the stock first",
+                );
+              throw error;
+            });
+          await this.scope.audit(tx, "grn.voided", id, {
+            lpoId: row.lpoId,
+            reasonGiven: true,
+            stockReversals: receipts.length,
+          });
           return this.response(scope, await this.row(scope, id), false);
         },
         true,
       )
       .catch((error: unknown) => {
+        if (isCheckViolation(error) && /below zero/.test(String((error as Error).message)))
+          throw p2pConflict(
+            "grn-stock-consumed",
+            "Goods from this GRN were already issued or moved; return or adjust the stock first",
+          );
         if (isCheckViolation(error))
           throw p2pConflict(
             "grn-supports-approved-invoice",

@@ -314,6 +314,7 @@ model Site {
   requisitions      Requisition[]
   lpos              Lpo[]
   grns              Grn[]
+  stores            Store[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -514,16 +515,17 @@ model BqMappingTemplate {
 
 // A project's Bill of Quantities (one per project); its versions carry the history.
 model Bq {
-  id         String           @id @default(uuid(7)) @db.Uuid
-  tenantId   String           @map("tenant_id") @db.Uuid
-  projectId  String           @map("project_id") @db.Uuid
-  name       String           @db.VarChar(150)
-  createdBy  String           @map("created_by") @db.Uuid
-  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  project    Project          @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  versions   BqVersion[]
-  variations VariationOrder[]
-  rateLinks  BqItemRateLink[]
+  id           String                @id @default(uuid(7)) @db.Uuid
+  tenantId     String                @map("tenant_id") @db.Uuid
+  projectId    String                @map("project_id") @db.Uuid
+  name         String                @db.VarChar(150)
+  createdBy    String                @map("created_by") @db.Uuid
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  project      Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  versions     BqVersion[]
+  variations   VariationOrder[]
+  rateLinks    BqItemRateLink[]
+  measurements ProgressMeasurement[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId])
@@ -536,39 +538,40 @@ model Bq {
 // versions never change (app.guard_bq_version); totals are checked against the bills and items
 // when the transaction commits (app.check_bq_version_totals).
 model BqVersion {
-  id              String           @id @default(uuid(7)) @db.Uuid
-  tenantId        String           @map("tenant_id") @db.Uuid
-  projectId       String           @map("project_id") @db.Uuid
-  bqId            String           @map("bq_id") @db.Uuid
-  versionNo       Int              @map("version_no")
-  status          String           @default("draft") @db.VarChar(20)
-  source          String           @default("import") @db.VarChar(20)
-  vatRatePercent  Decimal          @map("vat_rate_percent") @db.Decimal(7, 4)
-  vatRuleKey      String           @map("vat_rule_key") @db.VarChar(40)
-  vatRuleStatus   String           @map("vat_rule_status") @db.VarChar(30)
-  rounding        String           @db.VarChar(20)
-  subtotalMinor   BigInt           @map("subtotal_minor")
-  vatMinor        BigInt           @map("vat_minor")
-  grandTotalMinor BigInt           @map("grand_total_minor")
-  billCount       Int              @map("bill_count")
-  itemCount       Int              @map("item_count")
-  createdBy       String           @map("created_by") @db.Uuid
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy       String           @map("updated_by") @db.Uuid
-  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  version         Int              @default(1)
-  parentVersionId String?          @map("parent_version_id") @db.Uuid
-  variationId     String?          @map("variation_id") @db.Uuid
-  approvedBy      String?          @map("approved_by") @db.Uuid
-  approvedAt      DateTime?        @map("approved_at") @db.Timestamptz
-  bq              Bq               @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Cascade)
-  parent          BqVersion?       @relation("BqVersionHistory", fields: [tenantId, bqId, parentVersionId], references: [tenantId, bqId, id], onDelete: Restrict)
-  children        BqVersion[]      @relation("BqVersionHistory")
-  variation       VariationOrder?  @relation("VariationResult", fields: [tenantId, bqId, variationId], references: [tenantId, bqId, id], onDelete: Restrict)
-  basedVariations VariationOrder[] @relation("VariationBase")
+  id              String                @id @default(uuid(7)) @db.Uuid
+  tenantId        String                @map("tenant_id") @db.Uuid
+  projectId       String                @map("project_id") @db.Uuid
+  bqId            String                @map("bq_id") @db.Uuid
+  versionNo       Int                   @map("version_no")
+  status          String                @default("draft") @db.VarChar(20)
+  source          String                @default("import") @db.VarChar(20)
+  vatRatePercent  Decimal               @map("vat_rate_percent") @db.Decimal(7, 4)
+  vatRuleKey      String                @map("vat_rule_key") @db.VarChar(40)
+  vatRuleStatus   String                @map("vat_rule_status") @db.VarChar(30)
+  rounding        String                @db.VarChar(20)
+  subtotalMinor   BigInt                @map("subtotal_minor")
+  vatMinor        BigInt                @map("vat_minor")
+  grandTotalMinor BigInt                @map("grand_total_minor")
+  billCount       Int                   @map("bill_count")
+  itemCount       Int                   @map("item_count")
+  createdBy       String                @map("created_by") @db.Uuid
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy       String                @map("updated_by") @db.Uuid
+  updatedAt       DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  version         Int                   @default(1)
+  parentVersionId String?               @map("parent_version_id") @db.Uuid
+  variationId     String?               @map("variation_id") @db.Uuid
+  approvedBy      String?               @map("approved_by") @db.Uuid
+  approvedAt      DateTime?             @map("approved_at") @db.Timestamptz
+  bq              Bq                    @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Cascade)
+  parent          BqVersion?            @relation("BqVersionHistory", fields: [tenantId, bqId, parentVersionId], references: [tenantId, bqId, id], onDelete: Restrict)
+  children        BqVersion[]           @relation("BqVersionHistory")
+  variation       VariationOrder?       @relation("VariationResult", fields: [tenantId, bqId, variationId], references: [tenantId, bqId, id], onDelete: Restrict)
+  basedVariations VariationOrder[]      @relation("VariationBase")
   bills           BqBill[]
   imports         BqImport[]
   rateLinks       BqItemRateLink[]
+  measurements    ProgressMeasurement[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, bqId, versionNo])
@@ -629,35 +632,38 @@ model BqSection {
 // A BQ item. Quantity and rate are exact decimals; amounts are KES minor units. amountSource says
 // how the amount was obtained (CHECK bq_items_amount_rule_check); the sheet's amount is kept apart.
 model BqItem {
-  id               String             @id @default(uuid(7)) @db.Uuid
-  tenantId         String             @map("tenant_id") @db.Uuid
-  versionId        String             @map("version_id") @db.Uuid
-  billId           String             @map("bill_id") @db.Uuid
-  sectionId        String?            @map("section_id") @db.Uuid
-  lineageId        String             @map("lineage_id") @db.Uuid
-  ref              String?            @db.VarChar(30)
-  description      String             @db.VarChar(4000)
-  unit             String?            @db.VarChar(10)
-  unitRaw          String?            @map("unit_raw") @db.VarChar(30)
-  quantity         Decimal?           @db.Decimal(20, 4)
-  rate             Decimal?           @db.Decimal(20, 4)
-  amountMinor      BigInt             @map("amount_minor")
-  sheetAmountMinor BigInt?            @map("sheet_amount_minor")
-  amountSource     String             @map("amount_source") @db.VarChar(20)
-  overrideReason   String?            @map("override_reason") @db.VarChar(500)
-  kind             String             @db.VarChar(20)
-  notes            String?            @db.VarChar(1000)
+  id               String                @id @default(uuid(7)) @db.Uuid
+  tenantId         String                @map("tenant_id") @db.Uuid
+  versionId        String                @map("version_id") @db.Uuid
+  billId           String                @map("bill_id") @db.Uuid
+  sectionId        String?               @map("section_id") @db.Uuid
+  lineageId        String                @map("lineage_id") @db.Uuid
+  ref              String?               @db.VarChar(30)
+  description      String                @db.VarChar(4000)
+  unit             String?               @db.VarChar(10)
+  unitRaw          String?               @map("unit_raw") @db.VarChar(30)
+  quantity         Decimal?              @db.Decimal(20, 4)
+  rate             Decimal?              @db.Decimal(20, 4)
+  amountMinor      BigInt                @map("amount_minor")
+  sheetAmountMinor BigInt?               @map("sheet_amount_minor")
+  amountSource     String                @map("amount_source") @db.VarChar(20)
+  overrideReason   String?               @map("override_reason") @db.VarChar(500)
+  kind             String                @db.VarChar(20)
+  notes            String?               @db.VarChar(1000)
   // Null for items added by a variation (no spreadsheet row).
-  sourceSheet      String?            @map("source_sheet") @db.VarChar(100)
-  sourceRow        Int?               @map("source_row")
-  hasFormula       Boolean            @default(false) @map("has_formula")
-  sortOrder        Int                @map("sort_order")
-  bill             BqBill             @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
-  section          BqSection?         @relation(fields: [tenantId, versionId, sectionId], references: [tenantId, versionId, id], onDelete: Cascade)
+  sourceSheet      String?               @map("source_sheet") @db.VarChar(100)
+  sourceRow        Int?                  @map("source_row")
+  hasFormula       Boolean               @default(false) @map("has_formula")
+  sortOrder        Int                   @map("sort_order")
+  bill             BqBill                @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
+  section          BqSection?            @relation(fields: [tenantId, versionId, sectionId], references: [tenantId, versionId, id], onDelete: Cascade)
   variationLines   VariationLine[]
   rateLinks        BqItemRateLink[]
   pieceRateOutputs PieceRateOutput[]
   requisitionLines RequisitionLine[]
+  stockMovements   StockMovement[]
+  stockEntries     StockLedgerEntry[]
+  measurements     ProgressMeasurement[]
   scheduleItems    ScheduleActivity[]
 
   @@unique([tenantId, id])
@@ -863,23 +869,24 @@ model RateBuildup {
 
 // One immutable version of a build-up with its rate (null while any line is unpriced).
 model RateBuildupVersion {
-  id            String            @id @default(uuid(7)) @db.Uuid
-  tenantId      String            @map("tenant_id") @db.Uuid
-  buildupId     String            @map("buildup_id") @db.Uuid
-  versionNo     Int               @map("version_no")
-  name          String            @db.VarChar(150)
-  unit          String            @db.VarChar(10)
-  assumptions   String?           @db.VarChar(2000)
-  rateMinor     BigInt?           @map("rate_minor")
-  pricedMinor   BigInt            @map("priced_minor")
-  unpricedLines Int               @map("unpriced_lines")
-  lineCount     Int               @map("line_count")
-  rounding      String            @db.VarChar(20)
-  createdBy     String            @map("created_by") @db.Uuid
-  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  buildup       RateBuildup       @relation(fields: [tenantId, buildupId], references: [tenantId, id], onDelete: Restrict)
+  id            String                @id @default(uuid(7)) @db.Uuid
+  tenantId      String                @map("tenant_id") @db.Uuid
+  buildupId     String                @map("buildup_id") @db.Uuid
+  versionNo     Int                   @map("version_no")
+  name          String                @db.VarChar(150)
+  unit          String                @db.VarChar(10)
+  assumptions   String?               @db.VarChar(2000)
+  rateMinor     BigInt?               @map("rate_minor")
+  pricedMinor   BigInt                @map("priced_minor")
+  unpricedLines Int                   @map("unpriced_lines")
+  lineCount     Int                   @map("line_count")
+  rounding      String                @db.VarChar(20)
+  createdBy     String                @map("created_by") @db.Uuid
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  buildup       RateBuildup           @relation(fields: [tenantId, buildupId], references: [tenantId, id], onDelete: Restrict)
   lines         RateBuildupLine[]
   links         BqItemRateLink[]
+  materialMaps  BuildupLineMaterial[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, buildupId, id])
@@ -889,20 +896,22 @@ model RateBuildupVersion {
 
 // A resource line: quantity per output unit, waste % and unit cost; amount rounded half-up per line.
 model RateBuildupLine {
-  id            String             @id @default(uuid(7)) @db.Uuid
-  tenantId      String             @map("tenant_id") @db.Uuid
-  versionId     String             @map("version_id") @db.Uuid
-  lineNo        Int                @map("line_no")
-  kind          String             @db.VarChar(10)
-  resourceName  String             @map("resource_name") @db.VarChar(120)
-  unit          String             @db.VarChar(30)
-  quantity      Decimal            @db.Decimal(15, 6)
-  wastePercent  Decimal?           @map("waste_percent") @db.Decimal(7, 4)
-  unitCostMinor BigInt?            @map("unit_cost_minor")
-  amountMinor   BigInt?            @map("amount_minor")
-  version       RateBuildupVersion @relation(fields: [tenantId, versionId], references: [tenantId, id], onDelete: Cascade)
+  id            String                @id @default(uuid(7)) @db.Uuid
+  tenantId      String                @map("tenant_id") @db.Uuid
+  versionId     String                @map("version_id") @db.Uuid
+  lineNo        Int                   @map("line_no")
+  kind          String                @db.VarChar(10)
+  resourceName  String                @map("resource_name") @db.VarChar(120)
+  unit          String                @db.VarChar(30)
+  quantity      Decimal               @db.Decimal(15, 6)
+  wastePercent  Decimal?              @map("waste_percent") @db.Decimal(7, 4)
+  unitCostMinor BigInt?               @map("unit_cost_minor")
+  amountMinor   BigInt?               @map("amount_minor")
+  version       RateBuildupVersion    @relation(fields: [tenantId, versionId], references: [tenantId, id], onDelete: Cascade)
+  materialMaps  BuildupLineMaterial[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, versionId, id])
   @@unique([tenantId, versionId, lineNo])
   @@map("rate_buildup_lines")
 }
@@ -958,27 +967,34 @@ model Unit {
 
 // A catalogue material with its base unit and category attributes (bar diameter, gauge…).
 model Material {
-  id               String            @id @default(uuid(7)) @db.Uuid
-  tenantId         String            @map("tenant_id") @db.Uuid
-  code             String            @db.VarChar(20)
-  name             String            @db.Citext
-  nameSw           String?           @map("name_sw") @db.VarChar(150)
-  category         String            @db.VarChar(20)
-  baseUnit         String            @map("base_unit") @db.VarChar(20)
-  spec             String?           @db.VarChar(200)
-  attributes       Json              @default("{}")
-  notes            String?           @db.VarChar(2000)
-  status           String            @default("active") @db.VarChar(10)
-  version          Int               @default(1)
-  createdBy        String            @map("created_by") @db.Uuid
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy        String            @map("updated_by") @db.Uuid
-  updatedAt        DateTime          @default(now()) @map("updated_at") @db.Timestamptz
-  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id               String                @id @default(uuid(7)) @db.Uuid
+  tenantId         String                @map("tenant_id") @db.Uuid
+  code             String                @db.VarChar(20)
+  name             String                @db.Citext
+  nameSw           String?               @map("name_sw") @db.VarChar(150)
+  category         String                @db.VarChar(20)
+  baseUnit         String                @map("base_unit") @db.VarChar(20)
+  spec             String?               @db.VarChar(200)
+  attributes       Json                  @default("{}")
+  notes            String?               @db.VarChar(2000)
+  status           String                @default("active") @db.VarChar(10)
+  version          Int                   @default(1)
+  createdBy        String                @map("created_by") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy        String                @map("updated_by") @db.Uuid
+  updatedAt        DateTime              @default(now()) @map("updated_at") @db.Timestamptz
+  tenant           Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversions      UnitConversion[]
   prices           MaterialPrice[]
   requisitionLines RequisitionLine[]
   lpoLines         LpoLine[]
+  stockBalances    StockBalance[]
+  stockEntries     StockLedgerEntry[]
+  movementLines    StockMovementLine[]
+  transferLines    StockTransferLine[]
+  stockTakeLines   StockTakeLine[]
+  reorderLevels    StockReorderLevel[]
+  buildupMaps      BuildupLineMaterial[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1181,17 +1197,19 @@ model MaterialPrice {
 
 // Company procurement settings (absent row = defaults, e.g. a 10 % price-change alert).
 model ProcurementSettings {
-  tenantId                 String   @id @map("tenant_id") @db.Uuid
-  priceChangeAlertPercent  Decimal  @map("price_change_alert_percent") @db.Decimal(8, 4)
+  tenantId                   String   @id @map("tenant_id") @db.Uuid
+  priceChangeAlertPercent    Decimal  @map("price_change_alert_percent") @db.Decimal(8, 4)
   // D5.2: procurement.min_quotes and the three-way match settings (CONFIGURATION §5).
-  minQuotes                Int      @default(3) @map("min_quotes")
-  qtyTolerancePercent      Decimal  @default(0) @map("qty_tolerance_percent") @db.Decimal(7, 4)
-  priceTolerancePercent    Decimal  @default(0) @map("price_tolerance_percent") @db.Decimal(7, 4)
-  blockPaymentWithoutEtims Boolean  @default(true) @map("block_payment_without_etims")
-  version                  Int      @default(1)
-  updatedBy                String   @map("updated_by") @db.Uuid
-  updatedAt                DateTime @default(now()) @map("updated_at") @db.Timestamptz
-  tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  minQuotes                  Int      @default(3) @map("min_quotes")
+  qtyTolerancePercent        Decimal  @default(0) @map("qty_tolerance_percent") @db.Decimal(7, 4)
+  priceTolerancePercent      Decimal  @default(0) @map("price_tolerance_percent") @db.Decimal(7, 4)
+  blockPaymentWithoutEtims   Boolean  @default(true) @map("block_payment_without_etims")
+  // D5.3: stores.consumption_variance_percent (CONFIGURATION §5).
+  consumptionVariancePercent Decimal  @default(10) @map("consumption_variance_percent") @db.Decimal(7, 4)
+  version                    Int      @default(1)
+  updatedBy                  String   @map("updated_by") @db.Uuid
+  updatedAt                  DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("procurement_settings")
 }
@@ -1451,22 +1469,24 @@ model LabourRate {
 // A named gang (crew) on a project, optionally tied to one of its sites, with a leader who is a
 // current member.
 model Gang {
-  id               String            @id @default(uuid(7)) @db.Uuid
-  tenantId         String            @map("tenant_id") @db.Uuid
-  projectId        String            @map("project_id") @db.Uuid
-  siteId           String?           @map("site_id") @db.Uuid
-  name             String            @db.VarChar(80)
-  leaderLabourerId String?           @map("leader_labourer_id") @db.Uuid
-  status           String            @default("active") @db.VarChar(20)
-  version          Int               @default(1)
-  createdBy        String            @map("created_by") @db.Uuid
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  project          Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  site             Site?             @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
-  leader           Labourer?         @relation(fields: [tenantId, leaderLabourerId], references: [tenantId, id], onDelete: NoAction)
+  id               String             @id @default(uuid(7)) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  projectId        String             @map("project_id") @db.Uuid
+  siteId           String?            @map("site_id") @db.Uuid
+  name             String             @db.VarChar(80)
+  leaderLabourerId String?            @map("leader_labourer_id") @db.Uuid
+  status           String             @default("active") @db.VarChar(20)
+  version          Int                @default(1)
+  createdBy        String             @map("created_by") @db.Uuid
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project          Project            @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  site             Site?              @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
+  leader           Labourer?          @relation(fields: [tenantId, leaderLabourerId], references: [tenantId, id], onDelete: NoAction)
   members          GangMembership[]
   outputs          PieceRateOutput[]
+  stockMovements   StockMovement[]
+  stockEntries     StockLedgerEntry[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -2655,6 +2675,7 @@ model Grn {
   geofence                  SiteGeofence?         @relation(fields: [tenantId, siteId, geofenceVersion], references: [tenantId, siteId, version], onDelete: Restrict)
   lines                     GrnLine[]
   documents                 ProcurementDocument[]
+  stockEntries              StockLedgerEntry[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, lpoId, id])
@@ -2666,21 +2687,22 @@ model Grn {
 
 // A counted line: received and rejected quantities in a unit, the accepted base quantity.
 model GrnLine {
-  id                   String  @id @default(uuid(7)) @db.Uuid
-  tenantId             String  @map("tenant_id") @db.Uuid
-  grnId                String  @map("grn_id") @db.Uuid
-  lpoId                String  @map("lpo_id") @db.Uuid
-  lpoLineId            String  @map("lpo_line_id") @db.Uuid
-  lineNo               Int     @map("line_no")
-  unit                 String  @db.VarChar(20)
-  receivedQuantity     Decimal @map("received_quantity") @db.Decimal(20, 6)
-  rejectedQuantity     Decimal @map("rejected_quantity") @db.Decimal(20, 6)
-  rejectionReason      String? @map("rejection_reason") @db.VarChar(300)
-  acceptedBaseQuantity Decimal @map("accepted_base_quantity") @db.Decimal(20, 6)
-  overDelivery         Boolean @default(false) @map("over_delivery")
+  id                   String             @id @default(uuid(7)) @db.Uuid
+  tenantId             String             @map("tenant_id") @db.Uuid
+  grnId                String             @map("grn_id") @db.Uuid
+  lpoId                String             @map("lpo_id") @db.Uuid
+  lpoLineId            String             @map("lpo_line_id") @db.Uuid
+  lineNo               Int                @map("line_no")
+  unit                 String             @db.VarChar(20)
+  receivedQuantity     Decimal            @map("received_quantity") @db.Decimal(20, 6)
+  rejectedQuantity     Decimal            @map("rejected_quantity") @db.Decimal(20, 6)
+  rejectionReason      String?            @map("rejection_reason") @db.VarChar(300)
+  acceptedBaseQuantity Decimal            @map("accepted_base_quantity") @db.Decimal(20, 6)
+  overDelivery         Boolean            @default(false) @map("over_delivery")
   conversion           Json
-  grn                  Grn     @relation(fields: [tenantId, lpoId, grnId], references: [tenantId, lpoId, id], onDelete: Cascade)
-  lpoLine              LpoLine @relation(fields: [tenantId, lpoId, lpoLineId], references: [tenantId, lpoId, id], onDelete: Restrict)
+  grn                  Grn                @relation(fields: [tenantId, lpoId, grnId], references: [tenantId, lpoId, id], onDelete: Cascade)
+  lpoLine              LpoLine            @relation(fields: [tenantId, lpoId, lpoLineId], references: [tenantId, lpoId, id], onDelete: Restrict)
+  stockEntries         StockLedgerEntry[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, grnId, lpoLineId])
@@ -2874,6 +2896,421 @@ model ProcurementDocument {
   @@index([tenantId, grnId])
   @@index([tenantId, invoiceId])
   @@map("procurement_documents")
+}
+
+// D5.3 stores (ARCHITECTURE §4.6). One store per site, created explicitly or on the first GRN for
+// the site; the storekeeper is optional (a company member, checked by app.guard_store).
+model Store {
+  id            String              @id @default(uuid(7)) @db.Uuid
+  tenantId      String              @map("tenant_id") @db.Uuid
+  projectId     String              @map("project_id") @db.Uuid
+  siteId        String              @map("site_id") @db.Uuid
+  name          String              @db.VarChar(120)
+  storekeeperId String?             @map("storekeeper_user_id") @db.Uuid
+  version       Int                 @default(1)
+  createdBy     String              @map("created_by") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy     String              @map("updated_by") @db.Uuid
+  updatedAt     DateTime            @default(now()) @map("updated_at") @db.Timestamptz
+  site          Site                @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  balances      StockBalance[]
+  entries       StockLedgerEntry[]
+  movements     StockMovement[]
+  transfersOut  StockTransfer[]     @relation("TransferFrom")
+  transfersIn   StockTransfer[]     @relation("TransferTo")
+  stockTakes    StockTake[]
+  reorderLevels StockReorderLevel[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, siteId])
+  @@index([tenantId, projectId])
+  @@map("stores")
+}
+
+// On-hand quantity (base unit) and value (KES minor units, weighted average) per store and
+// material. Written only by the ledger trigger (app.post_stock_entry → app.apply_stock_entry); a
+// guard refuses any other change. Never negative.
+model StockBalance {
+  tenantId    String             @map("tenant_id") @db.Uuid
+  storeId     String             @map("store_id") @db.Uuid
+  materialId  String             @map("material_id") @db.Uuid
+  quantity    Decimal            @default(0) @db.Decimal(20, 6)
+  valueMinor  Decimal            @default(0) @map("value_minor") @db.Decimal(30, 6)
+  lastSeq     BigInt             @default(0) @map("last_seq")
+  lastEntryAt DateTime?          @map("last_entry_at") @db.Timestamptz
+  store       Store              @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Restrict)
+  material    Material           @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Restrict)
+  entries     StockLedgerEntry[]
+
+  @@id([tenantId, storeId, materialId])
+  @@index([tenantId, materialId])
+  @@map("stock_balances")
+}
+
+// The append-only stock ledger: signed base-unit quantities with the value moved and the running
+// balance, numbered per store and material (seq). Exactly one source document per entry; a
+// correction is an entry of the same kind and opposite sign that names the entry it reverses.
+model StockLedgerEntry {
+  id                String             @id @db.Uuid
+  tenantId          String             @map("tenant_id") @db.Uuid
+  projectId         String             @map("project_id") @db.Uuid
+  storeId           String             @map("store_id") @db.Uuid
+  materialId        String             @map("material_id") @db.Uuid
+  baseUnit          String             @map("base_unit") @db.VarChar(20)
+  seq               BigInt
+  kind              String             @db.VarChar(15)
+  quantity          Decimal            @db.Decimal(20, 6)
+  unitCostMinor     Decimal            @map("unit_cost_minor") @db.Decimal(30, 6)
+  valueMinor        Decimal            @map("value_minor") @db.Decimal(30, 6)
+  balanceQuantity   Decimal            @map("balance_quantity") @db.Decimal(20, 6)
+  balanceValueMinor Decimal            @map("balance_value_minor") @db.Decimal(30, 6)
+  businessDate      DateTime           @map("business_date") @db.Date
+  recordedBy        String             @map("recorded_by") @db.Uuid
+  recordedAt        DateTime           @default(now()) @map("recorded_at") @db.Timestamptz
+  grnId             String?            @map("grn_id") @db.Uuid
+  grnLineId         String?            @map("grn_line_id") @db.Uuid
+  movementId        String?            @map("movement_id") @db.Uuid
+  movementLineId    String?            @map("movement_line_id") @db.Uuid
+  transferId        String?            @map("transfer_id") @db.Uuid
+  transferLineId    String?            @map("transfer_line_id") @db.Uuid
+  stockTakeId       String?            @map("stock_take_id") @db.Uuid
+  stockTakeLineId   String?            @map("stock_take_line_id") @db.Uuid
+  bqVersionId       String?            @map("bq_version_id") @db.Uuid
+  bqItemLineageId   String?            @map("bq_item_lineage_id") @db.Uuid
+  gangId            String?            @map("gang_id") @db.Uuid
+  reversesEntryId   String?            @map("reverses_entry_id") @db.Uuid
+  store             Store              @relation(fields: [tenantId, projectId, storeId], references: [tenantId, projectId, id], onDelete: Restrict)
+  balance           StockBalance       @relation(fields: [tenantId, storeId, materialId], references: [tenantId, storeId, materialId], onDelete: Restrict)
+  material          Material           @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Restrict)
+  grn               Grn?               @relation(fields: [tenantId, grnId], references: [tenantId, id], onDelete: Restrict)
+  grnLine           GrnLine?           @relation(fields: [tenantId, grnLineId], references: [tenantId, id], onDelete: Restrict)
+  movement          StockMovement?     @relation(fields: [tenantId, movementId], references: [tenantId, id], onDelete: Restrict)
+  movementLine      StockMovementLine? @relation(fields: [tenantId, movementLineId], references: [tenantId, id], onDelete: Restrict)
+  transfer          StockTransfer?     @relation(fields: [tenantId, transferId], references: [tenantId, id], onDelete: Restrict)
+  transferLine      StockTransferLine? @relation(fields: [tenantId, transferLineId], references: [tenantId, id], onDelete: Restrict)
+  stockTake         StockTake?         @relation(fields: [tenantId, stockTakeId], references: [tenantId, id], onDelete: Restrict)
+  stockTakeLine     StockTakeLine?     @relation(fields: [tenantId, stockTakeLineId], references: [tenantId, id], onDelete: Restrict)
+  bqItem            BqItem?            @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  gang              Gang?              @relation(fields: [tenantId, projectId, gangId], references: [tenantId, projectId, id], onDelete: Restrict)
+  reverses          StockLedgerEntry?  @relation("StockReversal", fields: [tenantId, reversesEntryId], references: [tenantId, id], onDelete: Restrict)
+  reversedBy        StockLedgerEntry?  @relation("StockReversal")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, storeId, materialId, seq])
+  @@unique([tenantId, reversesEntryId])
+  @@index([tenantId, storeId, id])
+  @@index([tenantId, projectId, bqItemLineageId])
+  @@index([tenantId, grnId])
+  @@index([tenantId, movementId])
+  @@index([tenantId, transferId])
+  @@index([tenantId, stockTakeId])
+  @@map("stock_ledger_entries")
+}
+
+// An issue (to a BQ item and/or a gang), a return of issued material or a wastage record: one
+// store, numbered ISS-/RTN-/WST-NNNN, offline-ready (client ID, idempotency key and digest).
+// Posted once; a mistaken one is reversed with a reason, never edited.
+model StockMovement {
+  id              String              @id @db.Uuid
+  tenantId        String              @map("tenant_id") @db.Uuid
+  projectId       String              @map("project_id") @db.Uuid
+  storeId         String              @map("store_id") @db.Uuid
+  kind            String              @db.VarChar(10)
+  number          String              @db.VarChar(20)
+  status          String              @default("posted") @db.VarChar(10)
+  bqVersionId     String?             @map("bq_version_id") @db.Uuid
+  bqItemLineageId String?             @map("bq_item_lineage_id") @db.Uuid
+  gangId          String?             @map("gang_id") @db.Uuid
+  issuedToName    String?             @map("issued_to_name") @db.VarChar(100)
+  returnOfId      String?             @map("return_of_id") @db.Uuid
+  wastageReason   String?             @map("wastage_reason") @db.VarChar(20)
+  notes           String?             @db.VarChar(1000)
+  idempotencyKey  String              @map("idempotency_key") @db.VarChar(100)
+  requestDigest   String              @map("request_digest") @db.Char(64)
+  capturedAt      DateTime            @map("captured_at") @db.Timestamptz
+  businessDate    DateTime            @map("business_date") @db.Date
+  source          String              @db.VarChar(10)
+  lineCount       Int                 @map("line_count")
+  recordedBy      String              @map("recorded_by") @db.Uuid
+  recordedAt      DateTime            @default(now()) @map("recorded_at") @db.Timestamptz
+  reversedBy      String?             @map("reversed_by") @db.Uuid
+  reversedAt      DateTime?           @map("reversed_at") @db.Timestamptz
+  reversalReason  String?             @map("reversal_reason") @db.VarChar(500)
+  store           Store               @relation(fields: [tenantId, projectId, storeId], references: [tenantId, projectId, id], onDelete: Restrict)
+  bqItem          BqItem?             @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  gang            Gang?               @relation(fields: [tenantId, projectId, gangId], references: [tenantId, projectId, id], onDelete: Restrict)
+  returnOf        StockMovement?      @relation("MovementReturns", fields: [tenantId, storeId, returnOfId], references: [tenantId, storeId, id], onDelete: Restrict)
+  returns         StockMovement[]     @relation("MovementReturns")
+  lines           StockMovementLine[]
+  entries         StockLedgerEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, storeId, id])
+  @@unique([tenantId, number])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, storeId, kind])
+  @@index([tenantId, projectId, bqItemLineageId])
+  @@index([tenantId, returnOfId])
+  @@map("stock_movements")
+}
+
+// A movement line: the quantity as entered, its base-unit quantity and the conversion used.
+model StockMovementLine {
+  id             String              @id @db.Uuid
+  tenantId       String              @map("tenant_id") @db.Uuid
+  movementId     String              @map("movement_id") @db.Uuid
+  lineNo         Int                 @map("line_no")
+  materialId     String              @map("material_id") @db.Uuid
+  quantity       Decimal             @db.Decimal(20, 6)
+  unit           String              @db.VarChar(20)
+  baseQuantity   Decimal             @map("base_quantity") @db.Decimal(20, 6)
+  conversion     Json
+  returnOfLineId String?             @map("return_of_line_id") @db.Uuid
+  movement       StockMovement       @relation(fields: [tenantId, movementId], references: [tenantId, id], onDelete: Restrict)
+  material       Material            @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Restrict)
+  returnOfLine   StockMovementLine?  @relation("LineReturns", fields: [tenantId, returnOfLineId], references: [tenantId, id], onDelete: Restrict)
+  returns        StockMovementLine[] @relation("LineReturns")
+  entries        StockLedgerEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, movementId, lineNo])
+  @@unique([tenantId, movementId, materialId])
+  @@index([tenantId, returnOfLineId])
+  @@map("stock_movement_lines")
+}
+
+// An inter-site transfer (TRF-NNNN): dispatched (in transit) → received | disputed → resolved, or
+// cancelled while in transit. Dispatch and receipt are each offline-ready (client ID / key).
+model StockTransfer {
+  id                    String              @id @db.Uuid
+  tenantId              String              @map("tenant_id") @db.Uuid
+  number                String              @db.VarChar(20)
+  fromProjectId         String              @map("from_project_id") @db.Uuid
+  fromStoreId           String              @map("from_store_id") @db.Uuid
+  toProjectId           String              @map("to_project_id") @db.Uuid
+  toStoreId             String              @map("to_store_id") @db.Uuid
+  status                String              @default("dispatched") @db.VarChar(12)
+  source                String              @db.VarChar(10)
+  idempotencyKey        String              @map("idempotency_key") @db.VarChar(100)
+  requestDigest         String              @map("request_digest") @db.Char(64)
+  capturedAt            DateTime            @map("captured_at") @db.Timestamptz
+  dispatchedBy          String              @map("dispatched_by") @db.Uuid
+  dispatchedAt          DateTime            @default(now()) @map("dispatched_at") @db.Timestamptz
+  dispatchNotes         String?             @map("dispatch_notes") @db.VarChar(1000)
+  receiveIdempotencyKey String?             @map("receive_idempotency_key") @db.VarChar(100)
+  receiveDigest         String?             @map("receive_digest") @db.Char(64)
+  receiveCapturedAt     DateTime?           @map("receive_captured_at") @db.Timestamptz
+  receivedBy            String?             @map("received_by") @db.Uuid
+  receivedAt            DateTime?           @map("received_at") @db.Timestamptz
+  receiveNotes          String?             @map("receive_notes") @db.VarChar(1000)
+  resolvedBy            String?             @map("resolved_by") @db.Uuid
+  resolvedAt            DateTime?           @map("resolved_at") @db.Timestamptz
+  resolutionNote        String?             @map("resolution_note") @db.VarChar(500)
+  cancelledBy           String?             @map("cancelled_by") @db.Uuid
+  cancelledAt           DateTime?           @map("cancelled_at") @db.Timestamptz
+  cancelReason          String?             @map("cancel_reason") @db.VarChar(500)
+  lineCount             Int                 @map("line_count")
+  version               Int                 @default(1)
+  fromStore             Store               @relation("TransferFrom", fields: [tenantId, fromProjectId, fromStoreId], references: [tenantId, projectId, id], onDelete: Restrict)
+  toStore               Store               @relation("TransferTo", fields: [tenantId, toProjectId, toStoreId], references: [tenantId, projectId, id], onDelete: Restrict)
+  lines                 StockTransferLine[]
+  entries               StockLedgerEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, number])
+  @@unique([tenantId, idempotencyKey])
+  @@unique([tenantId, receiveIdempotencyKey])
+  @@index([tenantId, fromStoreId, status])
+  @@index([tenantId, toStoreId, status])
+  @@map("stock_transfers")
+}
+
+// A transfer line: dispatched quantity and its value at the source's average cost, then what was
+// received (base unit) with a reason for any difference.
+model StockTransferLine {
+  id                   String             @id @db.Uuid
+  tenantId             String             @map("tenant_id") @db.Uuid
+  transferId           String             @map("transfer_id") @db.Uuid
+  lineNo               Int                @map("line_no")
+  materialId           String             @map("material_id") @db.Uuid
+  quantity             Decimal            @db.Decimal(20, 6)
+  unit                 String             @db.VarChar(20)
+  baseQuantity         Decimal            @map("base_quantity") @db.Decimal(20, 6)
+  conversion           Json
+  unitCostMinor        Decimal            @map("unit_cost_minor") @db.Decimal(30, 6)
+  dispatchedValueMinor Decimal            @map("dispatched_value_minor") @db.Decimal(30, 6)
+  receivedBaseQuantity Decimal?           @map("received_base_quantity") @db.Decimal(20, 6)
+  differenceReason     String?            @map("difference_reason") @db.VarChar(300)
+  transfer             StockTransfer      @relation(fields: [tenantId, transferId], references: [tenantId, id], onDelete: Restrict)
+  material             Material           @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Restrict)
+  entries              StockLedgerEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, transferId, lineNo])
+  @@unique([tenantId, transferId, materialId])
+  @@map("stock_transfer_lines")
+}
+
+// A stock take (STK-NNNN): a count sheet with the system quantity at the start, counts compared
+// with the system quantity when each line was counted, submitted and approved by someone who did
+// not contribute (contributors only grow); approval posts the variances as adjustments.
+model StockTake {
+  id           String             @id @default(uuid(7)) @db.Uuid
+  tenantId     String             @map("tenant_id") @db.Uuid
+  projectId    String             @map("project_id") @db.Uuid
+  storeId      String             @map("store_id") @db.Uuid
+  number       String             @db.VarChar(20)
+  status       String             @default("draft") @db.VarChar(12)
+  notes        String?            @db.VarChar(1000)
+  contributors String[]           @default([]) @db.Uuid
+  lineCount    Int                @map("line_count")
+  version      Int                @default(1)
+  createdBy    String             @map("created_by") @db.Uuid
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy    String             @map("updated_by") @db.Uuid
+  updatedAt    DateTime           @default(now()) @map("updated_at") @db.Timestamptz
+  submittedBy  String?            @map("submitted_by") @db.Uuid
+  submittedAt  DateTime?          @map("submitted_at") @db.Timestamptz
+  approvedBy   String?            @map("approved_by") @db.Uuid
+  approvedAt   DateTime?          @map("approved_at") @db.Timestamptz
+  returnReason String?            @map("return_reason") @db.VarChar(500)
+  cancelledBy  String?            @map("cancelled_by") @db.Uuid
+  cancelledAt  DateTime?          @map("cancelled_at") @db.Timestamptz
+  cancelReason String?            @map("cancel_reason") @db.VarChar(500)
+  store        Store              @relation(fields: [tenantId, projectId, storeId], references: [tenantId, projectId, id], onDelete: Restrict)
+  lines        StockTakeLine[]
+  counts       StockTakeCount[]
+  entries      StockLedgerEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, number])
+  @@index([tenantId, storeId, status])
+  @@map("stock_takes")
+}
+
+// A count-sheet line: the snapshot at the start and the latest count with the system quantity
+// (expected) and ledger position when it was counted.
+model StockTakeLine {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  stockTakeId      String             @map("stock_take_id") @db.Uuid
+  lineNo           Int                @map("line_no")
+  materialId       String             @map("material_id") @db.Uuid
+  snapshotQuantity Decimal            @map("snapshot_quantity") @db.Decimal(20, 6)
+  snapshotSeq      BigInt             @map("snapshot_seq")
+  countedQuantity  Decimal?           @map("counted_quantity") @db.Decimal(20, 6)
+  expectedQuantity Decimal?           @map("expected_quantity") @db.Decimal(20, 6)
+  countedSeq       BigInt?            @map("counted_seq")
+  countedBy        String?            @map("counted_by") @db.Uuid
+  countedAt        DateTime?          @map("counted_at") @db.Timestamptz
+  countId          String?            @map("count_id") @db.Uuid
+  stockTake        StockTake          @relation(fields: [tenantId, stockTakeId], references: [tenantId, id], onDelete: Restrict)
+  material         Material           @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Restrict)
+  counts           StockTakeCount[]
+  entries          StockLedgerEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, stockTakeId, id])
+  @@unique([tenantId, stockTakeId, lineNo])
+  @@unique([tenantId, stockTakeId, materialId])
+  @@map("stock_take_lines")
+}
+
+// Append-only count evidence (client ID, idempotency key and digest per batch).
+model StockTakeCount {
+  id               String        @id @db.Uuid
+  tenantId         String        @map("tenant_id") @db.Uuid
+  stockTakeId      String        @map("stock_take_id") @db.Uuid
+  lineId           String        @map("line_id") @db.Uuid
+  countedQuantity  Decimal       @map("counted_quantity") @db.Decimal(20, 6)
+  expectedQuantity Decimal       @map("expected_quantity") @db.Decimal(20, 6)
+  countedSeq       BigInt        @map("counted_seq")
+  idempotencyKey   String        @map("idempotency_key") @db.VarChar(100)
+  requestDigest    String        @map("request_digest") @db.Char(64)
+  capturedAt       DateTime      @map("captured_at") @db.Timestamptz
+  countedBy        String        @map("counted_by") @db.Uuid
+  countedAt        DateTime      @default(now()) @map("counted_at") @db.Timestamptz
+  stockTake        StockTake     @relation(fields: [tenantId, stockTakeId], references: [tenantId, id], onDelete: Restrict)
+  line             StockTakeLine @relation(fields: [tenantId, stockTakeId, lineId], references: [tenantId, stockTakeId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, idempotencyKey])
+  @@index([tenantId, lineId])
+  @@map("stock_take_counts")
+}
+
+// Reorder level per store and material (base unit); low stock when on hand ≤ level.
+model StockReorderLevel {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  storeId      String   @map("store_id") @db.Uuid
+  materialId   String   @map("material_id") @db.Uuid
+  reorderLevel Decimal  @map("reorder_level") @db.Decimal(20, 6)
+  updatedBy    String   @map("updated_by") @db.Uuid
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  store        Store    @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Restrict)
+  material     Material @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, storeId, materialId])
+  @@map("stock_reorder_levels")
+}
+
+// Minimal progress measurement (ERD §4; D5.3 for consumption variance, D6.3 extends with
+// submission, approval, photos and valuations): quantity completed to date of a BQ item lineage,
+// append-only; a correction is a new row naming the one it corrects.
+model ProgressMeasurement {
+  id               String               @id @default(uuid(7)) @db.Uuid
+  tenantId         String               @map("tenant_id") @db.Uuid
+  projectId        String               @map("project_id") @db.Uuid
+  bqId             String               @map("bq_id") @db.Uuid
+  versionId        String               @map("version_id") @db.Uuid
+  itemLineageId    String               @map("item_lineage_id") @db.Uuid
+  measuredOn       DateTime             @map("measured_on") @db.Date
+  quantityToDate   Decimal              @map("quantity_to_date") @db.Decimal(20, 4)
+  status           String               @default("recorded") @db.VarChar(12)
+  note             String?              @db.VarChar(500)
+  correctsId       String?              @map("corrects_id") @db.Uuid
+  correctionReason String?              @map("correction_reason") @db.VarChar(500)
+  measuredBy       String               @map("measured_by") @db.Uuid
+  recordedAt       DateTime             @default(now()) @map("recorded_at") @db.Timestamptz
+  bq               Bq                   @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Restrict)
+  version          BqVersion            @relation(fields: [tenantId, bqId, versionId], references: [tenantId, bqId, id], onDelete: Restrict)
+  item             BqItem               @relation(fields: [tenantId, versionId, itemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  corrects         ProgressMeasurement? @relation("MeasurementCorrection", fields: [tenantId, correctsId], references: [tenantId, id], onDelete: Restrict)
+  correctedBy      ProgressMeasurement? @relation("MeasurementCorrection")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, correctsId])
+  @@index([tenantId, projectId, itemLineageId, measuredOn])
+  @@map("progress_measurements")
+}
+
+// Maps a material line of an (immutable) build-up version to a catalogue material and the
+// catalogue unit its quantity is in, with the exact base units per that unit. Replacing a mapping
+// stamps the old one unmapped (one active mapping per line); never deleted.
+model BuildupLineMaterial {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  buildupId        String             @map("buildup_id") @db.Uuid
+  buildupVersionId String             @map("buildup_version_id") @db.Uuid
+  lineId           String             @map("line_id") @db.Uuid
+  materialId       String             @map("material_id") @db.Uuid
+  unit             String             @db.VarChar(20)
+  baseUnit         String             @map("base_unit") @db.VarChar(20)
+  basePerUnit      String             @map("base_per_unit") @db.VarChar(120)
+  conversion       Json
+  mappedBy         String             @map("mapped_by") @db.Uuid
+  mappedAt         DateTime           @default(now()) @map("mapped_at") @db.Timestamptz
+  unmappedBy       String?            @map("unmapped_by") @db.Uuid
+  unmappedAt       DateTime?          @map("unmapped_at") @db.Timestamptz
+  version          RateBuildupVersion @relation(fields: [tenantId, buildupId, buildupVersionId], references: [tenantId, buildupId, id], onDelete: Restrict)
+  line             RateBuildupLine    @relation(fields: [tenantId, buildupVersionId, lineId], references: [tenantId, versionId, id], onDelete: Restrict)
+  material         Material           @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, lineId])
+  @@index([tenantId, materialId])
+  @@map("rate_buildup_line_materials")
 }
 
 // ---------------------------------------------------------------------------------------------

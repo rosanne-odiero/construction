@@ -1,14 +1,21 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { buildupResponseSchema, buildupVersionResponseSchema } from "@pm-buddy/validation";
+import {
+  buildupMaterialsResponseSchema,
+  buildupResponseSchema,
+  buildupVersionResponseSchema,
+  materialsResponseSchema,
+} from "@pm-buddy/validation";
 import { BuildupAssumptions } from "@/components/bq/buildup-assumptions";
 import { BuildupEditor } from "@/components/bq/buildup-editor";
 import { PageHeader } from "@/components/page-header";
+import { BuildupMaterials } from "@/components/stores/buildup-materials";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime, formatDecimalString, formatKES } from "@/lib/format";
+import { unitOptions } from "@/lib/p2p-server";
 import { requireSession, serverApi } from "@/lib/server-api";
 import { signInHref } from "@/lib/safe-next";
 
@@ -51,6 +58,15 @@ export default async function BuildupPage({
     );
     if (other.ok) shown = other.data.version;
   }
+  // D5.3: the version's material lines mapped to catalogue materials (for stores variance).
+  const [mappings, materials, units] = await Promise.all([
+    serverApi(
+      `/rate-buildups/${buildupId}/versions/${shown.versionNo}/materials`,
+      buildupMaterialsResponseSchema,
+    ),
+    serverApi("/materials?limit=200&status=active", materialsResponseSchema),
+    unitOptions(),
+  ]);
   const t = await getTranslations("rateBuildUps");
   const tKinds = await getTranslations("rateBuildUps.kinds");
   const tUnits = await getTranslations("liveBq.units");
@@ -191,6 +207,18 @@ export default async function BuildupPage({
           </CardContent>
         </Card>
       </div>
+      {mappings.ok ? (
+        <BuildupMaterials
+          key={`${shown.id}-${mappings.data.lines.map((line) => line.mapping?.id ?? "").join()}`}
+          initial={mappings.data}
+          materials={
+            materials.ok
+              ? materials.data.materials.map(({ id, name, baseUnit }) => ({ id, name, baseUnit }))
+              : []
+          }
+          units={units}
+        />
+      ) : null}
       {data.permissions.canEdit ? (
         <BuildupEditor key={data.buildup.version} existing={data} />
       ) : null}

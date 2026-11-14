@@ -105,10 +105,12 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 |---|---|---|---|---|---|
 | D5.1 | **Catalogue and suppliers**:<br/>• Materials with Kenyan units and conversions (bags, tonnes, lorry trips, steel by length/kg)<br/>• Suppliers: KRA PIN, eTIMS, Paybill/Till, bank details, terms<br/>• Price history | Catalogue, unit conversions, supplier profile | Conversions are unit-tested | M | ✅ |
 | D5.2 | **Procure-to-pay**:<br/>• Requisition → approval → RFQ and quote comparison → LPO<br/>• Goods Received Note in the site app (offline, photos, GPS, vehicle reg)<br/>• Supplier invoice with eTIMS<br/>• Three-way match; B2B or bank payment | End-to-end procurement flow; match screen | **The three-way match blocks bad payments** | XL | 🔎 |
-| D5.3 | **Stores**: stock ledger per site; issues to a BQ item or gang; returns and transfers; stock takes; wastage; low stock; theoretical vs actual consumption variance alerts | Stock ledger, stock take, variance alerts | **A variance alert fires on test data** | L | ⬜ |
+| D5.3 | **Stores**: stock ledger per site; issues to a BQ item or gang; returns and transfers; stock takes; wastage; low stock; theoretical vs actual consumption variance alerts | Stock ledger, stock take, variance alerts | **A variance alert fires on test data** | L | 🔎 |
 | D5.4 | **Spending and cash flow** (brief §5.8):<br/>• Cost tagging<br/>• Petty cash floats; expenses with receipts<br/>• M-Pesa SMS parser<br/>• Budget vs actual vs committed; cash-flow forecast; spend alerts | Petty cash, expense capture, budget and cash-flow views | **Phase 5 acceptance** | M | ⬜ |
 
 > **D5.2 is in review (🔎).** The backend (requisitions, RFQs with the net-of-VAT comparison and minimum quotes, LPOs, idempotent GRNs, supplier invoices with eTIMS, the three-way match enforced in the API and in SQL, payee-bound approval and settlements recorded outside PM-Buddy) and the web screens, browser tests, mock API and docs (independently reviewed, `phase-5/d5.2-web`) are on `main`, waiting for the owner's review of the screens. Not in D5.2 yet: GRN capture in the offline site app (the web form is mobile-first and the API contract is offline-ready, see [ARCHITECTURE §12.2](./ARCHITECTURE.md#122-records-created-offline)), and paying suppliers through M-Pesa B2B or a bank API (payments made elsewhere are recorded as settlements; Daraja payouts are D4.2/D4.3). See [IMPLEMENTATION_STATUS](./IMPLEMENTATION_STATUS.md#d52-procure-to-pay-branch-phase-5d52-web).
+
+> **D5.3 is in review (🔎)** on branch `phase-5/d5.3-stores`. Stores per site with an append-only stock ledger in base units (running balances locked per movement, weighted average cost, negative stock never allowed), GRN receipts and void reversals, issues to a BQ item or gang, returns, wastage, inter-site transfers (in transit, disputed, resolved), stock takes with independent approval, reorder levels and low stock, and **theoretical-versus-actual consumption variance alerts** (the done-when: an API e2e test and the demo seed both fire one). Two gaps were closed minimally for D6.3 to extend: build-up material lines are mapped to catalogue materials in a separate table, and a minimal append-only progress measurement exists. Web screens (EN/SW, 360 px), browser tests and docs are included. Not in D5.3: stores in the offline site app (the API contract is offline-ready), per-material variance thresholds, days-of-cover low stock and an authorised negative-stock override (deliberately not offered, D-50). See [IMPLEMENTATION_STATUS](./IMPLEMENTATION_STATUS.md#d53-stores-branch-phase-5d53-stores).
 
 ### Phase 6: Progress and valuations
 
@@ -209,6 +211,7 @@ These have legal or commercial lead times, so they should start early:
 | D2.3 | `phase-2/d2.3-bq-variations` |
 | D5.1 | `phase-5/d5.1-catalogue-suppliers` |
 | D5.2 | backend on `main` (#25); web `phase-5/d5.2-web` |
+| D5.3 | `phase-5/d5.3-stores` |
 | D3.1 | `phase-3/d3.1-labour-registry` |
 | D3.3 (web slice) | `phase-3/d3.3-web-timesheets` |
 | … | `phase-N/dN.x-<slug>` |

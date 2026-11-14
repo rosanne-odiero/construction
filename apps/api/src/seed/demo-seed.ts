@@ -29,6 +29,7 @@ import { seedAttendance, type AttendanceSeedSummary } from "./attendance-seed.js
 import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
 import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
 import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
+import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 
 /**
@@ -56,7 +57,7 @@ type Audit = (
 ) => Promise<unknown>;
 
 type DemoAccount = {
-  key: "owner" | "projectManager" | "siteAgent" | "finance";
+  key: "owner" | "projectManager" | "siteAgent" | "finance" | "storekeeper";
   role: TenantSystemRole;
   identifier: string;
   displayName: string;
@@ -91,6 +92,14 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     identifier: "finance@jenga-bora.example.test",
     displayName: "Daniel Mwangi",
     totp: true,
+  },
+  {
+    // D5.3: keeps the site stores (issues, returns, wastage, transfers, counts).
+    key: "storekeeper",
+    role: "storekeeper",
+    identifier: "storekeeper@jenga-bora.example.test",
+    displayName: "Grace Wambui",
+    totp: false,
   },
 ];
 
@@ -200,7 +209,7 @@ export const DEMO_PROJECTS: readonly DemoProject[] = [
       { name: "Roof covered", dueDate: "2027-01-31", wbs: "3.4" },
       { name: "Practical completion", dueDate: "2027-04-30" },
     ],
-    team: ["projectManager", "siteAgent"],
+    team: ["projectManager", "siteAgent", "storekeeper"],
   },
   {
     code: "KIT-BNG",
@@ -243,7 +252,7 @@ export const DEMO_PROJECTS: readonly DemoProject[] = [
       { name: "Plastering complete", dueDate: "2026-12-15", wbs: "4" },
       { name: "Handover", dueDate: "2027-02-15" },
     ],
-    team: ["projectManager"],
+    team: ["projectManager", "storekeeper"],
   },
   {
     code: "SYO-TWN",
@@ -342,6 +351,7 @@ export type SeedSummary = {
   attendance: AttendanceSeedSummary;
   payroll: PayrollSeedSummary;
   procureToPay: ProcureToPaySeedSummary;
+  stores: StoresSeedSummary;
   schedule: ScheduleSeedSummary;
 };
 
@@ -524,6 +534,12 @@ export async function seedDemo(
     pmId: userOf("projectManager").id,
     agentId: userOf("siteAgent").id,
   });
+  const stores = await seedStores(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    storekeeperId: userOf("storekeeper").id,
+  });
   // After the attendance seed, so the company's public holidays shape the working calendar.
   const schedule = await seedSchedule(app, tenantId, owner.id);
 
@@ -537,6 +553,7 @@ export async function seedDemo(
     attendance,
     payroll,
     procureToPay,
+    stores,
     schedule,
   };
 }

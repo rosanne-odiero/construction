@@ -327,3 +327,4 @@ export * from "./safety.js";
 export * from "./supplier-portal.js";
 export * from "./plant.js";
 export * from "./documents.js";
+export * from "./client-portal.js";

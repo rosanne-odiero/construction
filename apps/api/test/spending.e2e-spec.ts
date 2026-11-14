@@ -1625,13 +1625,10 @@ describe("Spending and cash flow (real runtime role)", () => {
         `petty-cash/floats/${floatId}`,
       ])
         refused(await outsider.call("get", path), 403);
-      // A supplier member cannot even see that the expense exists: petty-cash expenses carry a
-      // restrictive "none for suppliers" policy (D7.2, D-102), so the lookup is 404 before the
-      // permission check; a client is refused by the permission check.
-      refused(
-        await outsider.call("get", `petty-cash/expenses/${expenseA}`),
-        outsider === supplierUser ? 404 : 403,
-      );
+      // Neither can even see that the expense exists: petty-cash expenses carry restrictive "none
+      // for suppliers" (D7.2, D-102) and "none for clients" (D7.1, D-132) policies, so the lookup
+      // is 404 before the permission check.
+      refused(await outsider.call("get", `petty-cash/expenses/${expenseA}`), 404);
       refused(await outsider.call("post", "petty-cash/sms/parse", { text: TILL_SMS }), 403);
       // Company settings (opening cash) and cost codes are internal too.
       refused(await outsider.call("get", "spending/settings"), 403);

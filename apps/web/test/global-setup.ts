@@ -130,6 +130,8 @@ const ROUTES = [
   "/valuations/projects/30000000-0000-4000-8000-000000000001/measure",
   "/valuations/projects/30000000-0000-4000-8000-000000000001/measurements/77300000-0000-4000-8000-000000000003",
   "/valuations/77200000-0000-4000-8000-000000000001",
+  "/valuations/projects/30000000-0000-4000-8000-000000000001/client",
+  "/valuations/client-portal",
   "/suppliers/60000000-0000-4000-8000-000000000001",
 ];
 /** D7.2 supplier portal pages, warmed as the supplier persona (others are redirected). */
@@ -145,6 +147,20 @@ const SUPPLIER_ROUTES = [
   "/supplier/join",
 ];
 
+/** D7.1 client portal pages, warmed as the client persona (others are redirected). */
+const CLIENT_ROUTES = [
+  "/portal",
+  "/portal/settings",
+  "/portal/projects/30000000-0000-4000-8000-000000000001",
+  "/portal/projects/30000000-0000-4000-8000-000000000001/progress",
+  "/portal/projects/30000000-0000-4000-8000-000000000001/photos",
+  "/portal/projects/30000000-0000-4000-8000-000000000001/diaries",
+  "/portal/projects/30000000-0000-4000-8000-000000000001/statement",
+  "/portal/projects/30000000-0000-4000-8000-000000000001/pay",
+  "/portal/projects/30000000-0000-4000-8000-000000000001/variations",
+  "/portal/projects/30000000-0000-4000-8000-000000000001/variations/36000000-0000-4000-8000-000000000001",
+];
+
 export default async function warmUp(config: FullConfig) {
   const baseURL = config.projects[0]?.use.baseURL;
   if (!baseURL) return;
@@ -156,6 +172,11 @@ export default async function warmUp(config: FullConfig) {
   for (const route of SUPPLIER_ROUTES)
     await fetch(`${baseURL}${route}`, {
       headers: { cookie: "pmb_at=supplier.warm-up" },
+      signal: AbortSignal.timeout(120_000),
+    }).catch(() => undefined);
+  for (const route of CLIENT_ROUTES)
+    await fetch(`${baseURL}${route}`, {
+      headers: { cookie: "pmb_at=client.warm-up" },
       signal: AbortSignal.timeout(120_000),
     }).catch(() => undefined);
 }

@@ -31,6 +31,8 @@ import {
   variationResponseSchema,
   variationsResponseSchema,
   variationVersionRequestSchema,
+  sendVariationToClientRequestSchema,
+  variationClientResponseSchema,
   type Instruction,
   type Project,
   type VariationDetail,
@@ -427,6 +429,8 @@ export function handleVariations(
     entry.variations.push(variation);
     return { ...detail(deps, project, entry, variation), status: 201 };
   }
+  const clientMatch = /^bq\/variations\/([^/]+)\/client$/.exec(rest);
+  if (clientMatch) return clientSendings(deps, method, body, projectBq, clientMatch[1]!);
   const variationMatch =
     /^bq\/variations\/([^/]+)(?:\/(lines|submit|approve|reject|reopen|cancel|rebase))?$/.exec(rest);
   if (!variationMatch) return null;
@@ -618,3 +622,66 @@ export function handleVariations(
 }
 
 export { netOf };
+
+/**
+ * D7.1: a variation's sendings to the client (`bq/variations/:id/client`). The mock project has
+ * one client user and does not wait for the client's approval.
+ */
+function clientSendings(
+  deps: BqDeps,
+  method: string,
+  body: unknown,
+  projectBq: () => { project: Project; entry: ProjectBq },
+  variationId: string,
+): Reply {
+  const { project, entry } = projectBq();
+  const variation = entry.variations.find((item) => item.id === variationId);
+  if (!variation) throw deps.fail(404, "not-found");
+  const requests = (variation.clientRequests ??= []);
+  const digest = variation.status === "submitted" ? digestOf(entry, variation) : null;
+  const blocker = () =>
+    variation.status !== "submitted"
+      ? ("status" as const)
+      : !deps.permissions().includes("bq.edit")
+        ? ("permission" as const)
+        : readOnly(project)
+          ? ("read-only" as const)
+          : requests.some((request) => request.snapshotDigest === digest)
+            ? ("already-sent" as const)
+            : null;
+  const view = (status?: number): Reply => ({
+    status,
+    body: {
+      approvalRequired: false,
+      clientMembers: 1,
+      requests: [...requests].reverse(),
+      currentDecision:
+        requests.find((request) => request.snapshotDigest === digest)?.decision?.decision ?? null,
+      permissions: { canSend: blocker() === null, sendBlocker: blocker() },
+    },
+    schema: variationClientResponseSchema,
+  });
+  if (method === "GET") return view();
+  if (method !== "POST") throw deps.fail(404, "not-found");
+  const input = deps.parse(sendVariationToClientRequestSchema, body);
+  const refused = blocker();
+  if (refused === "permission") throw deps.fail(403, "forbidden");
+  if (refused === "read-only") throw deps.fail(409, "project-read-only");
+  if (refused === "already-sent") throw deps.fail(409, "already-sent");
+  if (refused) throw deps.fail(409, "invalid-transition");
+  if (input.version !== variation.version) throw deps.fail(409, "version-conflict");
+  if (input.snapshotDigest !== digest) throw deps.fail(409, "variation-stale");
+  for (const request of requests)
+    if (request.state === "awaiting_decision") request.state = "withdrawn";
+  requests.push({
+    id: randomUUID(),
+    sentAt: now(),
+    sentBy: deps.actor,
+    message: input.message?.trim() || null,
+    snapshotDigest: digest!,
+    clientDigest: createHash("sha256").update(`client:${digest}`).digest("hex"),
+    state: "awaiting_decision",
+    decision: null,
+  });
+  return view(201);
+}

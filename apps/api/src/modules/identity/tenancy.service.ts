@@ -367,6 +367,19 @@ export class TenancyService {
       throw new ConflictException(
         "Already a member; roles cannot be changed through an invitation",
       );
+    // Checked before the membership exists: a new client-role member reads only the projects
+    // they are assigned to (restrictive RLS, D7.1), and these assignments are made below.
+    const invitedProjects = await tx.invitationProject.findMany({
+      where: { tenantId: invitation.tenantId, invitationId: invitation.id },
+      select: { projectId: true },
+    });
+    for (const { projectId } of invitedProjects) {
+      const project = await tx.project.findUnique({
+        where: { tenantId_id: { tenantId: invitation.tenantId, id: projectId } },
+        select: { id: true },
+      });
+      if (!project) throw new ConflictException("An invited project no longer exists");
+    }
     await tx.membership.create({
       data: {
         tenantId: invitation.tenantId,
@@ -375,15 +388,7 @@ export class TenancyService {
         customRoleId: grant.customRoleId,
       },
     });
-    const invitedProjects = await tx.invitationProject.findMany({
-      where: { tenantId: invitation.tenantId, invitationId: invitation.id },
-      select: { projectId: true },
-    });
     for (const { projectId } of invitedProjects) {
-      const project = await tx.project.findUnique({
-        where: { tenantId_id: { tenantId: invitation.tenantId, id: projectId } },
-      });
-      if (!project) throw new ConflictException("An invited project no longer exists");
       await tx.projectMembership.create({
         data: {
           tenantId: invitation.tenantId,

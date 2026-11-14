@@ -44,5 +44,7 @@ import { ValuationsService } from "./valuations/valuations.service.js";
     EarnedValueService,
     CertificateExportService,
   ],
+  // The client portal (D7.1) renders certified certificates with the D6.3 export.
+  exports: [ValuationsService, CertificateExportService],
 })
 export class ProgressModule {}

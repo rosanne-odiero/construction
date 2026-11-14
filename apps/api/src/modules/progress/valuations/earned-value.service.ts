@@ -30,6 +30,7 @@ import {
 import type { Scope } from "../../identity/access-policy.js";
 import type { Principal } from "../../identity/auth.service.js";
 import { TenantScope } from "../../identity/tenant-scope.service.js";
+import { clientReceiptsMinor } from "../../finance/client-ledger.js";
 import { minorOf, projectRef, SpendingAccess, type Tx } from "../../finance/spending-common.js";
 import { itemFigures, loadProjectFacts } from "../../finance/spending-report.service.js";
 import { toCalendarDate } from "../../projects/project-mappers.js";
@@ -77,21 +78,8 @@ export class EarnedValueService {
           message: "Earned value is reported up to today",
         });
       const dataDate = asOf ?? today;
-      const version = await bqInForce(tx, access.tenantId, projectId);
-      const items: ItemRow[] = version
-        ? await tx.bqItem.findMany({
-            where: { tenantId: access.tenantId, versionId: version.id },
-            include: itemWithBill,
-          })
-        : [];
-      const measured = items.filter((item) => measurementBasis(measurable(item)) !== null);
-      const bacMinor = measured.reduce((sum, item) => sum + minorOf(item.amountMinor), 0);
-      const approved = await approvedMeasurements(tx, access.tenantId, projectId);
-
-      // EV as a running total of value changes: each approved measurement in force replaces the
-      // item's previous value from its measurement date.
-      const evChanges = earnedValueChanges(measured, approved);
-      const ev = runningTotal(evChanges);
+      const { version, bacMinor, evChanges, ev, baseline, pv, linked, spread, baselineFinish } =
+        await plannedAndEarned(tx, access.tenantId, projectId);
       const costRows = await tx.costEntry.groupBy({
         by: ["occurredOn"],
         where: { tenantId: access.tenantId, projectId, measure: "accrued" },
@@ -103,65 +91,6 @@ export class EarnedValueService {
           valueMinor: minorOf(row._sum.amountMinor ?? 0n),
         })),
       );
-
-      // PV from the current (newest) schedule baseline.
-      const baseline = await tx.scheduleBaseline.findFirst({
-        where: { tenantId: access.tenantId, projectId },
-        orderBy: { baselineNo: "desc" },
-        include: { items: true },
-      });
-      let pv: PlannedValue | null = null;
-      let linked = 0;
-      let spread = 0;
-      let baselineFinish: string | null = null;
-      if (baseline) {
-        const holidays = baseline.includePublicHolidays
-          ? (
-              await tx.publicHoliday.findMany({
-                where: { tenantId: access.tenantId },
-                select: { holidayDate: true },
-              })
-            ).map((row) => toCalendarDate(row.holidayDate))
-          : [];
-        const calendar = workingCalendar(baseline.workingWeekdays, holidays);
-        const tasks = baseline.items.filter((item) => item.kind === "task");
-        const activities = await tx.scheduleActivity.findMany({
-          where: {
-            tenantId: access.tenantId,
-            projectId,
-            id: { in: tasks.map((item) => item.refId) },
-            bqItemLineageId: { not: null },
-          },
-          select: { id: true, bqItemLineageId: true },
-        });
-        const windows = new Map<string, PlannedWindow[]>();
-        for (const activity of activities) {
-          const item = tasks.find((task) => task.refId === activity.id)!;
-          const list = windows.get(activity.bqItemLineageId!) ?? [];
-          list.push({
-            start: toCalendarDate(item.startDate),
-            finish: toCalendarDate(item.finishDate),
-          });
-          windows.set(activity.bqItemLineageId!, list);
-        }
-        const starts = baseline.items.map((item) => toCalendarDate(item.startDate));
-        const finishes = baseline.items.map((item) => toCalendarDate(item.finishDate));
-        const start = [toCalendarDate(baseline.startDate), ...starts].sort()[0]!;
-        baselineFinish = baseline.projectFinish
-          ? toCalendarDate(baseline.projectFinish)
-          : ([...finishes].sort().at(-1) ?? start);
-        const span = { start, finish: baselineFinish < start ? start : baselineFinish };
-        pv = new PlannedValue(
-          calendar,
-          span,
-          measured.map((item) => {
-            const own = windows.get(item.lineageId) ?? [];
-            if (own.length) linked += 1;
-            else spread += 1;
-            return { amountMinor: minorOf(item.amountMinor), windows: own };
-          }),
-        );
-      }
 
       const stock = await tx.$queryRaw<{ value: string | null }[]>`
         SELECT sum(b.balance_value_minor)::text AS value FROM (
@@ -199,6 +128,9 @@ export class EarnedValueService {
         },
         _sum: { receivedMinor: true },
       });
+      const clientReceipts = await clientReceiptsMinor(tx, access.tenantId, [projectId], {
+        to: dataDate,
+      });
       return earnedValueResponseSchema.parse({
         project: projectRef(project.project),
         dataDate,
@@ -226,8 +158,12 @@ export class EarnedValueService {
           certifiedWorkMinor: certified.length ? minorOf(certified.at(-1)!.workDoneMinor!) : null,
           certifiedNetMinor: certified.reduce((sum, row) => sum + minorOf(row.amountDueMinor!), 0),
           invoicedMinor: null,
+          // Manual cash-flow receipts plus client receipts recorded against certificates (D7.1,
+          // net of reversals); null while neither exists.
           receivedMinor:
-            received._sum.receivedMinor === null ? null : minorOf(received._sum.receivedMinor),
+            received._sum.receivedMinor === null && clientReceipts === null
+              ? null
+              : minorOf(received._sum.receivedMinor ?? 0n) + (clientReceipts ?? 0),
         },
         notes: {
           stockOnHandMinor: stock[0]?.value ? stockValueToMinor(stock[0].value) : 0,
@@ -378,6 +314,100 @@ const itemRow = (
   percentComplete: row.percentComplete,
   ...rowOf(row.input),
 });
+
+/**
+ * The planned and earned value inputs shared by the finance view and the client portal (D7.1):
+ * the BQ in force, its measured items' budget at completion, earned value as a running total of
+ * approved measurements in force (each replaces the item's previous value from its measurement
+ * date) and planned value from the newest schedule baseline. No cost data.
+ */
+export async function plannedAndEarned(tx: Tx, tenantId: string, projectId: string) {
+  const version = await bqInForce(tx, tenantId, projectId);
+  const items: ItemRow[] = version
+    ? await tx.bqItem.findMany({
+        where: { tenantId, versionId: version.id },
+        include: itemWithBill,
+      })
+    : [];
+  const measured = items.filter((item) => measurementBasis(measurable(item)) !== null);
+  const bacMinor = measured.reduce((sum, item) => sum + minorOf(item.amountMinor), 0);
+  const approved = await approvedMeasurements(tx, tenantId, projectId);
+
+  // EV as a running total of value changes: each approved measurement in force replaces the
+  // item's previous value from its measurement date.
+  const evChanges = earnedValueChanges(measured, approved);
+  const ev = runningTotal(evChanges);
+  // PV from the current (newest) schedule baseline.
+  const baseline = await tx.scheduleBaseline.findFirst({
+    where: { tenantId, projectId },
+    orderBy: { baselineNo: "desc" },
+    include: { items: true },
+  });
+  let pv: PlannedValue | null = null;
+  let linked = 0;
+  let spread = 0;
+  let baselineFinish: string | null = null;
+  if (baseline) {
+    const holidays = baseline.includePublicHolidays
+      ? (
+          await tx.publicHoliday.findMany({
+            where: { tenantId },
+            select: { holidayDate: true },
+          })
+        ).map((row) => toCalendarDate(row.holidayDate))
+      : [];
+    const calendar = workingCalendar(baseline.workingWeekdays, holidays);
+    const tasks = baseline.items.filter((item) => item.kind === "task");
+    const activities = await tx.scheduleActivity.findMany({
+      where: {
+        tenantId,
+        projectId,
+        id: { in: tasks.map((item) => item.refId) },
+        bqItemLineageId: { not: null },
+      },
+      select: { id: true, bqItemLineageId: true },
+    });
+    const windows = new Map<string, PlannedWindow[]>();
+    for (const activity of activities) {
+      const item = tasks.find((task) => task.refId === activity.id)!;
+      const list = windows.get(activity.bqItemLineageId!) ?? [];
+      list.push({
+        start: toCalendarDate(item.startDate),
+        finish: toCalendarDate(item.finishDate),
+      });
+      windows.set(activity.bqItemLineageId!, list);
+    }
+    const starts = baseline.items.map((item) => toCalendarDate(item.startDate));
+    const finishes = baseline.items.map((item) => toCalendarDate(item.finishDate));
+    const start = [toCalendarDate(baseline.startDate), ...starts].sort()[0]!;
+    baselineFinish = baseline.projectFinish
+      ? toCalendarDate(baseline.projectFinish)
+      : ([...finishes].sort().at(-1) ?? start);
+    const span = { start, finish: baselineFinish < start ? start : baselineFinish };
+    pv = new PlannedValue(
+      calendar,
+      span,
+      measured.map((item) => {
+        const own = windows.get(item.lineageId) ?? [];
+        if (own.length) linked += 1;
+        else spread += 1;
+        return { amountMinor: minorOf(item.amountMinor), windows: own };
+      }),
+    );
+  }
+  return {
+    version,
+    measured,
+    bacMinor,
+    evChanges,
+    ev,
+    baseline,
+    pv,
+    linked,
+    spread,
+    baselineFinish,
+  };
+}
 
 /**
  * Value changes over time: for each measured item, each approved measurement (newest of its day)

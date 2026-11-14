@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { ClipboardCheck, Ruler } from "lucide-react";
+import { ClipboardCheck, Coins, Ruler } from "lucide-react";
 import { valuationsOverviewResponseSchema } from "@pm-buddy/validation";
 import { PageHeader } from "@/components/page-header";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
@@ -40,13 +40,24 @@ export default async function ValuationsPage() {
         title={t("title")}
         description={t("description")}
         actions={
-          approvalQueue > 0 ? (
-            <Button asChild size="sm">
-              <Link href="/valuations/approvals">
-                <ClipboardCheck aria-hidden /> {t("queue", { count: approvalQueue })}
-              </Link>
-            </Button>
-          ) : null
+          <>
+            {approvalQueue > 0 ? (
+              <Button asChild size="sm">
+                <Link href="/valuations/approvals">
+                  <ClipboardCheck aria-hidden /> {t("queue", { count: approvalQueue })}
+                </Link>
+              </Button>
+            ) : null}
+            {["config.manage", "finance.view", "finance.manage"].some((key) =>
+              session.company.permissions.includes(key),
+            ) ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/valuations/client-portal">
+                  <Coins aria-hidden /> {t("clientPortalSettings")}
+                </Link>
+              </Button>
+            ) : null}
+          </>
         }
       />
       {projects.length === 0 ? (

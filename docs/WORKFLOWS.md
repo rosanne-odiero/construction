@@ -504,6 +504,59 @@ stateDiagram-v2
 
 Supplier-facing statuses (`supplierInvoiceStatus`): `submitted` → submitted; `matched` → under review; `disputed` → disputed; `approved` → approved; `partly_settled` → partly paid; `settled` → paid; `cancelled` → cancelled; a staff `draft` is not shown. Audit: `supplier_portal.user_invited/user_activated/user_revoked`, `supplier_portal.lpo_acknowledged`, `supplier_portal.invoice_submitted` (plus the invoice's own `invoice.*` events), `supplier_portal.statement_exported`.
 
+## Client portal: receipts and variation decisions (D7.1)
+
+Implemented in D7.1 ([ARCHITECTURE §4.15](./ARCHITECTURE.md#415-client-portal-d71)). Neither flow adds a state to D6.3's valuations or D2.3's variations: receipts are entries against a certified certificate, and the client's decision is a gate on `submitted → approved`.
+
+### Client receipts
+
+```mermaid
+stateDiagram-v2
+  [*] --> owed : certificate certified (D6.3; due = certified on + payment terms in force)
+  owed --> part_paid : receipt recorded (finance.manage; ≤ outstanding)
+  part_paid --> paid : receipts reach the certificate's total
+  owed --> paid : one receipt for the whole amount
+  part_paid --> owed : the only receipt reversed (reason)
+  paid --> part_paid : a receipt reversed (reason)
+  owed --> overdue : due date passes (derived, Nairobi dates)
+  part_paid --> overdue : due date passes with something outstanding
+```
+
+The states are derived from the entries, never stored (`certificateBalances` in `packages/domain`); a correcting (negative) certificate is a **credit** applied to the oldest certificates still owed.
+
+| Workflow / transition | Actor, scope and preconditions | Side effects and audit event | Retry |
+|---|---|---|---|
+| Receipt recorded | `finance.manage` on the project; open project; a **certified** certificate (409 `certificate-not-certified`); amount > 0 and ≤ outstanding (409 `receipt-exceeds-outstanding`, checked again under a lock by `app.guard_client_payment`); received today or earlier and not before certification (422 `receipt-date-invalid`); method, reference; ≤ 200 entries per certificate | Append-only `client_payments` row; the client's statement, overview and pay page change at once; the forecast and earned value follow (D-138); `client_payment.recorded` (IDs only) | Client `id` + `Idempotency-Key` + digest: a replay returns the view; another payload is 409 `idempotency-key-reused`; the same ID under another key 409 `payment-id-conflict` |
+| Receipt reversed | `finance.manage`; open project; a receipt not already reversed (409 `receipt-already-reversed`; unique `reverses_id`); reason (≥ 3 characters, shown to the client) | A reversal entry for the full amount; `client_payment.reversed` | As above |
+| Client terms changed | `projects.manage`; open project; on the version read (409 `version-conflict`) | New `project_client_settings` version; certificates already certified keep their due dates; `client_portal.terms_changed` | Expected version |
+| Paybill instructions changed | `config.manage` + step-up; on the version read | New company version, shown to clients at once; `client_portal.payment_instructions_changed` | Expected version |
+| Pay with M-Pesa (STK Push) | an assigned client; something outstanding (409 `nothing-outstanding`, 422 `amount-exceeds-outstanding`) | **Refused with 503 `stk-push-unavailable`** until D4.2 (the client pays by Paybill; finance records the receipt) | — |
+| Anything else (edit, delete) | — | Refused (no UPDATE/DELETE for `pmb_app`; the trigger refuses every role) | — |
+
+Once D4.2 exists, a payment request moves `created → submitting → pending → confirmed | failed` (`unknown` reconciled before any retry, `cancelled` only before submission; `CLIENT_PAYMENT_REQUEST_TRANSITIONS`); only a reconciled provider callback confirms, and only then is a receipt recorded.
+
+### Variation decisions by the client
+
+```mermaid
+stateDiagram-v2
+  [*] --> awaiting_decision : staff send the current submission (bq.edit; client view + digest frozen)
+  awaiting_decision --> approved : client approves on the digest (once)
+  awaiting_decision --> rejected : client rejects on the digest with a comment (once)
+  awaiting_decision --> withdrawn : the variation is reopened, rebased, rejected, cancelled or approved first
+  approved --> [*]
+  rejected --> [*]
+  withdrawn --> [*]
+```
+
+| Workflow / transition | Actor, scope and preconditions | Side effects and audit event | Retry |
+|---|---|---|---|
+| Send to the client | `bq.edit` on the project; open project; the variation is `submitted` (409 `invalid-transition`) and the request quotes its version and snapshot digest (409 `version-conflict`, `variation-stale`); not already sent for this submission (409 `already-sent`); a client user is assigned (409 `no-client-assigned`) | `variation_client_requests` row with the frozen client view and its SHA-256; `client_portal.variation_sent` | Expected version and digest |
+| Client approves / rejects | an assigned client (portal, `app.acts_as_client`); the sending is still open (409 `request-closed`) and not decided (409 `already-decided`); quotes the client digest (409 `variation-stale`); a rejection needs a comment; 30 per hour | `variation_client_decisions` row; staff see it on the variation page; `client_portal.variation_decided` | — (once) |
+| Internal approval (D2.3) | unchanged (`bq.approve_variation`, step-up, maker-checker, digest), **plus**: when the project's client terms require it, the client approved this submission (409 `client-approval-required`; trigger `app.hold_variation_for_client`) | As D2.3 | As D2.3 |
+| Reject, rebase, cancel, reopen (D2.3) | unchanged; never wait for the client | An open sending becomes *withdrawn* (derived) | As D2.3 |
+
+A rejection by the client does not reject the variation: staff decide what to do (revise and resubmit, then send again; or reject it). When the project does not require client approval, the client's decision is advisory and shown beside the internal one.
+
 ## Stores (D5.3)
 
 Implemented in D5.3 ([ARCHITECTURE §4.6](./ARCHITECTURE.md#46-stores-d53)). The transition tables live in `packages/domain/src/stores/lifecycle.ts` and are repeated by `app.guard_stock_transfer` and `app.guard_stock_take`; stock itself only changes through ledger entries (`app.post_stock_entry`), never by editing a balance.

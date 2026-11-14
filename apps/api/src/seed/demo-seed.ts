@@ -37,6 +37,7 @@ import { seedDocuments, type DocumentsSeedSummary } from "./documents-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 import { seedValuations, type ValuationsSeedSummary } from "./demo-valuations.js";
+import { seedClientPortal, type ClientPortalSeedSummary } from "./demo-client-portal.js";
 import { seedSupplierPortal, type SupplierPortalSeedSummary } from "./demo-supplier-portal.js";
 
 /**
@@ -416,6 +417,7 @@ export type SeedSummary = {
   valuations: ValuationsSeedSummary;
   safety: SafetySeedSummary;
   supplierPortal: SupplierPortalSeedSummary;
+  clientPortal: ClientPortalSeedSummary;
   plant: PlantSeedSummary;
   documents: DocumentsSeedSummary;
 };
@@ -661,6 +663,20 @@ export async function seedDemo(
     },
     { resetCredentials: options.resetCredentials },
   );
+  // After valuations (certified certificates to pay) and documents (an open instruction): the
+  // client's account on RUI-HTS, Paybill and FX settings, a part payment and a variation sent to
+  // the client. It adds nothing the earlier summaries count.
+  const clientPortal = await seedClientPortal(
+    app,
+    tenantId,
+    {
+      ownerId: owner.id,
+      projectManagerId: userOf("projectManager").id,
+      siteAgentId: userOf("siteAgent").id,
+      financeId: userOf("finance").id,
+    },
+    { resetCredentials: options.resetCredentials },
+  );
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
@@ -679,6 +695,7 @@ export async function seedDemo(
     valuations,
     safety,
     supplierPortal,
+    clientPortal,
     plant,
     documents,
   };

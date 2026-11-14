@@ -665,6 +665,34 @@ erDiagram
 | (new) ValuationAdjustment | `valuation_adjustments` | Draft input: `kind` (`advance` > 0, `advance_recovery` < 0, `contra_charge` < 0, `other` ≠ 0), description, signed `amount_minor`, created by/at. Insert or delete while the interim is a draft; never updated |
 | Subcontract, SubcontractItem, PieceRateJob | — | Not in D6.3 part A (part B) |
 
+**Implemented in D7.1 (client portal)** (migration `20261130090000_client_portal`; [ARCHITECTURE §4.15](./ARCHITECTURE.md#415-client-portal-d71)). Seven tables, each with `tenant_id`, forced RLS with `WITH CHECK` on `app.current_tenant_id()`, composite `(tenant_id, …)` foreign keys (to projects, valuations `(tenant_id, project_id, id)`, the reversed receipt `(tenant_id, valuation_id, id)` so a reversal belongs to the same certificate, variations `(tenant_id, project_id, id)` and sendings), times stamped by the database clock (`clock_timestamp()`), and `pmb_app` privileges without DELETE or TRUNCATE on any of them and without UPDATE except on `client_preferences`. Guard triggers (`app.guard_project_client_settings`, `app.guard_client_payment_instructions`, `app.guard_fx_rate`, `app.stamp_client_preference`, `app.guard_client_payment`, `app.guard_variation_client_request`, `app.guard_variation_client_decision`) and `app.hold_variation_for_client` on `variation_orders` repeat the API's rules. Restrictive RLS policies named `<table>_client_portal` (20 project-scoped ones for `client`-role members and 19 that give them none of the company's working records) sit beside tenant isolation. Money is `bigint` KES minor units.
+
+```mermaid
+erDiagram
+  Project ||--o{ ProjectClientSettings : "client terms (versions)"
+  Valuation ||--o{ ClientPayment : "receipts and reversals"
+  ClientPayment |o--o| ClientPayment : "reversed by"
+  VariationOrder ||--o{ VariationClientRequest : "sent to the client"
+  VariationClientRequest ||--o| VariationClientDecision : "decided once"
+  User ||--o| ClientPreference : "display currency"
+  Tenant ||--o{ ClientPaymentInstructions : "Paybill (versions)"
+  Tenant ||--o{ FxRate : "indicative rates"
+```
+
+| Entity | Implemented as | Notes |
+|---|---|---|
+| (new) ProjectClientSettings | `project_client_settings` | Append-only versions per project (primary key `(tenant_id, project_id, version)`): `client_approval_required`, `payment_terms_days` (0–120), `created_by/at`. No row = the defaults (not required, 14 days). A certificate keeps the version in force on its certification date |
+| (new) ClientPaymentInstructions | `client_payment_instructions` | Company-level append-only versions (primary key `(tenant_id, version)`): `paybill_number`, `till_number` (5–7 digits), `account_name`, `account_format` (`project_certificate`, `project`), `bank_instructions`; at least one way to pay; `created_by/at` |
+| FxRate | `fx_rates` | Append-only: `currency` (`USD`, `GBP`, `EUR`), `kes_per_unit` `numeric(9,4)` (1–10,000), `rate_date` (a date, today or earlier, instead of the target's `as_of` timestamp), `source`, `created_by/at`. Usable for 31 days (derived) |
+| (new) ClientPreference | `client_preferences` | Primary key `(tenant_id, user_id)`: `display_currency` (`KES`, `USD`, `GBP`, `EUR`), `updated_at` (database clock). Its owner alone reads and writes it (restrictive policy) |
+| (new) ClientPayment | `client_payments` | Append-only: `kind` (`receipt`, `reversal`), `project_id`, `valuation_id` (a certified certificate), `amount_minor` (> 0), `received_on`, receipt `method` (`mpesa_paybill`, `bank`, `cheque`, `cash`), `reference`, `note` (staff only); reversal `reverses_id` (unique: once) and `reason`; `idempotency_key` (unique per company), `request_digest`, `recorded_by/at`. Received = receipts − reversals; never above the certificate's total |
+| (new) VariationClientRequest | `variation_client_requests` | A sending of the variation's current submission: `snapshot_digest` and `submitted_at` as stored on the variation (unique `(variation_id, submitted_at)`: one per submission), `client_view` (JSON: what the client sees), `client_digest` (SHA-256 of it), `message`, `sent_by/at`. Never changed; its state (awaiting, approved, rejected, withdrawn) is derived |
+| (new) VariationClientDecision | `variation_client_decisions` | One per sending (unique `request_id`): `decision` (`approved`, `rejected`; a rejection needs a `comment`), `client_digest` quoted, `decided_by` (an assigned client), `decided_at`. Never changed |
+| PaymentProviderRequest (client STK Push) | — | Not in D7.1: the `ClientPaymentRequests` boundary and its states are in code (`packages/domain`), the table comes with D4.2 |
+
+Client balances and statements are computed from `valuations` (certified) and `client_payments` (no table): see `clientStatement()` in `packages/domain` and `loadClientLedger()` in `apps/api/src/modules/finance/client-ledger.ts`.
+
+
 ## 5. Materials, procurement and stores
 
 ```mermaid

@@ -129,3 +129,4 @@ export * from "./valuations/index.js";
 export * from "./safety/index.js";
 export * from "./plant/index.js";
 export * from "./documents/index.js";
+export * from "./client-portal/index.js";

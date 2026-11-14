@@ -26,6 +26,7 @@ import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import { BqAccess, bqConflict, bqProblem, recordConflict } from "./bq-access.js";
 import { peopleOf, personOf, type People } from "./bq-mappers.js";
+import { refuseClientPortalMember } from "../portals/client/client-portal-access.js";
 
 type InstructionRow = Prisma.InstructionGetPayload<object>;
 type Counts = { total: number; approved: number; pending: number };
@@ -168,6 +169,7 @@ export class InstructionsService {
   list(principal: Principal, projectId: string, query: { status?: string }, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       const { project, effective } = await this.access.load(scope, projectId, "bq.view");
+      refuseClientPortalMember(scope);
       const rows = await scope.tx.instruction.findMany({
         where: {
           tenantId: scope.access.tenantId,
@@ -192,6 +194,7 @@ export class InstructionsService {
   get(principal: Principal, projectId: string, instructionId: string, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       await this.access.load(scope, projectId, "bq.view");
+      refuseClientPortalMember(scope);
       const row = await InstructionsService.row(scope, projectId, instructionId);
       const [instruction] = await this.wire(scope, projectId, [row]);
       return instructionResponseSchema.parse({ instruction });

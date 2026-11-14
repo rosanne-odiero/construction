@@ -22,6 +22,7 @@ import type { Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import { loadCalendar } from "../payroll/batch-builder.js";
+import { clientReceiptsMinor, loadClientLedger } from "./client-ledger.js";
 import { nextId } from "../procurement/catalogue-store.js";
 import { peopleOf, personOf, toCalendarDate } from "../procurement/procurement-mappers.js";
 import {
@@ -56,10 +57,14 @@ type Line = ForecastItem & {
  * - LPO commitments: approved LPOs not yet invoiced (incl. VAT) at delivery date (else approval
  *   date) + credit days (estimated);
  * - petty-cash top-ups requested or approved and not yet paid, now;
- * - manual lines: expected client receipts (until certificates exist, D6.3/D7.1) and other
- *   expected payments, on their expected date (overdue shown now).
+ * - certified certificates (D6.3) still owed by the client (D7.1 client ledger, after recorded
+ *   receipts and credits) on their due date; overdue shown now (recorded);
+ * - manual lines: other expected client receipts (deposits, instalments not yet certified) and
+ *   other expected payments, on their expected date (overdue shown now). A certificate's
+ *   receipts are recorded as client receipts (D7.1), not as manual lines, so nothing counts twice.
  * The opening position is the company's entered opening cash moved by what was recorded since
- * (company view), or a project's recorded receipts − payments to date (derived).
+ * (manual receipts and client receipts net of reversals, less payments; company view), or a
+ * project's recorded receipts − payments to date (derived).
  */
 @Injectable()
 export class CashFlowService {
@@ -425,6 +430,15 @@ export class CashFlowService {
         "recorded",
         { kind: "cash_flow_item", id: item.id, label: item.description },
       );
+
+    // Certified certificates the client still owes, on their due date.
+    const ledger = await loadClientLedger(tx, tenantId, projectId, project.code, today);
+    for (const certificate of ledger.certificates)
+      push("client_receipts", "in", certificate.dueDate, certificate.outstandingMinor, "recorded", {
+        kind: "certificate",
+        id: certificate.id,
+        label: certificate.number,
+      });
     return lines;
   }
 
@@ -465,7 +479,13 @@ export class CashFlowService {
         _sum: { amountMinor: true },
       }),
     ]);
-    const receivedSinceMinor = minorOf(received._sum.receivedMinor ?? 0n);
+    const clientReceipts = await clientReceiptsMinor(
+      tx,
+      tenantId,
+      projectIds,
+      since ? { from: since } : {},
+    );
+    const receivedSinceMinor = minorOf(received._sum.receivedMinor ?? 0n) + (clientReceipts ?? 0);
     const paidSinceMinor =
       minorOf(settled._sum.amountMinor ?? 0n) + minorOf(topUps._sum.amountMinor ?? 0n);
     if (!company)

@@ -114,6 +114,12 @@ import {
 import { handleSafety, initialSafety, type SafetyState } from "./mock-safety.mts";
 import { handlePlant, initialPlant, type PlantState } from "./mock-plant.mts";
 import {
+  clientPortalFile,
+  handleClientPortalStaff,
+  initialClientPortalStaff,
+  type ClientPortalStaffState,
+} from "./mock-client-portal.mts";
+import {
   documentDownload,
   handleDocuments,
   initialDocuments,
@@ -221,6 +227,8 @@ type State = {
   plant: PlantState;
   /** D8.4 documents, compliance, instructions and approvals (mock-documents.mts). */
   documents: DocumentsState;
+  /** D7.1 client payments, client terms, Paybill instructions and FX rates (mock-client-portal.mts). */
+  clientPortal: ClientPortalStaffState;
 };
 
 const states = new Map<string, State>();
@@ -484,6 +492,7 @@ function fixture(persona: Persona): State {
     stores: initialStores(procurement, bq.buildups),
     spending: initialSpending(projectInfo(projects)),
     supplierPortal: initialSupplierPortalUsers(),
+    clientPortal: initialClientPortalStaff(),
     projects,
     labour,
     attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
@@ -835,9 +844,13 @@ async function handle(
       throw new HttpError(403, "forbidden");
     return handlePortalPersona(
       persona,
+      session,
       method,
       path,
+      query,
+      body,
       (status, code) => new HttpError(status, code),
+      parse,
     );
   }
   const state = stateFor(req);
@@ -966,6 +979,28 @@ async function handle(
     raw,
   );
   if (documents) return documents;
+  const clientPortal = handleClientPortalStaff(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      project: (projectId) =>
+        state.projects.find((entry) => entry.project.id === projectId)?.project ?? null,
+      projectPermissions: (projectId) => valuationPermissions(state, projectId),
+      companyPermissions: rolePermissions(state),
+      tenantWide: isTenantWide(state.persona),
+      requireStepUp: () => requireStepUp(state),
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+    },
+    state.clientPortal,
+    method,
+    path,
+    body,
+  );
+  if (clientPortal) return clientPortal;
   const valuations = handleValuations(
     {
       fail: (status, code) => new HttpError(status, code),
@@ -1691,6 +1726,52 @@ const server = createServer((req, res) => {
         "Cache-Control": "no-store",
       });
       return res.end(file.content);
+    }
+    // The client's photo images, statements and certificate PDFs are bytes.
+    if (
+      persona === "client" &&
+      req.method === "GET" &&
+      /^\/portal\/client\/projects\/[^/]+\/(photos\/[^/]+\/image|statement\/export\/|certificates\/)/.test(
+        path,
+      )
+    ) {
+      const file = clientPortalFile(path);
+      if (!file) return send(res, 404, { code: "not-found" }, true);
+      res.writeHead(200, {
+        "Content-Type": file.contentType,
+        ...(file.filename
+          ? { "Content-Disposition": `attachment; filename="${file.filename}"` }
+          : {}),
+        "Cache-Control": "no-store",
+      });
+      return res.end(file.content);
+    }
+    // Staff statement exports are bytes too.
+    const staffStatement = /^\/projects\/([^/]+)\/client-payments\/statement\/(pdf|xlsx)$/.exec(
+      path,
+    );
+    if (staffStatement && req.method === "GET") {
+      try {
+        const state = stateFor(req);
+        const permissions = valuationPermissions(state, staffStatement[1]!);
+        if (
+          !["bq.edit", "finance.view", "finance.manage"].some((p) =>
+            permissions.includes(p as Permission),
+          )
+        )
+          return send(res, 403, { code: "forbidden" }, true);
+        const pdf = staffStatement[2] === "pdf";
+        res.writeHead(200, {
+          "Content-Type": pdf
+            ? "application/pdf"
+            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="client-statement.${staffStatement[2]}"`,
+          "Cache-Control": "no-store",
+        });
+        return res.end(Buffer.from(pdf ? "%PDF-1.4\n% mock client statement\n%%EOF\n" : "PK mock"));
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
     }
     // Procurement documents and GRN photos are downloaded as bytes, not JSON.
     const download = /^\/procurement\/documents\/([^/]+)$/.exec(path);

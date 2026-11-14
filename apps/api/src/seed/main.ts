@@ -128,6 +128,19 @@ function print(summary: SeedSummary) {
       (invoice) => `  invoice ${invoice.number} — ${invoice.status} (submitted by the supplier)`,
     ),
   );
+  const { clientPortal } = summary;
+  lines.push(
+    "",
+    `Client portal (synthetic, ${clientPortal.created ? "created" : "already present"}): ${clientPortal.project}`,
+    `  ${clientPortal.account.displayName} — client portal user (amounts also shown in ${clientPortal.displayCurrency}, indicative)`,
+    `    sign in as: ${clientPortal.account.identifier}`,
+    clientPortal.account.password
+      ? `    password:   ${clientPortal.account.password}`
+      : "    password:   unchanged (run with --reset-credentials for a new one)",
+    `  Paybill ${clientPortal.paybill ?? "not set"} (Safaricom sandbox shortcode, not a live Paybill); rates: ${clientPortal.rates.join(", ") || "none"} (synthetic)`,
+    `  ${clientPortal.receipts} client receipt(s) recorded; variation ${clientPortal.variation ? `${clientPortal.variation.number} ${clientPortal.variation.state.replaceAll("_", " ")}` : "not sent"}`,
+    "  Pay with M-Pesa (STK Push) is disabled until the Daraja integration (D4.2).",
+  );
   const { plant } = summary;
   lines.push(
     "",

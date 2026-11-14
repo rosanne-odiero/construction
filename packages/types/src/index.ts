@@ -321,3 +321,4 @@ export * from "./procure-to-pay.js";
 export * from "./stores.js";
 export * from "./schedule.js";
 export * from "./quality.js";
+export * from "./safety.js";

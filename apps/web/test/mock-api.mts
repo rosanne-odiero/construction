@@ -28,6 +28,7 @@ import {
   isProjectPermission,
   PROJECT_ASSIGNABLE_PERMISSIONS,
   PROJECT_PERMISSIONS,
+  SAFETY_READ_PERMISSIONS,
   SYSTEM_ROLE_PERMISSIONS,
   TENANT_PERMISSIONS,
   type Permission,
@@ -89,6 +90,7 @@ import { handleP2p, initialP2p, p2pDocument, type P2pDeps, type P2pState } from 
 import { handleStores, initialStores, type StoresState } from "./mock-stores.mts";
 import { handleSchedule, initialSchedule, type ScheduleState } from "./mock-schedule.mts";
 import { handleQuality, initialQuality, type QualityState } from "./mock-quality.mts";
+import { handleSafety, initialSafety, type SafetyState } from "./mock-safety.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -178,6 +180,8 @@ type State = {
   schedule: ScheduleState;
   /** D6.1 quality: templates, inspections, tests, snags, completion (mock-quality.mts). */
   quality: QualityState;
+  /** D8.2 health and safety (mock-safety.mts). */
+  safety: SafetyState;
 };
 
 const states = new Map<string, State>();
@@ -400,6 +404,19 @@ function fixture(persona: Persona): State {
         pm: { id: PM_ID, displayName: "Brian Otieno" },
         agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
       },
+    ),
+    safety: initialSafety(
+      { projectId: RUIRU_ID, siteId: MAIN_PLOT_ID },
+      {
+        owner: { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+        pm: { id: PM_ID, displayName: "Brian Otieno" },
+        agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
+      },
+      labour.labourers.map(({ id: labourerId, workerNo, fullName }) => ({
+        id: labourerId,
+        workerNo,
+        fullName,
+      })),
     ),
     photos: initialPhotos(RUIRU_ID, MAIN_PLOT_ID),
     bq,
@@ -945,6 +962,95 @@ async function handle(
   });
   if (path.startsWith("/quality/"))
     return handleQuality(qualityDeps(null), state.quality, method, path, query, body)!;
+  const safetyDeps = (entry: ProjectState | null) => ({
+    project: entry
+      ? {
+          id: entry.project.id,
+          code: entry.project.code,
+          name: entry.project.name,
+          status: entry.project.status,
+        }
+      : null,
+    sites: entry ? entry.sites.map(({ site }) => ({ id: site.id, name: site.name })) : [],
+    permissions: entry ? projectPermissions(state, entry) : [],
+    somewhere,
+    companyPermissions: rolePermissions(state),
+    actor,
+    // Members who can read safety records, with their effective permissions on the project:
+    // role ∩ assignment (owner: all), as projectStaff() in the API.
+    staff: entry
+      ? (state.team.get(entry.project.id) ?? [])
+          .map((member) => ({
+            id: member.userId,
+            displayName: member.displayName,
+            permissions:
+              member.role === "owner"
+                ? PROJECT_PERMISSIONS
+                : SYSTEM_ROLE_PERMISSIONS[member.role].filter(
+                    (key) => isProjectPermission(key) && (member.assignment ?? []).includes(key),
+                  ),
+          }))
+          .filter(
+            (member) =>
+              member.permissions.includes("projects.view") &&
+              SAFETY_READ_PERMISSIONS.some((key) => member.permissions.includes(key)),
+          )
+          .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      : [],
+    labourers: entry
+      ? state.labour.labourers
+          .filter((labourer) =>
+            labourer.engagements.some((engagement) => engagement.projectId === entry.project.id),
+          )
+          .map((labourer) => ({
+            id: labourer.id,
+            workerNo: labourer.workerNo,
+            fullName: labourer.fullName,
+            gangId:
+              state.labour.gangs.find((gang) =>
+                gang.members.some(
+                  (member) => member.labourerId === labourer.id && member.leftOn === null,
+                ),
+              )?.id ?? null,
+          }))
+      : [],
+    gangs: entry
+      ? state.labour.gangs
+          .filter((gang) => gang.projectId === entry.project.id && gang.status === "active")
+          .map((gang) => ({
+            id: gang.id,
+            name: gang.name,
+            siteId: gang.siteId,
+            members: gang.members
+              .filter((member) => member.leftOn === null)
+              .map((member) => member.labourerId),
+          }))
+      : [],
+    photo: (photoId: string) => {
+      const found = state.photos.find(
+        (photo) => photo.id === photoId && photo.projectId === entry?.project.id,
+      );
+      return found
+        ? { id: found.id, verified: found.verified, caption: found.caption, siteId: found.siteId }
+        : null;
+    },
+    projects: state.projects.map((candidate) => {
+      const permissions = projectPermissions(state, candidate);
+      return {
+        id: candidate.project.id,
+        code: candidate.project.code,
+        name: candidate.project.name,
+        status: candidate.project.status,
+        readable:
+          permissions.includes("projects.view") &&
+          SAFETY_READ_PERMISSIONS.some((key) => permissions.includes(key)),
+      };
+    }),
+    fail: (status: number, code: string) => new HttpError(status, code),
+    parse,
+  });
+  if (path.startsWith("/safety/"))
+    return handleSafety(safetyDeps(null), state.safety, method, path, query, body)!;
   const match = /^\/projects\/([^/]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw new HttpError(404, "not-found");
   const [, projectId, rest = ""] = match;
@@ -985,6 +1091,10 @@ async function handle(
   if (rest === "quality" || rest.startsWith("quality/")) {
     const entry = find(state, projectId!, "projects.view");
     return handleQuality(qualityDeps(entry), state.quality, method, path, query, body)!;
+  }
+  if (rest === "safety" || rest.startsWith("safety/")) {
+    const entry = find(state, projectId!, "projects.view");
+    return handleSafety(safetyDeps(entry), state.safety, method, path, query, body)!;
   }
   if (rest === "diaries" || rest.startsWith("diaries/")) {
     const entry = find(state, projectId!, method === "GET" ? "projects.view" : "site.diary");

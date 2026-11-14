@@ -14,7 +14,7 @@ import {
 } from "@pm-buddy/types";
 import type { Prisma } from "../../generated/prisma/client.js";
 import { AppConfig } from "../../config/app-config.js";
-import { AccessPolicy, customRoleColumns } from "./access-policy.js";
+import { AccessPolicy, customRoleColumns, type Scope } from "./access-policy.js";
 import { AuthService, type Principal } from "./auth.service.js";
 import { AuthSecurity, digest, opaqueToken } from "./auth-security.service.js";
 import { grantOf, requiresMfa, roleReference, type Grant } from "./role-grants.js";
@@ -37,11 +37,57 @@ export class TenancyService {
     private readonly config: AppConfig,
   ) {}
 
-  /** The SMS/email for an invitation. Labourers get a link that opens the PIN set-up page. */
+  /**
+   * The SMS/email for an invitation. Labourers get a link that opens the PIN set-up page and
+   * supplier contacts one that opens the supplier portal's join page (D7.2).
+   */
   invitationText(grant: Grant, token: string): string {
+    const origin = new URL(this.config.get("WEB_ORIGIN")).origin;
     if (grant.role === "labourer")
-      return `You have been invited to PM-Buddy as a labourer. Open ${new URL(this.config.get("WEB_ORIGIN")).origin}/worker/join?token=${token} to set your PIN. Expires in ${INVITATION_HOURS} hours.`;
+      return `You have been invited to PM-Buddy as a labourer. Open ${origin}/worker/join?token=${token} to set your PIN. Expires in ${INVITATION_HOURS} hours.`;
+    if (grant.role === "supplier")
+      return `Invitation token: ${token}\nYou have been invited to the PM-Buddy supplier portal. Open ${origin}/supplier/join?token=${token} to create your account or sign in. Expires in ${INVITATION_HOURS} hours.`;
     return `Invitation token: ${token}\nExpires in ${INVITATION_HOURS} hours.`;
+  }
+
+  /**
+   * A supplier-portal invitation (D7.2) in the caller's transaction: the `supplier` system role,
+   * no project, 48 hours. The caller has checked who may invite and binds the supplier; refused
+   * when the identifier already belongs to a member of the company. Returns the token to send.
+   */
+  async createSupplierInvitation(scope: Scope, identifier: string) {
+    const { tx, access } = scope;
+    const existing = await tx.membership.findFirst({
+      where: { tenantId: access.tenantId, user: { identifier } },
+      select: { userId: true },
+    });
+    if (existing)
+      throw new ConflictException({
+        code: "already-member",
+        message: "This email address or phone number already belongs to a member of the company",
+      });
+    const token = opaqueToken();
+    const invitation = await tx.invitation.create({
+      data: {
+        tenantId: access.tenantId,
+        identifier,
+        role: "supplier",
+        digest: digest(token),
+        expiresAt: new Date(Date.now() + INVITATION_HOURS * 60 * 60_000),
+        createdBy: access.userId,
+      },
+      select: { id: true, expiresAt: true },
+    });
+    return { ...invitation, token };
+  }
+
+  /** Sends a supplier-portal invitation after its transaction committed. */
+  sendSupplierInvitation(identifier: string, token: string) {
+    return this.security.notify(
+      identifier,
+      "PM-Buddy supplier portal invitation",
+      this.invitationText(grantOf({ role: "supplier", customRoleId: null }), token),
+    );
   }
 
   async list(principal: Principal, req: Request) {
@@ -300,6 +346,15 @@ export class TenancyService {
     });
     const grant = grantOf(stored);
     check(grant);
+    // A supplier-portal invitation (D7.2) binds the new member to its supplier once they join.
+    const portal = await tx.supplierPortalUser.findUnique({
+      where: {
+        tenantId_invitationId: { tenantId: invitation.tenantId, invitationId: invitation.id },
+      },
+      select: { id: true, status: true },
+    });
+    if (portal && portal.status !== "invited")
+      throw new ConflictException("This invitation was withdrawn");
     const result = await tx.invitation.updateMany({
       where: { id: invitation.id, acceptedAt: null, expiresAt: { gt: new Date() } },
       data: { acceptedAt: new Date() },
@@ -348,6 +403,22 @@ export class TenancyService {
         metadata: { role: roleReference(grant) },
       },
     });
+    if (portal) {
+      await tx.supplierPortalUser.update({
+        where: { tenantId_id: { tenantId: invitation.tenantId, id: portal.id } },
+        data: { status: "active", userId, version: { increment: 1 } },
+      });
+      await tx.auditEvent.create({
+        data: {
+          tenantId: invitation.tenantId,
+          actorId: userId,
+          requestId: this.db.current().requestId,
+          action: "supplier_portal.user_activated",
+          resourceId: portal.id,
+          metadata: {},
+        },
+      });
+    }
     return grant;
   }
 

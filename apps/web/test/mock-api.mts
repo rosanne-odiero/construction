@@ -6,7 +6,8 @@
  *
  * Each test signs in with its own `pmb_at=<persona>.<id>` cookie and gets its own copy of the
  * fixture data; cookies with the same <id> share that copy, so a test can switch between the
- * owner, the project manager and the site agent on the same data. Requests are validated with the shared request schemas and every response is
+ * owner, the project manager and the site agent on the same data (the client, labourer and
+ * supplier personas have their own). Requests are validated with the shared request schemas and every response is
  * validated with the shared response schema before it is sent, so the suite also checks the wire
  * contract. Synthetic data only.
  */
@@ -87,6 +88,14 @@ import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
 import { handlePhotos, initialPhotos } from "./mock-photos.mts";
 import { latestApproved } from "./mock-bq-model.mts";
 import { handleP2p, initialP2p, p2pDocument, type P2pDeps, type P2pState } from "./mock-p2p.mts";
+import {
+  handleSupplierPersona,
+  handleSupplierPortalUsers,
+  initialSupplierPortalUsers,
+  isSupplierPersona,
+  supplierPortalFile,
+  type SupplierPortalStaffState,
+} from "./mock-supplier-portal.mts";
 import { handleStores, initialStores, type StoresState } from "./mock-stores.mts";
 import {
   handleSpending,
@@ -199,6 +208,8 @@ type State = {
   valuations: ValuationsState;
   /** D8.2 health and safety (mock-safety.mts). */
   safety: SafetyState;
+  /** D7.2 each supplier's portal users (mock-supplier-portal.mts). */
+  supplierPortal: SupplierPortalStaffState;
   /** D8.3 plant and equipment (mock-plant.mts). */
   plant: PlantState;
 };
@@ -458,6 +469,7 @@ function fixture(persona: Persona): State {
     p2p: initialP2p(p2pBase(projects, procurement, bq)),
     stores: initialStores(procurement, bq.buildups),
     spending: initialSpending(projectInfo(projects)),
+    supplierPortal: initialSupplierPortalUsers(),
     projects,
     labour,
     attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
@@ -756,7 +768,28 @@ async function handle(
   if (path === "/auth/refresh") throw new HttpError(401, "unauthorized");
   if (path === "/auth/logout")
     return { body: { message: "Signed out." }, schema: messageResponseSchema };
-  const persona = cookie(req, "pmb_at")?.split(".")[0];
+  const [persona, session = ""] = cookie(req, "pmb_at")?.split(".") ?? [];
+  if (isSupplierPersona(persona)) {
+    if (method !== "GET" && req.headers["x-csrf-token"] !== MOCK_CSRF)
+      throw new HttpError(403, "forbidden");
+    return handleSupplierPersona(
+      session,
+      method,
+      path,
+      query,
+      body,
+      {
+        idempotencyKey:
+          typeof req.headers["idempotency-key"] === "string"
+            ? req.headers["idempotency-key"]
+            : undefined,
+        contentType: req.headers["content-type"],
+        raw,
+      },
+      (status, code) => new HttpError(status, code),
+      parse,
+    );
+  }
   if (isPortalPersona(persona)) {
     if (method !== "GET" && req.headers["x-csrf-token"] !== MOCK_CSRF)
       throw new HttpError(403, "forbidden");
@@ -1011,6 +1044,32 @@ async function handle(
     body,
   );
   if (p2p) return p2p;
+  const supplierPortalUsers = handleSupplierPortalUsers(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      canManage:
+        rolePermissions(state).includes("procurement.manage_suppliers") ||
+        (isTenantWide(state.persona) && rolePermissions(state).includes("finance.manage")),
+      requireStepUp: () => requireStepUp(state),
+      supplier: (id) => {
+        const found = state.procurement.suppliers.find((entry) => entry.supplier.id === id);
+        return found
+          ? {
+              id: found.supplier.id,
+              code: found.supplier.code,
+              name: found.supplier.tradingName ?? found.supplier.legalName,
+            }
+          : null;
+      },
+    },
+    state.supplierPortal,
+    method,
+    path,
+    body,
+  );
+  if (supplierPortalUsers) return supplierPortalUsers;
   const procurement = handleProcurement(
     {
       fail: (status, code) => new HttpError(status, code),
@@ -1565,6 +1624,24 @@ const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://mock.invalid");
     if (url.pathname === "/health") return send(res, 200, { status: "ok" });
     const path = url.pathname.replace(/^\/api\/v1/, "");
+    // The supplier's invoice documents and statement exports are bytes.
+    const [persona, session = ""] = cookie(req, "pmb_at")?.split(".") ?? [];
+    if (
+      isSupplierPersona(persona) &&
+      req.method === "GET" &&
+      /^\/portal\/supplier\/(documents|statement\/export)\//.test(path)
+    ) {
+      const file = supplierPortalFile(session, path);
+      if (!file) return send(res, 404, { code: "not-found" }, true);
+      res.writeHead(200, {
+        "Content-Type": file.contentType,
+        ...(file.filename
+          ? { "Content-Disposition": `attachment; filename="${file.filename}"` }
+          : {}),
+        "Cache-Control": "no-store",
+      });
+      return res.end(file.content);
+    }
     // Procurement documents and GRN photos are downloaded as bytes, not JSON.
     const download = /^\/procurement\/documents\/([^/]+)$/.exec(path);
     if (download && req.method === "GET") {

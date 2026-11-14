@@ -404,42 +404,49 @@ export class LposService {
   async detail(scope: Scope, id: string) {
     const { tx, access } = scope;
     const row = await this.row(scope, id);
-    const [summary, lines, grns, invoices, progress, project, people] = await Promise.all([
-      this.summary(scope, row),
-      tx.lpoLine.findMany({
-        where: { tenantId: access.tenantId, lpoId: id },
-        include: {
-          material: true,
-          requisitionLine: {
-            select: {
-              bqVersionId: true,
-              bqItemLineageId: true,
-              bqItem: { select: { ref: true, description: true } },
+    const [summary, lines, grns, invoices, progress, project, people, acknowledgement] =
+      await Promise.all([
+        this.summary(scope, row),
+        tx.lpoLine.findMany({
+          where: { tenantId: access.tenantId, lpoId: id },
+          include: {
+            material: true,
+            requisitionLine: {
+              select: {
+                bqVersionId: true,
+                bqItemLineageId: true,
+                bqItem: { select: { ref: true, description: true } },
+              },
             },
           },
-        },
-        orderBy: { lineNo: "asc" },
-      }),
-      tx.grn.findMany({
-        where: { tenantId: access.tenantId, lpoId: id },
-        orderBy: { receivedAt: "asc" },
-        select: { id: true, number: true, status: true, receivedAt: true, locationState: true },
-      }),
-      tx.supplierInvoice.findMany({
-        where: { tenantId: access.tenantId, lpoId: id },
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          invoiceNumber: true,
-          status: true,
-          totalMinor: true,
-          computedSubtotalMinor: true,
-        },
-      }),
-      this.progress(scope, id),
-      this.access.on(scope, row.projectId),
-      peopleOf(tx, row.contributors),
-    ]);
+          orderBy: { lineNo: "asc" },
+        }),
+        tx.grn.findMany({
+          where: { tenantId: access.tenantId, lpoId: id },
+          orderBy: { receivedAt: "asc" },
+          select: { id: true, number: true, status: true, receivedAt: true, locationState: true },
+        }),
+        tx.supplierInvoice.findMany({
+          where: { tenantId: access.tenantId, lpoId: id },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            invoiceNumber: true,
+            status: true,
+            totalMinor: true,
+            computedSubtotalMinor: true,
+          },
+        }),
+        this.progress(scope, id),
+        this.access.on(scope, row.projectId),
+        peopleOf(tx, row.contributors),
+        tx.lpoAcknowledgement.findUnique({
+          where: { tenantId_lpoId: { tenantId: access.tenantId, lpoId: id } },
+        }),
+      ]);
+    const acknowledger = acknowledgement
+      ? await peopleOf(tx, [acknowledgement.acknowledgedBy])
+      : new Map<string, string>();
     const committed = row.status === "approved" ? Number(row.subtotalMinor) : 0;
     const accrued = invoices
       .filter((invoice) => ACCRUED.includes(invoice.status))
@@ -489,6 +496,12 @@ export class LposService {
         openMinor: Math.max(0, committed - accrued),
       },
       contributors: row.contributors.map((person) => personOf(people, person)),
+      acknowledgement: acknowledgement
+        ? {
+            acknowledgedAt: iso(acknowledgement.acknowledgedAt),
+            acknowledgedBy: personOf(acknowledger, acknowledgement.acknowledgedBy),
+          }
+        : null,
       permissions: {
         canManage: can("procurement.manage_suppliers") && row.status !== "cancelled",
         canApprove:

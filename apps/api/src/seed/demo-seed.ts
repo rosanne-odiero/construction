@@ -36,6 +36,7 @@ import { seedPlant, type PlantSeedSummary } from "./plant-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 import { seedValuations, type ValuationsSeedSummary } from "./demo-valuations.js";
+import { seedSupplierPortal, type SupplierPortalSeedSummary } from "./demo-supplier-portal.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -48,7 +49,9 @@ import { seedValuations, type ValuationsSeedSummary } from "./demo-valuations.js
  * delays (schedule-seed.ts), and (D5.4) an approved RUI-HTS budget, cost codes, a petty-cash float
  * with expenses, a count, a journal and forecast lines (demo-spending.ts), and (D6.3) approved
  * measurements with photos, certified payment certificates on RUI-HTS and JUJ-DPX with a
- * practical-completion retention release, and earned value inputs (demo-valuations.ts).
+ * practical-completion retention release, and earned value inputs (demo-valuations.ts), and
+ * (D7.2) a supplier portal user for the quarry with an acknowledged LPO, a delivery and invoices
+ * it submitted on the Kitengela project (demo-supplier-portal.ts).
  * Idempotent: existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
@@ -411,6 +414,7 @@ export type SeedSummary = {
   quality: QualitySeedSummary;
   valuations: ValuationsSeedSummary;
   safety: SafetySeedSummary;
+  supplierPortal: SupplierPortalSeedSummary;
   plant: PlantSeedSummary;
 };
 
@@ -635,6 +639,19 @@ export async function seedDemo(
     siteAgentId: userOf("siteAgent").id,
     financeId: userOf("finance").id,
   });
+  // Last: it adds an LPO, a delivery, invoices and a part payment on KIT-BNG (no budget there),
+  // with documents and distinct amounts, so the earlier summaries and alerts do not change.
+  const supplierPortal = await seedSupplierPortal(
+    app,
+    tenantId,
+    {
+      ownerId: owner.id,
+      projectManagerId: userOf("projectManager").id,
+      storekeeperId: userOf("storekeeper").id,
+      financeId: userOf("finance").id,
+    },
+    { resetCredentials: options.resetCredentials },
+  );
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
@@ -652,6 +669,7 @@ export async function seedDemo(
     quality,
     valuations,
     safety,
+    supplierPortal,
     plant,
   };
 }

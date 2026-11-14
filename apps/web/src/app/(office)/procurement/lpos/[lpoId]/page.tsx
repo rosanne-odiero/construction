@@ -52,7 +52,8 @@ export default async function LpoPage({ params }: { params: Promise<{ lpoId: str
     if (result.status === 404 || result.status === 400) notFound();
     return result.status === 403 ? <LiveForbidden /> : <LiveUnavailable retryHref={path} />;
   }
-  const { lpo, lines, grns, invoices, commitment, contributors, permissions } = result.data;
+  const { lpo, lines, grns, invoices, commitment, contributors, acknowledgement, permissions } =
+    result.data;
   const t = await getTranslations("p2p.lpos");
   const tCommon = await getTranslations("p2p.common");
   const tStatus = await getTranslations("p2p.status");
@@ -145,6 +146,16 @@ export default async function LpoPage({ params }: { params: Promise<{ lpoId: str
       {lpo.returnReason && lpo.status === "draft" ? (
         <p className="rounded-lg border border-warning/40 p-3 text-sm" role="note">
           {t("detail.events.returned", { reason: lpo.returnReason })}
+        </p>
+      ) : null}
+      {lpo.status === "approved" ? (
+        <p className="text-sm text-muted-foreground" data-testid="lpo-acknowledgement">
+          {acknowledgement
+            ? t("detail.acknowledged", {
+                name: acknowledgement.acknowledgedBy.displayName,
+                date: formatDateTime(acknowledgement.acknowledgedAt),
+              })
+            : t("detail.notAcknowledged")}
         </p>
       ) : null}
       {lpo.status === "cancelled" ? (

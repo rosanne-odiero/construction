@@ -397,6 +397,28 @@ Requisitions, RFQs, LPOs and supplier invoices are implemented ([ARCHITECTURE §
 - **Invoice.** `submitted → matched | disputed` happens in the submission transaction (no separate reviewer step). `matched ↔ disputed` on `rematch`; `disputed → matched` by an **exception** (independent `payments.approve`, step-up, reason; never for a missing eTIMS number, inconsistent totals, an empty invoice or a line not on the order); `disputed | matched → draft` on `reopen` for a corrected version (a new content version; the old match no longer counts). `matched → approved` by an independent `payments.approve` holder with step-up, only while the current match passes and is not stale, binding the match, the content version and the supplier's verified payout version. `approved → partly_settled → settled` follow recorded settlements (`payments.disburse`, step-up, not the approver, amount ≤ outstanding, idempotent). A payee change after approval stops settlement until the invoice is approved again (`approved | partly_settled` re-approval creates a new payable). Anything not yet approved can be cancelled with a reason (e.g. after a credit note); approved invoices are not cancelled in D5.2.
 - **Audit events:** `requisition.created/updated/submitted/approved/rejected/reopened/cancelled`, `rfq.created/updated/exception_requested/exception_approved/awarded/cancelled`, `quotation.recorded/withdrawn`, `lpo.created/updated/…` (one per transition), `grn.recorded/voided`, `invoice.recorded/updated/submitted/matched/disputed/match_excepted/approved/reapproved/reopened/cancelled`, `invoice.settlement_recorded`, `procurement.document_added`; metadata carries IDs, statuses, field names and match reason codes, never amounts or free text.
 
+### Supplier invoices through the supplier portal (D7.2)
+
+The supplier's path joins the D5.2 invoice state machine above; nothing in it changes for staff-recorded invoices ([ARCHITECTURE §4.12](./ARCHITECTURE.md#412-supplier-portal-d72)).
+
+```mermaid
+stateDiagram-v2
+  [*] --> invited: staff invite a contact (manage suppliers or finance, step-up)
+  invited --> active: the contact accepts (supplier role, no project)
+  invited --> revoked: staff withdraw (reason), or a new invitation replaces it (superseded)
+  active --> revoked: staff revoke (reason) or the membership ends
+  revoked --> [*]
+```
+
+1. **Access.** A supplier manager (`procurement.manage_suppliers` or company-wide `finance.manage`, step-up) invites a contact from the supplier page; the contact opens `/supplier/join?token=…`, creates an account (or signs in) and accepts. The binding is `active` from then on; revoking it ends the membership and sessions at once. If the link expired (48 hours) or never arrived, staff simply invite again: the new invitation replaces the old one (cause `superseded`) and only the newest link works.
+2. **Order.** Staff approve the LPO (D5.2, unchanged). It appears in the portal; the supplier may **acknowledge** it once (a record, not a transition).
+3. **Delivery.** Staff record GRNs (D5.2, unchanged); the supplier sees what was received, rejected and why.
+4. **Invoice.** The supplier submits against the approved LPO (eTIMS number required, PDF attached, client ID + `Idempotency-Key`). In **one transaction**: the invoice is recorded as `draft` by the supplier, the submission row is written, and `draft → submitted → matched | disputed` runs the three-way match. The supplier sees *under review* or *disputed* (with reason codes); staff see the invoice in their queue marked "Submitted by the supplier".
+5. **Staff decision.** Exactly as D5.2: `rematch`, exception (independent `payments.approve`), approval (independent `payments.approve`, step-up, verified payee) or `cancel` with a reason. **`reopen` is refused** for a portal invoice (409 `supplier-invoice-locked`, API and trigger): to correct it, staff cancel it with a reason and the supplier submits a new invoice (a new number if the supplier's own numbering requires it; a cancelled invoice's number is free again under the D5.2 key rules).
+6. **Payment.** `approved → partly_settled → settled` by staff recording settlements (D5.2). The supplier sees *approved*, *partly paid* or *paid* with each recorded payment (amount, date, method, reference) and its statement; the portal never confirms or initiates a payment.
+
+Supplier-facing statuses (`supplierInvoiceStatus`): `submitted` → submitted; `matched` → under review; `disputed` → disputed; `approved` → approved; `partly_settled` → partly paid; `settled` → paid; `cancelled` → cancelled; a staff `draft` is not shown. Audit: `supplier_portal.user_invited/user_activated/user_revoked`, `supplier_portal.lpo_acknowledged`, `supplier_portal.invoice_submitted` (plus the invoice's own `invoice.*` events), `supplier_portal.statement_exported`.
+
 ## Stores (D5.3)
 
 Implemented in D5.3 ([ARCHITECTURE §4.6](./ARCHITECTURE.md#46-stores-d53)). The transition tables live in `packages/domain/src/stores/lifecycle.ts` and are repeated by `app.guard_stock_transfer` and `app.guard_stock_take`; stock itself only changes through ledger entries (`app.post_stock_entry`), never by editing a balance.

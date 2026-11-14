@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { Receipt } from "lucide-react";
-import { INVOICE_STATUSES, type InvoiceStatus } from "@pm-buddy/types";
+import {
+  INVOICE_SOURCES,
+  INVOICE_STATUSES,
+  type InvoiceSource,
+  type InvoiceStatus,
+} from "@pm-buddy/types";
 import { invoicesResponseSchema } from "@pm-buddy/validation";
 import { PageHeader } from "@/components/page-header";
 import { apiQuery, ListFilters, listHrefs, Pager } from "@/components/procurement/p2p/list-filters";
@@ -21,8 +26,13 @@ export async function generateMetadata() {
 
 const isStatus = (value: string | undefined): value is InvoiceStatus =>
   (INVOICE_STATUSES as readonly string[]).includes(value ?? "");
+const isSource = (value: string | undefined): value is InvoiceSource =>
+  (INVOICE_SOURCES as readonly string[]).includes(value ?? "");
 
-/** Supplier invoices with their eTIMS flag, match outcome and what is outstanding (D5.2). */
+/**
+ * Supplier invoices with their eTIMS flag, match outcome and what is outstanding (D5.2), and who
+ * put them in: staff or the supplier through the supplier portal (D7.2).
+ */
 export default async function InvoicesPage({
   searchParams,
 }: {
@@ -31,13 +41,14 @@ export default async function InvoicesPage({
   const raw = await searchParams;
   const project = isUuid(pickParam(raw, "project")) ? pickParam(raw, "project") : undefined;
   const status = isStatus(pickParam(raw, "status")) ? pickParam(raw, "status") : undefined;
+  const source = isSource(pickParam(raw, "source")) ? pickParam(raw, "source") : undefined;
   const cursor = isUuid(pickParam(raw, "cursor")) ? pickParam(raw, "cursor") : undefined;
-  const path = `/procurement/invoices${apiQuery({ project, status, cursor })}`;
+  const path = `/procurement/invoices${apiQuery({ project, status, source, cursor })}`;
   const session = await requireSession(path);
   if (!session) return <LiveUnavailable retryHref={path} />;
   const [result, projects] = await Promise.all([
     loadOrRedirect(
-      `/procurement/invoices${apiQuery({ projectId: project, status, cursor })}`,
+      `/procurement/invoices${apiQuery({ projectId: project, status, source, cursor })}`,
       invoicesResponseSchema,
       path,
     ),
@@ -49,7 +60,7 @@ export default async function InvoicesPage({
   const tCommon = await getTranslations("p2p.common");
   const tStatus = await getTranslations("p2p.status.invoice");
   const { invoices, page, permissions } = result.data;
-  const hrefs = listHrefs("/procurement/invoices", { project, status }, page.nextCursor);
+  const hrefs = listHrefs("/procurement/invoices", { project, status, source }, page.nextCursor);
 
   return (
     <div className="space-y-6">
@@ -74,13 +85,20 @@ export default async function InvoicesPage({
         statuses={INVOICE_STATUSES.map((value) => ({ value, label: tStatus(value) }))}
         project={project}
         status={status}
+        extra={{
+          name: "source",
+          label: t("sourceFilter"),
+          allLabel: t("allSources"),
+          options: INVOICE_SOURCES.map((value) => ({ value, label: t(`source.${value}`) })),
+          value: source,
+        }}
       />
       <p className="text-sm text-muted-foreground" role="status">
         {tCommon("count", { count: invoices.length })}
       </p>
       {invoices.length === 0 ? (
         <p className="rounded-xl border border-dashed p-8 text-center font-medium">
-          {project || status ? tCommon("noMatches") : tCommon("empty")}
+          {project || status || source ? tCommon("noMatches") : tCommon("empty")}
         </p>
       ) : (
         <div
@@ -135,7 +153,14 @@ export default async function InvoicesPage({
                       {row.lpo.number}
                     </Link>
                   </td>
-                  <td className="py-2 pr-2">{row.supplier.name}</td>
+                  <td className="py-2 pr-2">
+                    {row.supplier.name}
+                    {row.source === "supplier_portal" ? (
+                      <span className="mt-1 block">
+                        <StatusBadge tone="info">{t("source.supplier_portal")}</StatusBadge>
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="py-2 pr-2">
                     {formatCalendarDate(row.invoiceDate)}
                     <span className="block text-xs text-muted-foreground">

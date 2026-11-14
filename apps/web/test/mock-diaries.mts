@@ -2,13 +2,60 @@ import { randomUUID } from "node:crypto";
 import {
   createDiaryRequestSchema,
   diariesResponseSchema,
+  diaryAttendanceQuerySchema,
+  diaryAttendanceResponseSchema,
   diaryActionRequestSchema,
   diaryListQuerySchema,
   diaryResponseSchema,
   updateDiaryRequestSchema,
   type SiteDiary,
 } from "@pm-buddy/validation";
-import { diaryTransition, nairobiDate } from "@pm-buddy/domain";
+import { diaryTransition, nairobiDate, summariseWorkforce } from "@pm-buddy/domain";
+
+const MAIN_PLOT = "31000000-0000-4000-8000-000000000001";
+/** Synthetic attendance: on the main plot five masons (one on a half day) and four helpers. */
+function attendanceOn(siteId: string) {
+  if (siteId !== MAIN_PLOT) return { musterStatus: "none" as const, ...summariseWorkforce([]) };
+  const record =
+    (tradeId: string, tradeKey: string, nameEn: string, nameSw: string, order: number) =>
+    (status: "present" | "half_day") => ({
+      tradeId,
+      tradeKey,
+      nameEn,
+      nameSw,
+      sortOrder: order,
+      status,
+    });
+  const mason = record("41000000-0000-4000-8000-000000000001", "mason", "Mason", "Fundi mwashi", 1);
+  const helper = record(
+    "41000000-0000-4000-8000-000000000002",
+    "general_labourer",
+    "General labourer",
+    "Kibarua",
+    2,
+  );
+  return {
+    musterStatus: "submitted" as const,
+    ...summariseWorkforce([
+      mason("present"),
+      mason("present"),
+      mason("present"),
+      mason("present"),
+      mason("half_day"),
+      helper("present"),
+      helper("present"),
+      helper("present"),
+      helper("present"),
+    ]),
+  };
+}
+const snapshot = (siteId: string) => {
+  const { musterStatus, total, trades } = attendanceOn(siteId);
+  return {
+    workforceCount: total,
+    workforce: { snapshotAt: new Date().toISOString(), musterStatus, trades },
+  };
+};
 
 /** Synthetic web fixtures only; real authorization and locking are tested in the API suite. */
 export function initialDiaries(
@@ -27,6 +74,7 @@ export function initialDiaries(
     delays: null,
     workforceCount: null,
     workforceSource: "manual",
+    workforce: null,
     status: "draft",
     version: 1,
     createdBy: owner,
@@ -66,6 +114,15 @@ export function handleDiaries(
   body: unknown,
   fail: (status: number, code: string) => Error,
 ) {
+  if (rest === "diaries/attendance" && method === "GET") {
+    const parsed = diaryAttendanceQuerySchema.parse(Object.fromEntries(query));
+    if (!siteIds.includes(parsed.siteId)) throw fail(404, "not-found");
+    const { musterStatus, total, trades } = attendanceOn(parsed.siteId);
+    return {
+      body: { ...parsed, musterStatus, total, trades, countedAt: new Date().toISOString() },
+      schema: diaryAttendanceResponseSchema,
+    };
+  }
   if (rest === "diaries" && method === "GET") {
     const parsed = diaryListQuerySchema.parse(Object.fromEntries(query));
     const matching = rows.filter(
@@ -82,9 +139,9 @@ export function handleDiaries(
     const timestamp = new Date().toISOString();
     const diary: SiteDiary = {
       ...input,
+      ...(input.workforceSource === "attendance" ? snapshot(input.siteId) : { workforce: null }),
       id: randomUUID(),
       projectId,
-      workforceSource: "manual",
       status: "draft",
       version: 1,
       createdBy: userId,
@@ -107,7 +164,11 @@ export function handleDiaries(
     if (input.version !== diary.version) throw fail(409, "version-conflict");
     if (userId !== diary.createdBy) throw fail(403, "diary-author-required");
     if (diary.status !== "draft") throw fail(409, "diary-not-draft");
-    Object.assign(diary, input);
+    Object.assign(
+      diary,
+      input,
+      input.workforceSource === "attendance" ? snapshot(diary.siteId) : { workforce: null },
+    );
   } else if (method === "POST" && match?.[2]) {
     const input = diaryActionRequestSchema.parse(body);
     if (input.version !== diary.version) throw fail(409, "version-conflict");
@@ -115,6 +176,11 @@ export function handleDiaries(
     if (!status) throw fail(409, "diary-invalid-transition");
     if (input.action === "submit") {
       if (userId !== diary.createdBy) throw fail(403, "diary-author-required");
+      // An attendance snapshot is refreshed first (a draft edit), as the API does.
+      if (diary.workforceSource === "attendance") {
+        Object.assign(diary, snapshot(diary.siteId));
+        diary.version += 1;
+      }
       diary.submittedBy = userId;
       diary.submittedAt = new Date().toISOString();
     } else if (input.action === "reopen") {

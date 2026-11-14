@@ -20,9 +20,9 @@ offline event identity/replay and outbox integration remain future work.
 
 | Transition | Actor / preconditions | Effect / audit |
 |---|---|---|
-| new → draft | `site.diary`; site belongs to project; day is not future in Nairobi; site/day unused | Version 1; `diary.created`; manual or unknown workforce |
+| new → draft | `site.diary`; site belongs to project; day is not future in Nairobi; site/day unused | Version 1; `diary.created`; workforce typed in (may be unknown) or an attendance snapshot (D6.1) |
 | draft → draft | Original author + `site.diary`; expected version | Replace draft content; `diary.updated` |
-| draft → submitted | Original author + `site.diary`; expected version | Freeze content pending review; `diary.submitted` |
+| draft → submitted | Original author + `site.diary`; expected version | An attendance-sourced workforce is re-snapshotted first (version + 2); freeze content pending review; `diary.submitted` |
 | submitted → rejected | Independent `quality.manage` reviewer; expected version; reason 3–500 characters | Store reviewer/time/reason; `diary.rejected` |
 | rejected → draft | Original author + `site.diary`; expected version | Clear current sign-off; retain audited transition history; `diary.reopened` |
 | submitted → approved | Independent `quality.manage` reviewer; expected version | Store reviewer/time; lock record permanently; `diary.approved` |
@@ -30,8 +30,56 @@ offline event identity/replay and outbox integration remain future work.
 Approved diaries have no edit/reopen/delete transition. Database triggers backstop the
 lifecycle, author/reviewer identities and lock; RLS and composite foreign keys isolate
 company/project/site references. Closed/cancelled projects allow reads but no changes.
-Attendance auto-fill, verified photos and quality workflows are not supplied by this
-foundation. Financial certificate approval is a separate workflow below.
+Verified photos (increment 2) attach to drafts only. Financial certificate approval is a
+separate workflow below.
+
+**Workforce provenance (D6.1, ARCHITECTURE §4.7).** `workforce_source` is `manual` (typed in;
+null = unknown, 0 = nobody) or `attendance`: a snapshot of attendance on the diary's site and
+date by trade (present or half day), with the muster sheet's state and the snapshot time. The
+server takes it on create/edit and again on submit; the database recomputes it and refuses a
+mismatch, and the snapshot is frozen with the rest of the content while submitted and after
+approval, so later attendance corrections never change an approved diary. Switching between
+manual and attendance is an ordinary draft edit.
+
+## Quality (D6.1)
+
+Implemented for the web app ([ARCHITECTURE §4.7](./ARCHITECTURE.md#47-quality-d61)). Every command runs in the tenant transaction with the project's permissions (role ∩ assignment), sends the version it read (409 `version-conflict`) and writes a `quality.*` audit event (IDs, codes, counts and outcomes only) in the same transaction. Closed and cancelled projects are read-only in the API and in every trigger. "Independent" means a different user from the one named; the database checks it again. "Reason" is 3–500 characters.
+
+**Inspection** (`inspections`, items and item photos)
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → draft | `site.diary` or `quality.manage`; site of the project; current, non-retired template version; date not in the future (Nairobi); optional WBS item, schedule task, approved-BQ item | `INS-NNNN`; items copied from the template as `pending`; `quality.inspection_created` |
+| draft → draft | The author; items answered `pass`/`fail`/`na`, notes, up to 6 site photos per item | `quality.inspection_updated` (field names and counts) |
+| draft → submitted | The author; every item answered; every failed item has a note | Result = `fail` if any item failed, else `pass`; content frozen; `quality.inspection_submitted` |
+| submitted → signed_off | `quality.manage`; independent of the creator and the submitter | **Locked**: no further change to the inspection, items or photos; `quality.inspection_signed_off` |
+| submitted → draft | `quality.manage`; independent; reason | Result cleared, return reason kept; `quality.inspection_returned` |
+
+A submitted or signed-off inspection with result `fail` can raise snags from its failed items (below). There is no delete.
+
+**Snag / defect** (`snags`, `snag_photos`)
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → open | `site.diary` or `quality.manage`; site, location, description, severity, responsible party (kind + name), optional due date and failed inspection item, photos | `SNG-NNNN`; `phase` = `dlp` when practical completion is certified, else `construction`; `quality.snag_raised` |
+| open → open | `quality.manage` (edits may change severity) | `quality.snag_updated` |
+| open → fixed | `site.diary` or `quality.manage`, recorded for the responsible party; optional fix note and photos | Fixer and time stored; `quality.snag_fixed` |
+| fixed → closed | `quality.manage`; independent of whoever recorded the fix | **Final** (verified); `quality.snag_closed` |
+| fixed → open | `quality.manage`; independent of the fixer; reason | `reopen_count` + 1, last reason kept, fix cleared; `quality.snag_reopened` |
+
+Closed snags never reopen; a recurrence is a new snag. Overdue = open after its due date (Nairobi).
+
+**Completion certificate** (`project_completions`, kinds `practical` and `final`)
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → proposed | `projects.manage`; date not in the future; one live certificate per kind. Practical: DLP months (default from settings, 1–24); no critical snag that is open or fixed-but-unverified unless an exception reason is given. Final: a certified practical completion, date ≥ the DLP end, no snag that is not closed unless an exception reason is given | Snag counts at proposal stored; DLP end = date + months (clamped to month end); `quality.completion_proposed` |
+| proposed → certified | `quality.manage`; independent of the proposer; the snag check is repeated | **Locked**; starts (practical) or ends (final) the DLP; later snags are DLP defects; `quality.completion_certified` |
+| proposed → withdrawn | `projects.manage`; reason | Frees the kind for a new proposal; `quality.completion_withdrawn` |
+
+Certification does not change the project's status. D6.3 retention release reads certified rows.
+
+**Concrete tests and templates** (append-only records, not state machines). A cube set (`CUBE-NNNN`) is recorded, then one result per age (7, 28 days) by `site.diary` or `quality.manage`; the outcome follows rule KE-CUBE-1 and is re-checked by the database. A slump test (`SLP-NNNN`) is recorded once with its KE-SLUMP-1 outcome. **Corrections** (`quality.manage`, reason) append a row that supersedes the original once; **voiding** a cube set (`quality.manage`, reason) stops it falling due but keeps its results. Template **revisions** and **retirements** (`quality.manage` somewhere) append the next version of the lineage; inspections keep the version they used.
 
 ## Schedule baseline and delay log (D6.2)
 

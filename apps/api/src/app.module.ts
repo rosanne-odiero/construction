@@ -14,6 +14,7 @@ import { PayrollModule } from "./modules/payroll/payroll.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
 import { PortalsModule } from "./modules/portals/portals.module.js";
 import { ProgressModule } from "./modules/progress/progress.module.js";
+import { QualityModule } from "./modules/quality/quality.module.js";
 import { ScheduleModule } from "./modules/schedule/schedule.module.js";
 
 @Module({
@@ -36,6 +37,7 @@ import { ScheduleModule } from "./modules/schedule/schedule.module.js";
     PayrollModule,
     ProgressModule,
     ScheduleModule,
+    QualityModule,
     PortalsModule,
   ],
 })

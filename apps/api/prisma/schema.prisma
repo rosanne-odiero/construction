@@ -170,6 +170,8 @@ model Tenant {
   payrollSettings     PayrollSettings?
   statutoryRules      StatutoryRuleVersion[]
   minimumWages        MinimumWageRate[]
+  qualitySettings     QualitySettings?
+  checklistTemplates  ChecklistTemplate[]
 
   @@map("tenants")
 }
@@ -270,6 +272,8 @@ model Project {
   baselines        ScheduleBaseline[]
   scheduleDelays   ScheduleDelay[]
 
+  completions ProjectCompletion[]
+
   @@unique([tenantId, id])
   @@unique([tenantId, code])
   @@index([tenantId, status])
@@ -315,6 +319,10 @@ model Site {
   lpos              Lpo[]
   grns              Grn[]
   stores            Store[]
+  inspections       Inspection[]
+  snags             Snag[]
+  cubeSets          CubeSet[]
+  slumpTests        SlumpTest[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -323,28 +331,33 @@ model Site {
 }
 
 model SiteDiary {
-  id             String          @id @default(uuid(7)) @db.Uuid
-  tenantId       String          @map("tenant_id") @db.Uuid
-  projectId      String          @map("project_id") @db.Uuid
-  siteId         String          @map("site_id") @db.Uuid
-  date           DateTime        @db.Date
-  workPerformed  String          @map("work_performed") @db.VarChar(6000)
-  weather        String?         @db.VarChar(250)
-  delays         String?         @db.VarChar(2000)
-  workforceCount Int?            @map("workforce_count")
-  status         String          @default("draft") @db.VarChar(20)
-  version        Int             @default(1)
-  createdBy      String          @map("created_by") @db.Uuid
-  submittedBy    String?         @map("submitted_by") @db.Uuid
-  submittedAt    DateTime?       @map("submitted_at") @db.Timestamptz
-  reviewedBy     String?         @map("reviewed_by") @db.Uuid
-  reviewedAt     DateTime?       @map("reviewed_at") @db.Timestamptz
-  reviewReason   String?         @map("review_reason") @db.VarChar(500)
-  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  site           Site            @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_diaries_site_fkey")
-  photos         SitePhoto[]
-  scheduleDelays ScheduleDelay[]
+  id                    String          @id @default(uuid(7)) @db.Uuid
+  tenantId              String          @map("tenant_id") @db.Uuid
+  projectId             String          @map("project_id") @db.Uuid
+  siteId                String          @map("site_id") @db.Uuid
+  date                  DateTime        @db.Date
+  workPerformed         String          @map("work_performed") @db.VarChar(6000)
+  weather               String?         @db.VarChar(250)
+  delays                String?         @db.VarChar(2000)
+  workforceCount        Int?            @map("workforce_count")
+  // D6.1: manual (typed in) or attendance (a snapshot by trade, re-checked by the database).
+  workforceSource       String          @default("manual") @map("workforce_source") @db.VarChar(12)
+  workforceSnapshotAt   DateTime?       @map("workforce_snapshot_at") @db.Timestamptz
+  workforceMusterStatus String?         @map("workforce_muster_status") @db.VarChar(12)
+  workforceByTrade      Json?           @map("workforce_by_trade")
+  status                String          @default("draft") @db.VarChar(20)
+  version               Int             @default(1)
+  createdBy             String          @map("created_by") @db.Uuid
+  submittedBy           String?         @map("submitted_by") @db.Uuid
+  submittedAt           DateTime?       @map("submitted_at") @db.Timestamptz
+  reviewedBy            String?         @map("reviewed_by") @db.Uuid
+  reviewedAt            DateTime?       @map("reviewed_at") @db.Timestamptz
+  reviewReason          String?         @map("review_reason") @db.VarChar(500)
+  createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  site                  Site            @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_diaries_site_fkey")
+  photos                SitePhoto[]
+  scheduleDelays        ScheduleDelay[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -397,6 +410,7 @@ model WbsNode {
   children          WbsNode[]          @relation("WbsTree")
   milestones        Milestone[]
   scheduleItems     ScheduleActivity[]
+  inspections       Inspection[]
 
   @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, code])
@@ -665,6 +679,7 @@ model BqItem {
   stockEntries     StockLedgerEntry[]
   measurements     ProgressMeasurement[]
   scheduleItems    ScheduleActivity[]
+  inspections      Inspection[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, versionId, lineageId])
@@ -2321,36 +2336,39 @@ model PayrollDayClaim {
 // at capture; `verified` = location inside and time ok. Originals and metadata-free thumbnails
 // are private objects under tenant/project/photo keys.
 model SitePhoto {
-  id              String     @id @db.Uuid
-  tenantId        String     @map("tenant_id") @db.Uuid
-  projectId       String     @map("project_id") @db.Uuid
-  siteId          String     @map("site_id") @db.Uuid
-  diaryId         String?    @map("diary_id") @db.Uuid
-  caption         String?    @db.VarChar(500)
-  objectKey       String     @map("object_key") @db.VarChar(300)
-  thumbnailKey    String     @map("thumbnail_key") @db.VarChar(300)
-  fileSha256      String     @map("file_sha256") @db.Char(64)
-  sizeBytes       Int        @map("size_bytes")
+  id              String                @id @db.Uuid
+  tenantId        String                @map("tenant_id") @db.Uuid
+  projectId       String                @map("project_id") @db.Uuid
+  siteId          String                @map("site_id") @db.Uuid
+  diaryId         String?               @map("diary_id") @db.Uuid
+  caption         String?               @db.VarChar(500)
+  objectKey       String                @map("object_key") @db.VarChar(300)
+  thumbnailKey    String                @map("thumbnail_key") @db.VarChar(300)
+  fileSha256      String                @map("file_sha256") @db.Char(64)
+  sizeBytes       Int                   @map("size_bytes")
   width           Int
   height          Int
-  scanStatus      String     @map("scan_status") @db.VarChar(20)
-  scanEngine      String     @map("scan_engine") @db.VarChar(60)
-  scannedAt       DateTime   @map("scanned_at") @db.Timestamptz
-  capturedAt      DateTime?  @map("captured_at") @db.Timestamptz
-  timeSource      String?    @map("time_source") @db.VarChar(20)
-  latitude        Decimal?   @db.Decimal(9, 6)
-  longitude       Decimal?   @db.Decimal(9, 6)
-  camera          String?    @db.VarChar(120)
-  geofenceVersion Int?       @map("geofence_version")
-  locationCheck   String     @map("location_check") @db.VarChar(12)
-  timeCheck       String     @map("time_check") @db.VarChar(16)
-  distanceM       Decimal?   @map("distance_m") @db.Decimal(10, 1)
+  scanStatus      String                @map("scan_status") @db.VarChar(20)
+  scanEngine      String                @map("scan_engine") @db.VarChar(60)
+  scannedAt       DateTime              @map("scanned_at") @db.Timestamptz
+  capturedAt      DateTime?             @map("captured_at") @db.Timestamptz
+  timeSource      String?               @map("time_source") @db.VarChar(20)
+  latitude        Decimal?              @db.Decimal(9, 6)
+  longitude       Decimal?              @db.Decimal(9, 6)
+  camera          String?               @db.VarChar(120)
+  geofenceVersion Int?                  @map("geofence_version")
+  locationCheck   String                @map("location_check") @db.VarChar(12)
+  timeCheck       String                @map("time_check") @db.VarChar(16)
+  distanceM       Decimal?              @map("distance_m") @db.Decimal(10, 1)
   verified        Boolean
-  uploadedBy      String     @map("uploaded_by") @db.Uuid
-  uploadedAt      DateTime   @default(now()) @map("uploaded_at") @db.Timestamptz
-  site            Site       @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_site_fkey")
-  diary           SiteDiary? @relation(fields: [tenantId, siteId, diaryId], references: [tenantId, siteId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_diary_fkey")
+  uploadedBy      String                @map("uploaded_by") @db.Uuid
+  uploadedAt      DateTime              @default(now()) @map("uploaded_at") @db.Timestamptz
+  site            Site                  @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_site_fkey")
+  diary           SiteDiary?            @relation(fields: [tenantId, siteId, diaryId], references: [tenantId, siteId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_diary_fkey")
+  inspectionItems InspectionItemPhoto[]
+  snags           SnagPhoto[]
 
+  @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, fileSha256])
   @@index([tenantId, projectId, id])
   @@map("site_photos")
@@ -3367,6 +3385,7 @@ model ScheduleActivity {
   predecessors       ScheduleDependency[]    @relation("DependencySuccessor")
   successors         ScheduleDependency[]    @relation("DependencyPredecessor")
   delayLinks         ScheduleDelayActivity[]
+  inspections        Inspection[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -3493,4 +3512,326 @@ model ScheduleDelayActivity {
   @@id([tenantId, delayVersionId, activityId])
   @@index([tenantId, projectId, activityId])
   @@map("schedule_delay_activities")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Quality (D6.1; ARCHITECTURE §4.7, WORKFLOWS "Quality"). State machines, maker-checker sign-offs,
+// numbering, the concrete rules and immutability live in SQL triggers (migration
+// 20261122100000_quality); partial unique indexes are SQL-only.
+
+// Company quality settings; no row means the defaults (DLP 6 months, cube grace 2 days).
+model QualitySettings {
+  tenantId             String   @id @map("tenant_id") @db.Uuid
+  dlpMonths            Int      @default(6) @map("dlp_months")
+  cubeOverdueGraceDays Int      @default(2) @map("cube_overdue_grace_days")
+  version              Int      @default(1)
+  updatedBy            String   @map("updated_by") @db.Uuid
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("quality_settings")
+}
+
+// One version of a company checklist template (append-only). `lineage_id` is version 1's ID; a
+// revision or retirement appends the next version; inspections keep the version they used.
+model ChecklistTemplate {
+  id          String                  @id @db.Uuid
+  tenantId    String                  @map("tenant_id") @db.Uuid
+  lineageId   String                  @map("lineage_id") @db.Uuid
+  version     Int
+  name        String                  @db.VarChar(120)
+  category    String                  @db.VarChar(20)
+  description String?                 @db.VarChar(500)
+  retired     Boolean                 @default(false)
+  itemCount   Int                     @map("item_count")
+  createdBy   String                  @map("created_by") @db.Uuid
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  tenant      Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lineage     ChecklistTemplate       @relation("TemplateLineage", fields: [tenantId, lineageId], references: [tenantId, id], onDelete: NoAction)
+  versions    ChecklistTemplate[]     @relation("TemplateLineage")
+  items       ChecklistTemplateItem[]
+  inspections Inspection[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, lineageId, version])
+  @@map("checklist_templates")
+}
+
+// A template version's checklist item (written with its version, append-only).
+model ChecklistTemplateItem {
+  id         String            @id @db.Uuid
+  tenantId   String            @map("tenant_id") @db.Uuid
+  templateId String            @map("template_id") @db.Uuid
+  position   Int
+  text       String            @db.VarChar(300)
+  template   ChecklistTemplate @relation(fields: [tenantId, templateId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, templateId, position])
+  @@map("checklist_template_items")
+}
+
+// An inspection of work on a site against a template version: draft → submitted → signed off by
+// an independent quality.manage holder (locked), or returned to draft with a reason.
+model Inspection {
+  id                 String            @id @db.Uuid
+  tenantId           String            @map("tenant_id") @db.Uuid
+  projectId          String            @map("project_id") @db.Uuid
+  siteId             String            @map("site_id") @db.Uuid
+  number             Int
+  templateId         String            @map("template_id") @db.Uuid
+  category           String            @db.VarChar(20)
+  location           String            @db.VarChar(200)
+  inspectorType      String            @map("inspector_type") @db.VarChar(12)
+  inspectorName      String?           @map("inspector_name") @db.VarChar(150)
+  inspectedOn        DateTime          @map("inspected_on") @db.Date
+  wbsNodeId          String?           @map("wbs_node_id") @db.Uuid
+  scheduleActivityId String?           @map("schedule_activity_id") @db.Uuid
+  bqVersionId        String?           @map("bq_version_id") @db.Uuid
+  bqItemLineageId    String?           @map("bq_item_lineage_id") @db.Uuid
+  notes              String?           @db.VarChar(2000)
+  status             String            @default("draft") @db.VarChar(12)
+  result             String?           @db.VarChar(4)
+  version            Int               @default(1)
+  createdBy          String            @map("created_by") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  submittedBy        String?           @map("submitted_by") @db.Uuid
+  submittedAt        DateTime?         @map("submitted_at") @db.Timestamptz
+  signedOffBy        String?           @map("signed_off_by") @db.Uuid
+  signedOffAt        DateTime?         @map("signed_off_at") @db.Timestamptz
+  returnedBy         String?           @map("returned_by") @db.Uuid
+  returnedAt         DateTime?         @map("returned_at") @db.Timestamptz
+  returnReason       String?           @map("return_reason") @db.VarChar(500)
+  updatedBy          String            @map("updated_by") @db.Uuid
+  updatedAt          DateTime          @default(now()) @map("updated_at") @db.Timestamptz
+  site               Site              @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  template           ChecklistTemplate @relation(fields: [tenantId, templateId], references: [tenantId, id], onDelete: Restrict)
+  wbsNode            WbsNode?          @relation(fields: [tenantId, projectId, wbsNodeId], references: [tenantId, projectId, id], onDelete: Restrict)
+  scheduleActivity   ScheduleActivity? @relation(fields: [tenantId, projectId, scheduleActivityId], references: [tenantId, projectId, id], onDelete: Restrict)
+  bqItem             BqItem?           @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  items              InspectionItem[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, status])
+  @@map("inspections")
+}
+
+// A checklist item on an inspection (its text is copied from the template version).
+model InspectionItem {
+  id           String                @id @db.Uuid
+  tenantId     String                @map("tenant_id") @db.Uuid
+  projectId    String                @map("project_id") @db.Uuid
+  inspectionId String                @map("inspection_id") @db.Uuid
+  position     Int
+  text         String                @db.VarChar(300)
+  result       String                @default("pending") @db.VarChar(8)
+  note         String?               @db.VarChar(1000)
+  updatedBy    String                @map("updated_by") @db.Uuid
+  updatedAt    DateTime              @default(now()) @map("updated_at") @db.Timestamptz
+  inspection   Inspection            @relation(fields: [tenantId, projectId, inspectionId], references: [tenantId, projectId, id], onDelete: Cascade)
+  photos       InspectionItemPhoto[]
+  snags        Snag[]
+
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, inspectionId, position])
+  @@map("inspection_items")
+}
+
+// A site photo attached to a checklist item while its inspection is a draft.
+model InspectionItemPhoto {
+  tenantId  String         @map("tenant_id") @db.Uuid
+  projectId String         @map("project_id") @db.Uuid
+  itemId    String         @map("item_id") @db.Uuid
+  photoId   String         @map("photo_id") @db.Uuid
+  item      InspectionItem @relation(fields: [tenantId, projectId, itemId], references: [tenantId, projectId, id], onDelete: Cascade)
+  photo     SitePhoto      @relation(fields: [tenantId, projectId, photoId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@id([tenantId, itemId, photoId])
+  @@index([tenantId, projectId, photoId])
+  @@map("inspection_item_photos")
+}
+
+// A snag or defect: open → fixed → closed (verified by someone other than the fixer) or reopened.
+// `phase` is dlp when raised after practical completion was certified.
+model Snag {
+  id               String          @id @db.Uuid
+  tenantId         String          @map("tenant_id") @db.Uuid
+  projectId        String          @map("project_id") @db.Uuid
+  siteId           String          @map("site_id") @db.Uuid
+  number           Int
+  location         String          @db.VarChar(200)
+  description      String          @db.VarChar(2000)
+  severity         String          @db.VarChar(10)
+  responsibleKind  String          @map("responsible_kind") @db.VarChar(15)
+  responsibleName  String          @map("responsible_name") @db.VarChar(150)
+  dueOn            DateTime?       @map("due_on") @db.Date
+  phase            String          @db.VarChar(12)
+  inspectionItemId String?         @map("inspection_item_id") @db.Uuid
+  status           String          @default("open") @db.VarChar(8)
+  fixNote          String?         @map("fix_note") @db.VarChar(1000)
+  reopenCount      Int             @default(0) @map("reopen_count")
+  lastReopenReason String?         @map("last_reopen_reason") @db.VarChar(500)
+  raisedBy         String          @map("raised_by") @db.Uuid
+  raisedAt         DateTime        @default(now()) @map("raised_at") @db.Timestamptz
+  fixedBy          String?         @map("fixed_by") @db.Uuid
+  fixedAt          DateTime?       @map("fixed_at") @db.Timestamptz
+  closedBy         String?         @map("closed_by") @db.Uuid
+  closedAt         DateTime?       @map("closed_at") @db.Timestamptz
+  version          Int             @default(1)
+  updatedBy        String          @map("updated_by") @db.Uuid
+  updatedAt        DateTime        @default(now()) @map("updated_at") @db.Timestamptz
+  site             Site            @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  inspectionItem   InspectionItem? @relation(fields: [tenantId, projectId, inspectionItemId], references: [tenantId, projectId, id], onDelete: Restrict)
+  photos           SnagPhoto[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, status])
+  @@map("snags")
+}
+
+// A site photo of a snag when raised or when recorded as fixed (append-only).
+model SnagPhoto {
+  tenantId  String    @map("tenant_id") @db.Uuid
+  projectId String    @map("project_id") @db.Uuid
+  snagId    String    @map("snag_id") @db.Uuid
+  photoId   String    @map("photo_id") @db.Uuid
+  stage     String    @db.VarChar(8)
+  /// The snag's reopen count when a fix photo was added (0 for photos taken when it was raised).
+  fixRound  Int       @default(0) @map("fix_round")
+  addedBy   String    @map("added_by") @db.Uuid
+  addedAt   DateTime  @default(now()) @map("added_at") @db.Timestamptz
+  snag      Snag      @relation(fields: [tenantId, projectId, snagId], references: [tenantId, projectId, id], onDelete: Cascade)
+  photo     SitePhoto @relation(fields: [tenantId, projectId, photoId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@id([tenantId, snagId, photoId, stage, fixRound])
+  @@index([tenantId, projectId, photoId])
+  @@map("snag_photos")
+}
+
+// A set of concrete test cubes cast from one pour. Fixed once recorded; it can only be voided
+// (entered in error) with a reason.
+model CubeSet {
+  id                String       @id @db.Uuid
+  tenantId          String       @map("tenant_id") @db.Uuid
+  projectId         String       @map("project_id") @db.Uuid
+  siteId            String       @map("site_id") @db.Uuid
+  number            Int
+  element           String       @db.VarChar(200)
+  concreteClass     String       @map("concrete_class") @db.VarChar(4)
+  specifiedStrength Int          @map("specified_strength")
+  castOn            DateTime     @map("cast_on") @db.Date
+  cubesPerAge       Int          @map("cubes_per_age")
+  batchReference    String?      @map("batch_reference") @db.VarChar(60)
+  notes             String?      @db.VarChar(1000)
+  status            String       @default("active") @db.VarChar(6)
+  voidReason        String?      @map("void_reason") @db.VarChar(500)
+  voidedBy          String?      @map("voided_by") @db.Uuid
+  voidedAt          DateTime?    @map("voided_at") @db.Timestamptz
+  version           Int          @default(1)
+  createdBy         String       @map("created_by") @db.Uuid
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  site              Site         @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  results           CubeResult[]
+  slumpTests        SlumpTest[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, castOn])
+  @@map("cube_sets")
+}
+
+// One age's crushing results (append-only). A correction is a new row that supersedes the
+// original once, with a reason; the stored mean and outcome are re-checked by the database.
+model CubeResult {
+  id               String      @id @db.Uuid
+  tenantId         String      @map("tenant_id") @db.Uuid
+  projectId        String      @map("project_id") @db.Uuid
+  cubeSetId        String      @map("cube_set_id") @db.Uuid
+  ageDays          Int         @map("age_days")
+  testedOn         DateTime    @map("tested_on") @db.Date
+  strengths        Decimal[]   @db.Decimal(4, 1)
+  meanStrength     Decimal     @map("mean_strength") @db.Decimal(5, 2)
+  minStrength      Decimal     @map("min_strength") @db.Decimal(4, 1)
+  outcome          String      @db.VarChar(16)
+  ruleVersion      String      @map("rule_version") @db.VarChar(20)
+  laboratory       String?     @db.VarChar(120)
+  reportReference  String?     @map("report_reference") @db.VarChar(60)
+  supersedesId     String?     @map("supersedes_id") @db.Uuid
+  correctionReason String?     @map("correction_reason") @db.VarChar(500)
+  recordedBy       String      @map("recorded_by") @db.Uuid
+  recordedAt       DateTime    @default(now()) @map("recorded_at") @db.Timestamptz
+  cubeSet          CubeSet     @relation(fields: [tenantId, projectId, cubeSetId], references: [tenantId, projectId, id], onDelete: Cascade)
+  supersedes       CubeResult? @relation("CubeCorrection", fields: [tenantId, projectId, supersedesId], references: [tenantId, projectId, id], onDelete: NoAction)
+  supersededBy     CubeResult? @relation("CubeCorrection")
+
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, supersedesId])
+  @@index([tenantId, cubeSetId, ageDays])
+  @@map("cube_results")
+}
+
+// A slump test (append-only; a correction supersedes the original once and keeps its number).
+model SlumpTest {
+  id               String     @id @db.Uuid
+  tenantId         String     @map("tenant_id") @db.Uuid
+  projectId        String     @map("project_id") @db.Uuid
+  siteId           String     @map("site_id") @db.Uuid
+  number           Int
+  testedOn         DateTime   @map("tested_on") @db.Date
+  element          String     @db.VarChar(200)
+  concreteClass    String?    @map("concrete_class") @db.VarChar(4)
+  cubeSetId        String?    @map("cube_set_id") @db.Uuid
+  targetMm         Int        @map("target_mm")
+  toleranceMm      Int        @map("tolerance_mm")
+  measuredMm       Int        @map("measured_mm")
+  outcome          String     @db.VarChar(4)
+  ruleVersion      String     @map("rule_version") @db.VarChar(20)
+  notes            String?    @db.VarChar(1000)
+  supersedesId     String?    @map("supersedes_id") @db.Uuid
+  correctionReason String?    @map("correction_reason") @db.VarChar(500)
+  recordedBy       String     @map("recorded_by") @db.Uuid
+  recordedAt       DateTime   @default(now()) @map("recorded_at") @db.Timestamptz
+  site             Site       @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  cubeSet          CubeSet?   @relation(fields: [tenantId, projectId, cubeSetId], references: [tenantId, projectId, id], onDelete: Restrict)
+  supersedes       SlumpTest? @relation("SlumpCorrection", fields: [tenantId, projectId, supersedesId], references: [tenantId, projectId, id], onDelete: NoAction)
+  supersededBy     SlumpTest? @relation("SlumpCorrection")
+
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, supersedesId])
+  @@index([tenantId, projectId, number])
+  @@map("slump_tests")
+}
+
+// Practical or final completion: proposed → certified by an independent quality.manage holder
+// (locked) or withdrawn with a reason. One live (not withdrawn) certificate per project and kind.
+model ProjectCompletion {
+  id                String    @id @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  projectId         String    @map("project_id") @db.Uuid
+  kind              String    @db.VarChar(10)
+  status            String    @default("proposed") @db.VarChar(10)
+  completionDate    DateTime  @map("completion_date") @db.Date
+  dlpMonths         Int?      @map("dlp_months")
+  dlpEndsOn         DateTime? @map("dlp_ends_on") @db.Date
+  openCriticalSnags Int       @map("open_critical_snags")
+  openSnags         Int       @map("open_snags")
+  exceptionReason   String?   @map("exception_reason") @db.VarChar(500)
+  notes             String?   @db.VarChar(1000)
+  version           Int       @default(1)
+  proposedBy        String    @map("proposed_by") @db.Uuid
+  proposedAt        DateTime  @default(now()) @map("proposed_at") @db.Timestamptz
+  certifiedBy       String?   @map("certified_by") @db.Uuid
+  certifiedAt       DateTime? @map("certified_at") @db.Timestamptz
+  withdrawnBy       String?   @map("withdrawn_by") @db.Uuid
+  withdrawnAt       DateTime? @map("withdrawn_at") @db.Timestamptz
+  withdrawReason    String?   @map("withdraw_reason") @db.VarChar(500)
+  project           Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId, kind])
+  @@map("project_completions")
 }

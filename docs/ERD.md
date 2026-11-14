@@ -1968,6 +1968,46 @@ erDiagram
   }
 ```
 
+**Implemented in D8.1 (dashboards and reports)** (migration `20261129090000_reports`; [ARCHITECTURE §4.14](./ARCHITECTURE.md#414-dashboards-and-reports-d81)). Reports and the dashboard are read models over the other modules' tables (no report tables, views or export jobs, D-129); the migration adds two tables for scheduled emails and three indexes the bounded report queries use (`audit_events (tenant_id, created_at)`, `cost_entries (tenant_id, project_id, occurred_on)`, `stock_ledger_entries (tenant_id, project_id, business_date)`). Both tables have `tenant_id`, forced RLS with `WITH CHECK` on `app.current_tenant_id()`, database-stamped times and `pmb_app` privileges without DELETE or TRUNCATE (and without UPDATE on the runs).
+
+```mermaid
+erDiagram
+  Tenant ||--o{ ReportSubscription : has
+  User ||--o{ ReportSubscription : "subscribes (self only)"
+  ReportSubscription ||--o{ ReportSubscriptionRun : "append-only"
+  ReportSubscription {
+    uuid id PK
+    uuid tenant_id FK
+    uuid user_id FK "the subscriber"
+    varchar report_id "registry ID (not the unavailable one)"
+    jsonb parameters "IDs only; the period follows each run"
+    varchar frequency "weekly, monthly"
+    smallint weekday "1-7 when weekly"
+    smallint day_of_month "1-31 when monthly"
+    varchar locale "en, sw"
+    varchar status "active, paused, deleted"
+    timestamptz next_run_at
+    timestamptz last_run_at
+    int version
+    timestamptz deleted_at
+  }
+  ReportSubscriptionRun {
+    uuid id PK
+    uuid tenant_id FK
+    uuid subscription_id FK "(tenant_id, subscription_id)"
+    timestamptz due_at "unique per subscription"
+    varchar outcome "sent, failed, skipped"
+    varchar reason "a code, never personal data"
+    date period_from
+    date period_to
+  }
+```
+
+| Entity | Table | Notes |
+|---|---|---|
+| ReportSubscription | `report_subscriptions` | A user's own scheduled report: `report_id`, `parameters` (JSON object of IDs, ≤ 2,000 bytes), `frequency` with `weekday` **or** `day_of_month`, `locale`, `status` `active ⇄ paused`, either → `deleted` (final; `deleted_at`, `next_run_at` cleared), `next_run_at` (required while active), `last_run_at` (only forward), `version` (moves exactly on a status change). `app.guard_report_subscription`: created only by the signed-in user for themselves as a member, starting active at version 1; changed only by the subscriber; report, parameters, schedule, language and creation time never change. Partial index `report_subscriptions_due_idx (next_run_at) WHERE status = 'active'`; partial unique `report_subscriptions_live_key (tenant_id, user_id, report_id, parameters, frequency, weekday, day_of_month) WHERE status <> 'deleted'` (409 `subscription-exists`). Both partial indexes live in the migration only (Prisma does not model them). The scheduler reads due rows across companies only through `app.due_report_subscriptions(limit)` (SECURITY DEFINER; company, ID and due time; a `report_subscriptions_due_scan` policy limited to the schema owner). |
+| ReportSubscriptionRun | `report_subscription_runs` | One row per subscription and due time (unique), recorded as the subscriber of an active subscription and never before it is due: `outcome` `sent`; `skipped` with `permission-lost`, `membership-ended`, `report-unavailable` or `no-email-address`; `failed` with `delivery-failed`; the period reported on (range reports). Append-only for every role (`app.guard_report_subscription_run`, TRUNCATE refused). No report data. |
+
 **Implemented in D8.4 (documents, compliance register and instructions)** (migration `20261128090000_documents`; [ARCHITECTURE §4.13](./ARCHITECTURE.md#413-documents-compliance-register-and-instructions-d84)). Every new table has `tenant_id`, forced RLS with `WITH CHECK` on `app.current_tenant_id()`, composite `(tenant_id, …)` foreign keys (to projects, documents and versions (`(tenant_id, project_id, id)` so a version, evidence, attachment or approval document belongs to the same project), types, superseded records, instructions, delays, site photos and requests) and `pmb_app` privileges without DELETE or TRUNCATE on any of them and without UPDATE on `instruction_responses`, `instruction_attachments` and `approval_responses` (append-only). Guard triggers (`app.guard_document`, `app.guard_document_version`, `app.guard_compliance_type`, `app.guard_compliance_record`, `app.guard_instruction`, `app.guard_instruction_response`, `app.guard_instruction_attachment`, `app.guard_approval_request`, `app.guard_approval_response`) repeat the API's rules; deferred checks (`app.check_document_has_version`, `app.check_document_versions`, `app.check_compliance_records`, `app.check_instruction_status`) hold the "exactly one current" and "status = latest response" rules at commit; `app.apply_approval_response` sets a request's decision; every write checks `app.assert_documents_writable` (closed and cancelled projects are read-only). Partial and expression unique indexes (kept out of `schema.prisma`): one current version per document, revision per document (case-insensitive), drawing number per project (case-insensitive), one current compliance record per project item and per company item. Differences from the target model above:
 
 | Entity | Implemented as | Difference from the target model |

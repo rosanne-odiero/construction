@@ -37,7 +37,12 @@ import { seedDocuments, type DocumentsSeedSummary } from "./documents-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 import { seedValuations, type ValuationsSeedSummary } from "./demo-valuations.js";
-import { seedSupplierPortal, type SupplierPortalSeedSummary } from "./demo-supplier-portal.js";
+import {
+  DEMO_SUPPLIER_PORTAL_USER,
+  seedSupplierPortal,
+  type SupplierPortalSeedSummary,
+} from "./demo-supplier-portal.js";
+import { seedReports, type ReportsSeedSummary } from "./reports-seed.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -52,13 +57,31 @@ import { seedSupplierPortal, type SupplierPortalSeedSummary } from "./demo-suppl
  * measurements with photos, certified payment certificates on RUI-HTS and JUJ-DPX with a
  * practical-completion retention release, and earned value inputs (demo-valuations.ts), and
  * (D7.2) a supplier portal user for the quarry with an acknowledged LPO, a delivery and invoices
- * it submitted on the Kitengela project (demo-supplier-portal.ts).
+ * it submitted on the Kitengela project (demo-supplier-portal.ts), and (D8.1) report subscriptions
+ * for the owner and finance (reports-seed.ts).
  * Idempotent: existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
  */
 
 export const DEMO_COMPANY = "Jenga Bora Builders Ltd";
+
+/**
+ * A copy of the demo company under its own name and accounts (`owner+<namespace>@…`), so a test
+ * can seed a whole company without touching the shared demo one. Lower-case letters, digits and
+ * hyphens only.
+ */
+export type SeedNamespace = string;
+const NAMESPACE = /^[a-z0-9-]{1,30}$/;
+const namespaced = (identifier: string, namespace: SeedNamespace | undefined) =>
+  namespace ? identifier.replace("@", `+${namespace}@`) : identifier;
+export const demoCompanyName = (namespace?: SeedNamespace) =>
+  namespace ? `${DEMO_COMPANY} (${namespace})` : DEMO_COMPANY;
+export const demoAccounts = (namespace?: SeedNamespace): readonly DemoAccount[] =>
+  DEMO_ACCOUNTS.map((account) => ({
+    ...account,
+    identifier: namespaced(account.identifier, namespace),
+  }));
 const SOURCE = { source: "seed" } as const;
 
 type Tx = Prisma.TransactionClient;
@@ -417,6 +440,7 @@ export type SeedSummary = {
   safety: SafetySeedSummary;
   supplierPortal: SupplierPortalSeedSummary;
   plant: PlantSeedSummary;
+  reports: ReportsSeedSummary;
   documents: DocumentsSeedSummary;
 };
 
@@ -432,16 +456,19 @@ const calendar = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
 export async function seedDemo(
   app: INestApplicationContext,
-  options: { resetCredentials?: boolean } = {},
+  options: { resetCredentials?: boolean; namespace?: SeedNamespace } = {},
 ): Promise<SeedSummary> {
   assertSeedAllowed(process.env["NODE_ENV"]);
+  if (options.namespace !== undefined && !NAMESPACE.test(options.namespace))
+    throw new Error("A seed namespace is 1–30 lower-case letters, digits or hyphens");
+  const companyName = demoCompanyName(options.namespace);
   assertSeedAllowed(app.get(AppConfig).get("NODE_ENV"));
   const prisma = app.get(PrismaService);
   const security = app.get(AuthSecurity);
   const db = app.get(TenantDatabase);
 
   const accounts: (SeededAccount & { id: string; key: DemoAccount["key"] })[] = [];
-  for (const demo of DEMO_ACCOUNTS) {
+  for (const demo of demoAccounts(options.namespace)) {
     const existing = await prisma.user.findUnique({ where: { identifier: demo.identifier } });
     const reset = !existing || options.resetCredentials === true;
     const password = reset ? newPassword() : null;
@@ -521,7 +548,7 @@ export async function seedDemo(
       select: { tenant: { select: { id: true, name: true } } },
     }),
   );
-  const found = memberships.find((membership) => membership.tenant.name === DEMO_COMPANY);
+  const found = memberships.find((membership) => membership.tenant.name === companyName);
   const tenantId = found?.tenant.id ?? randomUUID();
   const audit: Audit = (tx, action, resourceId, metadata = {}) =>
     tx.auditEvent.create({
@@ -532,7 +559,7 @@ export async function seedDemo(
   const buildups: SeedSummary["buildups"] = [];
   await db.run({ userId: owner.id, tenantId, requestId: "seed" }, async (tx) => {
     if (!found) {
-      await tx.tenant.create({ data: { id: tenantId, name: DEMO_COMPANY, createdBy: owner.id } });
+      await tx.tenant.create({ data: { id: tenantId, name: companyName, createdBy: owner.id } });
       await tx.membership.create({ data: { tenantId, userId: owner.id, role: "owner" } });
       await audit(tx, "tenant.created", tenantId, SOURCE);
     }
@@ -659,11 +686,19 @@ export async function seedDemo(
       storekeeperId: userOf("storekeeper").id,
       financeId: userOf("finance").id,
     },
-    { resetCredentials: options.resetCredentials },
+    {
+      resetCredentials: options.resetCredentials,
+      identifier: namespaced(DEMO_SUPPLIER_PORTAL_USER.identifier, options.namespace),
+    },
   );
+  // Last: subscriptions to reports over everything above.
+  const reports = await seedReports(app, tenantId, {
+    ownerId: owner.id,
+    financeId: userOf("finance").id,
+  });
 
   return {
-    company: { id: tenantId, name: DEMO_COMPANY, created: !found },
+    company: { id: tenantId, name: companyName, created: !found },
     accounts: accounts.map(({ id: _id, key: _key, ...account }) => account),
     projects,
     buildups,
@@ -680,6 +715,7 @@ export async function seedDemo(
     safety,
     supplierPortal,
     plant,
+    reports,
     documents,
   };
 }

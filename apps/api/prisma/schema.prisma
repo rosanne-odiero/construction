@@ -37,6 +37,7 @@ model User {
   challenges          AuthChallenge[]
   recoveryCodes       RecoveryCode[]
   memberships         Membership[]
+  reportSubscriptions ReportSubscription[]
   passkeys            WebAuthnCredential[]
   identities          UserIdentity[]
 
@@ -151,6 +152,7 @@ model Tenant {
   projects            Project[]
   invites             Invitation[]
   audit               AuditEvent[]
+  reportSubscriptions ReportSubscription[]
   roles               TenantRole[]
   bqTemplates         BqMappingTemplate[]
   buildups            RateBuildup[]
@@ -542,6 +544,7 @@ model AuditEvent {
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, sequence])
+  @@index([tenantId, createdAt])
   @@map("audit_events")
 }
 
@@ -3113,6 +3116,7 @@ model StockLedgerEntry {
   @@unique([tenantId, storeId, materialId, seq])
   @@unique([tenantId, reversesEntryId])
   @@index([tenantId, storeId, id])
+  @@index([tenantId, projectId, businessDate])
   @@index([tenantId, projectId, bqItemLineageId])
   @@index([tenantId, grnId])
   @@index([tenantId, movementId])
@@ -4047,6 +4051,7 @@ model CostEntry {
   @@unique([tenantId, id])
   @@unique([tenantId, reversesEntryId])
   @@index([tenantId, projectId, recordedAt])
+  @@index([tenantId, projectId, occurredOn])
   @@index([tenantId, projectId, bqItemLineageId])
   @@index([tenantId, invoiceId])
   @@index([tenantId, expenseId])
@@ -5375,6 +5380,56 @@ model PlantService {
   @@unique([tenantId, id])
   @@index([tenantId, plantId, servicedAt])
   @@map("plant_services")
+}
+
+// D8.1: a user's scheduled report email (ARCHITECTURE §4.14). The report and its fixed parameters
+// (project, site, store, batch, actor) never change; the period follows each run. active ⇄ paused,
+// either → deleted (final, kept with its runs). Only the owner changes it (app.guard_report_subscription);
+// the email carries a sign-in link, never report data (D-127).
+model ReportSubscription {
+  id         String                  @id @default(uuid(7)) @db.Uuid
+  tenantId   String                  @map("tenant_id") @db.Uuid
+  userId     String                  @map("user_id") @db.Uuid
+  reportId   String                  @map("report_id") @db.VarChar(40)
+  parameters Json                    @default("{}")
+  frequency  String                  @db.VarChar(10)
+  weekday    Int?                    @db.SmallInt
+  dayOfMonth Int?                    @map("day_of_month") @db.SmallInt
+  locale     String                  @default("en") @db.VarChar(2)
+  status     String                  @default("active") @db.VarChar(10)
+  nextRunAt  DateTime?               @map("next_run_at") @db.Timestamptz
+  lastRunAt  DateTime?               @map("last_run_at") @db.Timestamptz
+  version    Int                     @default(1)
+  createdAt  DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime                @default(now()) @map("updated_at") @db.Timestamptz
+  deletedAt  DateTime?               @map("deleted_at") @db.Timestamptz
+  tenant     Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user       User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  runs       ReportSubscriptionRun[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, userId, status])
+  @@map("report_subscriptions")
+}
+
+// D8.1: one scheduled run of a subscription (sent, failed or skipped with a reason code), once per
+// subscription and due time. Append-only (app.guard_report_subscription_run); no report data.
+model ReportSubscriptionRun {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  tenantId       String             @map("tenant_id") @db.Uuid
+  subscriptionId String             @map("subscription_id") @db.Uuid
+  dueAt          DateTime           @map("due_at") @db.Timestamptz
+  outcome        String             @db.VarChar(10)
+  reason         String?            @db.VarChar(30)
+  periodFrom     DateTime?          @map("period_from") @db.Date
+  periodTo       DateTime?          @map("period_to") @db.Date
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  subscription   ReportSubscription @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, subscriptionId, dueAt])
+  @@index([tenantId, createdAt])
+  @@map("report_subscription_runs")
 }
 
 // D8.4 Documents and compliance register (ARCHITECTURE §4.13, migration 20261128090000_documents).

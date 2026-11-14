@@ -20,6 +20,7 @@ import { SafetyModule } from "./modules/safety/safety.module.js";
 import { PlantModule } from "./modules/plant/plant.module.js";
 import { DocumentsModule } from "./modules/documents/documents.module.js";
 import { ScheduleModule } from "./modules/schedule/schedule.module.js";
+import { ReportsModule } from "./modules/reports/reports.module.js";
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { ScheduleModule } from "./modules/schedule/schedule.module.js";
     PlantModule,
     DocumentsModule,
     PortalsModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}

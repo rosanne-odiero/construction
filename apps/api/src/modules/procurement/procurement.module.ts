@@ -101,6 +101,7 @@ import { VarianceService } from "./stores/variance.service.js";
     P2pAccess,
     P2pDocumentsService,
     P2pUploadGuard,
+    StoresService,
     SupplierCrypto,
   ],
 })

@@ -1,13 +1,14 @@
-# Phase 8 demo: health and safety (D8.2), plant and equipment (D8.3), documents and compliance (D8.4)
+# Phase 8 demo: health and safety (D8.2), plant and equipment (D8.3), dashboards and reports (D8.1), documents and compliance (D8.4)
 
-This walkthrough is **not** Phase 8 acceptance. It covers the health and safety module (D8.2):
+This walkthrough covers Phase 8. It starts with the health and safety module (D8.2):
 site inductions with flags from attendance, toolbox talks, the PPE register, incidents and near
 misses, corrective actions and first aid, and the done-when flow: incident → investigation →
-corrective actions → done → verified → incident closed and locked. Plant and equipment (D8.3) and
-documents and the compliance register (D8.4) have their own walkthroughs
-[below](#plant-and-equipment-d83) and [further down](#documents-and-compliance-register-d84).
-Dashboards and reports (D8.1) and offline/site-app capture remain pending, so Phase 8 acceptance
-("all reports export to PDF and Excel") is not met yet. Notifying the regulator (DOSH) and the OSHA/WIBA registers are **COMPLIANCE-REVIEW**
+corrective actions → done → verified → incident closed and locked. Plant and equipment (D8.3),
+dashboards and reports (D8.1) and documents and the compliance register (D8.4) have their own
+walkthroughs [below](#plant-and-equipment-d83), [after it](#dashboards-and-reports-d81) and
+[further down](#documents-and-compliance-register-d84). **Phase 8 acceptance** ("all reports export to PDF and Excel") is met: every report in the
+registry exports to both (D8.1's done-when test and the [reports walkthrough](#dashboards-and-reports-d81)),
+and so does the compliance register (D8.4); offline/site-app capture remains pending. Notifying the regulator (DOSH) and the OSHA/WIBA registers are **COMPLIANCE-REVIEW**
 items (CR-HS-01 to CR-HS-04): the system records what you did; it files nothing.
 
 ## Start
@@ -132,6 +133,63 @@ What to look for:
   not see hire rates.
 - COMPLIANCE-REVIEW CR-PLT-01–03: operator certificate rules, consumption standards and record
   keeping await an adviser.
+
+## Dashboards and reports (D8.1)
+
+This walkthrough covers the live owner dashboard, the reports centre with PDF and Excel downloads
+in English and Kiswahili, and scheduled emails. Its done-when — **all reports export** — is proved
+by the API test that exports every report in the registry; here you check a few by hand. The seed
+(same commands as above) adds two subscriptions: the owner's weekly cost ledger for Ruiru Heights
+(Mondays) and the finance officer's monthly supplier invoice ageing (on the 1st, in Kiswahili).
+Emails go to Mailpit in development (`AUTH_NOTIFICATION_TRANSPORT=development`); production email
+stays off until a provider is approved.
+
+1. As the **owner** (Wanjiru Kamau; TOTP from the seed output), open **Dashboard**. Check the KPI
+   cards (cash position from the forecast, certified to date, actual cost, present today, supplier
+   invoices overdue), *Needs attention* (each line links to its screen), the projects table with
+   certified value and certified % of contract ("—" where a project has no contract sum), budget,
+   committed and actual with used % ("Unavailable" without a budget), the company cash-flow
+   forecast (chart and table) and today's attendance. Switch to SW and a phone width (360 px).
+2. Sign in as the **site agent** (Kevin Kiprono) in another browser profile: the dashboard has no
+   money sections at all (not zeros), and **Reports** lists only the muster roll, stock,
+   procurement, petty cash and safety reports; the payroll register, cost ledger, budget against
+   actual, valuations and audit log are under *Other reports* with the permission each needs.
+3. As the owner, open **Reports** (`/reports`). Reports are grouped (labour, finance and
+   reconciliation, materials and procurement, commercial, records); *M-Pesa payout reconciliation*
+   is listed as **not available yet · arrives with D4.3**.
+4. Open **Muster roll**: choose Ruiru Heights, then the Main plot (sites come from the project),
+   keep the last seven days and *Show report*. The table shows each labourer's day codes (P, H, A,
+   L, S), days present, absences and hours, with the legend; days whose muster is not yet confirmed
+   are left out, and a note says how many were confirmed. *Download PDF* and *Download Excel*: open both. In Excel,
+   money columns are numbers (shillings, two decimals) and dates are real dates.
+5. Open **Payroll register** for Ruiru Heights and the seeded batch: gross, PAYE, NSSF, SHIF, AHL,
+   deductions and net per worker, statutory totals, and the batch status (draft or submitted:
+   approval and payment do not exist yet). Download both files in **Kiswahili** (switch the
+   language first).
+6. Open **Cost ledger** (all projects, last 30 days), **Budget against actual** (Ruiru Heights),
+   **Stock**, **Valuations and certificates**, **LPO register**, **Supplier invoice ageing** (as at
+   today: not yet due, 1–30, 31–60, 61–90, over 90 days overdue), **Supplier payments
+   reconciliation**, **Petty-cash reconciliation** and **Health and safety**; compare one total in
+   each with its source screen (for example the cost ledger's accrued total with *Spending →
+   Ledger* for the same filters).
+7. Open **Audit log**: it asks for a fresh two-step check (*Verify and show the report*). The
+   details column shows IDs and codes only; your own report views and exports appear as
+   `report.viewed` / `report.exported` with the report and parameter IDs (no amounts or names).
+8. On any report, *Email me this report*: weekly on a day or monthly on a day of the month, email
+   language. Open **Scheduled emails** (`/reports/subscriptions`): pause, resume and delete your
+   own. The *Company* tab (owner, `config.manage`) lists everyone's with recent runs; *Send due
+   emails now* runs the due ones (the scheduler does the same every minute). In Mailpit the email
+   holds the report name, company, period and a link — **no figures and no attachment**. Open the
+   link signed in as someone without the permission: the report is refused.
+
+What to look for:
+
+- A report never shows more than its source screen shows the same person (try the project
+  manager: only the assigned projects are offered; another project by URL is refused).
+- Excel files open without warnings; a cell that starts with `=` shows as text.
+- A report above 5,000 rows offers Excel only; very long periods are refused with the limit.
+- COMPLIANCE-REVIEW CR-RPT-01–05: statutory formats, personal data in exports, scheduled emails,
+  the audit-log report and Kiswahili wording await an adviser.
 
 ## Documents and compliance register (D8.4)
 

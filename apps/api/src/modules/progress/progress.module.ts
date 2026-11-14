@@ -44,5 +44,6 @@ import { ValuationsService } from "./valuations/valuations.service.js";
     EarnedValueService,
     CertificateExportService,
   ],
+  exports: [ValuationsService],
 })
 export class ProgressModule {}

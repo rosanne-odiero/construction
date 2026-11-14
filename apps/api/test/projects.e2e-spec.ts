@@ -1310,6 +1310,11 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         plantUsage: await tx.plantUsageLog.count({ where: { tenantId } }),
         plantFuel: await tx.plantFuelIssue.count({ where: { tenantId } }),
         plantBreakdowns: await tx.plantBreakdown.count({ where: { tenantId, status: "open" } }),
+        reportSubscriptions: await tx.reportSubscription.findMany({
+          where: { tenantId },
+          select: { reportId: true, frequency: true, status: true },
+          orderBy: { reportId: "asc" },
+        }),
         documents: await tx.document.count({ where: { tenantId } }),
         documentVersions: await tx.documentVersion.count({ where: { tenantId } }),
         supersededVersions: await tx.documentVersion.count({
@@ -1485,6 +1490,11 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       plantUsage: 7,
       plantFuel: 3,
       plantBreakdowns: 1,
+      // D8.1: the owner's weekly cost ledger and the finance officer's monthly invoice ageing.
+      reportSubscriptions: [
+        { reportId: "cost-ledger", frequency: "weekly", status: "active" },
+        { reportId: "invoice-ageing", frequency: "monthly", status: "active" },
+      ],
       // D8.4: 13 documents on RUI-HTS (A-101 in three revisions, S-201 in two) and KIT-BNG's
       // county approval; the nine starter item types; ten compliance records (the CAR policy
       // renewed once, two company items); three instructions with five responses; three approval
@@ -1712,6 +1722,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       ],
     });
     expect(second.plant).toEqual({ ...first.plant, created: false });
+    expect(second.reports).toEqual({ ...first.reports, created: false });
     expect(second.documents).toEqual({ ...first.documents, created: false });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
     // Seeds a whole company twice (about 7 s alone); parallel e2e files can triple that.

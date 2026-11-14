@@ -137,6 +137,14 @@ function print(summary: SeedSummary) {
         `  ${item.code} ${item.status}${item.alerts.length ? `: ${item.alerts.join(", ")}` : ""}`,
     ),
   );
+  const { reports } = summary;
+  lines.push(
+    "",
+    `Report subscriptions (D8.1, ${reports.created ? "created" : "already present"}; emails carry a sign-in link, never report data):`,
+    ...reports.subscriptions.map(
+      (entry) => `  ${entry.report} — ${entry.frequency} — ${entry.subscriber}`,
+    ),
+  );
   const { documents } = summary;
   lines.push(
     "",

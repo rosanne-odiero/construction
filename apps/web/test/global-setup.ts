@@ -131,6 +131,11 @@ const ROUTES = [
   "/valuations/projects/30000000-0000-4000-8000-000000000001/measurements/77300000-0000-4000-8000-000000000003",
   "/valuations/77200000-0000-4000-8000-000000000001",
   "/suppliers/60000000-0000-4000-8000-000000000001",
+  "/dashboard",
+  "/reports",
+  "/reports/subscriptions",
+  "/reports/cost-ledger",
+  "/reports/cost-ledger?projectId=30000000-0000-4000-8000-000000000001",
 ];
 /** D7.2 supplier portal pages, warmed as the supplier persona (others are redirected). */
 const SUPPLIER_ROUTES = [

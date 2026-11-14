@@ -95,7 +95,7 @@ export const navGroups: {
     key: "records",
     items: [
       { key: "documents", href: "/documents", icon: FolderOpen },
-      { key: "reports", href: "/soon/reports", icon: ChartColumn, phase: 8 },
+      { key: "reports", href: "/reports", icon: ChartColumn },
     ],
   },
 ];
@@ -108,7 +108,6 @@ export const comingSoonSections = {
   safety: 8,
   payments: 4,
   spending: 5,
-  reports: 8,
   settings: 1,
 } as const;
 
@@ -119,12 +118,13 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
  * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1), attendance and
  * timesheets (D3.3 web slice), payroll (D4.1), the catalogue and suppliers (D5.1),
  * procure-to-pay (D5.2), stores (D5.3), spending and cash flow (D5.4), quality (D6.1),
- * measurement and valuations (D6.3), health and safety (D8.2), plant and equipment (D8.3) and
- * documents and compliance (D8.4). The D0 labour, attendance and payroll prototypes live under
- * /prototype.
+ * measurement and valuations (D6.3), health and safety (D8.2), plant and equipment (D8.3),
+ * documents and compliance (D8.4) and the dashboard and reports centre (D8.1). The D0 labour,
+ * attendance and payroll prototypes live under /prototype.
  */
 export function isLiveRoute(pathname: string): boolean {
   if (pathname === "/projects" || pathname === "/bq" || pathname === "/diary") return true;
+  if (pathname === "/dashboard" || /^\/reports(\/[a-z-]+)?$/.test(pathname)) return true;
   if (/^\/quality(\/templates(\/[0-9a-f-]{36})?)?$/.test(pathname)) return true;
   if (pathname === "/safety" || pathname === "/safety/settings") return true;
   if (/^\/plant(\/(new|settings|[0-9a-f-]{36}))?$/.test(pathname)) return true;

@@ -583,55 +583,83 @@
     "mfaRequiredNote": "Required for your role"
   },
   "dashboard": {
-    "greeting": "Good morning, {name}",
-    "subtitle": "Everything across your projects today.",
-    "reviewApprovals": "Review {count, plural, one {# approval} other {# approvals}}",
+    "greeting": "Good day, {name}",
+    "subtitle": "Live figures from your projects. You see only what your role and projects allow.",
+    "reports": "Reports",
+    "nothing": "There is nothing to show for your role yet.",
     "kpi": {
       "cash": "Cash position",
-      "cashHint": "Up {change} on last week · M-Pesa float {float}",
-      "spend": "Spend this month",
-      "spendHint": "{pct} of the {plan} plan",
-      "workers": "Workers on site today",
-      "workersHint": "Across {sites} sites",
-      "approvals": "Awaiting your approval",
-      "approvalsHint": "{amount} in payments"
+      "cashHint": "Opening cash entered, moved by what was recorded since",
+      "noOpening": "No opening cash entered yet",
+      "certified": "Certified to date",
+      "certifiedHint": "{count, plural, one {# project} other {# projects}} with certificates, net of retention",
+      "actual": "Actual cost",
+      "actualHint": "Committed {committed} · paid {paid}",
+      "workers": "Present today",
+      "workersHint": "{halfDay} half day · {absent} absent (recorded so far)",
+      "overdue": "Supplier invoices overdue",
+      "overdueHint": "{count} overdue · {dueSoon} due within {days} days"
     },
-    "projectsTitle": "Projects",
-    "projectsDescription": "Progress, cost and schedule performance",
-    "viewAll": "View all",
-    "table": {
+    "attention": {
+      "title": "Needs attention",
+      "nothing": "Nothing needs attention right now.",
+      "tones": {
+        "danger": "Urgent",
+        "warning": "Check",
+        "info": "Open",
+        "success": "Done",
+        "neutral": "Note"
+      },
+      "invoicesOverdue": "{count, plural, one {# supplier invoice} other {# supplier invoices}} overdue ({amount})",
+      "invoicesDue": "{count, plural, one {# invoice} other {# invoices}} due within {days} days ({amount})",
+      "spendAlerts": "{count, plural, one {# spend alert} other {# spend alerts}}",
+      "lowStock": "{count, plural, one {# material} other {# materials}} below the reorder level",
+      "plant": "{count, plural, one {# plant alert} other {# plant alerts}}",
+      "openIncidents": "{count, plural, one {# open incident} other {# open incidents}}",
+      "overdueActions": "{count, plural, one {# overdue corrective action} other {# overdue corrective actions}}",
+      "openSnags": "{count, plural, one {# open snag} other {# open snags}}",
+      "inspections": "{count, plural, one {# inspection} other {# inspections}} awaiting sign-off"
+    },
+    "projects": {
+      "title": "Projects",
+      "empty": "No projects yet.",
       "project": "Project",
-      "progress": "Progress",
-      "burn": "Budget used",
-      "workers": "Workers",
-      "health": "Status"
+      "status": "Status",
+      "contract": "Contract sum",
+      "certified": "Certified",
+      "percent": "Certified % of contract",
+      "latest": "Latest certificate",
+      "note": "Certified % is the certified value (net of retention) ÷ the revised contract sum. It is not physical progress, which is not measured yet."
     },
-    "alertsTitle": "Alerts",
-    "alertsDescription": "{count, plural, one {# alert needs} other {# alerts need}} attention",
-    "spendTitle": "Spend by category",
-    "spendDescription": "November 2026, all projects",
-    "cashFlowTitle": "Cash-flow forecast",
-    "cashFlowDescription": "Next six weeks: certificates due vs payroll, LPOs and other outgoings",
-    "inflow": "Money in",
-    "outflow": "Money out",
-    "weekOf": "Week of",
-    "mapTitle": "Sites",
-    "mapDescription": "Active sites and their geofences",
-    "upcomingTitle": "Upcoming payments",
-    "upcomingDescription": "Next 10 days",
-    "payments": {
-      "payrollRuiru": "Payroll PR-2026-W45 · Ruiru Heights",
-      "payrollKitengela": "Payroll · Kitengela Bungalow",
-      "lpo42": "LPO-0042 · Thika Road Hardware",
-      "lpo45": "LPO-0045 · Juja Quarry Products",
-      "ipc3": "IPC-03 from the Kitengela client"
+    "spending": {
+      "title": "Budget, committed and actual",
+      "hint": "Used % = (actual + committed) ÷ budget; alerts from {percent} %.",
+      "budget": "Budget",
+      "committed": "Committed",
+      "actual": "Actual",
+      "paid": "Paid",
+      "used": "Used",
+      "noBudget": "No budget",
+      "unavailable": "Unavailable"
     },
-    "paymentStates": {
-      "awaitingApproval": "Awaiting approval",
-      "prepared": "Prepared",
-      "matched": "3-way matched",
-      "blocked": "Blocked",
-      "due": "Incoming"
+    "forecast": {
+      "title": "Cash-flow forecast (company)",
+      "chart": "Money in and out per week, with the closing balance",
+      "table": "Forecast by week",
+      "week": "Week of",
+      "in": "Money in",
+      "out": "Money out",
+      "closing": "Closing",
+      "open": "Open the full forecast"
+    },
+    "attendance": {
+      "title": "Attendance today",
+      "present": "Present",
+      "halfDay": "Half day",
+      "absent": "Absent",
+      "sites": "Sites recorded",
+      "sitesValue": "{recorded} of {sites}",
+      "note": "Records made today, confirmed or not; the muster roll report uses confirmed days only."
     }
   },
   "projects": {
@@ -1836,7 +1864,22 @@
     "approvalDateInvalid": "Check the dates: sent not in the future, due on or after the date sent, and a response between the date sent and today.",
     "approvalEvidenceInvalid": "Attach the scan of the signed response (a different document of this project).",
     "approvalResubmissionInvalid": "Only a rejected or \"resubmit\" request can be resubmitted, and only once.",
-    "instructionIdConflict": "This instruction was already sent with another key. Reload the log."
+    "instructionIdConflict": "This instruction was already sent with another key. Reload the log.",
+    "reportForbidden": "You may not run this report for these choices.",
+    "reportNotAvailable": "This report is not available yet.",
+    "reportParameterInvalid": "One of the report's choices does not belong here.",
+    "reportProjectRequired": "Choose a project.",
+    "reportBatchRequired": "Choose a payroll batch.",
+    "reportPeriodRequired": "Give both dates of the period.",
+    "reportPeriodInvalid": "Check the period's dates.",
+    "reportPeriodTooLong": "The period is longer than this report allows.",
+    "reportUseExcel": "Too many rows for a PDF: download Excel instead.",
+    "reportTooLarge": "This report has too many rows. Narrow the project, store or period.",
+    "subscriptionExists": "You already have this subscription.",
+    "subscriptionLimit": "You have the most subscriptions allowed. Delete one first.",
+    "subscriptionEmailRequired": "Scheduled reports are sent by email, and your account has no email address.",
+    "schedulerBusy": "Scheduled emails are being sent right now. Try again in a minute.",
+    "reportRule": "This change breaks a reports rule."
   },
   "projectStatus": {
     "planning": "Planning",
@@ -10043,6 +10086,520 @@
       "expires": "Expires {date}",
       "expired": "Expired {date}",
       "due": "Due {date}"
+    }
+  },
+  "reportExport": {
+    "generated": "Generated {date} (Africa/Nairobi) by {name}",
+    "page": "Page {page} of {pages}",
+    "currency": "Money in KES.",
+    "excelMoney": "Money columns are Kenya shillings with two decimals; dates are real dates.",
+    "total": "Total",
+    "yes": "Yes",
+    "no": "No",
+    "empty": "No records for these parameters.",
+    "notAvailable": "This report is not available yet: it arrives with {deliverable}.",
+    "params": {
+      "project": "Project",
+      "allProjects": "All projects you may see ({count})",
+      "site": "Site",
+      "store": "Store",
+      "allStores": "All stores",
+      "batch": "Payroll batch",
+      "batchValue": "{from} to {to} · pay date {payDate} · {status}",
+      "period": "Period",
+      "periodValue": "{from} to {to}",
+      "asAt": "As at",
+      "actor": "Person",
+      "anyone": "Anyone",
+      "action": "Action starts with",
+      "anyAction": "Any action",
+      "company": "Company"
+    },
+    "catalogue": {
+      "muster-roll": {
+        "title": "Muster roll",
+        "description": "Labourers by day at one site, from confirmed attendance: present, half day, absent, leave or sick, with days and hours.",
+        "rule": "Needs attendance.view on the project."
+      },
+      "payroll-register": {
+        "title": "Payroll register",
+        "description": "One payroll batch: gross pay, statutory deductions, advance recoveries and net pay per worker, with statutory totals.",
+        "rule": "Needs payroll.view or payroll.prepare on the project."
+      },
+      "cost-ledger": {
+        "title": "Cost ledger",
+        "description": "Cost ledger entries in a period: accrued and paid, with the category, BQ item or cost code, counterparty and document.",
+        "rule": "Needs finance.view or finance.manage on the project."
+      },
+      "budget-vs-actual": {
+        "title": "Budget against actual",
+        "description": "Budget, committed, actual and paid by category and by bill, with the percentage used.",
+        "rule": "Needs finance.view or finance.manage on the project."
+      },
+      "stock": {
+        "title": "Stock",
+        "description": "Stock on hand per store at weighted average cost, and the stock movements in a period.",
+        "rule": "Needs stores.manage, procurement.requisition, procurement.approve, finance.view or finance.manage on the project."
+      },
+      "valuations-register": {
+        "title": "Valuations and certificates",
+        "description": "A project's certificate register: gross to date, retention, previous certificates, amount due, VAT and status.",
+        "rule": "Needs bq.edit, finance.view or finance.manage on the project."
+      },
+      "lpo-register": {
+        "title": "LPO register",
+        "description": "Local purchase orders raised in a period, with their amounts and what has been invoiced against them.",
+        "rule": "Needs a procurement permission on the project (requisition, approve, stores, finance or payments), or procurement.manage_suppliers."
+      },
+      "invoice-ageing": {
+        "title": "Supplier invoice ageing",
+        "description": "Approved supplier invoices not fully paid, by days past the due date, and invoices paid in the last 30 days.",
+        "rule": "Needs a procurement permission on the project (requisition, approve, stores, finance or payments), or procurement.manage_suppliers."
+      },
+      "supplier-payments": {
+        "title": "Supplier payments reconciliation",
+        "description": "Payments recorded against approved supplier invoices: approved, paid before and during the period, and outstanding.",
+        "rule": "Needs a procurement permission on the project (requisition, approve, stores, finance or payments), or procurement.manage_suppliers."
+      },
+      "petty-cash": {
+        "title": "Petty-cash reconciliation",
+        "description": "Petty-cash floats over a period (opening, top-ups, expenses, count adjustments, closing) with cash counts and variances.",
+        "rule": "Needs finance.petty_cash, finance.view, finance.manage, payments.approve, payments.disburse or procurement.approve on the project."
+      },
+      "mpesa-reconciliation": {
+        "title": "M-Pesa payout reconciliation",
+        "description": "Payroll payouts matched with M-Pesa results. Not available yet: M-Pesa payouts arrive with D4.3.",
+        "rule": "Arrives with D4.3."
+      },
+      "safety-actions": {
+        "title": "Health and safety incidents and actions",
+        "description": "Incidents in a period and corrective actions, overdue first. No descriptions, people or injury details.",
+        "rule": "Needs safety.manage, site.diary or projects.manage on the project."
+      },
+      "audit-log": {
+        "title": "Audit log",
+        "description": "Who did what and when, by period, person and action. Details show IDs and codes only.",
+        "rule": "Needs audit.view (company) and a recent MFA check."
+      }
+    },
+    "muster": {
+      "section": "Muster roll",
+      "workerNo": "Worker no.",
+      "name": "Name",
+      "trade": "Trade",
+      "days": "Days present",
+      "absent": "Absent",
+      "leave": "Leave",
+      "sick": "Sick",
+      "hours": "Hours recorded",
+      "codes": {
+        "present": "P",
+        "half_day": "H",
+        "absent": "A",
+        "leave": "L",
+        "sick": "S"
+      },
+      "legend": "P present · H half day · A absent · L leave · S sick · blank: no record on a confirmed day.",
+      "confirmedDays": "{confirmed} of {days} days have a confirmed muster at this site; days not yet confirmed are left out.",
+      "missingTimes": "{count} worked days have no check-in or check-out time; their hours are not counted.",
+      "hoursNote": "Hours are check-in to check-out less breaks, as recorded, before timesheet rules. Payroll uses the approved timesheet.",
+      "presentRow": "Present"
+    },
+    "payroll": {
+      "lines": "Payroll lines",
+      "statutory": "Statutory totals",
+      "workerNo": "Worker no.",
+      "name": "Name",
+      "trade": "Trade",
+      "days": "Days worked",
+      "gross": "Gross pay",
+      "paye": "PAYE",
+      "nssf": "NSSF",
+      "shif": "SHIF",
+      "ahl": "Housing levy",
+      "advances": "Advance recovery",
+      "other": "Other deductions",
+      "net": "Net pay",
+      "item": "Item",
+      "employee": "Employee (withheld)",
+      "shortfall": "Not withheld",
+      "employer": "Employer cost",
+      "kinds": {
+        "paye": "PAYE",
+        "nssf": "NSSF",
+        "shif": "SHIF",
+        "ahl": "Affordable Housing Levy",
+        "nita": "NITA"
+      },
+      "statuses": {
+        "draft": "Draft",
+        "submitted": "Submitted",
+        "cancelled": "Cancelled"
+      },
+      "statusNote": "Batch status: {status}. PM-Buddy has draft and submitted payroll only; approval and payment come with D4.2 and D4.3, so this is not an approved or paid payroll.",
+      "unverified": "Some statutory rules used are not yet verified (COMPLIANCE-REVIEW); the figures may change.",
+      "statutoryNote": "Statutory figures follow the rules saved with the batch. Official return formats need review (CR-RPT-01)."
+    },
+    "costLedger": {
+      "entries": "Entries",
+      "byCategory": "By category",
+      "date": "Date",
+      "project": "Project",
+      "category": "Category",
+      "tag": "BQ item or cost code",
+      "counterparty": "Counterparty",
+      "document": "Document",
+      "reference": "Payment reference",
+      "accrued": "Accrued",
+      "paid": "Paid",
+      "note": "Accrued is cost incurred (net of VAT); paid is the cost part of cash paid. A reversal shows as a negative amount."
+    },
+    "budget": {
+      "categories": "By category",
+      "bills": "By bill",
+      "category": "Category",
+      "bill": "Bill",
+      "budget": "Budget",
+      "committed": "Committed",
+      "actual": "Actual",
+      "paid": "Paid",
+      "forecast": "Actual + committed",
+      "remaining": "Remaining",
+      "used": "Used %",
+      "notOnItems": "Not on BQ items",
+      "version": "Budget version {version} (approved).",
+      "noBudget": "No approved budget yet: budget columns show —.",
+      "note": "Committed: approved LPOs not yet invoiced (net of VAT). Actual: accrued cost. Used % = (actual + committed) ÷ budget, truncated to one decimal; — means there is no budget."
+    },
+    "stock": {
+      "onHand": "Stock on hand now",
+      "movements": "Movements in the period",
+      "store": "Store",
+      "project": "Project",
+      "code": "Code",
+      "material": "Material",
+      "unit": "Unit",
+      "quantity": "Quantity",
+      "averageCost": "Average cost",
+      "value": "Value",
+      "date": "Date",
+      "kind": "Movement",
+      "reference": "Reference",
+      "in": "In",
+      "out": "Out",
+      "note": "Values at weighted average cost in whole cents. Stock on hand is today's, not at the end of the period."
+    },
+    "valuations": {
+      "section": "Certificates",
+      "valuation": "Valuation",
+      "certificate": "Certificate",
+      "kind": "Kind",
+      "date": "Valuation date",
+      "status": "Status",
+      "gross": "Gross to date",
+      "retention": "Retention held",
+      "previous": "Previous certificates",
+      "due": "Amount due",
+      "vat": "VAT",
+      "total": "Total",
+      "certifiedOn": "Certified on",
+      "note": "Gross and retention are cumulative to each valuation date. Totals add certified certificates only. Drafts have no figures until they are submitted."
+    },
+    "lpo": {
+      "section": "LPOs",
+      "number": "LPO",
+      "project": "Project",
+      "supplier": "Supplier",
+      "status": "Status",
+      "created": "Raised on",
+      "approved": "Approved on",
+      "delivery": "Delivery date",
+      "subtotal": "Net",
+      "vat": "VAT",
+      "total": "Total",
+      "invoiced": "Invoiced",
+      "note": "Totals leave out draft and cancelled LPOs. Invoiced = approved supplier invoices against the LPO, including VAT."
+    },
+    "ageing": {
+      "summary": "Summary",
+      "invoices": "Invoices not fully paid",
+      "bucket": "Age",
+      "count": "Invoices",
+      "outstanding": "Outstanding",
+      "invoice": "Invoice",
+      "project": "Project",
+      "supplier": "Supplier",
+      "invoiceDate": "Invoice date",
+      "dueDate": "Due date",
+      "total": "Total",
+      "paidToDate": "Paid by the date",
+      "daysOverdue": "Days overdue",
+      "buckets": {
+        "current": "Not yet due",
+        "1-30": "1–30 days overdue",
+        "31-60": "31–60 days overdue",
+        "61-90": "61–90 days overdue",
+        "over-90": "Over 90 days overdue",
+        "paid": "Paid in the last 30 days"
+      },
+      "note": "Approved invoices including VAT; payments are those recorded on or before the as-at date. An invoice due on the as-at date is not yet overdue."
+    },
+    "payments": {
+      "invoices": "Invoices",
+      "payments": "Payments in the period",
+      "invoice": "Invoice",
+      "project": "Project",
+      "supplier": "Supplier",
+      "approved": "Approved to pay",
+      "before": "Paid before the period",
+      "during": "Paid in the period",
+      "toDate": "Paid to date",
+      "outstanding": "Outstanding",
+      "state": "State",
+      "states": {
+        "unpaid": "Unpaid",
+        "part-paid": "Part paid",
+        "paid": "Paid",
+        "over-paid": "Paid more than approved"
+      },
+      "paidOn": "Paid on",
+      "method": "Method",
+      "reference": "Reference",
+      "amount": "Amount",
+      "note": "Payments are those recorded in PM-Buddy (bank, cheque or M-Pesa made elsewhere); PM-Buddy does not pay suppliers yet. Approved = the amount authorised on the invoice's current approval."
+    },
+    "pettyCash": {
+      "floats": "Floats",
+      "counts": "Cash counts",
+      "float": "Float",
+      "project": "Project",
+      "site": "Site",
+      "custodian": "Custodian",
+      "opening": "Opening",
+      "topUps": "Top-ups",
+      "expenses": "Expenses",
+      "rejected": "Rejected (returned)",
+      "adjustments": "Count adjustments",
+      "closing": "Closing",
+      "balanceNow": "Book balance now",
+      "number": "Count",
+      "countedAt": "Counted at",
+      "book": "Book",
+      "counted": "Counted",
+      "variance": "Variance",
+      "status": "Status",
+      "note": "Book balances on business dates: closing = opening + top-ups − expenses + rejected expenses ± count adjustments. A variance (counted − book) moves the float only once approved."
+    },
+    "safety": {
+      "incidents": "Incidents",
+      "actions": "Corrective actions",
+      "number": "Number",
+      "occurred": "Occurred",
+      "site": "Site",
+      "kind": "Kind",
+      "severity": "Severity",
+      "status": "Status",
+      "actionCount": "Actions",
+      "openActions": "Open actions",
+      "source": "Source",
+      "incident": "Incident",
+      "owner": "Owner",
+      "due": "Due",
+      "overdue": "Days overdue",
+      "done": "Done on",
+      "verified": "Verified on",
+      "note": "No descriptions, people or injury details are included; open them in the Health and safety area. Actions: raised in the period, or still open."
+    },
+    "audit": {
+      "section": "Events",
+      "sequence": "#",
+      "time": "Time",
+      "actor": "Person",
+      "action": "Action",
+      "resource": "Record",
+      "metadata": "Details",
+      "note": "Details show IDs, codes, dates and numbers only; other text shows as [text]."
+    },
+    "email": {
+      "subject": "Scheduled report: {report}",
+      "intro": "Your scheduled report is ready to view: {report}.",
+      "company": "Company: {company}",
+      "period": "Period: {from} to {to}",
+      "asAt": "As at {date}",
+      "current": "Current figures",
+      "link": "Open it in PM-Buddy (you need to sign in; the report is checked against your permissions when you open it): {link}",
+      "noData": "This email carries no report data.",
+      "stop": "To stop these emails, pause or delete the subscription in Reports → Scheduled emails."
+    }
+  },
+  "reports": {
+    "home": {
+      "title": "Reports",
+      "live": "Live",
+      "description": "Standard reports from live data: on screen, as PDF and as Excel, in English or Kiswahili. Each report shows only what you may see on the screen its data comes from.",
+      "subscriptions": "Scheduled emails",
+      "groups": {
+        "labour": "Labour",
+        "finance": "Finance and reconciliation",
+        "materials": "Materials and procurement",
+        "commercial": "Commercial",
+        "records": "Records"
+      },
+      "projectCount": "{count, plural, one {# project} other {# projects}}",
+      "company": "Whole company",
+      "noneRunnable": "There is no report you may run yet. Reports need reports.view and the permission of the screen the data comes from.",
+      "othersTitle": "Other reports",
+      "othersHint": "Reports you may not run with your role and projects, and reports that are not built yet.",
+      "notAvailable": "Not available yet · arrives with {deliverable}",
+      "ruleNote": "Every report also needs reports.view on the same project."
+    },
+    "report": {
+      "back": "All reports",
+      "notAvailable": "Not available yet · arrives with {deliverable}",
+      "notAvailableHint": "This report needs data PM-Buddy does not hold yet. It is listed so you know it is planned; it never shows as an empty report.",
+      "cannotRun": "You may not run this report with your role and projects.",
+      "downloadPdf": "Download PDF",
+      "downloadExcel": "Download Excel",
+      "pdfTooLarge": "{rows} rows is too many for a PDF; download Excel.",
+      "verify": "Verify and show the report",
+      "problems": {
+        "report-forbidden": "You may not run this report for these choices.",
+        "report-not-available": "This report is not available yet.",
+        "report-parameter-invalid": "One of the choices does not belong here (for example a site of another project). Check the form.",
+        "project-required": "Choose a project.",
+        "site-required": "Choose a site.",
+        "batch-required": "Choose a payroll batch.",
+        "period-required": "Give both dates of the period.",
+        "period-invalid": "Check the dates: the period must end today at the latest and start before it ends.",
+        "period-too-long": "The period is longer than this report allows.",
+        "report-too-large": "This report has too many rows. Choose one project, store or a shorter period.",
+        "step-up-required": "This report needs a recent two-step verification. Verify, and the report opens.",
+        "rate-limited": "Too many reports in a short time. Wait a little and try again.",
+        "failed": "The report could not be built. Try again."
+      }
+    },
+    "form": {
+      "label": "Report choices",
+      "project": "Project",
+      "chooseProject": "Choose a project",
+      "allProjects": "All my projects",
+      "site": "Site",
+      "chooseSite": "Choose a site",
+      "store": "Store",
+      "allStores": "All stores",
+      "batch": "Payroll batch",
+      "chooseBatch": "Choose a batch",
+      "batchOption": "{from} to {to} · {status}",
+      "batchStatuses": {
+        "draft": "Draft",
+        "submitted": "Submitted",
+        "cancelled": "Cancelled"
+      },
+      "actor": "Person",
+      "anyone": "Anyone",
+      "action": "Action starts with",
+      "actionHint": "For example plant. or invoice.approved",
+      "from": "From",
+      "to": "To",
+      "asAt": "As at",
+      "periodHint": "At most {days} days.",
+      "show": "Show report",
+      "loading": "Loading…"
+    },
+    "view": {
+      "generated": "Generated {date} (Nairobi time) by {name}",
+      "rowsShown": "Showing the first {shown} of {total} rows. The totals and the downloads cover every row.",
+      "notes": "Notes"
+    },
+    "subscribe": {
+      "button": "Email me this report",
+      "title": "Email this report on a schedule",
+      "description": "We email you a link to this report with these choices; the period follows each email. The email carries no figures: you sign in to open it, and it shows only what you may see then.",
+      "frequency": "How often",
+      "weekly": "Every week",
+      "monthly": "Every month",
+      "weekday": "Day",
+      "weekdays": {
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday",
+        "7": "Sunday"
+      },
+      "dayOfMonth": "Day of the month",
+      "dayHint": "29, 30 and 31 run on the last day of shorter months.",
+      "language": "Email language",
+      "english": "English",
+      "kiswahili": "Kiswahili",
+      "sendTime": "Sent at {hour}:00, Nairobi time. Weekly emails cover the last whole week (Monday to Sunday); monthly ones the previous month.",
+      "submit": "Subscribe",
+      "cancel": "Cancel",
+      "done": "Subscribed. You can pause or delete it under Scheduled emails.",
+      "manage": "Scheduled emails"
+    },
+    "subscriptions": {
+      "title": "Scheduled emails",
+      "back": "All reports",
+      "description": "Reports emailed to you at {hour}:00, Nairobi time. Each email holds a sign-in link, never report data; a report you may no longer run is skipped and the reason recorded.",
+      "tabs": "Whose subscriptions",
+      "mine": "Mine",
+      "company": "Company",
+      "empty": "No scheduled emails yet. Open a report and choose Email me this report.",
+      "columns": {
+        "report": "Report",
+        "schedule": "When",
+        "status": "Status",
+        "nextRun": "Next email",
+        "lastRun": "Last run",
+        "subscriber": "Subscriber",
+        "actions": "Actions",
+        "due": "Due",
+        "period": "Period",
+        "outcome": "Outcome"
+      },
+      "weekly": "Every {day}",
+      "monthly": "Every month on day {day}",
+      "weekdays": {
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday",
+        "7": "Sunday"
+      },
+      "languages": {
+        "en": "English",
+        "sw": "Kiswahili"
+      },
+      "statuses": {
+        "active": "Active",
+        "paused": "Paused",
+        "deleted": "Deleted"
+      },
+      "outcomes": {
+        "sent": "Sent",
+        "failed": "Failed",
+        "skipped": "Skipped"
+      },
+      "reasons": {
+        "permission-lost": "The subscriber may no longer run this report",
+        "membership-ended": "The subscriber left the company",
+        "report-unavailable": "The report is not available",
+        "no-email-address": "No email address",
+        "delivery-failed": "The email could not be sent"
+      },
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this subscription? It will not be sent again.",
+      "runDue": "Send due emails now",
+      "runDueDone": "{sent} sent, {skipped} skipped, {failed} failed.",
+      "runsTitle": "Recent runs",
+      "noRuns": "No runs yet.",
+      "deliveryNote": "Emails go through the company's notification provider: in development they land in Mailpit; in production they stay off until a provider is approved."
     }
   }
 }

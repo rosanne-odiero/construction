@@ -75,16 +75,17 @@ export async function seedSupplierPortal(
   app: INestApplicationContext,
   tenantId: string,
   users: SeedUsers,
-  options: { resetCredentials?: boolean } = {},
+  options: { resetCredentials?: boolean; identifier?: string } = {},
 ): Promise<SupplierPortalSeedSummary> {
   const prisma = app.get(PrismaService);
   const db = app.get(TenantDatabase);
   const read = <T>(work: (tx: Parameters<Parameters<TenantDatabase["run"]>[1]>[0]) => Promise<T>) =>
     db.run({ userId: users.ownerId, tenantId, requestId: "seed" }, work);
+  const identifier = options.identifier ?? DEMO_SUPPLIER_PORTAL_USER.identifier;
 
   // The supplier contact's account (password printed once, like the other demo accounts).
   const existing = await prisma.user.findUnique({
-    where: { identifier: DEMO_SUPPLIER_PORTAL_USER.identifier },
+    where: { identifier },
   });
   const reset = !existing || options.resetCredentials === true;
   const password = reset ? newPassword() : null;
@@ -93,7 +94,7 @@ export async function seedSupplierPortal(
     (await prisma.user.create({
       data: {
         id: randomUUID(),
-        identifier: DEMO_SUPPLIER_PORTAL_USER.identifier,
+        identifier,
         displayName: DEMO_SUPPLIER_PORTAL_USER.displayName,
         passwordHash: await hashPassword(password!),
         verifiedAt: new Date(),
@@ -114,7 +115,7 @@ export async function seedSupplierPortal(
     });
   }
   const accountSummary = {
-    identifier: DEMO_SUPPLIER_PORTAL_USER.identifier,
+    identifier,
     displayName: DEMO_SUPPLIER_PORTAL_USER.displayName,
     password,
     created: !existing,
@@ -129,10 +130,10 @@ export async function seedSupplierPortal(
   ).id;
   const bound = await read((tx) =>
     tx.supplierPortalUser.findFirst({
-      where: { tenantId, supplierId: quarryId, identifier: DEMO_SUPPLIER_PORTAL_USER.identifier },
+      where: { tenantId, supplierId: quarryId, identifier },
     }),
   );
-  if (bound) return summarise(read, accountSummary, false);
+  if (bound) return summarise(read, accountSummary, false, identifier);
 
   const scope = app.get(TenantScope);
   const tenancy = app.get(TenancyService);
@@ -155,7 +156,7 @@ export async function seedSupplierPortal(
     seedRequest,
     (owned) =>
       portalUsers.inviteInScope(owned, quarryId, {
-        identifier: DEMO_SUPPLIER_PORTAL_USER.identifier,
+        identifier,
         contactName: "Achieng Otieno, accounts (synthetic)",
       }),
     true,
@@ -396,7 +397,7 @@ export async function seedSupplierPortal(
     [2_640_000, 422_400, 3_062_400],
     "KRACU0100000001/202",
   );
-  return summarise(read, accountSummary, true);
+  return summarise(read, accountSummary, true, identifier);
 }
 
 async function summarise(
@@ -405,10 +406,11 @@ async function summarise(
   ) => Promise<T>,
   account: SupplierPortalSeedSummary["account"],
   created: boolean,
+  identifier: string,
 ): Promise<SupplierPortalSeedSummary> {
   return read(async (tx) => {
     const binding = await tx.supplierPortalUser.findFirstOrThrow({
-      where: { identifier: DEMO_SUPPLIER_PORTAL_USER.identifier },
+      where: { identifier },
       include: { supplier: { select: { code: true, tradingName: true, legalName: true } } },
       orderBy: { invitedAt: "desc" },
     });

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { classifyEtimsInvoiceNumber, Ratio } from "@pm-buddy/domain";
+import { classifyEtimsInvoiceNumber } from "@pm-buddy/domain";
 import { VAT_TREATMENTS, type StandardUnitCode, type VatTreatment } from "@pm-buddy/types";
 import {
   invoiceDetailResponseSchema,
@@ -20,17 +20,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatKES } from "@/lib/format";
 import { liveRequest, liveUpload } from "@/lib/live-api";
 import {
+  defaultInvoicePrice,
   formatQuantity,
   inputToMinor,
   invoiceTotals,
   minorToInput,
   remainingQuantity,
   scaleQuantity,
+  unitsPerBase,
 } from "@/lib/p2p";
 import { unitLabel } from "@/lib/procurement";
 import { useP2pProblem } from "./use-p2p-problem";
 
-type LpoLine = LpoDetailResponse["lines"][number];
 type LineInput = {
   include: boolean;
   quantity: string;
@@ -56,25 +57,6 @@ export type InvoiceInitial = {
     vatTreatment: VatTreatment;
   }[];
 };
-
-/** Price units in one base unit for the units this form offers (the line's unit or the base). */
-function unitsPerBase(line: LpoLine, unit: string): Ratio {
-  if (unit === line.material.baseUnit) return Ratio.ONE;
-  return Ratio.fromDecimal(line.quantity).dividedBy(Ratio.fromDecimal(line.baseQuantity));
-}
-
-/** The LPO's price per the line's unit as written on an invoice (VAT treatment kept). */
-function defaultPrice(line: LpoLine, vatRate: string): number {
-  if (line.priceUnit === line.unit) return line.unitPriceMinor;
-  const perLineUnit = Ratio.fromDecimal(line.netUnitPriceBaseMinor)
-    .times(Ratio.fromDecimal(line.baseQuantity))
-    .dividedBy(Ratio.fromDecimal(line.quantity));
-  const gross =
-    line.vatTreatment === "inclusive"
-      ? perLineUnit.times(Ratio.of(100).plus(Ratio.fromDecimal(vatRate))).dividedBy(Ratio.of(100))
-      : perLineUnit;
-  return Number(gross.toDecimal(0).value);
-}
 
 /**
  * Records (or edits) a supplier invoice against an approved LPO (D5.2): the supplier's invoice
@@ -130,7 +112,7 @@ export function InvoiceForm({
             include: !initial && quantity !== "",
             quantity,
             unit: line.unit,
-            price: minorToInput(defaultPrice(line, rate)),
+            price: minorToInput(defaultInvoicePrice(line, rate)),
             vat: line.vatTreatment,
           },
         ];

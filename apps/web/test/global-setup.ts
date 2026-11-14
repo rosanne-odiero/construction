@@ -108,6 +108,19 @@ const ROUTES = [
   "/valuations/projects/30000000-0000-4000-8000-000000000001/measure",
   "/valuations/projects/30000000-0000-4000-8000-000000000001/measurements/77300000-0000-4000-8000-000000000003",
   "/valuations/77200000-0000-4000-8000-000000000001",
+  "/suppliers/60000000-0000-4000-8000-000000000001",
+];
+/** D7.2 supplier portal pages, warmed as the supplier persona (others are redirected). */
+const SUPPLIER_ROUTES = [
+  "/supplier",
+  "/supplier/lpos",
+  "/supplier/lpos/73000000-0000-4000-8000-000000000007",
+  "/supplier/lpos/73000000-0000-4000-8000-000000000007/invoice",
+  "/supplier/deliveries",
+  "/supplier/invoices",
+  "/supplier/invoices/75000000-0000-4000-8000-000000000001",
+  "/supplier/statement",
+  "/supplier/join",
 ];
 
 export default async function warmUp(config: FullConfig) {
@@ -116,6 +129,11 @@ export default async function warmUp(config: FullConfig) {
   for (const route of ROUTES)
     await fetch(`${baseURL}${route}`, {
       headers: { cookie: "pmb_at=owner.warm-up" },
+      signal: AbortSignal.timeout(120_000),
+    }).catch(() => undefined);
+  for (const route of SUPPLIER_ROUTES)
+    await fetch(`${baseURL}${route}`, {
+      headers: { cookie: "pmb_at=supplier.warm-up" },
       signal: AbortSignal.timeout(120_000),
     }).catch(() => undefined);
 }

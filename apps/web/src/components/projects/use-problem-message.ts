@@ -345,6 +345,20 @@ const codes: Record<string, ProblemKey> = {
   "first-aider-exists": "firstAiderExists",
   "first-aider-not-on-site": "firstAiderNotOnSite",
   "treatment-linked": "treatmentLinked",
+  // Supplier portal (D7.2)
+  "supplier-invoice-locked": "supplierInvoiceLocked",
+  "supplier-portal-user": "supplierPortalUser",
+  "portal-user-exists": "portalUserExists",
+  "already-member": "alreadyMember",
+  "supplier-portal-not-linked": "supplierPortalNotLinked",
+  "lpo-already-acknowledged": "lpoAlreadyAcknowledged",
+  "invoice-id-conflict": "invoiceIdConflict",
+  "invoice-date-invalid": "invoiceDateInvalid",
+  "too-many-documents": "tooManyDocuments",
+  "invoice-not-attachable": "invoiceNotAttachable",
+  "statement-period-invalid": "statementPeriodInvalid",
+  "supplier-portal-rule": "supplierPortalRule",
+  "supplier-portal-forbidden": "supplierPortalForbidden",
 };
 
 /** EN/SW text for an API problem code; anything unknown is "unexpected" (never a success). */

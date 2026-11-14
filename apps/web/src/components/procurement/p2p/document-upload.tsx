@@ -4,7 +4,10 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Paperclip } from "lucide-react";
-import { procurementDocumentResponseSchema } from "@pm-buddy/validation";
+import {
+  portalDocumentResponseSchema,
+  procurementDocumentResponseSchema,
+} from "@pm-buddy/validation";
 import { Button } from "@/components/ui/button";
 import { liveUpload } from "@/lib/live-api";
 import { useP2pProblem } from "./use-p2p-problem";
@@ -19,12 +22,15 @@ export function DocumentUpload({
   accept = "application/pdf,image/jpeg,image/png,image/webp",
   hint,
   id,
+  contract = "procurement",
 }: {
   path: string;
   label: string;
   accept?: string;
   hint?: string;
   id: string;
+  /** The upload's response contract (the supplier portal answers with its own). */
+  contract?: "procurement" | "supplier-portal";
 }) {
   const t = useTranslations("p2p.common");
   const problem = useP2pProblem();
@@ -39,7 +45,9 @@ export function DocumentUpload({
     setBusy(true);
     setMessage(null);
     try {
-      await liveUpload(path, file, procurementDocumentResponseSchema);
+      if (contract === "supplier-portal")
+        await liveUpload(path, file, portalDocumentResponseSchema);
+      else await liveUpload(path, file, procurementDocumentResponseSchema);
       setMessage({ text: t("attached"), error: false });
       setFile(null);
       if (input.current) input.current.value = "";

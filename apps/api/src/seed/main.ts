@@ -114,6 +114,20 @@ function print(summary: SeedSummary) {
     `  incidents: ${safety.incidents.map((entry) => `${entry.code} ${entry.kind} (${entry.status})`).join(", ")}`,
     `  corrective actions: ${safety.actions.total} (${safety.actions.verified} verified, ${safety.actions.overdue} overdue); ${safety.kits} first-aid kits; ${safety.treatments} treatment(s)`,
   );
+  const { supplierPortal } = summary;
+  lines.push(
+    "",
+    `Supplier portal (synthetic, ${supplierPortal.created ? "created" : "already present"}): ${supplierPortal.supplier}`,
+    `  ${supplierPortal.account.displayName} — supplier portal user`,
+    `    sign in as: ${supplierPortal.account.identifier}`,
+    supplierPortal.account.password
+      ? `    password:   ${supplierPortal.account.password}`
+      : "    password:   unchanged (run with --reset-credentials for a new one)",
+    `  ${supplierPortal.lpo} (acknowledged) → ${supplierPortal.grn}`,
+    ...supplierPortal.invoices.map(
+      (invoice) => `  invoice ${invoice.number} — ${invoice.status} (submitted by the supplier)`,
+    ),
+  );
   console.log(lines.join("\n"));
 }
 

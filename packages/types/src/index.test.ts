@@ -91,16 +91,25 @@ describe("system roles", () => {
     expect(SYSTEM_ROLE_PERMISSIONS.labourer).toEqual(["portal.worker"]);
   });
 
-  it("sends staff to the office, clients and labourers to their own portals", () => {
+  it("sends staff to the office, clients, labourers and suppliers to their own portals", () => {
     expect(portalFor(SYSTEM_ROLE_PERMISSIONS.client)).toBe("client");
     expect(portalFor(SYSTEM_ROLE_PERMISSIONS.labourer)).toBe("worker");
-    for (const role of TENANT_SYSTEM_ROLES.filter((r) => r !== "client" && r !== "labourer"))
+    expect(portalFor(SYSTEM_ROLE_PERMISSIONS.supplier)).toBe("supplier");
+    for (const role of TENANT_SYSTEM_ROLES.filter(
+      (r) => r !== "client" && r !== "labourer" && r !== "supplier",
+    ))
       expect(portalFor(SYSTEM_ROLE_PERMISSIONS[role]), role).toBe("office");
+    expect(portalFor(["portal.supplier", "procurement.requisition"])).toBe("office");
     expect(portalFor(["portal.client", "site.diary"])).toBe("office");
     expect(portalFor(["projects.view"])).toBe("office");
     expect(portalFor(["portal.worker", "not.a.permission"])).toBe("worker");
     expect(portalFor([])).toBe("office");
-    expect(PORTAL_HOME).toEqual({ office: "/projects", client: "/portal", worker: "/worker" });
+    expect(PORTAL_HOME).toEqual({
+      office: "/projects",
+      client: "/portal",
+      worker: "/worker",
+      supplier: "/supplier",
+    });
   });
 
   it("lets a PIN session act only with the labourer portal permission", () => {

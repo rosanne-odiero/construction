@@ -735,6 +735,12 @@ export class InvoicesController {
   @ApiQuery({ name: "lpoId", required: false })
   @ApiQuery({ name: "supplierId", required: false })
   @ApiQuery({ name: "status", required: false })
+  @ApiQuery({
+    name: "source",
+    required: false,
+    enum: ["company", "supplier_portal"],
+    description: "Keyed by staff, or submitted by the supplier through the supplier portal (D7.2)",
+  })
   @ApiOkResponse({ schema: openApi(invoicesResponseSchema) })
   async list(@Query() query: unknown, @Req() req: Request) {
     return this.invoices.list(
@@ -827,7 +833,7 @@ export class InvoicesController {
   @HttpCode(200)
   @ApiOperation({
     summary: "Reopen a disputed or matched invoice for a corrected version",
-    description: invoiceNote,
+    description: `${invoiceNote} Not for an invoice the supplier submitted through the supplier portal (409 supplier-invoice-locked: cancel it and ask for a new one).`,
     operationId: "reopenInvoice",
   })
   @ApiBody({ schema: openApi(versionRequestSchema) })

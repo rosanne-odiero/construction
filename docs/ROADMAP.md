@@ -133,8 +133,10 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
 | D7.1 | **Client portal**:<br/>• Progress, S-curve and verified photo timeline; diary summaries<br/>• Certificates and statements; **pay via STK Push**; C2B Paybill instructions<br/>• Variation approvals<br/>• FX display (USD/GBP/EUR) | Client portal on mobile and desktop | A client can view progress and pay (sandbox) | L | 🟨 Live client portal (assigned projects, milestones, approved diaries) built early on owner request; photos, certificates, STK Push, variations and FX remain |
-| D7.2 | **Supplier portal**: LPOs, deliveries, invoices with eTIMS, payment status, statements | Supplier portal | A supplier can see an LPO and submit an invoice | M | ⬜ |
+| D7.2 | **Supplier portal**: LPOs, deliveries, invoices with eTIMS, payment status, statements | Supplier portal | A supplier can see an LPO and submit an invoice | M | 🔎 |
 | D7.3 | **Labourer USSD/SMS and notifications**:<br/>• Africa's Talking USSD menu (EN/SW) with ID + PIN<br/>• Notification centre: templates (EN/SW), preferences, WhatsApp | USSD simulator, notification settings and templates | **Phase 7 acceptance:** a labourer can check pay via USSD | M | 🟨 Labourer web portal with phone + PIN built early on owner request (assigned sites only); USSD, pay, attendance and the real SMS provider remain |
+
+> **D7.2 is in review (🔎)** on branch `phase-7/d7.2-supplier-portal` (not yet independently reviewed). Staff with `procurement.manage_suppliers` or company-wide `finance.manage` invite a supplier's contact (email or Kenyan mobile, step-up) as a `supplier`-role user **bound to exactly one supplier** (`supplier_portal_users`: invited → active → revoked; revoking ends the membership and sessions at once). The supplier portal (`/supplier`, 360 px, EN/SW, light/dark) shows only that supplier's **approved LPOs** (lines, prices, VAT, delivery, terms; optional acknowledgement), **deliveries** (received, rejected and why; no internal notes or photos), **invoices** with a supplier-facing status and the **payments the company recorded**, and a **statement** (opening balance, invoices, payments, closing balance; per project or company-wide; PDF/Excel). The supplier **submits invoices** (eTIMS number required and format-checked, PDF, client ID + `Idempotency-Key`) into the **same D5.2 workflow**: three-way matched at once and waiting in the staff queue marked "Submitted by the supplier"; only staff approve or record payments, and a portal invoice is never reopened. Isolation is enforced in the API and by restrictive RLS policies and triggers (migration `20261127090000_supplier_portal`); no permission was added. Not included: M-Pesa B2B/bank payouts (D4.x), supplier quotations to RFQs, delivery scheduling, self-registration, credit notes and eTIMS verification with KRA (COMPLIANCE_TODO CR-SUP-01–04). See ARCHITECTURE §4.12, D-100–D-109 and IMPLEMENTATION_STATUS.
 
 ### Phase 8: Reports, H&S, plant and compliance
 
@@ -165,7 +167,7 @@ Some brief sections (§5.8, §5.14, §5.15) aren't assigned to a phase in the br
 |---|---|
 | §5.1 Projects and sites | D1.4 (create project), D2.1 |
 | §5.2 Bill of Quantities | D2.2, D2.3, D6.3 |
-| §5.3 Materials, procurement and stores | D5.1–D5.3 |
+| §5.3 Materials, procurement and stores | D5.1–D5.3; supplier portal D7.2 |
 | §5.4 Labour management | D3.1 (productivity and ledger finished in D4.1/D6.3) |
 | §5.5 Attendance and biometrics | D3.2–D3.4 |
 | §5.6 Payroll | D4.1, D4.3 |

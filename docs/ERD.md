@@ -924,6 +924,27 @@ erDiagram
 | StockTakeLine | `stock_take_lines` + `stock_take_counts` | Lines: `snapshot_quantity` and `snapshot_seq` at start, then the latest `counted_quantity`, `expected_quantity` (system quantity when counted) and `counted_seq`, `counted_by/at`, `count_id`; the variance is derived (counted − expected). `stock_take_counts` is the append-only count evidence with client ID, idempotency key, digest and capture time. |
 | (new) StockReorderLevel | `stock_reorder_levels` | Per (store, material): `reorder_level` in the base unit, `updated_by/at`. |
 
+**Implemented in D7.2 (supplier portal)** (migration `20261127090000_supplier_portal`; [ARCHITECTURE §4.12](./ARCHITECTURE.md#412-supplier-portal-d72)). Three tables, each with `tenant_id`, forced RLS with `WITH CHECK` on `app.current_tenant_id()`, composite `(tenant_id, …)` foreign keys, database-stamped times and `pmb_app` privileges without DELETE or TRUNCATE (and without UPDATE on the two append-only tables). A supplier-role member is also limited by **restrictive** RLS policies on `suppliers`, `supplier_contacts`, `supplier_phone_changes`, `supplier_payout_versions`, `material_prices`, `unit_conversions`, `rfq_suppliers`, `quotations` + lines, `lpos` + lines, `grns` + lines, `supplier_invoices` + lines, `three_way_matches`, `invoice_payables`, `invoice_settlements`, `procurement_documents` and the new tables: only rows of the supplier its active binding names. `lpos` and `supplier_invoices` gain a unique `(tenant_id, supplier_id, id)` so the new tables can reference "an LPO / invoice **of this supplier**".
+
+```mermaid
+erDiagram
+  Supplier ||--o{ SupplierPortalUser : "contacts with access"
+  Invitation ||--|| SupplierPortalUser : "invited by"
+  User |o--o{ SupplierPortalUser : "bound as"
+  SupplierInvoice ||--o| SupplierInvoiceSubmission : "submitted through the portal"
+  SupplierPortalUser ||--o{ SupplierInvoiceSubmission : "submits"
+  Lpo ||--o| LpoAcknowledgement : "acknowledged"
+  SupplierPortalUser ||--o{ LpoAcknowledgement : "acknowledges"
+```
+
+| Entity | Implemented as | Notes |
+|---|---|---|
+| (new) SupplierPortalUser | `supplier_portal_users` | `supplier_id` (composite FK), `invitation_id` (composite FK, unique), `identifier` (email or normalised phone invited), `contact_name`, `user_id` (set on activation; no FK so the history survives an account's removal), `status` (`invited, active, revoked`), `version`, `invited_by/at`, `activated_at`, `revoked_by/at`, `revoke_cause` (`revoked, membership_ended`), `revoke_reason` (3–500, required when staff revoke). Partial unique indexes: one `active` row per (tenant, user); one `invited`/`active` row per (tenant, supplier, identifier). Unique `(tenant_id, supplier_id, id)` for same-supplier references. Never deleted |
+| (new) SupplierInvoiceSubmission | `supplier_invoice_submissions` | Append-only: `invoice_id` (unique; composite FK `(tenant_id, supplier_id, invoice_id)` → an invoice of the same supplier), `supplier_id`, `portal_user_id` (composite FK `(tenant_id, supplier_id, portal_user_id)`), `submitted_by`, `idempotency_key` (unique per company), `request_digest` (SHA-256 hex), `submitted_at`. Its existence is the invoice's `source = supplier_portal` |
+| (new) LpoAcknowledgement | `lpo_acknowledgements` | Append-only, one per LPO (unique `lpo_id`; composite FK `(tenant_id, supplier_id, lpo_id)`), `portal_user_id` (same-supplier composite FK), `acknowledged_by`, `acknowledged_at`. Never changes the LPO |
+
+Statements and payment status are computed from `supplier_invoices` and `invoice_settlements` (no table): see `supplierStatement()` in `packages/domain`.
+
 
 ## 6. Labour, attendance and biometrics
 

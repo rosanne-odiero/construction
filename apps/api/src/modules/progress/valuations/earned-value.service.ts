@@ -261,11 +261,20 @@ export class EarnedValueService {
       ]);
       const inForce = valuedInForce(items, approved, nairobiDate());
       const figures = itemFigures(facts);
+      // D6.3 part B: the uncertified value of live subcontracts on an item is a floor of its ETC.
+      const subcontracted = new Map<string, number>();
+      for (const commitment of facts.commitments)
+        if (commitment.category === "subcontract" && commitment.lineageId)
+          subcontracted.set(
+            commitment.lineageId,
+            (subcontracted.get(commitment.lineageId) ?? 0) + commitment.open,
+          );
       const rowOf = (input: {
         contractMinor: number;
         evMinor: number;
         budgetMinor: number | null;
         actualMinor: number;
+        committedMinor: number;
       }): CostToCompleteRow => ({ ...input, ...costToComplete(input) });
       const perItem = items.map((item) => {
         const own = figures.get(item.lineageId);
@@ -277,6 +286,7 @@ export class EarnedValueService {
             evMinor: valued?.valueMinor ?? 0,
             budgetMinor: own?.budgetMinor ?? null,
             actualMinor: own?.actualMinor ?? 0,
+            committedMinor: subcontracted.get(item.lineageId) ?? 0,
           },
           percentComplete: valued?.percentComplete ?? null,
         };
@@ -290,6 +300,7 @@ export class EarnedValueService {
           null,
         ),
         actualMinor: rows.reduce((total, row) => total + row.input.actualMinor, 0),
+        committedMinor: rows.reduce((total, row) => total + row.input.committedMinor, 0),
       });
       const billMap = new Map<string, { bill: ItemRow["bill"]; rows: typeof perItem }>();
       for (const row of perItem) {
@@ -364,6 +375,7 @@ const itemRow = (
       evMinor: number;
       budgetMinor: number | null;
       actualMinor: number;
+      committedMinor: number;
     };
     percentComplete: string | null;
   },
@@ -372,6 +384,7 @@ const itemRow = (
     evMinor: number;
     budgetMinor: number | null;
     actualMinor: number;
+    committedMinor: number;
   }) => CostToCompleteRow,
 ) => ({
   item: bqItemWire(row.item),

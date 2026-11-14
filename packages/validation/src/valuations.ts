@@ -676,6 +676,8 @@ export const costToCompleteRowSchema = z.strictObject({
   eacMinor: minor.nullable(),
   vacMinor: minor.nullable(),
   basis: z.enum(ETC_BASES),
+  /** Approved subcontracts' value not yet certified (D6.3 part B): the ETC is never below it. */
+  committedMinor: minor.default(0),
 });
 export type CostToCompleteRow = z.infer<typeof costToCompleteRowSchema>;
 

@@ -168,8 +168,8 @@ export class SpendAlertsService {
         let used = 0;
         for (const entry of facts.entries)
           if (entry.category === category && entry.measure === "accrued") used += entry.sum;
-        if (category === "materials")
-          for (const commitment of facts.commitments) used += commitment.open;
+        for (const commitment of facts.commitments)
+          if (commitment.category === category) used += commitment.open;
         add({ kind: "category", category, bill: null }, used, budget, `category:${category}`);
       }
       const bills = await this.report.billsOf(scope, project.id, itemFigures(facts), facts);

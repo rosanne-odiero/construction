@@ -3,9 +3,9 @@
 This walkthrough covers online web diaries (increment 1), verified photos (increment 2), the
 schedule (D6.2), quality (D6.1: workforce from attendance, inspections, concrete tests, snags,
 practical completion and the defects liability period) and measurement and valuations (D6.3 part
-A). The **Phase 6 acceptance walkthrough** is at the end. Offline/site-app capture, subcontracts
-and piece-rate links (D6.3 part B) remain pending. No biometric collection, payouts, deployment
-or pilot is authorised.
+A), then subcontracts and piece-rate jobs (D6.3 part B). The **Phase 6 acceptance walkthrough**
+is at the end. Offline/site-app capture remains pending. No biometric collection, payouts,
+deployment or pilot is authorised.
 
 ## Start
 
@@ -209,6 +209,57 @@ interim certificates and **IPC-0003, the practical-completion retention release*
    one: nothing — certificates, measurements and earned value are internal (the API e2e
    permission matrix covers clients, consultants, suppliers, site agents and another company).
 
+## D6.3 part B: subcontracts, subcontract certificates and piece-rate jobs
+
+Seeded data (synthetic, RUI-HTS): BQ variation for instruction AI-002 adds **D internal plaster**
+(450 m² @ KES 350) and **E aluminium windows** (36 m² @ KES 9,500). Two D5.1 suppliers are
+flagged as subcontractors: *Kamau Plastering Works Ltd* and *Nyali Aluminium and Glass Ltd*.
+**SC-0001** (labour-only plastering: D 450 m² @ KES 280, retention 5 % limited to 5 %, advance
+KES 20,000 recovered at 20 % per certificate, withholding 3 %) and **SC-0002** (supply-and-fix
+windows: E 36 m² @ KES 8,200, VAT 16 %, retention 10 % limited to 5 %) were prepared by the project
+manager and approved by the owner. **ADV-01** (KES 20,000) was asked for by the project manager,
+approved by finance and recorded as paid by the owner. Measurements of D (200 m²) and E (12 m²)
+were approved. **SCC-0001** on SC-0001 was certified by finance: work KES 56,000, retention 2,800,
+advance recovery 11,200, **due KES 42,000**, withholding 1,260, **payable KES 40,740**; the owner
+recorded a KES 20,000 part payment and finance matched the subcontractor's invoice KPW-INV-014. A
+draft certificate on SC-0002 claims 12 m². **PRJ-0001** (Gang B, item C walling, KES 150/m², 100
+m² agreed) was approved by finance; 96 m² of output was approved against 90 m² measured, so the
+reconciliation flags **paid above measured**.
+
+1. **Owner** (Wanjiru Kamau, TOTP): **Suppliers** — the two subcontractors carry the
+   *Subcontractor* badge; the flag is a checkbox on the supplier form (KRA PIN, eTIMS and the
+   maker-checked payout details stay the supplier's).
+2. **Project manager** (Brian Otieno): **Subcontracts → RUI-HTS** lists SC-0001 and SC-0002 with
+   value, certified and committed. **New subcontract** (pick a flagged supplier, kind, terms) opens
+   a draft; **Add a line** on a BQ item at the subcontractor's own rate (never the client BQ rate;
+   the list shows what is left of each item). A quantity above what is left of the BQ item is
+   refused unless an exception reason is given; provisional sums are not offered. **Submit for approval**: the terms
+   and lines freeze with a digest; there is no approve button for the preparer.
+3. **Owner**: open the submitted draft, **Approve** (step-up): its value now counts as committed
+   in the budget view and as a floor of cost to complete. **Start work** makes it active.
+4. **Project manager**: on SC-0001 **Raise a variation** (a reason; a quantity change or a new
+   line): one pending at a time, approved by someone else as the next contract version; a line
+   never goes below what was certified. **Ask for an advance** above the agreed advance: refused.
+5. **Project manager**: on SC-0002 open the draft certificate: the KE-SUB-1 breakdown (work done,
+   retention with its limit, advance recovery, previous certificates, amount due, VAT and
+   withholding shown separately, payable), each line with the measured quantity and what other
+   subcontracts claim on the item. Claim more than was measured: refused, the same measured
+   quantity is never paid twice. **Submit**.
+6. **Finance** (Daniel Mwangi, TOTP): **Certify** (step-up) on the digest seen: the draft SCV-0001
+   becomes SC-0002's **SCC-0001** (numbered per subcontract), locked, and posts once to the cost ledger (category subcontract, item E; ledger
+   source *Subcontract certificate*). Recording a payment as the certifier is refused; the owner
+   records it (Idempotency-Key). **Match the subcontractor's invoice**: it posts nothing. Download
+   the certificate **PDF (EN/SW)** and **Excel**; on SC-0001, the **statement** (certified, paid,
+   retention held, advances outstanding).
+7. **Project manager**: **Piece-rate jobs → RUI-HTS**: PRJ-0001 with agreed, approved and
+   remaining quantity; the **reconciliation** shows item C *Paid above measured* (96 vs 90 m²).
+   **New piece-rate job** (item, gang or labourer, rate, unit, agreed quantity, dates); approval is
+   by someone else. **Record output**: pick the job — the rate is shown, never typed; a quantity
+   above what is left of the job is refused until an extension is approved.
+8. **Kiswahili, 360 px**: the same pages in Kiswahili at 360 px: nothing scrolls sideways.
+9. A **supplier portal** user of the subcontractor, a client or a consultant sees none of this
+   (404/403; API e2e).
+
 ## Automated evidence
 
 ```bash
@@ -229,6 +280,10 @@ pnpm --filter @pm-buddy/domain exec vitest run src/valuations
 pnpm --filter @pm-buddy/validation exec vitest run src/valuations.test.ts
 pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/valuations.e2e-spec.ts
 pnpm --filter @pm-buddy/web exec playwright test test/valuations.spec.ts
+# D6.3 part B subcontracts and piece-rate jobs (done-when in subcontracts.e2e-spec.ts)
+pnpm --filter @pm-buddy/domain exec vitest run src/subcontracts
+pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/subcontracts.e2e-spec.ts
+pnpm --filter @pm-buddy/web exec playwright test test/subcontracts.spec.ts
 ```
 
 The API suite uses the separate `pmb_test` database and real non-owner runtime role.
@@ -256,6 +311,8 @@ synthetic accounts; finance and the owner need TOTP).
 | 9 | **Retention** (finance): RUI-HTS ledger; JUJ-DPX release IPC-0003 after the certified practical completion | Retention released only after a certified completion, never more than held | D6.3 + D6.1 |
 | 10 | **Earned value** (finance): CPI, SPI, EAC with formulas; the S-curve and its table; cost to complete by bill | Undefined ratios unavailable; earned, certified, invoiced and received kept apart | D6.3 + D6.2 + D5.4 |
 | 11 | **Outside parties**: a client or supplier cannot open certificates, measurements or earned value | 403/404; nothing internal leaks | D6.3 |
+| 12 | **Subcontract certificate** (project manager, then finance with step-up): SC-0002's draft from the approved measurement of item E; certify | KE-SUB-1 figures; claims never above measured across subcontracts; posted once to the ledger; invoice matched, not accrued | D6.3 part B |
+| 13 | **Piece-rate reconciliation** (project manager): PRJ-0001 on item C | Output at the job's rate only; *Paid above measured* flag | D6.3 part B |
 
 Automated evidence for the same chain: API e2e `diaries`, `photos`, `quality`, `schedule` and
 `valuations` (the done-when test "generates IPC-0001 from measured progress, certified
@@ -263,4 +320,8 @@ independently on the digest seen", with hand-computed figures) plus `projects` (
 on the real runtime role; browser `diaries.spec.ts`, `photos.spec.ts`, `quality.spec.ts`,
 `schedule.spec.ts` and `valuations.spec.ts`. Actual results are in
 [IMPLEMENTATION_STATUS](../IMPLEMENTATION_STATUS.md#d63-measurement-and-valuations-branch-phase-6d63-valuations).
+Part B's done-when ("a subcontract certificate generates correctly from measured progress, and
+piece-rate pay above measured quantities is flagged") is `subcontracts.e2e-spec.ts` with
+`subcontracts.spec.ts` in the browser; results in
+[IMPLEMENTATION_STATUS](../IMPLEMENTATION_STATUS.md#d63-part-b-subcontracts-and-piece-rate-jobs-branch-phase-6d63b-subcontracts).
 

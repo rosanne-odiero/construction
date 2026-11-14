@@ -73,7 +73,8 @@ export async function seedPayroll(
     ruleVersions: await tx.statutoryRuleVersion.count({ where: { tenantId } }),
     minimumWages: await tx.minimumWageRate.count({ where: { tenantId } }),
     allowances: await tx.payrollAllowance.count({ where: { tenantId } }),
-    outputs: await tx.pieceRateOutput.count({ where: { tenantId } }),
+    // D4.1's own outputs (D6.3 part B's job outputs are summarised by the subcontracts seed).
+    outputs: await tx.pieceRateOutput.count({ where: { tenantId, jobId: null } }),
     advances: await tx.salaryAdvance.count({ where: { tenantId } }),
     draftBatches: await tx.payrollBatch.count({ where: { tenantId, status: "draft" } }),
     submittedBatches: await tx.payrollBatch.count({ where: { tenantId, status: "submitted" } }),

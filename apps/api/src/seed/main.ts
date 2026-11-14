@@ -161,6 +161,14 @@ function print(summary: SeedSummary) {
       .map((entry) => `${entry.code} ${entry.status}${entry.overdue ? " (overdue)" : ""}`)
       .join(", ")}`,
   );
+  const { subcontracts } = summary;
+  lines.push(
+    "",
+    `Subcontracts and piece-rate jobs on RUI-HTS (D6.3 part B, synthetic, ${subcontracts.created ? "created" : "already present"}): BQ variation ${subcontracts.variation ?? "—"}`,
+    `  subcontracts: ${subcontracts.subcontracts.map((entry) => `${entry.code} ${entry.status}`).join(", ")}; ${subcontracts.advances} advance(s)`,
+    `  certificates: ${subcontracts.certificates.map((entry) => `${entry.code} ${entry.status}`).join(", ")}`,
+    `  piece-rate jobs: ${subcontracts.pieceRateJobs.map((entry) => `${entry.code} ${entry.status}`).join(", ")}; ${subcontracts.flaggedItems} BQ item(s) flagged as paid above measured`,
+  );
   console.log(lines.join("\n"));
 }
 

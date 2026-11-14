@@ -210,6 +210,11 @@ export default async function SuppliersPage({
                         {supplier.legalName}
                       </span>
                     ) : null}
+                    {supplier.isSubcontractor ? (
+                      <span className="mt-1 block">
+                        <StatusBadge tone="info">{t("subcontractor")}</StatusBadge>
+                      </span>
+                    ) : null}
                   </td>
                   <td className="py-2 pr-2 font-mono">{supplier.kraPinMasked ?? t("noPin")}</td>
                   <td className="py-2 pr-2">

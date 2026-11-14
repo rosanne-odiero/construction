@@ -1,5 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Request } from "express";
+import {
+  subcontractAdvanceCode,
+  subcontractCertificateCode,
+  subcontractCode,
+} from "@pm-buddy/domain";
 import { SPENDING_READ_PERMISSIONS, type CostCategory } from "@pm-buddy/types";
 import {
   costLedgerResponseSchema,
@@ -138,6 +143,9 @@ export class CostLedgerService {
       expenses,
       counts,
       journals,
+      certificates,
+      payments,
+      advances,
     ] = await Promise.all([
       tx.project.findMany({
         where: { tenantId: access.tenantId, id: { in: rows.map((row) => row.projectId) } },
@@ -205,7 +213,72 @@ export class CostLedgerService {
         },
         select: { id: true, number: true },
       }),
+      tx.subcontractCertificate.findMany({
+        where: {
+          tenantId: access.tenantId,
+          id: {
+            in: rows.flatMap((row) =>
+              row.subcontractCertificateId ? [row.subcontractCertificateId] : [],
+            ),
+          },
+        },
+        select: { id: true, number: true, certificateNumber: true },
+      }),
+      tx.subcontractPayment.findMany({
+        where: {
+          tenantId: access.tenantId,
+          id: {
+            in: rows.flatMap((row) => (row.subcontractPaymentId ? [row.subcontractPaymentId] : [])),
+          },
+        },
+        select: {
+          id: true,
+          certificate: { select: { id: true, number: true, certificateNumber: true } },
+        },
+      }),
+      tx.subcontractAdvance.findMany({
+        where: {
+          tenantId: access.tenantId,
+          id: {
+            in: rows.flatMap((row) => (row.subcontractAdvanceId ? [row.subcontractAdvanceId] : [])),
+          },
+        },
+        select: { id: true, number: true, subcontract: { select: { id: true, number: true } } },
+      }),
     ]);
+    const certificateLabel = (row?: { number: number; certificateNumber: number | null }) =>
+      row
+        ? subcontractCertificateCode(
+            row.certificateNumber ?? row.number,
+            row.certificateNumber !== null,
+          )
+        : "—";
+    const subcontractDocument = (row: EntryRow) => {
+      if (row.source === "subcontract_certificate") {
+        const found = certificates.find((entry) => entry.id === row.subcontractCertificateId);
+        return {
+          kind: row.source,
+          id: row.subcontractCertificateId!,
+          label: certificateLabel(found),
+        };
+      }
+      if (row.source === "subcontract_payment") {
+        const found = payments.find((entry) => entry.id === row.subcontractPaymentId);
+        return {
+          kind: row.source,
+          id: found?.certificate.id ?? row.subcontractPaymentId!,
+          label: certificateLabel(found?.certificate),
+        };
+      }
+      const found = advances.find((entry) => entry.id === row.subcontractAdvanceId);
+      return {
+        kind: row.source as "subcontract_advance",
+        id: found?.subcontract.id ?? row.subcontractAdvanceId!,
+        label: found
+          ? `${subcontractCode(found.subcontract.number)} ${subcontractAdvanceCode(found.number)}`
+          : "—",
+      };
+    };
     const label = (list: { id: string; number?: string; invoiceNumber?: string }[], id: string) => {
       const found = list.find((entry) => entry.id === id);
       return found?.number ?? found?.invoiceNumber ?? "—";
@@ -219,7 +292,9 @@ export class CostLedgerService {
             ? { kind: row.source, id: row.expenseId!, label: label(expenses, row.expenseId!) }
             : row.source === "petty_cash_count"
               ? { kind: row.source, id: row.floatCountId!, label: label(counts, row.floatCountId!) }
-              : { kind: row.source, id: row.journalId!, label: label(journals, row.journalId!) };
+              : row.source === "cost_journal"
+                ? { kind: row.source, id: row.journalId!, label: label(journals, row.journalId!) }
+                : subcontractDocument(row);
       return {
         id: row.id,
         project: projectRef(project),

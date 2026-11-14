@@ -7,6 +7,7 @@ import {
   FileSpreadsheet,
   FolderOpen,
   Forklift,
+  Handshake,
   HardHat,
   LayoutDashboard,
   NotebookPen,
@@ -26,6 +27,7 @@ export type NavKey =
   | "projects"
   | "bq"
   | "valuations"
+  | "subcontracts"
   | "labour"
   | "attendance"
   | "diary"
@@ -67,6 +69,7 @@ export const navGroups: {
       { key: "suppliers", href: "/suppliers", icon: Truck },
       { key: "procurement", href: "/procurement", icon: ShoppingCart },
       { key: "valuations", href: "/valuations", icon: Calculator },
+      { key: "subcontracts", href: "/subcontracts", icon: Handshake },
     ],
   },
   {
@@ -118,7 +121,8 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
  * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1), attendance and
  * timesheets (D3.3 web slice), payroll (D4.1), the catalogue and suppliers (D5.1),
  * procure-to-pay (D5.2), stores (D5.3), spending and cash flow (D5.4), quality (D6.1),
- * measurement and valuations (D6.3), health and safety (D8.2), plant and equipment (D8.3),
+ * measurement and valuations (D6.3), subcontracts and piece-rate jobs (D6.3 part B), health and
+ * safety (D8.2), plant and equipment (D8.3),
  * documents and compliance (D8.4) and the dashboard and reports centre (D8.1). The D0 labour,
  * attendance and payroll prototypes live under /prototype.
  */
@@ -149,6 +153,12 @@ export function isLiveRoute(pathname: string): boolean {
     return true;
   if (
     /^\/valuations(\/(approvals|[0-9a-f-]{36})|\/projects\/[0-9a-f-]{36}(\/(measure|measurements\/[0-9a-f-]{36}))?)?$/.test(
+      pathname,
+    )
+  )
+    return true;
+  if (
+    /^\/subcontracts(\/((certificates|piece-rate-jobs)\/)?[0-9a-f-]{36}|\/projects\/[0-9a-f-]{36}(\/piece-rate(\/output)?)?)?$/.test(
       pathname,
     )
   )

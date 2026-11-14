@@ -43,6 +43,7 @@ import {
   type SupplierPortalSeedSummary,
 } from "./demo-supplier-portal.js";
 import { seedReports, type ReportsSeedSummary } from "./reports-seed.js";
+import { seedSubcontracts, type SubcontractsSeedSummary } from "./subcontracts-seed.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -442,6 +443,7 @@ export type SeedSummary = {
   plant: PlantSeedSummary;
   reports: ReportsSeedSummary;
   documents: DocumentsSeedSummary;
+  subcontracts: SubcontractsSeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -675,6 +677,15 @@ export async function seedDemo(
     projectManagerId: userOf("projectManager").id,
     siteAgentId: userOf("siteAgent").id,
   });
+  // After documents (instruction AI-002 follows AI-001) and valuations (D6.3 part A): a BQ
+  // variation adds the finishes let to two subcontractors, their certificates and advance, and a
+  // piece-rate job on RUI-HTS (D6.3 part B).
+  const subcontracts = await seedSubcontracts(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    financeId: userOf("finance").id,
+  });
   // Last: it adds an LPO, a delivery, invoices and a part payment on KIT-BNG (no budget there),
   // with documents and distinct amounts, so the earlier summaries and alerts do not change.
   const supplierPortal = await seedSupplierPortal(
@@ -717,6 +728,7 @@ export async function seedDemo(
     plant,
     reports,
     documents,
+    subcontracts,
   };
 }
 

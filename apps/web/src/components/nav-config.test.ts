@@ -31,6 +31,21 @@ describe("sidebar", () => {
     expect(missing).toEqual([]);
   });
 
+  it("treats the subcontract and piece-rate screens as live pages", () => {
+    const id = "01a1db46-7d90-7436-b8e8-4582012ff940";
+    for (const path of [
+      "/subcontracts",
+      `/subcontracts/${id}`,
+      `/subcontracts/certificates/${id}`,
+      `/subcontracts/piece-rate-jobs/${id}`,
+      `/subcontracts/projects/${id}`,
+      `/subcontracts/projects/${id}/piece-rate`,
+      `/subcontracts/projects/${id}/piece-rate/output`,
+    ])
+      expect(isLiveRoute(path), path).toBe(true);
+    expect(isLiveRoute(`/subcontracts/projects/${id}/other`)).toBe(false);
+  });
+
   it("treats the dashboard and the reports centre as live pages, not prototypes", () => {
     for (const path of ["/dashboard", "/reports", "/reports/cost-ledger", "/reports/subscriptions"])
       expect(isLiveRoute(path)).toBe(true);

@@ -643,6 +643,69 @@ stateDiagram-v2
 | Contract settings changed | `finance.manage`; values in range | New version; drafts recompute; a submitted valuation becomes stale until returned and resubmitted; `valuation.settings_updated` | Expected settings version |
 | Certificate PDF / Excel | a certificate reader | Generated on demand (watermark until certified); `valuation.exported`; rate-limited | Repeatable |
 
+## Subcontracts, certificates, advances and piece-rate jobs (D6.3 part B)
+
+Implemented in D6.3 part B ([ARCHITECTURE §4.16](./ARCHITECTURE.md#416-subcontracts-and-piece-rate-jobs-d63-part-b), D-140–D-149). Transition tables: `packages/domain/src/subcontracts/lifecycle.ts` (`SUBCONTRACT_TRANSITIONS`, `SUBCONTRACT_CERTIFICATE_TRANSITIONS`, `SUBCONTRACT_ADVANCE_TRANSITIONS`, `PIECE_RATE_JOB_TRANSITIONS`), enforced again by the database guards.
+
+```mermaid
+stateDiagram-v2
+  state Subcontract {
+    [*] --> s_draft : create (bq.edit; a flagged supplier)
+    s_draft --> s_draft : edit terms; add / remove lines (BQ items at own rates; cap or reason)
+    s_draft --> s_submitted : submit (terms and lines frozen; digest)
+    s_submitted --> s_approved : approve on the digest (procurement.approve + step-up, not a contributor; caps re-checked)
+    s_submitted --> s_draft : return (reason)
+    s_approved --> s_active : activate
+    s_active --> s_completed : complete (no open certificate or variation)
+    s_approved --> s_terminated : terminate (reason, step-up)
+    s_active --> s_terminated : terminate (reason, step-up)
+    s_draft --> s_cancelled : cancel (reason)
+    s_submitted --> s_cancelled : cancel (reason)
+  }
+  state Certificate {
+    [*] --> c_draft : open (bq.edit; one open per subcontract; dated on/after the last)
+    c_draft --> c_draft : claim quantities to date (≤ line; pool ≤ approved measured)
+    c_draft --> c_submitted : submit (figures, terms, version and lines frozen; digest)
+    c_submitted --> c_certified : certify on the digest (finance.manage + step-up, not a contributor; SCC-NNNN; posts once)
+    c_submitted --> c_draft : return (reason)
+    c_draft --> c_cancelled : cancel (reason)
+    c_submitted --> c_cancelled : cancel (reason)
+  }
+  state Advance {
+    [*] --> a_requested : request (bq.edit or finance.manage; ≤ agreed advance)
+    a_requested --> a_approved : approve (payments.approve + step-up, not the requester)
+    a_requested --> a_rejected : reject (reason)
+    a_approved --> a_paid : record payment (payments.disburse + step-up, neither of the two; posts once)
+    a_requested --> a_cancelled : cancel (reason)
+    a_approved --> a_cancelled : cancel (reason)
+  }
+  state PieceRateJob {
+    [*] --> j_pending : create (payroll.prepare or labour.manage)
+    j_pending --> j_approved : approve (timesheets.approve, not the creator)
+    j_pending --> j_rejected : reject (reason)
+    j_approved --> j_closed : close
+  }
+```
+
+| Workflow / transition | Actor, scope and preconditions | Side effects and audit event | Retry |
+|---|---|---|---|
+| Subcontract drafted; lines added or removed | `bq.edit`; an active supplier flagged as a subcontractor (409 `subcontractor-not-eligible`); lines on measurable items of the BQ in force, one per item, at the subcontract's own rate; above the BQ quantity only with a reason (409 `over-bq-quantity`) | `subcontract.created`, `.line_added`, `.line_removed`; the editor becomes a contributor | Expected version |
+| draft → submitted | `bq.edit`; at least one line (409 `subcontract-empty`); advance recoverable (409 `advance-not-recoverable`) | Terms and lines frozen, digest stored; `subcontract.submitted` | Expected version |
+| submitted → approved | `procurement.approve` + step-up; **not a contributor** (403 `maker-checker`); the quoted digest equals a recomputation (409 `subcontract-stale`); caps re-checked under an item lock | Original value and contract version 1; counts as committed; `subcontract.approved` | Expected version |
+| Variation raised → approved / rejected | raise: `bq.edit` on an approved or active subcontract, a reason, one pending (409 `subcontract-variation-open`), never below certified (409 `line-below-certified`); decide: `procurement.approve` (+ step-up to approve), not the maker, on its digest | Approval: next contract version, value moves; `subcontract.variation_raised/approved/rejected` | Expected version |
+| active → completed / terminated | completion: preparer or approver, no open certificate or variation (409 `subcontract-has-open-items`); termination: `procurement.approve` + step-up, reason | Commits nothing afterwards; retention still released by certificate; `subcontract.completed/terminated` | Expected version |
+| Certificate opened; claims set | `bq.edit`; interim on an active subcontract or a retention release after the certified completion; claims ≤ the line (409 `claim-exceeds-line`) | Draft preview recomputed on every read; `subcontract.certificate_created`, `…_claims_set` | Expected version |
+| draft → submitted | `bq.edit`; per item the pool of claims ≤ approved measured (409 `claim-exceeds-measured`) | Figures (KE-SUB-1), terms, version and lines frozen, digest; the database re-verifies at commit; `subcontract.certificate_submitted` | Expected version |
+| submitted → certified | `finance.manage` + step-up; **not a contributor**; digest equals a recomputation (409 `certificate-stale`) | `SCC-NNNN`; the work certified this period posts once per line to the cost ledger (accrued, subcontract); frozen; `subcontract.certificate_certified` | Expected version |
+| Payment recorded | `payments.disburse` + step-up; **not the certifier**; ≤ payable − paid (409 `payment-exceeds-payable`); dated between the certificate and today; reference unique per method | The cost part of the cash posts once (paid); `subcontract.payment_recorded` | `Idempotency-Key` (required): same key and body return the original, another body 409 `idempotency-key-reused` |
+| Subcontractor invoice matched | `finance.manage`; a certified certificate with something due; one per certificate (409 `invoice-exists`); a number not used by the supplier in D5.2 (409 `invoice-number-taken`) | Posts nothing; `subcontract.invoice_matched` | — |
+| Advance requested → approved → paid | as the diagram; ≤ the agreed advance (409 `advance-exceeds-limit`); paid not in the future | Paid: posts once (paid); recovered by later certificates; `subcontract.advance_*` | Expected version |
+| Piece-rate job created → approved | create: `payroll.prepare`/`labour.manage`; an item measured by quantity; unit the item's or an exact conversion (400 `unit-not-convertible`); a gang or an engaged labourer. Approve: `timesheets.approve`, not the creator (409 `same-person`) | `payroll.piece_rate_job_created/approved/rejected/closed` | Expected version |
+| Extension asked → approved | ask: a job preparer, reason; decide: `timesheets.approve`, not the requester | Quantity in force grows; `payroll.piece_rate_extension_*` | Expected version |
+| Output recorded against a job | `attendance.record` or `payroll.prepare`; an approved job, within its dates (409 `job-dates`), recorded (pending + approved) ≤ agreed + approved extensions (409 `job-quantity-exceeded`, job row locked) | A D4.1 output at the job's rate, unit, worker and item; `payroll.output_recorded` (with the job). Approval is D4.1's (`timesheets.approve`, not the recorder; equal gang shares; the cap re-checked) | Optional `Idempotency-Key` |
+| Reconciliation | piece-rate readers with `bq.edit` or finance | Per BQ item: approved piece-rate quantity and amount vs approved measured, what subcontractors were certified; flags | Read only |
+| Certificate PDF / Excel, statement PDF / Excel | a subcontract reader | Generated on demand (watermark until certified), EN/SW; `subcontract.certificate_exported` / `.statement_exported`; rate-limited | Repeatable |
+
 ## Report subscriptions (D8.1)
 
 Implemented in D8.1 ([ARCHITECTURE §4.14](./ARCHITECTURE.md#414-dashboards-and-reports-d81), D-126, D-127). A person subscribes **themselves** to a report they may run now; the email carries a sign-in link, never report data.

@@ -218,6 +218,15 @@ import {
   earnedValueResponseSchema,
   costToCompleteResponseSchema,
   valuationsOverviewResponseSchema,
+  pieceRateJobOptionsResponseSchema,
+  pieceRateJobResponseSchema,
+  pieceRateJobsResponseSchema,
+  pieceRateReconciliationResponseSchema,
+  projectSubcontractsResponseSchema,
+  subcontractCertificateResponseSchema,
+  subcontractItemsResponseSchema,
+  subcontractResponseSchema,
+  subcontractsOverviewResponseSchema,
   movementResponseSchema,
   movementsResponseSchema,
   stockTakeResponseSchema,
@@ -390,6 +399,8 @@ export function responseContract(method: string, target: string) {
     return buildupMaterialsResponseSchema;
   const valuations = valuationsContract(method, path);
   if (valuations) return valuations;
+  const subcontracts = subcontractsContract(method, path);
+  if (subcontracts) return subcontracts;
   const stores = storesContract(method, path);
   if (stores) return stores;
   if (path === "rate-buildups")
@@ -529,6 +540,30 @@ function valuationsContract(method: string, path: string) {
     )
   )
     return valuationResponseSchema;
+  return null;
+}
+
+/** The D6.3 part B subcontract endpoints' success contracts. */
+function subcontractsContract(method: string, path: string) {
+  if (path === "subcontracts") return subcontractsOverviewResponseSchema;
+  if (/^subcontracts\/projects\/[^/]+$/.test(path))
+    return method === "get" ? projectSubcontractsResponseSchema : subcontractResponseSchema;
+  if (/^subcontracts\/projects\/[^/]+\/items$/.test(path)) return subcontractItemsResponseSchema;
+  if (/^subcontracts\/advances\/[^/]+\/(approve|reject|cancel|pay)$/.test(path))
+    return subcontractResponseSchema;
+  if (/^subcontracts\/[^/]+\/certificates$/.test(path)) return subcontractCertificateResponseSchema;
+  if (
+    /^subcontracts\/[^/]+(\/(lines(\/[^/]+)?|submit|approve|return|activate|complete|terminate|cancel|advances|variations(\/[^/]+\/(approve|reject))?))?$/.test(
+      path,
+    )
+  )
+    return subcontractResponseSchema;
+  if (
+    /^subcontract-certificates\/[^/]+(\/(claims|submit|certify|return|cancel|payments|invoice))?$/.test(
+      path,
+    )
+  )
+    return subcontractCertificateResponseSchema;
   return null;
 }
 
@@ -738,6 +773,14 @@ function payrollContract(method: string, path: string) {
   if (/^payroll\/projects\/[^/]+\/outputs$/.test(path))
     return get ? outputsResponseSchema : outputResponseSchema;
   if (/^payroll\/outputs\/[^/]+\/(approve|reject)$/.test(path)) return outputResponseSchema;
+  // D6.3 part B piece-rate jobs.
+  if (/^payroll\/projects\/[^/]+\/piece-rate-jobs$/.test(path))
+    return get ? pieceRateJobsResponseSchema : pieceRateJobResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/piece-rate-jobs\/options$/.test(path))
+    return pieceRateJobOptionsResponseSchema;
+  if (/^payroll\/projects\/[^/]+\/piece-rate-reconciliation$/.test(path))
+    return pieceRateReconciliationResponseSchema;
+  if (/^payroll\/piece-rate-jobs\/[^/]+(\/.*)?$/.test(path)) return pieceRateJobResponseSchema;
   if (path === "payroll/advances") return advancesResponseSchema;
   if (/^payroll\/projects\/[^/]+\/advances$/.test(path)) return advanceResponseSchema;
   if (/^payroll\/advances\/[^/]+\/(approve|reject|disburse|cancel)$/.test(path))

@@ -137,6 +137,25 @@ import {
   statutoryRuleResponseSchema,
   workerPortalResponseSchema,
   scheduleActivityResponseSchema,
+  correctiveActionResponseSchema,
+  correctiveActionsResponseSchema,
+  firstAiderResponseSchema,
+  firstAidKitResponseSchema,
+  firstAidResponseSchema,
+  incidentDetailResponseSchema,
+  incidentsResponseSchema,
+  inductionResponseSchema,
+  inductionsResponseSchema,
+  inductionStatusResponseSchema,
+  ppeIssueResponseSchema,
+  ppeIssuesResponseSchema,
+  safetyOptionsResponseSchema,
+  safetyOverviewResponseSchema,
+  safetySettingsResponseSchema,
+  safetySummaryResponseSchema,
+  toolboxTalkResponseSchema,
+  toolboxTalksResponseSchema,
+  treatmentResponseSchema,
   scheduleBaselineResponseSchema,
   scheduleBaselinesResponseSchema,
   scheduleCalendarResponseSchema,
@@ -349,6 +368,8 @@ export function responseContract(method: string, target: string) {
   if (spending) return spending;
   const quality = qualityContract(method, path);
   if (quality) return quality;
+  const safety = safetyContract(method, path);
+  if (safety) return safety;
   return messageResponseSchema;
 }
 
@@ -373,6 +394,36 @@ function valuationsContract(method: string, path: string) {
     )
   )
     return valuationResponseSchema;
+  return null;
+}
+
+/** The D8.2 health and safety endpoints' success contracts. */
+function safetyContract(method: string, path: string) {
+  if (path === "safety/settings") return safetySettingsResponseSchema;
+  if (path === "safety/overview") return safetyOverviewResponseSchema;
+  const match = /^projects\/[^/]+\/safety(\/.*)?$/.exec(path);
+  if (!match) return null;
+  const rest = match[1] ?? "";
+  const get = method === "get";
+  if (rest === "/summary") return safetySummaryResponseSchema;
+  if (rest === "/options") return safetyOptionsResponseSchema;
+  if (rest === "/induction-status") return inductionStatusResponseSchema;
+  if (rest === "/inductions") return get ? inductionsResponseSchema : inductionResponseSchema;
+  if (/^\/inductions\/[^/]+\/void$/.test(rest)) return inductionResponseSchema;
+  if (rest === "/talks") return get ? toolboxTalksResponseSchema : toolboxTalkResponseSchema;
+  if (/^\/talks\/[^/]+(\/actions)?$/.test(rest)) return toolboxTalkResponseSchema;
+  if (rest === "/ppe") return get ? ppeIssuesResponseSchema : ppeIssueResponseSchema;
+  if (/^\/ppe\/[^/]+\/(return|void)$/.test(rest)) return ppeIssueResponseSchema;
+  if (rest === "/incidents") return get ? incidentsResponseSchema : incidentDetailResponseSchema;
+  if (/^\/incidents\/[^/]+(\/(investigation|regulator|close|void|photos))?$/.test(rest))
+    return incidentDetailResponseSchema;
+  if (rest === "/corrective-actions")
+    return get ? correctiveActionsResponseSchema : correctiveActionResponseSchema;
+  if (/^\/corrective-actions\/[^/]+(\/actions)?$/.test(rest)) return correctiveActionResponseSchema;
+  if (rest === "/first-aid") return firstAidResponseSchema;
+  if (/^\/first-aid\/kits(\/[^/]+\/(checks|retire))?$/.test(rest)) return firstAidKitResponseSchema;
+  if (/^\/first-aid\/first-aiders(\/[^/]+\/remove)?$/.test(rest)) return firstAiderResponseSchema;
+  if (/^\/first-aid\/treatments(\/[^/]+\/(void|link))?$/.test(rest)) return treatmentResponseSchema;
   return null;
 }
 

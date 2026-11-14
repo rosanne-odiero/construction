@@ -81,6 +81,7 @@ export function PhotoUpload({
   caption,
   label,
   disabled,
+  purpose,
   onUploaded,
 }: {
   projectId: string;
@@ -88,6 +89,8 @@ export function PhotoUpload({
   caption: string;
   label: string;
   disabled?: boolean;
+  /** `safety_incident`: kept out of the project's photo list, for safety readers only. */
+  purpose?: "safety_incident";
   onUploaded: (photo: QualityPhoto) => void;
 }) {
   const t = useTranslations("quality.photos");
@@ -109,7 +112,11 @@ export function PhotoUpload({
         `/projects/${projectId}/photos`,
         file,
         sitePhotoResponseSchema,
-        { siteId, caption: Array.from(caption).slice(0, 200).join("") },
+        {
+          siteId,
+          caption: Array.from(caption).slice(0, 200).join(""),
+          ...(purpose ? { purpose } : {}),
+        },
       );
       onUploaded({ id: photo.id, verified: photo.verified, caption: photo.caption });
     } catch (caught) {

@@ -604,7 +604,12 @@ export class MeasurementsService {
   private async checkPhotos(scope: Scope, projectId: string, photoIds: readonly string[]) {
     if (!photoIds.length) return;
     const found = await scope.tx.sitePhoto.count({
-      where: { tenantId: scope.access.tenantId, projectId, id: { in: [...photoIds] } },
+      where: {
+        tenantId: scope.access.tenantId,
+        projectId,
+        purpose: "general",
+        id: { in: [...photoIds] },
+      },
     });
     if (found !== new Set(photoIds).size)
       throw valuationProblem(

@@ -107,6 +107,13 @@ function print(summary: SeedSummary) {
     `  certified: ${valuations.certificates.join(", ")}`,
     `  retention held: ${valuations.retentionHeld.join("; ")}; RUI-HTS CPI ${valuations.earnedValue.cpi ?? "unavailable"}, SPI ${valuations.earnedValue.spi ?? "unavailable"}`,
   );
+  const { safety } = summary;
+  lines.push(
+    "",
+    `Health and safety for RUI-HTS (synthetic, ${safety.created ? "created" : "already present"}): ${safety.inductions} inductions (${safety.flaggedLabourers} labourers flagged for working without one), ${safety.talks} toolbox talks, ${safety.ppeIssues} PPE issues (${safety.ppeDue} due for replacement)`,
+    `  incidents: ${safety.incidents.map((entry) => `${entry.code} ${entry.kind} (${entry.status})`).join(", ")}`,
+    `  corrective actions: ${safety.actions.total} (${safety.actions.verified} verified, ${safety.actions.overdue} overdue); ${safety.kits} first-aid kits; ${safety.treatments} treatment(s)`,
+  );
   console.log(lines.join("\n"));
 }
 

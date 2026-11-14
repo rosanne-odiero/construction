@@ -25,6 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ section: 
 export default async function ComingSoonPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
   if (section === "diary") redirect("/diary");
+  if (section === "safety") redirect("/safety");
   if (!isSection(section)) notFound();
   const t = await getTranslations("soon");
   const phase = comingSoonSections[section];

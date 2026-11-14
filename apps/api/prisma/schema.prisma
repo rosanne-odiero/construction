@@ -174,6 +174,7 @@ model Tenant {
   costCodes           CostCode[]
   qualitySettings     QualitySettings?
   checklistTemplates  ChecklistTemplate[]
+  safetySettings      SafetySettings?
 
   @@map("tenants")
 }
@@ -278,7 +279,8 @@ model Project {
   costEntries      CostEntry[]
   cashFlowItems    CashFlowItem[]
 
-  completions ProjectCompletion[]
+  completions       ProjectCompletion[]
+  correctiveActions CorrectiveAction[]
 
   contractSettings ContractSettings[]
   valuations       Valuation[]
@@ -306,36 +308,43 @@ model ProjectStatusChange {
 }
 
 model Site {
-  id                String                @id @default(uuid(7)) @db.Uuid
-  tenantId          String                @map("tenant_id") @db.Uuid
-  projectId         String                @map("project_id") @db.Uuid
-  name              String                @db.VarChar(120)
-  address           String?               @db.VarChar(250)
-  version           Int                   @default(1)
-  createdBy         String                @map("created_by") @db.Uuid
-  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  project           Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  geofences         SiteGeofence[]
-  gangs             Gang[]
-  attendanceDays    AttendanceDay[]
-  attendanceRecords AttendanceRecord[]
-  anomalies         AttendanceAnomaly[]
-  adjustments       TimesheetAdjustment[]
-  diaries           SiteDiary[]
-  photos            SitePhoto[]
-  requisitions      Requisition[]
-  lpos              Lpo[]
-  grns              Grn[]
-  stores            Store[]
-  pettyCashFloats   PettyCashFloat[]
-  pettyCashExpenses PettyCashExpense[]
-  costEntries       CostEntry[]
-  costJournalLines  CostJournalLine[]
-  inspections       Inspection[]
-  snags             Snag[]
-  cubeSets          CubeSet[]
-  slumpTests        SlumpTest[]
+  id                 String                @id @default(uuid(7)) @db.Uuid
+  tenantId           String                @map("tenant_id") @db.Uuid
+  projectId          String                @map("project_id") @db.Uuid
+  name               String                @db.VarChar(120)
+  address            String?               @db.VarChar(250)
+  version            Int                   @default(1)
+  createdBy          String                @map("created_by") @db.Uuid
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project            Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  geofences          SiteGeofence[]
+  gangs              Gang[]
+  attendanceDays     AttendanceDay[]
+  attendanceRecords  AttendanceRecord[]
+  anomalies          AttendanceAnomaly[]
+  adjustments        TimesheetAdjustment[]
+  diaries            SiteDiary[]
+  photos             SitePhoto[]
+  requisitions       Requisition[]
+  lpos               Lpo[]
+  grns               Grn[]
+  stores             Store[]
+  pettyCashFloats    PettyCashFloat[]
+  pettyCashExpenses  PettyCashExpense[]
+  costEntries        CostEntry[]
+  costJournalLines   CostJournalLine[]
+  inspections        Inspection[]
+  snags              Snag[]
+  cubeSets           CubeSet[]
+  slumpTests         SlumpTest[]
+  safetyInductions   SafetyInduction[]
+  toolboxTalks       ToolboxTalk[]
+  ppeIssues          PpeIssue[]
+  safetyIncidents    SafetyIncident[]
+  firstAidKits       FirstAidKit[]
+  firstAiders        FirstAider[]
+  firstAidTreatments FirstAidTreatment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -1320,58 +1329,64 @@ model LabourSettings {
 // data binds it to (tenant, table, column, row). `registered_on` is set by the database (Africa/
 // Nairobi date) and the minimum-age CHECK uses it. Rows are never deleted by the runtime role.
 model Labourer {
-  id             String                  @id @db.Uuid
-  tenantId       String                  @map("tenant_id") @db.Uuid
-  workerNo       String                  @map("worker_no") @db.VarChar(20)
-  fullName       String                  @map("full_name") @db.VarChar(150)
-  dateOfBirth    DateTime                @map("date_of_birth") @db.Date
-  gender         String                  @db.VarChar(20)
-  homeCounty     String?                 @map("home_county") @db.VarChar(30)
-  tradeId        String                  @map("trade_id") @db.Uuid
-  skillLevelId   String                  @map("skill_level_id") @db.Uuid
-  engagementType String                  @map("engagement_type") @db.VarChar(20)
-  rateBasis      String                  @default("daily") @map("rate_basis") @db.VarChar(10)
-  status         String                  @default("active") @db.VarChar(20)
-  idType         String                  @map("id_type") @db.VarChar(20)
-  idNumberEnc    Bytes                   @map("id_number_enc")
-  idNumberBidx   String                  @map("id_number_bidx") @db.Char(64)
-  phoneEnc       Bytes?                  @map("phone_enc")
-  phoneBidx      String?                 @map("phone_bidx") @db.Char(64)
-  kraPinEnc      Bytes?                  @map("kra_pin_enc")
-  kraPinBidx     String?                 @map("kra_pin_bidx") @db.Char(64)
-  nssfNumberEnc  Bytes?                  @map("nssf_number_enc")
-  shaNumberEnc   Bytes?                  @map("sha_number_enc")
-  nextOfKinEnc   Bytes?                  @map("next_of_kin_enc")
-  registeredOn   DateTime                @map("registered_on") @db.Date
-  doNotRehire    Boolean                 @default(false) @map("do_not_rehire")
-  doNotRehireAt  DateTime?               @map("do_not_rehire_at") @db.Timestamptz
-  doNotRehireBy  String?                 @map("do_not_rehire_by") @db.Uuid
-  version        Int                     @default(1)
-  createdBy      String                  @map("created_by") @db.Uuid
-  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  tenant         Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trade          Trade                   @relation(fields: [tenantId, tradeId], references: [tenantId, id], onDelete: NoAction)
-  skillLevel     SkillLevel              @relation(fields: [tenantId, skillLevelId], references: [tenantId, id], onDelete: NoAction)
-  engagements    LabourEngagement[]
-  consents       LabourerConsent[]
-  accreditations LabourerAccreditation[]
-  dnrEvents      DoNotRehireEvent[]      @relation("DnrSubject")
-  relatedDnr     DoNotRehireEvent[]      @relation("DnrRelated")
-  rates          LabourRate[]
-  ledGangs       Gang[]
-  gangMembers    GangMembership[]
-  attendance     AttendanceRecord[]
-  corrections    AttendanceCorrection[]
-  anomalies      AttendanceAnomaly[]
-  timesheetLines TimesheetLine[]
-  adjustments    TimesheetAdjustment[]
-  allowances     PayrollAllowance[]
-  outputs        PieceRateOutput[]
-  outputShares   PieceRateOutputShare[]
-  advances       SalaryAdvance[]
-  payrollLines   PayrollLine[]
-  dayClaims      PayrollDayClaim[]
+  id                    String                  @id @db.Uuid
+  tenantId              String                  @map("tenant_id") @db.Uuid
+  workerNo              String                  @map("worker_no") @db.VarChar(20)
+  fullName              String                  @map("full_name") @db.VarChar(150)
+  dateOfBirth           DateTime                @map("date_of_birth") @db.Date
+  gender                String                  @db.VarChar(20)
+  homeCounty            String?                 @map("home_county") @db.VarChar(30)
+  tradeId               String                  @map("trade_id") @db.Uuid
+  skillLevelId          String                  @map("skill_level_id") @db.Uuid
+  engagementType        String                  @map("engagement_type") @db.VarChar(20)
+  rateBasis             String                  @default("daily") @map("rate_basis") @db.VarChar(10)
+  status                String                  @default("active") @db.VarChar(20)
+  idType                String                  @map("id_type") @db.VarChar(20)
+  idNumberEnc           Bytes                   @map("id_number_enc")
+  idNumberBidx          String                  @map("id_number_bidx") @db.Char(64)
+  phoneEnc              Bytes?                  @map("phone_enc")
+  phoneBidx             String?                 @map("phone_bidx") @db.Char(64)
+  kraPinEnc             Bytes?                  @map("kra_pin_enc")
+  kraPinBidx            String?                 @map("kra_pin_bidx") @db.Char(64)
+  nssfNumberEnc         Bytes?                  @map("nssf_number_enc")
+  shaNumberEnc          Bytes?                  @map("sha_number_enc")
+  nextOfKinEnc          Bytes?                  @map("next_of_kin_enc")
+  registeredOn          DateTime                @map("registered_on") @db.Date
+  doNotRehire           Boolean                 @default(false) @map("do_not_rehire")
+  doNotRehireAt         DateTime?               @map("do_not_rehire_at") @db.Timestamptz
+  doNotRehireBy         String?                 @map("do_not_rehire_by") @db.Uuid
+  version               Int                     @default(1)
+  createdBy             String                  @map("created_by") @db.Uuid
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant                Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trade                 Trade                   @relation(fields: [tenantId, tradeId], references: [tenantId, id], onDelete: NoAction)
+  skillLevel            SkillLevel              @relation(fields: [tenantId, skillLevelId], references: [tenantId, id], onDelete: NoAction)
+  engagements           LabourEngagement[]
+  consents              LabourerConsent[]
+  accreditations        LabourerAccreditation[]
+  dnrEvents             DoNotRehireEvent[]      @relation("DnrSubject")
+  relatedDnr            DoNotRehireEvent[]      @relation("DnrRelated")
+  rates                 LabourRate[]
+  ledGangs              Gang[]
+  gangMembers           GangMembership[]
+  attendance            AttendanceRecord[]
+  corrections           AttendanceCorrection[]
+  anomalies             AttendanceAnomaly[]
+  timesheetLines        TimesheetLine[]
+  adjustments           TimesheetAdjustment[]
+  allowances            PayrollAllowance[]
+  outputs               PieceRateOutput[]
+  outputShares          PieceRateOutputShare[]
+  advances              SalaryAdvance[]
+  payrollLines          PayrollLine[]
+  dayClaims             PayrollDayClaim[]
+  safetyInductions      SafetyInduction[]
+  toolboxTalkAttendees  ToolboxTalkAttendee[]
+  ppeIssues             PpeIssue[]
+  safetyIncidentPersons SafetyIncidentPerson[]
+  firstAiders           FirstAider[]
+  firstAidTreatments    FirstAidTreatment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, workerNo])
@@ -1508,24 +1523,25 @@ model LabourRate {
 // A named gang (crew) on a project, optionally tied to one of its sites, with a leader who is a
 // current member.
 model Gang {
-  id               String             @id @default(uuid(7)) @db.Uuid
-  tenantId         String             @map("tenant_id") @db.Uuid
-  projectId        String             @map("project_id") @db.Uuid
-  siteId           String?            @map("site_id") @db.Uuid
-  name             String             @db.VarChar(80)
-  leaderLabourerId String?            @map("leader_labourer_id") @db.Uuid
-  status           String             @default("active") @db.VarChar(20)
-  version          Int                @default(1)
-  createdBy        String             @map("created_by") @db.Uuid
-  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  project          Project            @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  site             Site?              @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
-  leader           Labourer?          @relation(fields: [tenantId, leaderLabourerId], references: [tenantId, id], onDelete: NoAction)
-  members          GangMembership[]
-  outputs          PieceRateOutput[]
-  stockMovements   StockMovement[]
-  stockEntries     StockLedgerEntry[]
+  id                   String                @id @default(uuid(7)) @db.Uuid
+  tenantId             String                @map("tenant_id") @db.Uuid
+  projectId            String                @map("project_id") @db.Uuid
+  siteId               String?               @map("site_id") @db.Uuid
+  name                 String                @db.VarChar(80)
+  leaderLabourerId     String?               @map("leader_labourer_id") @db.Uuid
+  status               String                @default("active") @db.VarChar(20)
+  version              Int                   @default(1)
+  createdBy            String                @map("created_by") @db.Uuid
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project              Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  site                 Site?                 @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
+  leader               Labourer?             @relation(fields: [tenantId, leaderLabourerId], references: [tenantId, id], onDelete: NoAction)
+  members              GangMembership[]
+  outputs              PieceRateOutput[]
+  stockMovements       StockMovement[]
+  stockEntries         StockLedgerEntry[]
+  toolboxTalkAttendees ToolboxTalkAttendee[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -2360,38 +2376,41 @@ model PayrollDayClaim {
 // at capture; `verified` = location inside and time ok. Originals and metadata-free thumbnails
 // are private objects under tenant/project/photo keys.
 model SitePhoto {
-  id              String                     @id @db.Uuid
-  tenantId        String                     @map("tenant_id") @db.Uuid
-  projectId       String                     @map("project_id") @db.Uuid
-  siteId          String                     @map("site_id") @db.Uuid
-  diaryId         String?                    @map("diary_id") @db.Uuid
-  caption         String?                    @db.VarChar(500)
-  objectKey       String                     @map("object_key") @db.VarChar(300)
-  thumbnailKey    String                     @map("thumbnail_key") @db.VarChar(300)
-  fileSha256      String                     @map("file_sha256") @db.Char(64)
-  sizeBytes       Int                        @map("size_bytes")
-  width           Int
-  height          Int
-  scanStatus      String                     @map("scan_status") @db.VarChar(20)
-  scanEngine      String                     @map("scan_engine") @db.VarChar(60)
-  scannedAt       DateTime                   @map("scanned_at") @db.Timestamptz
-  capturedAt      DateTime?                  @map("captured_at") @db.Timestamptz
-  timeSource      String?                    @map("time_source") @db.VarChar(20)
-  latitude        Decimal?                   @db.Decimal(9, 6)
-  longitude       Decimal?                   @db.Decimal(9, 6)
-  camera          String?                    @db.VarChar(120)
-  geofenceVersion Int?                       @map("geofence_version")
-  locationCheck   String                     @map("location_check") @db.VarChar(12)
-  timeCheck       String                     @map("time_check") @db.VarChar(16)
-  distanceM       Decimal?                   @map("distance_m") @db.Decimal(10, 1)
-  verified        Boolean
-  uploadedBy      String                     @map("uploaded_by") @db.Uuid
-  uploadedAt      DateTime                   @default(now()) @map("uploaded_at") @db.Timestamptz
-  site            Site                       @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_site_fkey")
-  diary           SiteDiary?                 @relation(fields: [tenantId, siteId, diaryId], references: [tenantId, siteId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_diary_fkey")
-  inspectionItems InspectionItemPhoto[]
-  snags           SnagPhoto[]
-  measurements    ProgressMeasurementPhoto[]
+  id                   String                     @id @db.Uuid
+  tenantId             String                     @map("tenant_id") @db.Uuid
+  projectId            String                     @map("project_id") @db.Uuid
+  siteId               String                     @map("site_id") @db.Uuid
+  diaryId              String?                    @map("diary_id") @db.Uuid
+  caption              String?                    @db.VarChar(500)
+  purpose              String                     @default("general") @db.VarChar(20)
+  objectKey            String                     @map("object_key") @db.VarChar(300)
+  thumbnailKey         String                     @map("thumbnail_key") @db.VarChar(300)
+  fileSha256           String                     @map("file_sha256") @db.Char(64)
+  sizeBytes            Int                        @map("size_bytes")
+  width                Int
+  height               Int
+  scanStatus           String                     @map("scan_status") @db.VarChar(20)
+  scanEngine           String                     @map("scan_engine") @db.VarChar(60)
+  scannedAt            DateTime                   @map("scanned_at") @db.Timestamptz
+  capturedAt           DateTime?                  @map("captured_at") @db.Timestamptz
+  timeSource           String?                    @map("time_source") @db.VarChar(20)
+  latitude             Decimal?                   @db.Decimal(9, 6)
+  longitude            Decimal?                   @db.Decimal(9, 6)
+  camera               String?                    @db.VarChar(120)
+  geofenceVersion      Int?                       @map("geofence_version")
+  locationCheck        String                     @map("location_check") @db.VarChar(12)
+  timeCheck            String                     @map("time_check") @db.VarChar(16)
+  distanceM            Decimal?                   @map("distance_m") @db.Decimal(10, 1)
+  verified             Boolean
+  uploadedBy           String                     @map("uploaded_by") @db.Uuid
+  uploadedAt           DateTime                   @default(now()) @map("uploaded_at") @db.Timestamptz
+  site                 Site                       @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_site_fkey")
+  diary                SiteDiary?                 @relation(fields: [tenantId, siteId, diaryId], references: [tenantId, siteId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_diary_fkey")
+  inspectionItems      InspectionItemPhoto[]
+  snags                SnagPhoto[]
+  measurements         ProgressMeasurementPhoto[]
+  toolboxTalks         ToolboxTalk[]
+  safetyIncidentPhotos SafetyIncidentPhoto[]
 
   @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, fileSha256])
@@ -4275,42 +4294,43 @@ model ChecklistTemplateItem {
 // An inspection of work on a site against a template version: draft → submitted → signed off by
 // an independent quality.manage holder (locked), or returned to draft with a reason.
 model Inspection {
-  id                 String            @id @db.Uuid
-  tenantId           String            @map("tenant_id") @db.Uuid
-  projectId          String            @map("project_id") @db.Uuid
-  siteId             String            @map("site_id") @db.Uuid
+  id                 String             @id @db.Uuid
+  tenantId           String             @map("tenant_id") @db.Uuid
+  projectId          String             @map("project_id") @db.Uuid
+  siteId             String             @map("site_id") @db.Uuid
   number             Int
-  templateId         String            @map("template_id") @db.Uuid
-  category           String            @db.VarChar(20)
-  location           String            @db.VarChar(200)
-  inspectorType      String            @map("inspector_type") @db.VarChar(12)
-  inspectorName      String?           @map("inspector_name") @db.VarChar(150)
-  inspectedOn        DateTime          @map("inspected_on") @db.Date
-  wbsNodeId          String?           @map("wbs_node_id") @db.Uuid
-  scheduleActivityId String?           @map("schedule_activity_id") @db.Uuid
-  bqVersionId        String?           @map("bq_version_id") @db.Uuid
-  bqItemLineageId    String?           @map("bq_item_lineage_id") @db.Uuid
-  notes              String?           @db.VarChar(2000)
-  status             String            @default("draft") @db.VarChar(12)
-  result             String?           @db.VarChar(4)
-  version            Int               @default(1)
-  createdBy          String            @map("created_by") @db.Uuid
-  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  submittedBy        String?           @map("submitted_by") @db.Uuid
-  submittedAt        DateTime?         @map("submitted_at") @db.Timestamptz
-  signedOffBy        String?           @map("signed_off_by") @db.Uuid
-  signedOffAt        DateTime?         @map("signed_off_at") @db.Timestamptz
-  returnedBy         String?           @map("returned_by") @db.Uuid
-  returnedAt         DateTime?         @map("returned_at") @db.Timestamptz
-  returnReason       String?           @map("return_reason") @db.VarChar(500)
-  updatedBy          String            @map("updated_by") @db.Uuid
-  updatedAt          DateTime          @default(now()) @map("updated_at") @db.Timestamptz
-  site               Site              @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
-  template           ChecklistTemplate @relation(fields: [tenantId, templateId], references: [tenantId, id], onDelete: Restrict)
-  wbsNode            WbsNode?          @relation(fields: [tenantId, projectId, wbsNodeId], references: [tenantId, projectId, id], onDelete: Restrict)
-  scheduleActivity   ScheduleActivity? @relation(fields: [tenantId, projectId, scheduleActivityId], references: [tenantId, projectId, id], onDelete: Restrict)
-  bqItem             BqItem?           @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  templateId         String             @map("template_id") @db.Uuid
+  category           String             @db.VarChar(20)
+  location           String             @db.VarChar(200)
+  inspectorType      String             @map("inspector_type") @db.VarChar(12)
+  inspectorName      String?            @map("inspector_name") @db.VarChar(150)
+  inspectedOn        DateTime           @map("inspected_on") @db.Date
+  wbsNodeId          String?            @map("wbs_node_id") @db.Uuid
+  scheduleActivityId String?            @map("schedule_activity_id") @db.Uuid
+  bqVersionId        String?            @map("bq_version_id") @db.Uuid
+  bqItemLineageId    String?            @map("bq_item_lineage_id") @db.Uuid
+  notes              String?            @db.VarChar(2000)
+  status             String             @default("draft") @db.VarChar(12)
+  result             String?            @db.VarChar(4)
+  version            Int                @default(1)
+  createdBy          String             @map("created_by") @db.Uuid
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  submittedBy        String?            @map("submitted_by") @db.Uuid
+  submittedAt        DateTime?          @map("submitted_at") @db.Timestamptz
+  signedOffBy        String?            @map("signed_off_by") @db.Uuid
+  signedOffAt        DateTime?          @map("signed_off_at") @db.Timestamptz
+  returnedBy         String?            @map("returned_by") @db.Uuid
+  returnedAt         DateTime?          @map("returned_at") @db.Timestamptz
+  returnReason       String?            @map("return_reason") @db.VarChar(500)
+  updatedBy          String             @map("updated_by") @db.Uuid
+  updatedAt          DateTime           @default(now()) @map("updated_at") @db.Timestamptz
+  site               Site               @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  template           ChecklistTemplate  @relation(fields: [tenantId, templateId], references: [tenantId, id], onDelete: Restrict)
+  wbsNode            WbsNode?           @relation(fields: [tenantId, projectId, wbsNodeId], references: [tenantId, projectId, id], onDelete: Restrict)
+  scheduleActivity   ScheduleActivity?  @relation(fields: [tenantId, projectId, scheduleActivityId], references: [tenantId, projectId, id], onDelete: Restrict)
+  bqItem             BqItem?            @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
   items              InspectionItem[]
+  correctiveActions  CorrectiveAction[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -4536,4 +4556,407 @@ model ProjectCompletion {
   @@unique([tenantId, id])
   @@index([tenantId, projectId, kind])
   @@map("project_completions")
+}
+
+// D8.2 health and safety (ARCHITECTURE §4.8, WORKFLOWS "Health and safety"). Lifecycles,
+// independence, locking and numbering live in SQL triggers (migration
+// 20261124090000_health_safety); partial unique indexes are SQL-only.
+
+// The company's safety settings: the induction checklist, induction validity and attendance
+// look-back, the kit check interval and PPE replacement periods (CONFIGURATION).
+model SafetySettings {
+  tenantId              String   @id @map("tenant_id") @db.Uuid
+  /// [{ key, label }]: starter topics have a null label (translated on screen).
+  inductionTopics       Json     @map("induction_topics")
+  inductionValidityDays Int?     @map("induction_validity_days")
+  inductionLookbackDays Int      @default(14) @map("induction_lookback_days")
+  kitCheckIntervalDays  Int      @default(30) @map("kit_check_interval_days")
+  /// { helmet: days, … } for every PPE item.
+  ppeReplacementDays    Json     @map("ppe_replacement_days")
+  version               Int      @default(1)
+  updatedBy             String   @map("updated_by") @db.Uuid
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("safety_settings")
+}
+
+// A site induction of a labourer, staff member or named visitor (IND-NNNN per project). Fixed
+// once recorded; a mistake is voided with a reason.
+model SafetyInduction {
+  id                  String    @id @db.Uuid
+  tenantId            String    @map("tenant_id") @db.Uuid
+  projectId           String    @map("project_id") @db.Uuid
+  siteId              String    @map("site_id") @db.Uuid
+  number              Int
+  personKind          String    @map("person_kind") @db.VarChar(10)
+  labourerId          String?   @map("labourer_id") @db.Uuid
+  userId              String?   @map("user_id") @db.Uuid
+  visitorName         String?   @map("visitor_name") @db.VarChar(120)
+  visitorOrganisation String?   @map("visitor_organisation") @db.VarChar(120)
+  inductedOn          DateTime  @map("inducted_on") @db.Date
+  inductorId          String    @map("inductor_id") @db.Uuid
+  /// The checklist topics covered, copied from the settings ([{ key, label }]).
+  topics              Json
+  topicsTotal         Int       @map("topics_total")
+  acknowledgement     String    @db.VarChar(12)
+  notes               String?   @db.VarChar(500)
+  status              String    @default("recorded") @db.VarChar(10)
+  recordedBy          String    @map("recorded_by") @db.Uuid
+  recordedAt          DateTime  @default(now()) @map("recorded_at") @db.Timestamptz
+  voidedBy            String?   @map("voided_by") @db.Uuid
+  voidedAt            DateTime? @map("voided_at") @db.Timestamptz
+  voidReason          String?   @map("void_reason") @db.VarChar(500)
+  version             Int       @default(1)
+  site                Site      @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  labourer            Labourer? @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, siteId, labourerId])
+  @@map("safety_inductions")
+}
+
+// A toolbox talk (TBT-NNNN): draft while attendance is taken, then confirmed (locked) or cancelled.
+model ToolboxTalk {
+  id                String                @id @db.Uuid
+  tenantId          String                @map("tenant_id") @db.Uuid
+  projectId         String                @map("project_id") @db.Uuid
+  siteId            String                @map("site_id") @db.Uuid
+  number            Int
+  heldOn            DateTime              @map("held_on") @db.Date
+  topic             String                @db.VarChar(200)
+  notes             String?               @db.VarChar(2000)
+  durationMinutes   Int?                  @map("duration_minutes")
+  presenterId       String                @map("presenter_id") @db.Uuid
+  photoId           String?               @map("photo_id") @db.Uuid
+  otherAttendees    Int                   @default(0) @map("other_attendees")
+  status            String                @default("draft") @db.VarChar(10)
+  version           Int                   @default(1)
+  createdBy         String                @map("created_by") @db.Uuid
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  confirmedBy       String?               @map("confirmed_by") @db.Uuid
+  confirmedAt       DateTime?             @map("confirmed_at") @db.Timestamptz
+  cancelledBy       String?               @map("cancelled_by") @db.Uuid
+  cancelledAt       DateTime?             @map("cancelled_at") @db.Timestamptz
+  cancelReason      String?               @map("cancel_reason") @db.VarChar(500)
+  updatedBy         String                @map("updated_by") @db.Uuid
+  updatedAt         DateTime              @default(now()) @map("updated_at") @db.Timestamptz
+  site              Site                  @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  photo             SitePhoto?            @relation(fields: [tenantId, projectId, photoId], references: [tenantId, projectId, id], onDelete: Restrict)
+  attendees         ToolboxTalkAttendee[]
+  correctiveActions CorrectiveAction[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, status])
+  @@map("toolbox_talks")
+}
+
+// A registered labourer at a toolbox talk (added or removed only while the talk is a draft).
+model ToolboxTalkAttendee {
+  tenantId   String      @map("tenant_id") @db.Uuid
+  projectId  String      @map("project_id") @db.Uuid
+  talkId     String      @map("talk_id") @db.Uuid
+  labourerId String      @map("labourer_id") @db.Uuid
+  viaGangId  String?     @map("via_gang_id") @db.Uuid
+  addedBy    String      @map("added_by") @db.Uuid
+  addedAt    DateTime    @default(now()) @map("added_at") @db.Timestamptz
+  talk       ToolboxTalk @relation(fields: [tenantId, projectId, talkId], references: [tenantId, projectId, id], onDelete: Cascade)
+  labourer   Labourer    @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+  viaGang    Gang?       @relation(fields: [tenantId, projectId, viaGangId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@id([tenantId, talkId, labourerId])
+  @@index([tenantId, labourerId])
+  @@map("toolbox_talk_attendees")
+}
+
+// PPE issued to a labourer (a register; no stock movement, decision D-72): issued → returned,
+// replaced (by a newer issue naming it) or voided. The replacement date is fixed at issue.
+model PpeIssue {
+  id               String     @id @db.Uuid
+  tenantId         String     @map("tenant_id") @db.Uuid
+  projectId        String     @map("project_id") @db.Uuid
+  siteId           String     @map("site_id") @db.Uuid
+  labourerId       String     @map("labourer_id") @db.Uuid
+  item             String     @db.VarChar(20)
+  size             String?    @db.VarChar(12)
+  quantity         Int
+  issuedOn         DateTime   @map("issued_on") @db.Date
+  replacementDays  Int        @map("replacement_days")
+  replacementDueOn DateTime   @map("replacement_due_on") @db.Date
+  replacesIssueId  String?    @map("replaces_issue_id") @db.Uuid
+  status           String     @default("issued") @db.VarChar(10)
+  returnedOn       DateTime?  @map("returned_on") @db.Date
+  returnCondition  String?    @map("return_condition") @db.VarChar(8)
+  returnedBy       String?    @map("returned_by") @db.Uuid
+  returnedAt       DateTime?  @map("returned_at") @db.Timestamptz
+  voidedBy         String?    @map("voided_by") @db.Uuid
+  voidedAt         DateTime?  @map("voided_at") @db.Timestamptz
+  voidReason       String?    @map("void_reason") @db.VarChar(500)
+  issuedBy         String     @map("issued_by") @db.Uuid
+  issuedAt         DateTime   @default(now()) @map("issued_at") @db.Timestamptz
+  version          Int        @default(1)
+  updatedBy        String     @map("updated_by") @db.Uuid
+  updatedAt        DateTime   @default(now()) @map("updated_at") @db.Timestamptz
+  site             Site       @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  labourer         Labourer   @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+  replaces         PpeIssue?  @relation("PpeReplacement", fields: [tenantId, projectId, replacesIssueId], references: [tenantId, projectId, id], onDelete: NoAction)
+  replacedBy       PpeIssue[] @relation("PpeReplacement")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@index([tenantId, projectId, status, replacementDueOn])
+  @@index([tenantId, labourerId])
+  @@map("ppe_issues")
+}
+
+// An incident or near miss (INC-NNNN): reported → investigated → closed (locked), or voided.
+model SafetyIncident {
+  id                  String                 @id @db.Uuid
+  tenantId            String                 @map("tenant_id") @db.Uuid
+  projectId           String                 @map("project_id") @db.Uuid
+  siteId              String                 @map("site_id") @db.Uuid
+  number              Int
+  kind                String                 @db.VarChar(24)
+  severity            String                 @db.VarChar(10)
+  occurredAt          DateTime               @map("occurred_at") @db.Timestamptz
+  location            String                 @db.VarChar(200)
+  description         String                 @db.VarChar(2000)
+  immediateActions    String?                @map("immediate_actions") @db.VarChar(2000)
+  firstAidGiven       Boolean                @map("first_aid_given")
+  status              String                 @default("reported") @db.VarChar(14)
+  reportedBy          String                 @map("reported_by") @db.Uuid
+  reportedAt          DateTime               @default(now()) @map("reported_at") @db.Timestamptz
+  rootCauseCategory   String?                @map("root_cause_category") @db.VarChar(24)
+  rootCause           String?                @map("root_cause") @db.VarChar(2000)
+  contributingFactors String?                @map("contributing_factors") @db.VarChar(2000)
+  investigatedBy      String?                @map("investigated_by") @db.Uuid
+  investigatedAt      DateTime?              @map("investigated_at") @db.Timestamptz
+  regulatorDecision   String?                @map("regulator_decision") @db.VarChar(16)
+  regulatorNotifiedOn DateTime?              @map("regulator_notified_on") @db.Date
+  regulatorReference  String?                @map("regulator_reference") @db.VarChar(60)
+  regulatorReason     String?                @map("regulator_reason") @db.VarChar(500)
+  regulatorDecidedBy  String?                @map("regulator_decided_by") @db.Uuid
+  regulatorDecidedAt  DateTime?              @map("regulator_decided_at") @db.Timestamptz
+  closedBy            String?                @map("closed_by") @db.Uuid
+  closedAt            DateTime?              @map("closed_at") @db.Timestamptz
+  closureNote         String?                @map("closure_note") @db.VarChar(1000)
+  noActionReason      String?                @map("no_action_reason") @db.VarChar(500)
+  voidedBy            String?                @map("voided_by") @db.Uuid
+  voidedAt            DateTime?              @map("voided_at") @db.Timestamptz
+  voidReason          String?                @map("void_reason") @db.VarChar(500)
+  followUpOfId        String?                @map("follow_up_of_id") @db.Uuid
+  version             Int                    @default(1)
+  updatedBy           String                 @map("updated_by") @db.Uuid
+  updatedAt           DateTime               @default(now()) @map("updated_at") @db.Timestamptz
+  site                Site                   @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  followUpOf          SafetyIncident?        @relation("IncidentFollowUp", fields: [tenantId, projectId, followUpOfId], references: [tenantId, projectId, id], onDelete: NoAction)
+  followUps           SafetyIncident[]       @relation("IncidentFollowUp")
+  people              SafetyIncidentPerson[]
+  photos              SafetyIncidentPhoto[]
+  correctiveActions   CorrectiveAction[]
+  treatments          FirstAidTreatment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, status])
+  @@map("safety_incidents")
+}
+
+// Someone injured, involved or witnessing an incident: a labourer, a staff member or a name only;
+// injuries as two codes (no free-text medical detail). Shown only to safety.manage holders.
+model SafetyIncidentPerson {
+  id         String         @id @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  projectId  String         @map("project_id") @db.Uuid
+  incidentId String         @map("incident_id") @db.Uuid
+  role       String         @db.VarChar(8)
+  labourerId String?        @map("labourer_id") @db.Uuid
+  userId     String?        @map("user_id") @db.Uuid
+  name       String?        @db.VarChar(120)
+  injuryType String?        @map("injury_type") @db.VarChar(16)
+  bodyPart   String?        @map("body_part") @db.VarChar(10)
+  addedBy    String         @map("added_by") @db.Uuid
+  addedAt    DateTime       @default(now()) @map("added_at") @db.Timestamptz
+  incident   SafetyIncident @relation(fields: [tenantId, projectId, incidentId], references: [tenantId, projectId, id], onDelete: Cascade)
+  labourer   Labourer?      @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, incidentId])
+  @@index([tenantId, labourerId])
+  @@map("safety_incident_people")
+}
+
+// A site photo of an incident (linked while the incident is open).
+model SafetyIncidentPhoto {
+  tenantId   String         @map("tenant_id") @db.Uuid
+  projectId  String         @map("project_id") @db.Uuid
+  incidentId String         @map("incident_id") @db.Uuid
+  photoId    String         @map("photo_id") @db.Uuid
+  addedBy    String         @map("added_by") @db.Uuid
+  addedAt    DateTime       @default(now()) @map("added_at") @db.Timestamptz
+  incident   SafetyIncident @relation(fields: [tenantId, projectId, incidentId], references: [tenantId, projectId, id], onDelete: Cascade)
+  photo      SitePhoto      @relation(fields: [tenantId, projectId, photoId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@id([tenantId, incidentId, photoId])
+  @@index([tenantId, projectId, photoId])
+  @@map("safety_incident_photos")
+}
+
+// A corrective action (CA-NNNN) from an incident, an inspection, a toolbox talk or other: open →
+// done (by its owner) → verified independently; rejected back to open, or cancelled, with a reason.
+model CorrectiveAction {
+  id               String          @id @db.Uuid
+  tenantId         String          @map("tenant_id") @db.Uuid
+  projectId        String          @map("project_id") @db.Uuid
+  number           Int
+  source           String          @db.VarChar(14)
+  incidentId       String?         @map("incident_id") @db.Uuid
+  inspectionId     String?         @map("inspection_id") @db.Uuid
+  toolboxTalkId    String?         @map("toolbox_talk_id") @db.Uuid
+  description      String          @db.VarChar(1000)
+  ownerId          String          @map("owner_id") @db.Uuid
+  dueOn            DateTime        @map("due_on") @db.Date
+  status           String          @default("open") @db.VarChar(10)
+  doneBy           String?         @map("done_by") @db.Uuid
+  doneAt           DateTime?       @map("done_at") @db.Timestamptz
+  doneNote         String?         @map("done_note") @db.VarChar(1000)
+  verifiedBy       String?         @map("verified_by") @db.Uuid
+  verifiedAt       DateTime?       @map("verified_at") @db.Timestamptz
+  rejectCount      Int             @default(0) @map("reject_count")
+  lastRejectReason String?         @map("last_reject_reason") @db.VarChar(500)
+  cancelledBy      String?         @map("cancelled_by") @db.Uuid
+  cancelledAt      DateTime?       @map("cancelled_at") @db.Timestamptz
+  cancelReason     String?         @map("cancel_reason") @db.VarChar(500)
+  raisedBy         String          @map("raised_by") @db.Uuid
+  raisedAt         DateTime        @default(now()) @map("raised_at") @db.Timestamptz
+  version          Int             @default(1)
+  updatedBy        String          @map("updated_by") @db.Uuid
+  updatedAt        DateTime        @default(now()) @map("updated_at") @db.Timestamptz
+  project          Project         @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  incident         SafetyIncident? @relation(fields: [tenantId, projectId, incidentId], references: [tenantId, projectId, id], onDelete: Restrict)
+  inspection       Inspection?     @relation(fields: [tenantId, projectId, inspectionId], references: [tenantId, projectId, id], onDelete: Restrict)
+  toolboxTalk      ToolboxTalk?    @relation(fields: [tenantId, projectId, toolboxTalkId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, status, dueOn])
+  @@index([tenantId, incidentId])
+  @@index([tenantId, ownerId])
+  @@map("corrective_actions")
+}
+
+// A first-aid kit kept at a site; checks are append-only evidence.
+model FirstAidKit {
+  id            String             @id @db.Uuid
+  tenantId      String             @map("tenant_id") @db.Uuid
+  projectId     String             @map("project_id") @db.Uuid
+  siteId        String             @map("site_id") @db.Uuid
+  label         String             @db.VarChar(80)
+  location      String?            @db.VarChar(200)
+  status        String             @default("active") @db.VarChar(8)
+  retiredBy     String?            @map("retired_by") @db.Uuid
+  retiredAt     DateTime?          @map("retired_at") @db.Timestamptz
+  retiredReason String?            @map("retired_reason") @db.VarChar(500)
+  createdBy     String             @map("created_by") @db.Uuid
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  version       Int                @default(1)
+  updatedBy     String             @map("updated_by") @db.Uuid
+  updatedAt     DateTime           @default(now()) @map("updated_at") @db.Timestamptz
+  site          Site               @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  checks        FirstAidKitCheck[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, siteId, label])
+  @@map("first_aid_kits")
+}
+
+// A check of a first-aid kit (append-only): outcome and the earliest expiry of its contents.
+model FirstAidKitCheck {
+  id        String      @id @db.Uuid
+  tenantId  String      @map("tenant_id") @db.Uuid
+  projectId String      @map("project_id") @db.Uuid
+  kitId     String      @map("kit_id") @db.Uuid
+  checkedOn DateTime    @map("checked_on") @db.Date
+  outcome   String      @db.VarChar(10)
+  expiresOn DateTime?   @map("expires_on") @db.Date
+  notes     String?     @db.VarChar(500)
+  checkedBy String      @map("checked_by") @db.Uuid
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  kit       FirstAidKit @relation(fields: [tenantId, projectId, kitId], references: [tenantId, projectId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, kitId, checkedOn])
+  @@map("first_aid_kit_checks")
+}
+
+// A trained first-aider at a site (a labourer or a staff member) with the certificate's expiry.
+model FirstAider {
+  id                   String              @id @db.Uuid
+  tenantId             String              @map("tenant_id") @db.Uuid
+  projectId            String              @map("project_id") @db.Uuid
+  siteId               String              @map("site_id") @db.Uuid
+  labourerId           String?             @map("labourer_id") @db.Uuid
+  userId               String?             @map("user_id") @db.Uuid
+  certificateExpiresOn DateTime            @map("certificate_expires_on") @db.Date
+  certificateReference String?             @map("certificate_reference") @db.VarChar(60)
+  status               String              @default("active") @db.VarChar(8)
+  removedBy            String?             @map("removed_by") @db.Uuid
+  removedAt            DateTime?           @map("removed_at") @db.Timestamptz
+  removedReason        String?             @map("removed_reason") @db.VarChar(500)
+  createdBy            String              @map("created_by") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  version              Int                 @default(1)
+  updatedBy            String              @map("updated_by") @db.Uuid
+  updatedAt            DateTime            @default(now()) @map("updated_at") @db.Timestamptz
+  site                 Site                @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  labourer             Labourer?           @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+  treatments           FirstAidTreatment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@map("first_aiders")
+}
+
+// A first-aid treatment (FA-NNNN), optionally linked to an incident; injury and treatment as codes.
+// Voided with a reason, never edited; shown in full only to safety.manage holders.
+model FirstAidTreatment {
+  id           String          @id @db.Uuid
+  tenantId     String          @map("tenant_id") @db.Uuid
+  projectId    String          @map("project_id") @db.Uuid
+  siteId       String          @map("site_id") @db.Uuid
+  number       Int
+  treatedAt    DateTime        @map("treated_at") @db.Timestamptz
+  labourerId   String?         @map("labourer_id") @db.Uuid
+  personName   String?         @map("person_name") @db.VarChar(120)
+  injuryType   String          @map("injury_type") @db.VarChar(16)
+  treatment    String          @db.VarChar(20)
+  referral     String          @db.VarChar(10)
+  firstAiderId String?         @map("first_aider_id") @db.Uuid
+  incidentId   String?         @map("incident_id") @db.Uuid
+  status       String          @default("recorded") @db.VarChar(10)
+  voidedBy     String?         @map("voided_by") @db.Uuid
+  voidedAt     DateTime?       @map("voided_at") @db.Timestamptz
+  voidReason   String?         @map("void_reason") @db.VarChar(500)
+  recordedBy   String          @map("recorded_by") @db.Uuid
+  recordedAt   DateTime        @default(now()) @map("recorded_at") @db.Timestamptz
+  version      Int             @default(1)
+  updatedBy    String          @map("updated_by") @db.Uuid
+  updatedAt    DateTime        @default(now()) @map("updated_at") @db.Timestamptz
+  site         Site            @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  labourer     Labourer?       @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+  firstAider   FirstAider?     @relation(fields: [tenantId, projectId, firstAiderId], references: [tenantId, projectId, id], onDelete: Restrict)
+  incident     SafetyIncident? @relation(fields: [tenantId, projectId, incidentId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, treatedAt])
+  @@map("first_aid_treatments")
 }

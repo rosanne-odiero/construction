@@ -210,6 +210,21 @@ The contract terms of interim payment certificates are per-project, append-only 
 | `valuations.limits` | platform | 6 photos per measurement; 100 materials lines and 50 adjustments per valuation; 5,000 items valued per certificate (and per PDF); approval queue 200; S-curve 260 weeks; certificate exports 60 per user per 10 minutes. Code constants `VALUATION_LIMITS`, `CERTIFICATE_PDF_MAX_LINES` | ARCHITECTURE §4.10 | PRODUCT | D6.3 |
 | `valuations.evm_weighting` | platform | PV: each measurable item's contract value over the working days of its linked baseline tasks, else over the baseline span; the baseline's working weekdays and the company's public holidays. Not configurable | CR-VAL-05; D-87 | COMPLIANCE-REVIEW | D6.3 |
 
+### Health and safety (D8.2)
+
+One row of `safety_settings` per company (no row means the defaults, reported as version 0), read with `GET safety/settings` (any safety reader) and changed with `PUT safety/settings` (`config.manage`, optimistic `version`; audited `safety.settings_updated` with the changed field names only). The web form is `/safety/settings`. Defaults are `DEFAULT_SAFETY_SETTINGS`, `STARTER_INDUCTION_TOPICS` and `DEFAULT_PPE_REPLACEMENT_DAYS` in `packages/types`; the limits are `SAFETY_SETTINGS_LIMITS` and CHECKs in migration `20261124090000_health_safety`. Records keep the values they were made with (D-75).
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `safety.induction_topics` | company | The ten starter topics (site rules and hours, emergency procedures and assembly point, first aid and first-aiders, PPE, site hazards, working at height and scaffolds, excavations, electrical safety, housekeeping, reporting incidents and near misses), translated EN/SW; 1–30 topics; a company topic has its own label (2–120 characters, one language) | Common Kenyan site induction content; the legal minimum awaits review (COMPLIANCE-REVIEW CR-HS-02) | PRODUCT | D8.2 |
+| `safety.induction_validity_days` | company | **None** (an induction at a site does not expire); 30–1,095 days when set | Company policy (many contractors re-induct yearly or after a long absence) | PRODUCT | D8.2 |
+| `safety.induction_lookback_days` | company | **14 days**, 1–90: attendance this far back is read to flag labourers who worked at a site without a valid induction | ARCHITECTURE §4.9 (D-71) | PRODUCT | D8.2 |
+| `safety.kit_check_interval_days` | company | **30 days**, 7–180: a kit's next check is due this long after the last one | Site practice; legal contents and inspection frequency await review (COMPLIANCE-REVIEW CR-HS-04) | COMPLIANCE-REVIEW | D8.2 |
+| `safety.ppe_replacement_days` | company (per item) | Helmet 1,095; safety boots 365; reflective vest 180; gloves 30; harness 1,825; goggles 180; ear protection 90; dust mask 7; overalls 365 days (each 1–3,650). Stored on each issue with its due date | Typical manufacturer service lives; COMPLIANCE-REVIEW CR-HS-03 | COMPLIANCE-REVIEW | D8.2 |
+| `safety.warning_days` | platform | PPE due soon 14 days before the replacement date; kit contents expiring and first-aid certificates expiring within 30 days. Code constant `SAFETY_WARNING_DAYS` | ARCHITECTURE §4.9 | PRODUCT | D8.2 |
+| `safety.regulator_review_rule` | platform | A regulator decision is required before closing a **serious or fatal injury** or any **dangerous occurrence** (`packages/domain` `regulatorReviewRequired`, re-checked by `app.guard_safety_incident`) | OSHA 2007 / WIBA 2007 reporting duties as understood; COMPLIANCE-REVIEW CR-HS-01 | COMPLIANCE-REVIEW | D8.2 |
+| `safety.limits` | platform | 200 labourers per toolbox talk (500 others counted); 20 people and 6 photos per incident; PPE quantity 1–20; 100 rows per page. Code constant `SAFETY_LIMITS` | ARCHITECTURE §4.9 | PRODUCT | D8.2 |
+
 ## 6. Security, auth and operations
 
 | Key | Scope | Seed / default | Source | Status | Used from |

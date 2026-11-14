@@ -382,8 +382,9 @@ BEGIN
 END
 $$;
 
--- Evidence: site photos of the same project (composite FK), added by the signed-in user while the
--- measurement waits for review (not reviewed, not corrected), at most six; never removed.
+-- Evidence: general site photos of the same project (composite FK; restricted incident photos,
+-- D8.2, are never measurement evidence), added by the signed-in user while the measurement waits
+-- for review (not reviewed, not corrected), at most six; never removed.
 CREATE FUNCTION app.guard_measurement_photo() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP <> 'INSERT' THEN
@@ -399,6 +400,11 @@ BEGIN
                  WHERE tenant_id = NEW.tenant_id AND corrects_id = NEW.measurement_id) THEN
     RAISE EXCEPTION 'Photos are added to a measurement only while it waits for review'
       USING ERRCODE = '23514';
+  END IF;
+  IF (SELECT purpose FROM site_photos
+       WHERE tenant_id = NEW.tenant_id AND project_id = NEW.project_id AND id = NEW.photo_id)
+     IS DISTINCT FROM 'general' THEN
+    RAISE EXCEPTION 'Measurement evidence is a general site photo' USING ERRCODE = '23514';
   END IF;
   IF (SELECT count(*) FROM progress_measurement_photos
        WHERE tenant_id = NEW.tenant_id AND measurement_id = NEW.measurement_id) >= 6 THEN

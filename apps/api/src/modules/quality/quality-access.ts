@@ -181,7 +181,9 @@ export async function requireProjectPhotos(
   ids: readonly string[],
 ) {
   if (!ids.length) return;
-  const found = await tx.sitePhoto.count({ where: { tenantId, projectId, id: { in: [...ids] } } });
+  const found = await tx.sitePhoto.count({
+    where: { tenantId, projectId, purpose: "general", id: { in: [...ids] } },
+  });
   if (found !== new Set(ids).size)
     throw qualityProblem(
       422,

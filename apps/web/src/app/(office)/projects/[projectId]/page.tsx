@@ -3,13 +3,23 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { FileSpreadsheet } from "lucide-react";
 import { isProjectReadOnly } from "@pm-buddy/domain";
-import { bqContractSumResponseSchema, projectDetailResponseSchema } from "@pm-buddy/validation";
+import {
+  bqContractSumResponseSchema,
+  projectDetailResponseSchema,
+  projectDocumentsSummaryResponseSchema,
+} from "@pm-buddy/validation";
 import { PageHeader } from "@/components/page-header";
 import { EditProjectButton } from "@/components/projects/project-form";
 import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { StatusChangeButton } from "@/components/projects/status-change";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  DOCUMENT_VIEWS,
+  INSTRUCTION_VIEWS,
+  documentsAccess,
+  projectTabHref,
+} from "@/lib/documents";
 import { QUALITY_VIEWS, qualityAccess, qualityHref } from "@/lib/quality";
 import { plantAccess } from "@/lib/plant";
 import { SAFETY_VIEWS, safetyAccess, safetyHref } from "@/lib/safety";
@@ -17,6 +27,9 @@ import { scheduleAccess } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { serverApi, requireSession } from "@/lib/server-api";
 import { signInHref } from "@/lib/safe-next";
+import { ComplianceTab } from "./compliance-tab";
+import { DocumentsTab } from "./documents-tab";
+import { InstructionsTab } from "./instructions-tab";
 import { OverviewTab } from "./overview-tab";
 import { SitesTab } from "./sites-tab";
 import { TeamTab } from "./team-tab";
@@ -38,6 +51,9 @@ const TABS = [
   "quality",
   "safety",
   "plant",
+  "documents",
+  "compliance",
+  "instructions",
   "photos",
 ] as const;
 type Tab = (typeof TABS)[number];
@@ -69,14 +85,21 @@ export default async function ProjectPage({
   const view = SCHEDULE_VIEWS.find((candidate) => candidate === rawView) ?? "gantt";
   const qualityView = QUALITY_VIEWS.find((candidate) => candidate === rawView) ?? "inspections";
   const safetyView = SAFETY_VIEWS.find((candidate) => candidate === rawView) ?? "incidents";
+  const documentView = DOCUMENT_VIEWS.find((candidate) => candidate === rawView) ?? "all";
+  const instructionView =
+    INSTRUCTION_VIEWS.find((candidate) => candidate === rawView) ?? "instructions";
   const path =
     tab === "quality"
       ? qualityHref(projectId, qualityView)
       : tab === "safety"
         ? safetyHref(projectId, safetyView)
-        : `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}${
-            tab === "schedule" && view !== "gantt" ? `&view=${view}` : ""
-          }`;
+        : tab === "documents" && documentView !== "all"
+          ? projectTabHref(projectId, "documents", { view: documentView })
+          : tab === "instructions" && instructionView !== "instructions"
+            ? projectTabHref(projectId, "instructions", { view: instructionView })
+            : `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}${
+                tab === "schedule" && view !== "gantt" ? `&view=${view}` : ""
+              }`;
 
   const session = await requireSession(path);
   if (!session) return <LiveUnavailable retryHref={path} />;
@@ -100,11 +123,20 @@ export default async function ProjectPage({
   const canReadSafety = safetyAccess(detail.permissions).read;
   // Plant records: site, stores, finance and project staff (decision D-90).
   const canReadPlant = plantAccess(detail.permissions).read;
+  // Documents, compliance and instructions: project staff and consultants (decision D-110).
+  const canReadDocuments = documentsAccess(detail.permissions).read;
   const readOnly = isProjectReadOnly(project.status);
   // Original vs revised contract sum on the overview, for people who can see the BQ.
   const sums =
     tab === "overview" && canViewBq
       ? await serverApi(`/projects/${project.id}/bq/contract-sum`, bqContractSumResponseSchema)
+      : null;
+  const documentsSummary =
+    tab === "overview" && canReadDocuments
+      ? await serverApi(
+          `/projects/${project.id}/documents/summary`,
+          projectDocumentsSummaryResponseSchema,
+        )
       : null;
 
   return (
@@ -142,7 +174,9 @@ export default async function ProjectPage({
               (key !== "schedule" || canReadSchedule) &&
               (key !== "quality" || canReadQuality) &&
               (key !== "safety" || canReadSafety) &&
-              (key !== "plant" || canReadPlant),
+              (key !== "plant" || canReadPlant) &&
+              ((key !== "documents" && key !== "compliance" && key !== "instructions") ||
+                canReadDocuments),
           ).map((key) => (
             <li key={key}>
               <Link
@@ -176,6 +210,13 @@ export default async function ProjectPage({
         <OverviewTab
           detail={detail}
           contractSums={canViewBq ? (sums?.ok ? sums.data : null) : undefined}
+          documents={
+            canReadDocuments
+              ? documentsSummary?.ok
+                ? documentsSummary.data.summary
+                : null
+              : undefined
+          }
         />
       ) : null}
       {tab === "sites" ? (
@@ -239,6 +280,19 @@ export default async function ProjectPage({
           saved={typeof saved === "string" ? saved : undefined}
           returnTo={path}
         />
+      ) : null}
+      {(tab === "documents" || tab === "compliance" || tab === "instructions") &&
+      !canReadDocuments ? (
+        <LiveForbidden />
+      ) : null}
+      {tab === "documents" && canReadDocuments ? (
+        <DocumentsTab project={project} view={documentView} params={query} returnTo={path} />
+      ) : null}
+      {tab === "compliance" && canReadDocuments ? (
+        <ComplianceTab project={project} returnTo={path} />
+      ) : null}
+      {tab === "instructions" && canReadDocuments ? (
+        <InstructionsTab project={project} view={instructionView} params={query} returnTo={path} />
       ) : null}
       {tab === "photos" ? (
         <PhotosTab

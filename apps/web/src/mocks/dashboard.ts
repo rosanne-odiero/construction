@@ -65,7 +65,7 @@ export const alerts: DashboardAlert[] = [
     key: "documentExpiry",
     severity: "info",
     project: "Ruiru Heights",
-    href: "/soon/documents",
+    href: "/documents",
     params: { date: "30/11/2026" },
   },
 ];

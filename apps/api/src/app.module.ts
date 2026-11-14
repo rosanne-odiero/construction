@@ -18,6 +18,7 @@ import { ProgressModule } from "./modules/progress/progress.module.js";
 import { QualityModule } from "./modules/quality/quality.module.js";
 import { SafetyModule } from "./modules/safety/safety.module.js";
 import { PlantModule } from "./modules/plant/plant.module.js";
+import { DocumentsModule } from "./modules/documents/documents.module.js";
 import { ScheduleModule } from "./modules/schedule/schedule.module.js";
 import { ReportsModule } from "./modules/reports/reports.module.js";
 
@@ -45,6 +46,7 @@ import { ReportsModule } from "./modules/reports/reports.module.js";
     QualityModule,
     SafetyModule,
     PlantModule,
+    DocumentsModule,
     PortalsModule,
     ReportsModule,
   ],

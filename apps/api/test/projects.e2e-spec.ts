@@ -1315,6 +1315,24 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
           select: { reportId: true, frequency: true, status: true },
           orderBy: { reportId: "asc" },
         }),
+        documents: await tx.document.count({ where: { tenantId } }),
+        documentVersions: await tx.documentVersion.count({ where: { tenantId } }),
+        supersededVersions: await tx.documentVersion.count({
+          where: { tenantId, isCurrent: false },
+        }),
+        complianceTypes: await tx.complianceType.count({ where: { tenantId } }),
+        complianceRecords: await tx.complianceRecord.count({ where: { tenantId } }),
+        instructions: await tx.instruction.findMany({
+          where: { tenantId },
+          select: { number: true, status: true },
+          orderBy: { number: "asc" },
+        }),
+        instructionResponses: await tx.instructionResponse.count({ where: { tenantId } }),
+        approvalRequests: await tx.approvalRequest.findMany({
+          where: { tenantId },
+          select: { number: true, status: true },
+          orderBy: { number: "asc" },
+        }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1477,7 +1495,43 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         { reportId: "cost-ledger", frequency: "weekly", status: "active" },
         { reportId: "invoice-ageing", frequency: "monthly", status: "active" },
       ],
+      // D8.4: 13 documents on RUI-HTS (A-101 in three revisions, S-201 in two) and KIT-BNG's
+      // county approval; the nine starter item types; ten compliance records (the CAR policy
+      // renewed once, two company items); three instructions with five responses; three approval
+      // requests (one answered on paper, one overdue, one pending).
+      documents: 14,
+      documentVersions: 17,
+      supersededVersions: 3,
+      complianceTypes: 9,
+      complianceRecords: 10,
+      instructions: [
+        { number: "AI-001", status: "closed" },
+        { number: "EI-001", status: "acknowledged" },
+        { number: "SI-001", status: "received" },
+      ],
+      instructionResponses: 5,
+      approvalRequests: [
+        { number: 1, status: "approved_with_comments" },
+        { number: 2, status: "pending" },
+        { number: 3, status: "pending" },
+      ],
     });
+    expect(first.documents).toMatchObject({
+      documents: 13,
+      drawings: [
+        { number: "A-101", current: "A", superseded: ["P1", "P2"] },
+        { number: "E-301", current: "A", superseded: [] },
+        { number: "S-201", current: "B", superseded: ["A"] },
+      ],
+      // Every status shows on the demo register (company items included).
+      compliance: { valid: 4, expiring: 2, expired: 1, missing: 1, not_applicable: 1 },
+      approvals: [
+        { code: "APR-0001", status: "approved_with_comments", overdue: false },
+        { code: "APR-0002", status: "pending", overdue: true },
+        { code: "APR-0003", status: "pending", overdue: false },
+      ],
+    });
+    expect(first.documents.reminders).toBeGreaterThanOrEqual(5);
     // One fuel variance alert, one service due, one open breakdown and one idle hired item.
     const plantAlerts = Object.fromEntries(
       first.plant.items.map((item) => [item.code, item.alerts]),
@@ -1669,6 +1723,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     });
     expect(second.plant).toEqual({ ...first.plant, created: false });
     expect(second.reports).toEqual({ ...first.reports, created: false });
+    expect(second.documents).toEqual({ ...first.documents, created: false });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
     // Seeds a whole company twice (about 7 s alone); parallel e2e files can triple that.
   }, 90_000);

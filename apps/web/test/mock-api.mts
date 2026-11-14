@@ -120,6 +120,13 @@ import {
   type ReportsDeps,
   type ReportsState,
 } from "./mock-reports.mts";
+import {
+  documentDownload,
+  handleDocuments,
+  initialDocuments,
+  type DocumentsDeps,
+  type DocumentsState,
+} from "./mock-documents.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -221,6 +228,8 @@ type State = {
   plant: PlantState;
   /** D8.1 report subscriptions and their runs (mock-reports.mts). */
   reports: ReportsState;
+  /** D8.4 documents, compliance, instructions and approvals (mock-documents.mts). */
+  documents: DocumentsState;
 };
 
 const states = new Map<string, State>();
@@ -472,6 +481,11 @@ function fixture(persona: Persona): State {
       },
     ),
     reports: initialReports({ id: OWNER_ID, displayName: "Wanjiru Kamau" }, RUIRU_ID),
+    documents: initialDocuments(RUIRU_ID, {
+      owner: { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+      pm: { id: PM_ID, displayName: "Brian Otieno" },
+      agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
+    }),
     photos,
     valuations: initialValuations(RUIRU_ID, [photos[0]!.id]),
     bq,
@@ -640,6 +654,32 @@ function valuationPermissions(state: State, projectId: string): readonly Permiss
   const entry = state.projects.find((candidate) => candidate.project.id === projectId);
   if (!entry) return [];
   return isTenantWide(state.persona) ? rolePermissions(state) : projectPermissions(state, entry);
+}
+
+/** Projects with the caller's permissions and photos, as the documents mock sees them. */
+function documentsDeps(state: State): DocumentsDeps {
+  return {
+    projects: state.projects.map((entry) => ({
+      id: entry.project.id,
+      code: entry.project.code,
+      name: entry.project.name,
+      status: entry.project.status,
+      permissions: valuationPermissions(state, entry.project.id),
+    })),
+    companyPermissions: rolePermissions(state),
+    actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+    photos: (projectId) =>
+      state.photos
+        .filter((photo) => photo.projectId === projectId)
+        .map((photo) => ({
+          id: photo.id,
+          caption: photo.caption,
+          verified: photo.verified,
+          capturedAt: photo.capturedAt,
+        })),
+    fail: (status: number, code: string) => new HttpError(status, code),
+    parse,
+  };
 }
 
 /** Projects with their sites, as the spending and stores mocks see them. */
@@ -973,6 +1013,16 @@ async function handle(
     ]);
     return { status: 201, body: { project }, schema: projectResponseSchema };
   }
+  const documents = handleDocuments(
+    documentsDeps(state),
+    state.documents,
+    method,
+    path,
+    query,
+    body,
+    raw,
+  );
+  if (documents) return documents;
   const valuations = handleValuations(
     {
       fail: (status, code) => new HttpError(status, code),
@@ -1748,6 +1798,32 @@ const server = createServer((req, res) => {
         if (error instanceof HttpError)
           return send(res, error.status, { status: error.status, code: error.code }, true);
         return send(res, 500, { code: "internal-error" }, true);
+      }
+    }
+    // Document versions are downloaded as bytes, with the version state in a header.
+    const documentFile =
+      /^\/projects\/([^/]+)\/documents\/([^/]+)\/versions\/([^/]+)\/content$/.exec(path);
+    if (documentFile && req.method === "GET") {
+      try {
+        const state = stateFor(req);
+        const file = documentDownload(
+          documentsDeps(state),
+          state.documents,
+          documentFile[1]!,
+          documentFile[2]!,
+          documentFile[3]!,
+        );
+        if (!file) return send(res, 404, { code: "not-found" }, true);
+        res.writeHead(200, {
+          "Content-Type": file.contentType,
+          "Content-Disposition": `attachment; filename="${file.fileName}"`,
+          "X-Content-Type-Options": "nosniff",
+          "X-Document-Version-State": file.state,
+          "Cache-Control": "no-store",
+        });
+        return res.end(file.content);
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
       }
     }
     // Petty-cash receipt photos are downloaded as bytes too.

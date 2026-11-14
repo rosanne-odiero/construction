@@ -149,6 +149,20 @@ import {
   inductionStatusResponseSchema,
   ppeIssueResponseSchema,
   ppeIssuesResponseSchema,
+  approvalListResponseSchema,
+  approvalResponseSchema,
+  complianceHistoryResponseSchema,
+  complianceRegisterResponseSchema,
+  complianceTypeResponseSchema,
+  complianceTypesResponseSchema,
+  documentListResponseSchema,
+  documentResponseSchema,
+  documentsOverviewResponseSchema,
+  drawingRegisterResponseSchema,
+  instructionLogListResponseSchema,
+  instructionLogResponseSchema,
+  instructionOptionsResponseSchema,
+  projectDocumentsSummaryResponseSchema,
   plantAlertsResponseSchema,
   plantDetailResponseSchema,
   plantFuelListResponseSchema,
@@ -404,6 +418,8 @@ export function responseContract(method: string, target: string) {
   if (plant) return plant;
   const reports = reportsContract(method, path);
   if (reports) return reports;
+  const documents = documentsContract(method, path);
+  if (documents) return documents;
   return messageResponseSchema;
 }
 
@@ -420,6 +436,36 @@ function reportsContract(method: string, path: string) {
   if (/^reports\/[^/]+\/options$/.test(path)) return reportOptionsResponseSchema;
   if (/^reports\/[^/]+$/.test(path)) return reportModelSchema;
   return null;
+}
+
+/** The D8.4 documents, compliance, instructions log and approvals endpoints' success contracts. */
+function documentsContract(method: string, path: string) {
+  const get = method === "get";
+  if (path === "documents") return documentsOverviewResponseSchema;
+  if (path === "documents/compliance-types")
+    return get ? complianceTypesResponseSchema : complianceTypeResponseSchema;
+  if (/^documents\/compliance-types\/[^/]+$/.test(path)) return complianceTypeResponseSchema;
+  if (/^documents\/compliance(\/[^/]+)?$/.test(path)) return complianceHistoryResponseSchema;
+  const project = /^projects\/[^/]+\/(documents|compliance|instructions|approvals)(\/.*)?$/.exec(
+    path,
+  );
+  if (!project) return null;
+  const [, area, rest = ""] = project;
+  if (area === "documents") {
+    if (rest === "") return get ? documentListResponseSchema : documentResponseSchema;
+    if (rest === "/drawings") return drawingRegisterResponseSchema;
+    if (rest === "/summary") return projectDocumentsSummaryResponseSchema;
+    return documentResponseSchema;
+  }
+  if (area === "compliance")
+    return rest === "" && get ? complianceRegisterResponseSchema : complianceHistoryResponseSchema;
+  if (area === "instructions") {
+    if (rest === "") return get ? instructionLogListResponseSchema : instructionLogResponseSchema;
+    if (rest === "/options") return instructionOptionsResponseSchema;
+    return instructionLogResponseSchema;
+  }
+  if (rest === "") return get ? approvalListResponseSchema : approvalResponseSchema;
+  return approvalResponseSchema;
 }
 
 /** The D7.2 supplier portal endpoints' success contracts (supplier and staff sides). */
@@ -798,12 +844,21 @@ export class Browser {
     return res;
   }
 
-  /** A multipart upload of one file as the `file` field (as the web app sends it). */
-  async upload(path: string, content: Buffer, fileName: string): Promise<request.Response> {
+  /**
+   * A multipart upload of one file as the `file` field, after any text `fields` (as the web app
+   * sends it).
+   */
+  async upload(
+    path: string,
+    content: Buffer,
+    fileName: string,
+    fields: Record<string, string> = {},
+  ): Promise<request.Response> {
     const operation = request(this.app.getHttpServer()).post(`/api/v1/${path}`);
     operation.set("Cookie", [...this.cookies].map(([key, value]) => `${key}=${value}`).join("; "));
     operation.set("Origin", origin);
     operation.set("X-CSRF-Token", this.csrf);
+    for (const [name, value] of Object.entries(fields)) operation.field(name, value);
     const res = await operation.attach("file", content, fileName);
     if (res.status >= 200 && res.status < 300)
       expect(

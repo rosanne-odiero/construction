@@ -967,7 +967,7 @@ describe("Supplier portal (real runtime role)", () => {
       supA.upload(path, PDF, "a-1001-copy.pdf"),
       colleague.upload(path, PDF, "a-1001-copy-2.pdf"),
     ]);
-    expect(racing.map((res) => res.status).sort()).toEqual([201, 409]);
+    expect(racing.map((res) => res.status).sort((a, b) => a - b)).toEqual([201, 409]);
     expect(problem(racing.find((res) => res.status === 409)!)).toBe("too-many-documents");
     refused(await colleague.upload(path, PDF, "a-1001-late.pdf"), 409, "too-many-documents");
     // A staff upload is stamped as the company's and does not count against the supplier.

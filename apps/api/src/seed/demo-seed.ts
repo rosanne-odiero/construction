@@ -33,6 +33,7 @@ import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
 import { seedQuality, type QualitySeedSummary } from "./quality-seed.js";
 import { seedSafety, type SafetySeedSummary } from "./safety-seed.js";
 import { seedPlant, type PlantSeedSummary } from "./plant-seed.js";
+import { seedDocuments, type DocumentsSeedSummary } from "./documents-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 import { seedValuations, type ValuationsSeedSummary } from "./demo-valuations.js";
@@ -440,6 +441,7 @@ export type SeedSummary = {
   supplierPortal: SupplierPortalSeedSummary;
   plant: PlantSeedSummary;
   reports: ReportsSeedSummary;
+  documents: DocumentsSeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -666,6 +668,13 @@ export async function seedDemo(
     siteAgentId: userOf("siteAgent").id,
     financeId: userOf("finance").id,
   });
+  // After the schedule and valuations: instructions link the schedule's delay and a verified site
+  // photo from the valuations.
+  const documents = await seedDocuments(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+  });
   // Last: it adds an LPO, a delivery, invoices and a part payment on KIT-BNG (no budget there),
   // with documents and distinct amounts, so the earlier summaries and alerts do not change.
   const supplierPortal = await seedSupplierPortal(
@@ -707,6 +716,7 @@ export async function seedDemo(
     supplierPortal,
     plant,
     reports,
+    documents,
   };
 }
 

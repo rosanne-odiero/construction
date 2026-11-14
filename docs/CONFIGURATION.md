@@ -261,6 +261,18 @@ No company settings: limits are code constants (`REPORT_LIMITS`, `REPORT_DEFINIT
 | `reports.subscriptions` | platform | Weekly (ISO weekday) or monthly (day 1–31, clamped to the month's end), sent at **07:00 Africa/Nairobi**; at most **20** per person and **200** per company; the scheduler checks every **60 s** and takes at most **25** due subscriptions per cycle | D-126 | PRODUCT | D8.1 |
 | `reports.dashboard_due_soon_days` | platform | **7**: approved supplier invoices due within 7 days count as "due soon" on the dashboard | D-121 | PRODUCT | D8.1 |
 
+### Documents and compliance register (D8.4)
+
+Compliance item types are company configuration: `compliance_types` rows, read with `GET documents/compliance-types` (any document reader or `config.manage`) and changed with `POST`/`PATCH documents/compliance-types` (`config.manage`, optimistic `version`; audited `compliance.type_created` / `compliance.type_updated` with field names only). The web page is `/documents/compliance-types`. The starter set (`COMPLIANCE_STARTER_TYPES` in `packages/types`) is installed for a company on first use and flagged COMPLIANCE-REVIEW. Statuses and reminders are computed on read, so a changed reminder window applies at once.
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `documents.compliance_types` (starter set) | company | County building approval (project, expires, 60-day reminder), NCA project registration (project, no expiry), NCA construction levy (project, no expiry; may be recorded as not applicable or zero), NEMA licence / EIA (project, expires, 60), contractor NCA registration (**company**, expires, 60), Contractor's All Risk insurance (project, expires, 30), WIBA insurance (**company**, expires, 30), OSH workplace registration (DOSHS) (project, expires, 30), site signboard (project, no expiry). Each can be retired; custom types added | Brief §5.11 and §6; COMPLIANCE-REVIEW CR-DOC-01, CR-NCA-01/02/04, CR-DOC-02, CR-OSH-01 | Proposed | D8.4 |
+| `documents.compliance_reminder_days` | per type | **30 days** for a new type (1–365): an item is `expiring` from expiry − N days to the expiry date (both included), `expired` from the day after | Product default; the brief's "expiry reminders" | Proposed | D8.4 |
+| `documents.confidential_categories` | platform | Contracts, BQs and insurance documents (`CONFIDENTIAL_DOCUMENT_CATEGORIES`): readable only with `finance.view` or `finance.manage` | Commercial terms (D-112); COMPLIANCE-REVIEW CR-DOC-03 | Proposed | D8.4 |
+| `documents.limits` | platform | `DOCUMENT_LIMITS`: 25 MB per file (multipart; a declared body above it refused before reading); 50 versions per document; 5,000 documents per project; 120 uploads per user per hour; 300 downloads per user per 10 minutes; 30 compliance exports per user per 10 minutes; 10 attachments per instruction; file names reduced to a safe stem of at most 100 characters plus the detected extension; zip limits as for BQ imports (100 MB uncompressed, 100:1, 5,000 entries); 100 rows per page. `COMPLIANCE_LIMITS`: reminder window 1–365 days (default 30), 60 item types per company, 500 reminders on the company list | Product limits | Proposed | D8.4 |
+| `documents.accepted_types` | platform | PDF, JPEG, PNG, WebP, Word `.docx`, Excel `.xlsx`, detected from the content; DWG/DXF, legacy Office (OLE2), macro-enabled and ActiveX files, and PDFs with scripts, launch actions or embedded files are refused | D-114, brief §15 | Proposed | D8.4 |
+
 ## 6. Security, auth and operations
 
 | Key | Scope | Seed / default | Source | Status | Used from |

@@ -554,22 +554,22 @@ Paths under `projects/:id/bq` need `bq.view` to read, `bq.edit` to change (close
 projects are read-only) and `bq.approve_variation` plus MFA verified within five minutes to
 approve. Changes send the record's `version` (409 `version-conflict`).
 
-| Method/path                                    | Body                                     | Response / notes                                                                   |
-| ---------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------- |
-| GET versions                                   | —                                        | `{versions}` newest first (source, parent, variation, approval, totals)            |
-| GET versions/compare?from=&to=                 | —                                        | items added/removed/changed, bill subtotals, overall difference                    |
-| GET versions/:versionId/bills/:billId          | —                                        | `{bill, items}` of any version of this BQ (a variation's base)                     |
-| POST versions/:versionId/approve               | `{version}`                              | approves the imported draft as the baseline; not the importer (403)                |
-| GET contract-sum                               | —                                        | original, approved variations, revised, pending (with VAT)                         |
-| GET/POST instructions, GET/PATCH …/:id         | instruction fields (`status` on PATCH)   | the AI/EI register; 409 `instruction-number-taken`                                 |
-| GET variations?status=, POST variations        | `{instructionId, title, description?}`   | 409 `baseline-not-approved`, `instruction-closed`                                  |
-| GET/PATCH variations/:id                       | `{title?, description?, instructionId?}` | detail: lines, totals, projection, snapshot, decision, history, actions            |
-| PUT variations/:id/lines                       | `{lines, version}`                       | adjust / omit / add lines priced against the base; 400 `variation-line-invalid`    |
-| POST variations/:id/submit                     | `{version}`                              | freezes the snapshot digest; 409 `variation-empty`, `variation-stale`              |
-| POST variations/:id/approve                    | `{version, snapshotDigest}`              | creates the next BQ version atomically; 409 `variation-stale`; 403 `maker-checker` |
-| POST variations/:id/reject                     | `{version, snapshotDigest, reason}`      | `bq.approve_variation`, not the maker                                              |
-| POST variations/:id/reopen, …/cancel, …/rebase | `{version}` (`reason` to cancel)         | rejected → draft; draft → cancelled; stale → draft on the newest version           |
-| GET/PUT/DELETE items/:lineageId/rate-buildup   | `{buildupVersionId}` on PUT              | link a current-version item to a build-up version; 422 `unit-mismatch`             |
+| Method/path                                    | Body                                     | Response / notes                                                                             |
+| ---------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| GET versions                                   | —                                        | `{versions}` newest first (source, parent, variation, approval, totals)                      |
+| GET versions/compare?from=&to=                 | —                                        | items added/removed/changed, bill subtotals, overall difference                              |
+| GET versions/:versionId/bills/:billId          | —                                        | `{bill, items}` of any version of this BQ (a variation's base)                               |
+| POST versions/:versionId/approve               | `{version}`                              | approves the imported draft as the baseline; not the importer (403)                          |
+| GET contract-sum                               | —                                        | original, approved variations, revised, pending (with VAT)                                   |
+| GET/POST instructions, GET/PATCH …/:id         | instruction fields (`status` on PATCH)   | the AI/EI register (D8.4: the same log; `open` = not closed); 409 `instruction-number-taken` |
+| GET variations?status=, POST variations        | `{instructionId, title, description?}`   | 409 `baseline-not-approved`, `instruction-closed`                                            |
+| GET/PATCH variations/:id                       | `{title?, description?, instructionId?}` | detail: lines, totals, projection, snapshot, decision, history, actions                      |
+| PUT variations/:id/lines                       | `{lines, version}`                       | adjust / omit / add lines priced against the base; 400 `variation-line-invalid`              |
+| POST variations/:id/submit                     | `{version}`                              | freezes the snapshot digest; 409 `variation-empty`, `variation-stale`                        |
+| POST variations/:id/approve                    | `{version, snapshotDigest}`              | creates the next BQ version atomically; 409 `variation-stale`; 403 `maker-checker`           |
+| POST variations/:id/reject                     | `{version, snapshotDigest, reason}`      | `bq.approve_variation`, not the maker                                                        |
+| POST variations/:id/reopen, …/cancel, …/rebase | `{version}` (`reason` to cancel)         | rejected → draft; draft → cancelled; stale → draft on the newest version                     |
+| GET/PUT/DELETE items/:lineageId/rate-buildup   | `{buildupVersionId}` on PUT              | link a current-version item to a build-up version; 422 `unit-mismatch`                       |
 
 The company library is at `rate-buildups` (`GET`, `POST`), `rate-buildups/:id` (`GET`, `PUT`
 appends a version) and `rate-buildups/:id/versions/:n`. Reading needs `bq.view` and changing
@@ -843,6 +843,44 @@ D4.3. Views and exports are audited (`report.viewed`, `report.exported`) with th
 and parameter IDs only. Scheduled emails (`REPORT_SCHEDULER`, on by default outside tests) carry a
 sign-in link, never report data.
 
+## Documents, compliance register and instructions (D8.4)
+
+Project paths start with `/api/v1/projects/:projectId` (`documents`, `compliance`, `instructions`,
+`approvals`); company paths with `/api/v1/documents`. Authentication, the selected company and the
+CSRF guard apply; permissions are per project (role ∩ assignment). Reads need `projects.view` plus
+one of `documents.manage`, `projects.manage`, `site.diary`, `quality.manage`, `safety.manage`,
+`bq.edit`, `finance.view` or `finance.manage` (clients, suppliers, storekeepers and labourers get
+403). Contracts, BQs and insurance documents also need `finance.view` or `finance.manage`: for
+everyone else they are 404 and left out of lists. "Manager" = `documents.manage`; "recorder" (of
+instructions) = `documents.manage`, `bq.edit` or `site.diary`; closing and reopening instructions
+need `documents.manage` or `bq.edit`; item types and company items need `config.manage`. Closed and
+cancelled projects are read-only. Recording an instruction needs an `Idempotency-Key` header and a
+client `id` (offline-ready). Design: [ARCHITECTURE §4.13](../../docs/ARCHITECTURE.md#413-documents-compliance-register-and-instructions-d84).
+
+| Method / path                                                                       | Input                                                                                                                                                                                           |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET `…/documents`, GET `…/documents/drawings`, GET `…/documents/summary`            | `category?`, `discipline?`, `status?` (`active`, `withdrawn`, `all`), `search?`, `cursor?`, `limit?` / `discipline?`, `search?` / —                                                             |
+| POST `…/documents` (multipart)                                                      | `file`, `category`, `title`, `drawingNumber?` + `discipline?` (drawings), `reference?`, `revision`, `issuePurpose?`, `changeNote?` (manager)                                                    |
+| GET / PATCH `…/documents/:id`, POST `…/documents/:id/withdraw`                      | — / `{title?, drawingNumber?, discipline?, reference?, version}` / `{reason, version}` (manager)                                                                                                |
+| POST `…/documents/:id/versions` (multipart)                                         | `file`, `revision`, `issuePurpose?`, `changeNote`, `basedOnVersionId` (manager)                                                                                                                 |
+| GET `…/documents/:id/versions/:versionId/content`                                   | — (attachment; superseded names end `_SUPERSEDED`; audited)                                                                                                                                     |
+| GET / POST `…/compliance`, GET `…/compliance/items/:typeId`                         | — / `{typeId, kind: record \| not_applicable, referenceNo?, issuer?, issuedOn?, expiresOn?, evidenceVersionId?, notes?, reason?, supersedesId}` (manager)                                       |
+| GET `…/compliance/export/pdf`, `…/compliance/export/xlsx`                           | `locale?` (`en`, `sw`)                                                                                                                                                                          |
+| GET `…/instructions`, GET `…/instructions/options`                                  | `status?` (incl. `open`), `kind?`, `flag?` (`cost`, `time`), `search?`, `cursor?`, `limit?` / —                                                                                                 |
+| POST `…/instructions`                                                               | `{id, capturedAt?, number, kind, issuerName, issuerRole, issuerFirm?, issuedOn, receivedOn, subject, description?, costImplication, timeImplication, delayId?, issuedByMe}` (recorder)          |
+| GET / PATCH `…/instructions/:id`                                                    | — / the fields + `version` (`documents.manage` or `bq.edit`)                                                                                                                                    |
+| POST `…/instructions/:id/responses`, `…/attachments`                                | `{kind: note \| acknowledge \| action \| close \| reopen, body?, version}` / `{documentVersionId} \| {photoId}` (recorder)                                                                      |
+| GET / POST `…/approvals`, GET `…/approvals/:id`                                     | `status?` (`pending`, `overdue`, `decided`, `cancelled`, `all`), `kind?`, `search?` / `{kind, title, description?, documentVersionId, addressedTo, sentOn, dueOn, resubmissionOfId?}` (manager) |
+| POST `…/approvals/:id/response`, `…/approvals/:id/cancel`                           | `{decision, comments?, respondedOn, channel: in_app \| paper, responderName?, responderFirm?, evidenceVersionId?, documentSha256, version}` / `{reason, version}` (manager; cancel: the raiser) |
+| GET `/documents`, GET `/documents/compliance/:typeId`, POST `/documents/compliance` | — / — / as for project items (`config.manage`)                                                                                                                                                  |
+| GET / POST `/documents/compliance-types`, PATCH `/documents/compliance-types/:id`   | — / `{label, scope, expires, reminderDays?}` / `{label?, expires?, reminderDays?, active?, version}` (`config.manage`)                                                                          |
+
+Rules: exactly one current version per document (a superseded version is never listed as current);
+files are accepted by content (PDF, JPEG, PNG, WebP, DOCX, XLSX up to 25 MB; DWG/DXF refused);
+compliance statuses are derived on read in Nairobi dates; instruction statuses move only through
+responses; an approval is answered once, on the version's SHA-256, never in the app by its raiser
+or the uploader. Problem codes are listed in ARCHITECTURE §4.13.
+
 ## Development seed
 
 `npx pnpm@12.17.0 db:seed` (root; it builds the API first) creates the synthetic company
@@ -877,9 +915,14 @@ flags show), the site agent and a visitor; three toolbox talks (two confirmed, o
 issues (some due for replacement, one returned); a closed near miss with a verified action and an
 investigated injury with one verified and one overdue corrective action; two first-aid kits (one
 with its check overdue), a first-aider and a treatment linked to the injury; skipped when Ruiru
-Heights already has a safety incident. Since D8.1 it also adds two report subscriptions through the
-real service (the owner's weekly cost ledger for Ruiru Heights on Mondays; the finance officer's
-monthly supplier invoice ageing on the 1st, in Kiswahili); skipped when the owner already has one. It prints each account's identifier and, when it
+Heights already has a safety incident. Since D8.4 it also adds documents on Ruiru Heights (drawing
+revisions with superseded ones, the contract, BQ and insurance documents, permits and submittals as
+tiny generated files), a compliance register covering every status (and the county approval on
+Kitengela), three instructions and three approval requests (one answered on paper, one overdue);
+each step is skipped when what it creates is already there. Since D8.1 it also adds two report
+subscriptions through the real service (the owner's weekly cost ledger for Ruiru Heights on Mondays;
+the finance officer's monthly supplier invoice ageing on the 1st, in Kiswahili); skipped when the
+owner already has one. It prints each account's identifier and, when it
 creates the account, a generated password; for the owner also the TOTP secret and
 `otpauth://` URI. It is idempotent: a second run reports "already present" and leaves
 passwords unchanged. `npx pnpm@12.17.0 --filter @pm-buddy/api db:seed --reset-credentials`

@@ -1,11 +1,14 @@
-# Phase 8 demo: health and safety (D8.2), plant and equipment (D8.3), dashboards and reports (D8.1)
+# Phase 8 demo: health and safety (D8.2), plant and equipment (D8.3), dashboards and reports (D8.1), documents and compliance (D8.4)
 
 This walkthrough is **not** Phase 8 acceptance. It covers the health and safety module (D8.2):
 site inductions with flags from attendance, toolbox talks, the PPE register, incidents and near
 misses, corrective actions and first aid, and the done-when flow: incident → investigation →
-corrective actions → done → verified → incident closed and locked. Plant and equipment (D8.3) and
-dashboards and reports (D8.1) have their own walkthroughs [below](#plant-and-equipment-d83).
-Documents and the compliance register (D8.4) and offline/site-app capture remain pending. Notifying the regulator (DOSH) and the OSHA/WIBA registers are **COMPLIANCE-REVIEW**
+corrective actions → done → verified → incident closed and locked. Plant and equipment (D8.3),
+dashboards and reports (D8.1) and documents and the compliance register (D8.4) have their own
+walkthroughs [below](#plant-and-equipment-d83), [after it](#dashboards-and-reports-d81) and
+[further down](#documents-and-compliance-register-d84). With D8.1 and D8.4 merged, Phase 8
+acceptance ("all reports export to PDF and Excel") is met by D8.1's done-when test; offline/site-app
+capture remains pending. Notifying the regulator (DOSH) and the OSHA/WIBA registers are **COMPLIANCE-REVIEW**
 items (CR-HS-01 to CR-HS-04): the system records what you did; it files nothing.
 
 ## Start
@@ -187,3 +190,75 @@ What to look for:
 - A report above 5,000 rows offers Excel only; very long periods are refused with the limit.
 - COMPLIANCE-REVIEW CR-RPT-01–05: statutory formats, personal data in exports, scheduled emails,
   the audit-log report and Kiswahili wording await an adviser.
+
+## Documents and compliance register (D8.4)
+
+This walkthrough covers the versioned document repository, the compliance register with expiry
+reminders, the consultant instructions log and approval requests, and the two done-whens: **a
+superseded drawing is never shown as current**, and **an expiring item raises a reminder while an
+expired one shows expired**. The seed (same commands as above) adds synthetic documents (tiny
+generated PDFs, PNGs and a Word file; no real documents) through the real services:
+
+- **RUI-HTS documents.** Drawings **A-101** Ground floor plan (P1 and P2 superseded by **A**),
+  **S-201** Foundation layout (A superseded by **B**) and **E-301**; the signed contract, the priced
+  BQ and the CAR policy (confidential: finance readers only); the county approval and NCA
+  certificate; two submittals and a signed paper response.
+- **Compliance (RUI-HTS).** County building approval and NCA project registration valid, the NCA
+  levy *not applicable* with a reason, the **NEMA licence expired** five days ago, the **CAR
+  insurance expiring** in 12 days (renewed once, so the earlier record is history), the site
+  signboard valid and the **DOSHS registration missing**. Company items: the contractor's NCA
+  registration (valid) and **WIBA expiring** in 20 days. KIT-BNG has only its county approval, so
+  its other items are missing.
+- **Instructions.** AI-001 (closed, linked to the balcony delay), EI-001 (acknowledged, with a note)
+  and SI-001 (received, with a verified site photo).
+- **Approval requests.** APR-0001 answered on paper (approved with comments, with the scan),
+  APR-0002 **overdue**, APR-0003 pending.
+
+The seed summary prints the drawing register, the compliance statuses and the reminders.
+
+1. As the project manager, open **Documents** in the sidebar (`/documents`). *Expiring soon and
+   missing* lists, across your projects: the expired NEMA licence, the overdue APR-0002, the missing
+   items (RUI-HTS DOSHS, KIT-BNG items) and the expiring CAR and WIBA cover, each with its date and
+   days left. *Company items* shows the contractor's registration and WIBA; the projects table shows
+   each project's documents, compliance counts, open instructions and overdue approvals.
+2. Open Ruiru Heights → **Documents** → *Drawing register*. Each drawing shows **only its current
+   revision** (A-101 rev. A, S-201 rev. B) with *Download rev. …*; no superseded revision is listed.
+3. Open **A-101**. *Current version* is rev. A; *Versions* lists P2 and P1 as **Superseded by rev. …
+   on … Do not use this version.** Download P1: the file name ends in `_SUPERSEDED`.
+4. *Upload a new version*: try a `.dwg` file — refused ("CAD files (DWG, DXF) must be uploaded as
+   the issued PDF"). Upload a PDF as rev. B with a change note: B becomes current and A is labelled
+   superseded; the drawing register now shows rev. B only.
+5. **Compliance** tab: the register shows each item's status (expired, expiring with days left,
+   missing, not applicable with its reason, valid), reference, expiry and evidence, with
+   *Reminders* above it. Export it as **PDF** and **Excel**, and in the other language.
+6. *Renew* the NEMA licence (reference, issuer, issue date, a new expiry, the permit as evidence):
+   the status becomes valid and the expired record stays in the history as superseded. Record the
+   DOSHS registration, or mark an item *not applicable* with a reason.
+7. **Instructions** tab: *Record an instruction* (the number is suggested, e.g. AI-002; tick
+   *May change the cost*). On its page, *Acknowledge*, then *Mark actioned* with a note; *Attach* a
+   drawing revision or a verified site photo; *Close*. A closed instruction is locked until
+   reopened with a note. The BQ area's instruction list shows the same instructions.
+8. *Approval requests*: APR-0002 is flagged overdue. *Ask for approval* on A-101's current
+   revision: on the new request you cannot answer it yourself ("You raised this request, so someone
+   else must answer it"), but you can **record the consultant's paper response** with their name
+   and the scan, after confirming the file's SHA-256. Rejected or *resubmit* answers offer
+   *Resubmit with a new version*.
+9. As the owner, **Compliance item types** (`/documents/compliance-types`): the starter set is
+   flagged COMPLIANCE-REVIEW; add a type (e.g. *Hoarding licence*, 14-day reminder) or retire one.
+   Record the company's WIBA renewal on its company item page.
+10. As the site agent, on a phone (360 px, SW, dark): the Documents tab hides the contract, BQ and
+    insurance documents (a note says why) and offers no upload; *Rekodi agizo* records an
+    instruction, and *Kiri* acknowledges it.
+
+What to look for:
+
+- A superseded revision is never listed or labelled as current anywhere (register, lists,
+  approvals, attachments); its download says SUPERSEDED.
+- Statuses change at midnight Nairobi time without any job running; reminders are on screen only —
+  email, SMS and WhatsApp delivery comes with the D7.3 notification centre.
+- Clients, suppliers, storekeepers and labourers cannot open documents; contracts, BQs and
+  insurance are invisible without a finance permission.
+- Nothing is deleted: documents are withdrawn with a reason; records, responses and attachments
+  are append-only.
+- COMPLIANCE-REVIEW CR-DOC-01–05: the starter items, insurance, confidential categories, retention
+  and paper approvals await an adviser.

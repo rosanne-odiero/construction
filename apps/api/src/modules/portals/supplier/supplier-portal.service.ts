@@ -531,7 +531,7 @@ export class SupplierPortalService {
   getInvoice(principal: Principal, id: string, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       const binding = await this.access.binding(scope);
-      return this.invoiceDetail(scope, binding, await this.invoiceRow(scope, binding, id), false);
+      return this.invoiceDetail(scope, await this.invoiceRow(scope, binding, id), false);
     });
   }
 
@@ -568,7 +568,6 @@ export class SupplierPortalService {
         );
       return this.invoiceDetail(
         scope,
-        binding,
         await this.invoiceRow(scope, binding, replay.invoiceId),
         true,
       );
@@ -624,7 +623,7 @@ export class SupplierPortalService {
             portalUserId: binding.portalUserId,
             etims: input.etimsInvoiceNumber.format,
           });
-          return this.invoiceDetail(scope, binding, await this.invoices.row(scope, id), false);
+          return this.invoiceDetail(scope, await this.invoices.row(scope, id), false);
         },
         true,
       );
@@ -668,14 +667,20 @@ export class SupplierPortalService {
             "invoice-not-attachable",
             "Documents are attached to your own open invoices",
           );
-        const mine = await scope.tx.procurementDocument.count({
+        // Counted across all the supplier's portal users, under a lock on the invoice so parallel
+        // uploads wait for each other (the database repeats the limit).
+        await scope.tx.$executeRaw`
+          SELECT 1 FROM supplier_invoices
+           WHERE tenant_id = ${scope.access.tenantId}::uuid AND id = ${invoice.id}::uuid
+           FOR UPDATE`;
+        const fromSupplier = await scope.tx.procurementDocument.count({
           where: {
             tenantId: scope.access.tenantId,
             invoiceId: invoice.id,
-            uploadedBy: scope.access.userId,
+            uploadedBySupplier: true,
           },
         });
-        if (mine >= SUPPLIER_PORTAL_LIMITS.documentsPerInvoice)
+        if (fromSupplier >= SUPPLIER_PORTAL_LIMITS.documentsPerInvoice)
           throw supplierPortalProblem(
             409,
             "too-many-documents",
@@ -773,9 +778,9 @@ export class SupplierPortalService {
     };
   }
 
-  private async invoiceDetail(scope: Scope, binding: Binding, row: InvoiceRow, replayed: boolean) {
+  private async invoiceDetail(scope: Scope, row: InvoiceRow, replayed: boolean) {
     const { tx, access } = scope;
-    const [invoice, lines, match, settlements, documents, portalUsers] = await Promise.all([
+    const [invoice, lines, match, settlements, documents] = await Promise.all([
       this.invoiceWire(scope, row),
       tx.supplierInvoiceLine.findMany({
         where: { tenantId: access.tenantId, invoiceId: row.id },
@@ -791,14 +796,9 @@ export class SupplierPortalService {
         where: { tenantId: access.tenantId, invoiceId: row.id, kind: "invoice" },
         orderBy: { uploadedAt: "asc" },
       }),
-      tx.supplierPortalUser.findMany({
-        where: { tenantId: access.tenantId, supplierId: binding.supplierId, userId: { not: null } },
-        select: { userId: true },
-      }),
     ]);
-    const supplierUsers = new Set(portalUsers.map((user) => user.userId));
     const evidence = match ? (match.evidence as unknown as ThreeWayMatchResult) : null;
-    const mine = documents.filter((document) => document.uploadedBy === access.userId).length;
+    const fromSupplier = documents.filter((document) => document.uploadedBySupplier).length;
     return portalInvoiceDetailResponseSchema.parse({
       invoice,
       lines: lines.map((line) => ({
@@ -833,14 +833,14 @@ export class SupplierPortalService {
         sizeBytes: document.sizeBytes,
         scanStatus: document.scanStatus,
         uploadedAt: iso(document.uploadedAt),
-        uploadedBySupplier: supplierUsers.has(document.uploadedBy),
+        uploadedBySupplier: document.uploadedBySupplier,
       })),
       replayed,
       permissions: {
         canAttach:
           invoice.source === "supplier_portal" &&
           !["cancelled", "paid"].includes(invoice.status) &&
-          mine < SUPPLIER_PORTAL_LIMITS.documentsPerInvoice,
+          fromSupplier < SUPPLIER_PORTAL_LIMITS.documentsPerInvoice,
       },
     });
   }

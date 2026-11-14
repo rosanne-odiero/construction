@@ -21,6 +21,9 @@
 -- append-only ones. No permission was added (portal.supplier and the supplier role exist).
 BEGIN;
 
+-- AlterTable
+ALTER TABLE "procurement_documents" ADD COLUMN     "uploaded_by_supplier" BOOLEAN NOT NULL DEFAULT false;
+
 -- CreateTable
 CREATE TABLE "supplier_portal_users" (
     "id" UUID NOT NULL,
@@ -148,6 +151,8 @@ ALTER TABLE "supplier_portal_users" ADD CONSTRAINT "supplier_portal_users_state_
         WHEN 'revoked' THEN revoked_by IS NOT NULL
           AND COALESCE(char_length(btrim(revoke_reason)), 0) >= 3
         WHEN 'membership_ended' THEN user_id IS NOT NULL AND revoke_reason IS NULL
+        WHEN 'superseded' THEN user_id IS NULL AND revoked_by IS NOT NULL
+          AND revoke_reason IS NULL
       END, false)
   END, false)
 );
@@ -244,6 +249,17 @@ BEGIN
     IF NEW.revoke_cause = 'revoked' AND NEW.revoked_by IS DISTINCT FROM app.current_user_id() THEN
       RAISE EXCEPTION 'Supplier portal access is revoked by the signed-in user'
         USING ERRCODE = '23514';
+    END IF;
+    -- A new invitation replaces a pending or expired one (D-101): only an invitation nobody
+    -- accepted, by the signed-in user sending the new one.
+    IF NEW.revoke_cause = 'superseded' THEN
+      IF OLD.status <> 'invited' OR NEW.revoked_by IS DISTINCT FROM app.current_user_id()
+         OR EXISTS (SELECT 1 FROM invitations
+                     WHERE tenant_id = NEW.tenant_id AND id = NEW.invitation_id
+                       AND accepted_at IS NOT NULL) THEN
+        RAISE EXCEPTION 'Only an invitation nobody accepted is replaced by a new one'
+          USING ERRCODE = '23514';
+      END IF;
     END IF;
     IF NEW.revoke_cause = 'membership_ended' THEN
       IF EXISTS (SELECT 1 FROM memberships
@@ -417,6 +433,32 @@ $$;
 CREATE TRIGGER three_way_match_portal_guard BEFORE INSERT OR UPDATE ON "three_way_matches"
   FOR EACH ROW EXECUTE FUNCTION app.guard_supplier_portal_match();
 
+-- Who uploaded a procurement document is stamped by the database, never sent by the API: a
+-- supplier member's upload is the supplier's (its own limit and label), anyone else's is staff's.
+-- Documents are append-only (no UPDATE for pmb_app), so the stamp never changes. An invoice keeps
+-- at most 3 documents from the supplier, counted across all its portal users under a lock on the
+-- invoice, so parallel uploads cannot pass the limit together (SUPPLIER_PORTAL_LIMITS).
+CREATE FUNCTION app.stamp_procurement_document_source() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  uploaded integer;
+BEGIN
+  NEW.uploaded_by_supplier := app.is_supplier_member(NEW.tenant_id);
+  IF NEW.uploaded_by_supplier THEN
+    PERFORM 1 FROM supplier_invoices
+      WHERE tenant_id = NEW.tenant_id AND id = NEW.invoice_id FOR UPDATE;
+    SELECT count(*) INTO uploaded FROM procurement_documents
+     WHERE tenant_id = NEW.tenant_id AND invoice_id = NEW.invoice_id AND uploaded_by_supplier;
+    IF uploaded >= 3 THEN
+      RAISE EXCEPTION 'An invoice keeps at most 3 documents from the supplier'
+        USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+CREATE TRIGGER procurement_document_source BEFORE INSERT ON "procurement_documents"
+  FOR EACH ROW EXECUTE FUNCTION app.stamp_procurement_document_source();
+
 -- Orders, deliveries, approvals (payables) and payments (settlements) are the company's.
 CREATE FUNCTION app.refuse_supplier_member_write() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -505,6 +547,25 @@ BEGIN
 END
 $$;
 
+-- The company's other rows that name or concern suppliers (requisitions and RFQs, the cost ledger
+-- and its journals, petty-cash expenses, plant hired from a supplier) are never a supplier's: a
+-- `supplier`-role member reads and writes none of them; anyone else is unaffected.
+DO $$
+DECLARE
+  not_supplier constant text := 'NOT EXISTS (SELECT 1 FROM memberships m '
+    'WHERE m.tenant_id = app.current_tenant_id() AND m.user_id = app.current_user_id() '
+    'AND m.role = ''supplier'')';
+  target text;
+BEGIN
+  FOREACH target IN ARRAY ARRAY['requisitions', 'requisition_lines', 'rfqs', 'rfq_requisitions',
+    'cost_entries', 'cost_journal_lines', 'petty_cash_expenses', 'plant_items']
+  LOOP
+    EXECUTE format('CREATE POLICY %I ON %I AS RESTRICTIVE USING (%s) WITH CHECK (%s)',
+      target || '_supplier_portal', target, not_supplier, not_supplier);
+  END LOOP;
+END
+$$;
+
 -- The runtime role never deletes portal access, submissions or acknowledgements, and never
 -- rewrites the append-only ones.
 DO $$
@@ -528,6 +589,7 @@ REVOKE EXECUTE ON FUNCTION app.guard_supplier_invoice_submission() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.guard_lpo_acknowledgement() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.guard_supplier_portal_invoice() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.guard_supplier_portal_match() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION app.stamp_procurement_document_source() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.refuse_supplier_member_write() FROM PUBLIC;
 
 COMMIT;

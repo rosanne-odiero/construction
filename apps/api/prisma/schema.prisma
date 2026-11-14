@@ -2957,25 +2957,27 @@ model InvoiceSettlement {
 
 // A private file kept with a quotation, GRN or invoice (images or PDF; malware hook; never public).
 model ProcurementDocument {
-  id          String           @id @default(uuid(7)) @db.Uuid
-  tenantId    String           @map("tenant_id") @db.Uuid
-  projectId   String           @map("project_id") @db.Uuid
-  kind        String           @db.VarChar(20)
-  quotationId String?          @map("quotation_id") @db.Uuid
-  grnId       String?          @map("grn_id") @db.Uuid
-  invoiceId   String?          @map("invoice_id") @db.Uuid
-  objectKey   String           @map("object_key") @db.VarChar(300)
-  contentType String           @map("content_type") @db.VarChar(40)
-  sizeBytes   Int              @map("size_bytes")
-  sha256      String           @db.Char(64)
-  scanStatus  String           @map("scan_status") @db.VarChar(15)
-  scanEngine  String           @map("scan_engine") @db.VarChar(40)
-  scannedAt   DateTime         @map("scanned_at") @db.Timestamptz
-  uploadedBy  String           @map("uploaded_by") @db.Uuid
-  uploadedAt  DateTime         @default(now()) @map("uploaded_at") @db.Timestamptz
-  quotation   Quotation?       @relation(fields: [tenantId, quotationId], references: [tenantId, id], onDelete: Restrict)
-  grn         Grn?             @relation(fields: [tenantId, grnId], references: [tenantId, id], onDelete: Restrict)
-  invoice     SupplierInvoice? @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict)
+  id                 String           @id @default(uuid(7)) @db.Uuid
+  tenantId           String           @map("tenant_id") @db.Uuid
+  projectId          String           @map("project_id") @db.Uuid
+  kind               String           @db.VarChar(20)
+  quotationId        String?          @map("quotation_id") @db.Uuid
+  grnId              String?          @map("grn_id") @db.Uuid
+  invoiceId          String?          @map("invoice_id") @db.Uuid
+  objectKey          String           @map("object_key") @db.VarChar(300)
+  contentType        String           @map("content_type") @db.VarChar(40)
+  sizeBytes          Int              @map("size_bytes")
+  sha256             String           @db.Char(64)
+  scanStatus         String           @map("scan_status") @db.VarChar(15)
+  scanEngine         String           @map("scan_engine") @db.VarChar(40)
+  scannedAt          DateTime         @map("scanned_at") @db.Timestamptz
+  uploadedBy         String           @map("uploaded_by") @db.Uuid
+  uploadedAt         DateTime         @default(now()) @map("uploaded_at") @db.Timestamptz
+  // Stamped by the database (D7.2): true when a supplier-role member uploaded it.
+  uploadedBySupplier Boolean          @default(false) @map("uploaded_by_supplier")
+  quotation          Quotation?       @relation(fields: [tenantId, quotationId], references: [tenantId, id], onDelete: Restrict)
+  grn                Grn?             @relation(fields: [tenantId, grnId], references: [tenantId, id], onDelete: Restrict)
+  invoice            SupplierInvoice? @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
   @@unique([tenantId, objectKey])

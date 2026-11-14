@@ -405,12 +405,12 @@ The supplier's path joins the D5.2 invoice state machine above; nothing in it ch
 stateDiagram-v2
   [*] --> invited: staff invite a contact (manage suppliers or finance, step-up)
   invited --> active: the contact accepts (supplier role, no project)
-  invited --> revoked: staff withdraw (reason)
+  invited --> revoked: staff withdraw (reason), or a new invitation replaces it (superseded)
   active --> revoked: staff revoke (reason) or the membership ends
   revoked --> [*]
 ```
 
-1. **Access.** A supplier manager (`procurement.manage_suppliers` or company-wide `finance.manage`, step-up) invites a contact from the supplier page; the contact opens `/supplier/join?token=…`, creates an account (or signs in) and accepts. The binding is `active` from then on; revoking it ends the membership and sessions at once.
+1. **Access.** A supplier manager (`procurement.manage_suppliers` or company-wide `finance.manage`, step-up) invites a contact from the supplier page; the contact opens `/supplier/join?token=…`, creates an account (or signs in) and accepts. The binding is `active` from then on; revoking it ends the membership and sessions at once. If the link expired (48 hours) or never arrived, staff simply invite again: the new invitation replaces the old one (cause `superseded`) and only the newest link works.
 2. **Order.** Staff approve the LPO (D5.2, unchanged). It appears in the portal; the supplier may **acknowledge** it once (a record, not a transition).
 3. **Delivery.** Staff record GRNs (D5.2, unchanged); the supplier sees what was received, rejected and why.
 4. **Invoice.** The supplier submits against the approved LPO (eTIMS number required, PDF attached, client ID + `Idempotency-Key`). In **one transaction**: the invoice is recorded as `draft` by the supplier, the submission row is written, and `draft → submitted → matched | disputed` runs the three-way match. The supplier sees *under review* or *disputed* (with reason codes); staff see the invoice in their queue marked "Submitted by the supplier".

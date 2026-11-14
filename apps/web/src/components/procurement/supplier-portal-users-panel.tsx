@@ -46,6 +46,8 @@ export function SupplierPortalUsersPanel({
   const [inviting, setInviting] = useState(false);
   const [revoking, setRevoking] = useState<SupplierPortalUser | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // When the panel was shown: an invitation past its expiry is labelled expired.
+  const [shownAt] = useState(() => Date.now());
   const blocked = supplierStatus === "blocked";
 
   return (
@@ -88,7 +90,11 @@ export function SupplierPortalUsersPanel({
                   })}
                 </p>
                 {user.status === "invited" && user.invitationExpiresAt ? (
-                  <p>{t("expires", { date: formatDate(user.invitationExpiresAt) })}</p>
+                  <p>
+                    {Date.parse(user.invitationExpiresAt) <= shownAt
+                      ? t("expired", { date: formatDate(user.invitationExpiresAt) })
+                      : t("expires", { date: formatDate(user.invitationExpiresAt) })}
+                  </p>
                 ) : null}
                 {user.activatedAt && user.account ? (
                   <p>
@@ -100,12 +106,14 @@ export function SupplierPortalUsersPanel({
                 ) : null}
                 {user.revokedAt ? (
                   <p>
-                    {user.revokeCause === "membership_ended" || !user.revokedBy
-                      ? t("membershipEnded", { date: formatDate(user.revokedAt) })
-                      : t("revokedBy", {
-                          name: user.revokedBy.displayName,
-                          date: formatDate(user.revokedAt),
-                        })}
+                    {user.revokeCause === "superseded"
+                      ? t("superseded", { date: formatDate(user.revokedAt) })
+                      : user.revokeCause === "membership_ended" || !user.revokedBy
+                        ? t("membershipEnded", { date: formatDate(user.revokedAt) })
+                        : t("revokedBy", {
+                            name: user.revokedBy.displayName,
+                            date: formatDate(user.revokedAt),
+                          })}
                   </p>
                 ) : null}
                 {user.revokeReason ? (

@@ -231,7 +231,7 @@ No company settings: the portal uses the D5.2 procurement settings (match tolera
 
 | Key | Scope | Seed / default | Source | Status | Used from |
 |---|---|---|---|---|---|
-| `supplier_portal.limits` | platform | 30 invoice submissions per portal user per hour; 3 documents from the supplier per invoice (PDF or photo within the D5.2 document limit); statements default to the last 90 days, at most 1,096 days, PDF up to 5,000 lines (Excel unlimited); 30 statement exports per user per 10 minutes; 20 portal invitations per staff user per hour; 50 rows per page (≤ 200). Code constant `SUPPLIER_PORTAL_LIMITS` | ARCHITECTURE §4.12; THREAT_MODEL A-86 | PRODUCT | D7.2 |
+| `supplier_portal.limits` | platform | 30 invoice submissions per portal user per hour; 3 documents from the supplier per invoice, across all its portal users (PDF or photo within the D5.2 document limit; also enforced by `app.stamp_procurement_document_source`); statements default to the last 90 days, at most 1,096 days, PDF up to 5,000 lines (Excel unlimited); 30 statement exports per user per 10 minutes; 20 portal invitations per staff user per hour; 50 rows per page (≤ 200). Code constant `SUPPLIER_PORTAL_LIMITS` | ARCHITECTURE §4.12; THREAT_MODEL A-86 | PRODUCT | D7.2 |
 | `supplier_portal.etims_required` | platform | Always: a portal invoice needs an eTIMS number (staff-recorded invoices follow `procurement.block_payment_without_etims`) | COMPLIANCE_TODO CR-SUP-01 | COMPLIANCE-REVIEW | D7.2 |
 
 ### Plant and equipment (D8.3)

@@ -107,19 +107,53 @@ export class SupplierPortalUsersService {
         "supplier-blocked",
         "A blocked supplier's contacts cannot be invited",
       );
-    const open = await tx.supplierPortalUser.count({
+    const open = await tx.supplierPortalUser.findMany({
       where: {
         tenantId: access.tenantId,
         identifier: input.identifier,
         status: { in: ["invited", "active"] },
       },
+      include: { invitation: { select: { expiresAt: true, acceptedAt: true } } },
     });
-    if (open)
+    const now = new Date();
+    // A new invitation replaces one nobody accepted that has expired, or one still pending for
+    // this same supplier (a resend, e.g. after a failed send). Access, or a pending invitation
+    // for another supplier, still blocks it.
+    const replaceable = (row: (typeof open)[number]) =>
+      row.status === "invited" &&
+      row.invitation.acceptedAt === null &&
+      (row.invitation.expiresAt <= now || row.supplierId === supplierId);
+    if (open.some((row) => !replaceable(row)))
       throw supplierPortalProblem(
         409,
         "portal-user-exists",
         "This email address or phone number already has supplier portal access or an invitation in this company",
       );
+    for (const row of open) {
+      const superseded = await tx.supplierPortalUser.updateMany({
+        where: { tenantId: access.tenantId, id: row.id, version: row.version, status: "invited" },
+        data: {
+          status: "revoked",
+          revokeCause: "superseded",
+          revokedBy: access.userId,
+          version: { increment: 1 },
+        },
+      });
+      if (!superseded.count)
+        throw supplierPortalProblem(
+          409,
+          "version-conflict",
+          "This record was changed by someone else. Reload and try again.",
+        );
+      await tx.invitation.updateMany({
+        where: { tenantId: access.tenantId, id: row.invitationId, acceptedAt: null },
+        data: { expiresAt: now },
+      });
+      await this.scope.audit(tx, "supplier_portal.invitation_superseded", row.id, {
+        supplierId: row.supplierId,
+        invitationId: row.invitationId,
+      });
+    }
     const invitation = await this.tenancy.createSupplierInvitation(scope, input.identifier);
     const created = await tx.supplierPortalUser.create({
       data: {

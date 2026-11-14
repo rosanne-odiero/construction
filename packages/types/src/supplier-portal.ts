@@ -12,8 +12,11 @@ import type { Permission } from "./permissions.js";
 export const SUPPLIER_PORTAL_USER_STATUSES = ["invited", "active", "revoked"] as const;
 export type SupplierPortalUserStatus = (typeof SUPPLIER_PORTAL_USER_STATUSES)[number];
 
-/** Why access ended: revoked by company staff, or the membership was removed or changed role. */
-export const SUPPLIER_PORTAL_REVOKE_CAUSES = ["revoked", "membership_ended"] as const;
+/**
+ * Why access ended: revoked by company staff, the membership was removed or changed role, or an
+ * invitation nobody accepted was replaced by a new one (expired, or resent to the same supplier).
+ */
+export const SUPPLIER_PORTAL_REVOKE_CAUSES = ["revoked", "membership_ended", "superseded"] as const;
 export type SupplierPortalRevokeCause = (typeof SUPPLIER_PORTAL_REVOKE_CAUSES)[number];
 
 /** Who put an invoice into the procure-to-pay workflow: company staff or the supplier. */

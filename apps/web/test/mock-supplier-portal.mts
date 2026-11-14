@@ -867,9 +867,20 @@ export function handleSupplierPortalUsers(
   if (method === "POST" && !match[2]) {
     deps.requireStepUp();
     const input = deps.parse(invitePortalUserRequestSchema, body);
-    if (users.some((user) => user.identifier === input.identifier && user.status !== "revoked"))
-      throw deps.fail(409, "portal-user-exists");
     const now = new Date();
+    if (users.some((user) => user.identifier === input.identifier && user.status === "active"))
+      throw deps.fail(409, "portal-user-exists");
+    // As the API: a new invitation to the same supplier replaces one nobody accepted.
+    for (const old of users.filter(
+      (user) => user.identifier === input.identifier && user.status === "invited",
+    ))
+      Object.assign(old, {
+        status: "revoked",
+        version: old.version + 1,
+        revokedAt: now.toISOString(),
+        revokedBy: deps.actor,
+        revokeCause: "superseded",
+      });
     const user: SupplierPortalUser = {
       id: randomUUID(),
       supplierId: supplier.id,

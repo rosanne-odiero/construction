@@ -34,7 +34,10 @@ import { configureApp } from "../src/app.setup.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../src/generated/prisma/client.js";
 import { Browser, notifications } from "./support.js";
+import { testDatabaseUrls } from "./test-database.js";
 
 /**
  * D7.2 supplier portal end to end under the real runtime role (pmb_app, forced RLS and the
@@ -941,33 +944,116 @@ describe("Supplier portal (real runtime role)", () => {
     expect(JSON.stringify(paid)).not.toContain("Equity account");
   });
 
+  it("counts and labels invoice documents per supplier across its portal users, also under parallel uploads", async () => {
+    // A colleague at supplier A: a second portal user of the same supplier.
+    const colleague = new Browser(app);
+    await colleague.register();
+    await inviteContact(owner, colleague, supplier.a, tenantA);
+    const path = `portal/supplier/invoices/${invoiceOne}/document`;
+    const second = await colleague.upload(path, PDF, "a-1001-delivery.pdf");
+    expect(second.status, JSON.stringify(second.body)).toBe(201);
+    const detail = async () =>
+      portalInvoiceDetailResponseSchema.parse(
+        ok(await supA.call("get", `portal/supplier/invoices/${invoiceOne}`)),
+      );
+    // supA sees the colleague's upload as the supplier's, not the company's.
+    expect((await detail()).documents.map((document) => document.uploadedBySupplier)).toEqual([
+      true,
+      true,
+    ]);
+    expect((await detail()).permissions.canAttach).toBe(true);
+    // Two more at once: the limit (3 from the supplier, whoever uploads) admits only one.
+    const racing = await Promise.all([
+      supA.upload(path, PDF, "a-1001-copy.pdf"),
+      colleague.upload(path, PDF, "a-1001-copy-2.pdf"),
+    ]);
+    expect(racing.map((res) => res.status).sort()).toEqual([201, 409]);
+    expect(problem(racing.find((res) => res.status === 409)!)).toBe("too-many-documents");
+    refused(await colleague.upload(path, PDF, "a-1001-late.pdf"), 409, "too-many-documents");
+    // A staff upload is stamped as the company's and does not count against the supplier.
+    const staff = await owner.upload(
+      `procurement/invoices/${invoiceOne}/document`,
+      PDF,
+      "a-1001-file-copy.pdf",
+    );
+    expect(staff.status, JSON.stringify(staff.body)).toBe(201);
+    const full = await detail();
+    expect(full.documents.map((document) => document.uploadedBySupplier)).toEqual([
+      true,
+      true,
+      true,
+      false,
+    ]);
+    expect(full.permissions.canAttach).toBe(false);
+    // The database repeats the limit and decides the label itself.
+    const insert = (browser: Browser) => {
+      const id = randomUUID();
+      return asUser(
+        browser,
+        (tx) => tx.$executeRaw`INSERT INTO procurement_documents (id, tenant_id, project_id, kind,
+          invoice_id, object_key, content_type, size_bytes, sha256, scan_status, scan_engine,
+          scanned_at, uploaded_by, uploaded_by_supplier)
+          VALUES (${id}::uuid, ${tenantA}::uuid, ${projectId}::uuid, 'invoice', ${invoiceOne}::uuid,
+          ${`tenants/${tenantA}/projects/${projectId}/procurement/invoice/${id}`}, 'application/pdf',
+          5, ${"0".repeat(64)}, 'clean', 'direct-sql', now(), ${browser.auth.user.id}::uuid, false)`,
+      );
+    };
+    await expect(insert(colleague)).rejects.toThrow(/at most 3 documents from the supplier/);
+  });
+
   it("keeps suppliers apart (supplier B, another company) in the API and with direct SQL", async () => {
-    const lposB = portalLposResponseSchema.parse(
-      ok(await supB.call("get", "portal/supplier/lpos")),
-    );
-    expect(lposB.lpos.map((entry) => entry.id)).toEqual([lpoB.lpo.id]);
-    for (const path of [
-      `portal/supplier/lpos/${lpoA.lpo.id}`,
-      `portal/supplier/invoices/${invoiceOne}`,
-      `portal/supplier/documents/${documentId}`,
-      `portal/supplier/statement?projectId=${projectId}`,
-    ]) {
-      refused(await supB.call("get", path), 404);
-      refused(await supC.call("get", path), 404);
+    const apiKeepsThemApart = async () => {
+      const lposB = portalLposResponseSchema.parse(
+        ok(await supB.call("get", "portal/supplier/lpos")),
+      );
+      expect(lposB.lpos.map((entry) => entry.id)).toEqual([lpoB.lpo.id]);
+      for (const path of [
+        `portal/supplier/lpos/${lpoA.lpo.id}`,
+        `portal/supplier/invoices/${invoiceOne}`,
+        `portal/supplier/documents/${documentId}`,
+        `portal/supplier/statement?projectId=${projectId}`,
+      ]) {
+        refused(await supB.call("get", path), 404);
+        refused(await supC.call("get", path), 404);
+      }
+      refused(await supB.call("post", `portal/supplier/lpos/${lpoA.lpo.id}/acknowledge`, {}), 404);
+      const deliveriesB = portalDeliveriesResponseSchema.parse(
+        ok(await supB.call("get", `portal/supplier/deliveries?lpoId=${lpoA.lpo.id}`)),
+      );
+      expect(deliveriesB.deliveries).toEqual([]);
+      const invoicesB = portalInvoicesResponseSchema.parse(
+        ok(await supB.call("get", "portal/supplier/invoices")),
+      );
+      expect(invoicesB.invoices).toEqual([]);
+      const statementB = supplierStatementResponseSchema.parse(
+        ok(await supB.call("get", "portal/supplier/statement")),
+      );
+      expect(statementB).toMatchObject({ openingMinor: 0, closingMinor: 0, entries: [] });
+    };
+    await apiKeepsThemApart();
+    // The API's own filters, not only the database: with every supplier policy relaxed to `true`
+    // (as the schema owner, restored afterwards), supplier B still reaches none of A's records.
+    const schemaOwner = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: testDatabaseUrls().migrationUrl }),
+    });
+    const policies = await schemaOwner.$queryRaw<
+      { tablename: string; policyname: string; qual: string; with_check: string }[]
+    >`SELECT tablename, policyname, qual, with_check FROM pg_policies
+      WHERE policyname LIKE '%supplier_portal' AND permissive = 'RESTRICTIVE'`;
+    expect(policies.length).toBeGreaterThanOrEqual(30);
+    try {
+      for (const policy of policies)
+        await schemaOwner.$executeRawUnsafe(
+          `ALTER POLICY "${policy.policyname}" ON "${policy.tablename}" USING (true) WITH CHECK (true)`,
+        );
+      await apiKeepsThemApart();
+    } finally {
+      for (const policy of policies)
+        await schemaOwner.$executeRawUnsafe(
+          `ALTER POLICY "${policy.policyname}" ON "${policy.tablename}" USING (${policy.qual}) WITH CHECK (${policy.with_check})`,
+        );
+      await schemaOwner.$disconnect();
     }
-    refused(await supB.call("post", `portal/supplier/lpos/${lpoA.lpo.id}/acknowledge`, {}), 404);
-    const deliveriesB = portalDeliveriesResponseSchema.parse(
-      ok(await supB.call("get", `portal/supplier/deliveries?lpoId=${lpoA.lpo.id}`)),
-    );
-    expect(deliveriesB.deliveries).toEqual([]);
-    const invoicesB = portalInvoicesResponseSchema.parse(
-      ok(await supB.call("get", "portal/supplier/invoices")),
-    );
-    expect(invoicesB.invoices).toEqual([]);
-    const statementB = supplierStatementResponseSchema.parse(
-      ok(await supB.call("get", "portal/supplier/statement")),
-    );
-    expect(statementB).toMatchObject({ openingMinor: 0, closingMinor: 0, entries: [] });
     const homeC = supplierPortalOverviewResponseSchema.parse(
       ok(await supC.call("get", "portal/supplier")),
     );
@@ -1006,13 +1092,41 @@ describe("Supplier portal (real runtime role)", () => {
       (tx) => tx.$queryRaw<{ total: bigint }[]>`SELECT count(*) AS total FROM lpos`,
     );
     expect(Number(staffSees[0]!.total)).toBe(3);
-    // A supplier cannot write another supplier's rows either (WITH CHECK).
+    // Another supplier's rows are invisible to update (USING) …
     await expect(
       asUser(
         supB,
         (tx) => tx.$executeRaw`UPDATE suppliers SET notes = 'x' WHERE id = ${supplier.a}::uuid`,
       ),
     ).resolves.toBe(0);
+    // … and cannot be written either (WITH CHECK): a contact for supplier A, inserted by B.
+    await expect(
+      asUser(
+        supB,
+        (tx) => tx.$executeRaw`INSERT INTO supplier_contacts (id, tenant_id, supplier_id, name)
+          VALUES (${randomUUID()}::uuid, ${tenantA}::uuid, ${supplier.a}::uuid, 'Not B''s')`,
+      ),
+    ).rejects.toThrow(/row-level security/);
+    // The company's own rows about suppliers (requisitions, RFQs, the cost ledger and journals,
+    // petty cash, plant) are never a supplier's, though staff see them.
+    const internal = (browser: Browser) =>
+      asUser(
+        browser,
+        (tx) =>
+          tx.$queryRaw<{ table: string; total: bigint }[]>`
+          SELECT 'requisitions' AS table, count(*) AS total FROM requisitions
+          UNION ALL SELECT 'requisition_lines', count(*) FROM requisition_lines
+          UNION ALL SELECT 'rfqs', count(*) FROM rfqs
+          UNION ALL SELECT 'rfq_requisitions', count(*) FROM rfq_requisitions
+          UNION ALL SELECT 'cost_entries', count(*) FROM cost_entries
+          UNION ALL SELECT 'cost_journal_lines', count(*) FROM cost_journal_lines
+          UNION ALL SELECT 'petty_cash_expenses', count(*) FROM petty_cash_expenses
+          UNION ALL SELECT 'plant_items', count(*) FROM plant_items`,
+      ).then((rows) => Object.fromEntries(rows.map((row) => [row.table, Number(row.total)])));
+    expect(Object.values(await internal(supB))).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    const staffRows = await internal(owner);
+    expect(staffRows.requisitions).toBeGreaterThan(0);
+    expect(staffRows.rfqs).toBeGreaterThan(0);
   });
 
   it("states opening balance, invoices, payments and closing balance (hand-computed) and exports them", async () => {
@@ -1137,9 +1251,11 @@ describe("Supplier portal (real runtime role)", () => {
       ),
     );
     expect(revoked.user).toMatchObject({ status: "revoked", revokeCause: "revoked" });
-    // The next request already fails: the session and the membership are gone.
-    expect([401, 403]).toContain((await clerk.call("get", "portal/supplier")).status);
-    expect([401, 403]).toContain((await clerk.call("get", "portal/supplier/lpos")).status);
+    // The next request already fails because the session itself was revoked (401, not only the
+    // 403 a missing membership would give).
+    expect((await clerk.call("get", "portal/supplier")).status).toBe(401);
+    const session = await prisma.session.findUnique({ where: { id: clerk.auth.session.id } });
+    expect(session?.revokedAt).not.toBeNull();
     // Read in company A's context (RLS): the membership itself is gone, not only hidden.
     const membership = await asUser(
       owner,
@@ -1206,6 +1322,58 @@ describe("Supplier portal (real runtime role)", () => {
         (tx) => tx.$executeRaw`DELETE FROM supplier_portal_users WHERE id = ${user.id}::uuid`,
       ),
     ).rejects.toThrow();
+  });
+
+  it("replaces an expired or resent invitation, never someone's access or another supplier's pending invitation", async () => {
+    const late = new Browser(app);
+    await late.register();
+    const invite = (supplierId: string) =>
+      owner.call("post", `suppliers/${supplierId}/portal-users`, {
+        identifier: late.identifier,
+        contactName: "Accounts clerk (synthetic)",
+      });
+    // The contact never acted on the first invitation and it expired.
+    const first = await inviteContact(owner, late, supplier.a, tenantA, false);
+    await asUser(
+      owner,
+      (tx) => tx.$executeRaw`UPDATE invitations SET expires_at = now() - interval '1 minute'
+        WHERE tenant_id = ${tenantA}::uuid AND identifier = ${late.identifier.toLowerCase()}
+          AND accepted_at IS NULL`,
+    );
+    // Inviting again (here for supplier B) replaces the dead invitation instead of a 409.
+    const again = await inviteContact(owner, late, supplier.b, tenantA, false);
+    const replaced = supplierPortalUsersResponseSchema
+      .parse(ok(await owner.call("get", `suppliers/${supplier.a}/portal-users`)))
+      .users.find((entry) => entry.id === first.user.id);
+    expect(replaced).toMatchObject({
+      status: "revoked",
+      revokeCause: "superseded",
+      revokedBy: { id: owner.auth.user.id },
+      revokeReason: null,
+    });
+    // A pending invitation for supplier B still blocks one for supplier A …
+    await fresh(owner);
+    refused(await invite(supplier.a), 409, "portal-user-exists");
+    // … but resending it for B (say after a failed send) replaces it: only the newest link works.
+    const resent = await inviteContact(owner, late, supplier.b, tenantA, false);
+    refused(await late.call("post", "tenants/invitations/accept", { token: first.token }), 404);
+    refused(await late.call("post", "tenants/invitations/accept", { token: again.token }), 404);
+    ok(await late.call("post", "tenants/invitations/accept", { token: resent.token }));
+    ok(await late.call("post", `tenants/${tenantA}/select`, {}));
+    ok(await late.call("get", "portal/supplier"));
+    // Access is never replaced by a new invitation, in the API or the database.
+    await fresh(owner);
+    refused(await invite(supplier.b), 409, "portal-user-exists");
+    await expect(
+      asUser(
+        owner,
+        (tx) =>
+          tx.$executeRaw`UPDATE supplier_portal_users SET status = 'revoked',
+            revoke_cause = 'superseded', revoked_by = ${owner.auth.user.id}::uuid,
+            version = version + 1
+          WHERE id = ${resent.user.id}::uuid`,
+      ),
+    ).rejects.toThrow(/nobody accepted/);
   });
 
   it("keeps amounts, identifiers and personal data out of the audit log", async () => {

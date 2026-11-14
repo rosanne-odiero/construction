@@ -149,6 +149,17 @@ import {
   inductionStatusResponseSchema,
   ppeIssueResponseSchema,
   ppeIssuesResponseSchema,
+  plantAlertsResponseSchema,
+  plantDetailResponseSchema,
+  plantFuelListResponseSchema,
+  plantFuelResponseSchema,
+  plantListResponseSchema,
+  plantOptionsResponseSchema,
+  plantSettingsResponseSchema,
+  plantUsageListResponseSchema,
+  plantUsageResponseSchema,
+  projectPlantOptionsResponseSchema,
+  projectPlantResponseSchema,
   safetyOptionsResponseSchema,
   safetyOverviewResponseSchema,
   safetySettingsResponseSchema,
@@ -361,7 +372,28 @@ export function responseContract(method: string, target: string) {
   if (quality) return quality;
   const safety = safetyContract(method, path);
   if (safety) return safety;
+  const plant = plantContract(method, path);
+  if (plant) return plant;
   return messageResponseSchema;
+}
+
+/** The D8.3 plant endpoints' success contracts. */
+function plantContract(method: string, path: string) {
+  const get = method === "get";
+  if (/^projects\/[^/]+\/plant$/.test(path)) return projectPlantResponseSchema;
+  if (/^projects\/[^/]+\/plant\/options$/.test(path)) return projectPlantOptionsResponseSchema;
+  if (!path.startsWith("plant")) return null;
+  if (path === "plant") return get ? plantListResponseSchema : plantDetailResponseSchema;
+  if (path === "plant/alerts") return plantAlertsResponseSchema;
+  if (path === "plant/settings") return plantSettingsResponseSchema;
+  if (path === "plant/options") return plantOptionsResponseSchema;
+  if (/^plant\/[^/]+\/usage$/.test(path))
+    return get ? plantUsageListResponseSchema : plantUsageResponseSchema;
+  if (/^plant\/[^/]+\/usage\/[^/]+\/corrections$/.test(path)) return plantUsageResponseSchema;
+  if (/^plant\/[^/]+\/fuel$/.test(path))
+    return get ? plantFuelListResponseSchema : plantFuelResponseSchema;
+  if (/^plant\/[^/]+\/fuel\/[^/]+\/corrections$/.test(path)) return plantFuelResponseSchema;
+  return plantDetailResponseSchema;
 }
 
 /** The D8.2 health and safety endpoints' success contracts. */

@@ -32,6 +32,7 @@ import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-t
 import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
 import { seedQuality, type QualitySeedSummary } from "./quality-seed.js";
 import { seedSafety, type SafetySeedSummary } from "./safety-seed.js";
+import { seedPlant, type PlantSeedSummary } from "./plant-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 
@@ -405,6 +406,7 @@ export type SeedSummary = {
   spending: SpendingSeedSummary;
   quality: QualitySeedSummary;
   safety: SafetySeedSummary;
+  plant: PlantSeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -614,6 +616,12 @@ export async function seedDemo(
     projectManagerId: userOf("projectManager").id,
     siteAgentId: userOf("siteAgent").id,
   });
+  // After safety and the labour seed (the excavator's operator is a registered machine operator).
+  const plant = await seedPlant(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+  });
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
@@ -630,6 +638,7 @@ export async function seedDemo(
     spending,
     quality,
     safety,
+    plant,
   };
 }
 

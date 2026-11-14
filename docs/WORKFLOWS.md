@@ -146,6 +146,64 @@ Overdue = open after its due date (a done action awaiting verification is not ov
 
 **Records without a lifecycle.** An **induction** (`IND-NNNN`) is recorded once by a recorder and can only be **voided** by a manager with a reason. A **PPE issue** is `issued` → `returned` (recorder; date, condition) or → `replaced` (only by recording the newer issue that names it) or → `voided` (manager, reason); voiding a replacement puts the item it replaced back to `issued`. A **first-aid kit** is active → retired (manager, reason) and its **checks** are append-only (recorder). A **first-aider** is active → removed (manager, reason). A **treatment** (`FA-NNNN`) is recorded (recorder), linked to an open incident once (manager) or voided (manager, reason); a treatment linked to a closed incident cannot change.
 
+## Plant and equipment (D8.3)
+
+Implemented for the web app ([ARCHITECTURE §4.11](./ARCHITECTURE.md#411-plant-and-equipment-d83)). Every command runs in the tenant transaction with the caller's project permissions (role ∩ assignment), locks the item row, sends the version it read where the record is versioned (409 `version-conflict`) and writes a `plant.*` audit event (IDs, codes, dates, statuses and field names only). "Recorder" = `site.diary` or `plant.manage` on the site's project (fuel also `stores.manage`); "manager" = `plant.manage` on the item's project (or anywhere while it is in the yard). Records at a site of a closed or cancelled project are refused (409 `project-read-only`).
+
+**Plant item** (`plant_items`; status derived and checked at commit by `app.check_plant_state`)
+
+```mermaid
+stateDiagram-v2
+  [*] --> available: register in the yard (manager)
+  [*] --> on_site: register onto a site (manager)
+  available --> on_site: move to a site (manager)
+  on_site --> on_site: move to another site (manager)
+  on_site --> available: move to the yard (manager)
+  on_site --> under_repair: major/unsafe breakdown reported at the site
+  under_repair --> under_repair: move (manager)
+  under_repair --> on_site: last major/unsafe breakdown repaired (at a site)
+  under_repair --> available: last major/unsafe breakdown repaired (in the yard)
+  available --> off_hire: off hire (manager, hired, reason)
+  on_site --> off_hire: off hire (manager, hired, reason)
+  available --> disposed: dispose (manager, owned, reason)
+  on_site --> disposed: dispose (manager, owned, reason)
+  under_repair --> off_hire: breakdown resolved "off hire" (manager, reason)
+  under_repair --> disposed: breakdown resolved "written off" (manager, reason)
+  off_hire --> [*]
+  disposed --> [*]
+```
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → available / on_site | Manager (on the starting site's project); code unique in the company; hired items need a supplier, rate, unit and hire start (an LPO must be that supplier's); metered items an opening reading; fuelled metered items a standard consumption | Move 1 recorded when it starts on a site; `plant.registered` |
+| any open → same | Manager; name, category, quantity, make/model, registration, hire terms, standard consumption, service intervals, notes (code, ownership, meter, fuel type and opening reading fixed) | `plant.updated` (field names); later fuel issues carry the new standard |
+| move | Manager on the item's project and on the destination; dated on or after the previous move, not in the future; never strands usage or fuel recorded at the old site after the date (409 `move-strands-records`) | Append-only `plant_moves` row; `plant.moved` |
+| → under_repair and back | Follows open major/unsafe breakdowns automatically | — |
+| → off_hire / disposed | Manager; date (not before the hire start, not in the future) and reason; no open breakdown (409 `plant-has-open-breakdowns`) or as the resolution of the breakdown itself | **Final**: returned to the yard, operator assignments ended, no more records; `plant.closed` |
+
+**Breakdown** (`plant_breakdowns`, `BRK-NNNN` per company)
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → open | Recorder; at a site where the item is that day, when (≤ now + 5 min), severity `minor`/`major`/`unsafe`, description | Major/unsafe: item `under_repair`; unsafe: no `working` day accepted while open; `plant.breakdown_reported` |
+| open → repaired | Recorder (**unsafe: manager only**); date (on or after the report, not in the future), repaired by, cost reference, note | **Final**; status recomputed; `plant.breakdown_resolved` |
+| open → off_hire | Manager; hired item; reason | **Final**; the item goes off hire; `plant.breakdown_resolved`, `plant.closed` |
+| open → written_off | Manager; owned item; reason | **Final**; the item is disposed; `plant.breakdown_resolved`, `plant.closed` |
+
+**Usage log and fuel issue** (`plant_usage_logs`, `plant_fuel_issues`; append-only)
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → current | Recorder (fuel: also `stores.manage`); the item was at the site that day; date not in the future and ≤ 60 days back; meter readings monotonic (409 `meter-out-of-order`), ≤ 24.0 h or 1,500 km a day; usage: one original per item and day, operator assigned that day, no working day on unsafe plant; fuel: the item uses that fuel; client ID + `Idempotency-Key` | `plant.usage_recorded` / `plant.fuel_recorded`; a fuel issue that closes a full-tank window returns the window judged against the standard |
+| current → superseded | Recorder **and** (manager or whoever recorded it); a correction with new values (usage: same day) and a reason; only the newest entry of a chain | New row with `corrects_id` (unique); `plant.usage_corrected` / `plant.fuel_corrected` |
+| current → voided | Same actors; reason | New void row naming it; never counts again; `plant.usage_voided` / `plant.fuel_voided` |
+
+There is no edit and no delete; corrections and voids keep the original visible as history.
+
+**Other records.** An **operator assignment** is open (`to_on` empty or in the future) until **ended** once by a manager (`plant.operator_ended`); overlapping assignments of one person to one item are refused; a missing or expired certificate where the category needs one is flagged, never blocked (CR-PLT-01). A **meter reset** (manager; reason, note; after every reading) starts a new meter epoch and is never changed. A **service record** (recorder; `service`, `repair` or `inspection`) is `recorded` → `voided` by a manager with a reason (final); a `service` restarts the maintenance interval.
+
+**Alerts** (computed on read; never stored): unsafe breakdown and service overdue, operator certificate missing or expired, and hire overrun (critical); fuel above the standard and fuel on a static meter (estimates, never proof of theft), open breakdown, idle on hire, service due and hire ending (warning). Off-hired and disposed items raise none.
+
 ## Schedule baseline and delay log (D6.2)
 
 Implemented for the web app ([ARCHITECTURE §4.6](./ARCHITECTURE.md#46-schedule-d62)). Every command needs `projects.manage` on an open project (role ∩ assignment, checked by `ProjectAccess.editable`; closed and cancelled projects are read-only in the API and in every schedule trigger), runs in the tenant transaction under the company lock, checks the expected version and writes its audit event in the same transaction. There is no external effect, outbox event or offline capture; a retry after a lost response is refused as a version conflict (or `dependency-exists`) rather than applied twice.

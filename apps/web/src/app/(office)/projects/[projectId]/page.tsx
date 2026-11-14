@@ -11,6 +11,7 @@ import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state
 import { StatusChangeButton } from "@/components/projects/status-change";
 import { StatusBadge } from "@/components/status-badge";
 import { QUALITY_VIEWS, qualityAccess, qualityHref } from "@/lib/quality";
+import { plantAccess } from "@/lib/plant";
 import { SAFETY_VIEWS, safetyAccess, safetyHref } from "@/lib/safety";
 import { scheduleAccess } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ import { WbsTab } from "./wbs-tab";
 import { DiaryTab } from "./diary-tab";
 import { PhotosTab } from "./photos-tab";
 import { QualityTab } from "./quality-tab";
+import { PlantTab } from "./plant-tab";
 import { SafetyTab } from "./safety-tab";
 import { SCHEDULE_VIEWS, ScheduleTab } from "./schedule-tab";
 
@@ -35,6 +37,7 @@ const TABS = [
   "diary",
   "quality",
   "safety",
+  "plant",
   "photos",
 ] as const;
 type Tab = (typeof TABS)[number];
@@ -61,7 +64,7 @@ export default async function ProjectPage({
   if (PROTOTYPE_IDS.has(projectId)) redirect(`/prototype/projects/${projectId}`);
   if (!UUID.test(projectId)) notFound();
   const query = await searchParams;
-  const { tab: rawTab, cursor, view: rawView, baseline } = query;
+  const { tab: rawTab, cursor, view: rawView, baseline, saved } = query;
   const tab: Tab = TABS.find((candidate) => candidate === rawTab) ?? "overview";
   const view = SCHEDULE_VIEWS.find((candidate) => candidate === rawView) ?? "gantt";
   const qualityView = QUALITY_VIEWS.find((candidate) => candidate === rawView) ?? "inspections";
@@ -95,6 +98,8 @@ export default async function ProjectPage({
   const canReadQuality = qualityAccess(detail.permissions).read;
   // Health and safety records: site and project staff only (decision D-70).
   const canReadSafety = safetyAccess(detail.permissions).read;
+  // Plant records: site, stores, finance and project staff (decision D-90).
+  const canReadPlant = plantAccess(detail.permissions).read;
   const readOnly = isProjectReadOnly(project.status);
   // Original vs revised contract sum on the overview, for people who can see the BQ.
   const sums =
@@ -136,7 +141,8 @@ export default async function ProjectPage({
             (key) =>
               (key !== "schedule" || canReadSchedule) &&
               (key !== "quality" || canReadQuality) &&
-              (key !== "safety" || canReadSafety),
+              (key !== "safety" || canReadSafety) &&
+              (key !== "plant" || canReadPlant),
           ).map((key) => (
             <li key={key}>
               <Link
@@ -223,6 +229,14 @@ export default async function ProjectPage({
           view={safetyView}
           params={query}
           userId={session.user.id}
+          returnTo={path}
+        />
+      ) : null}
+      {tab === "plant" && !canReadPlant ? <LiveForbidden /> : null}
+      {tab === "plant" && canReadPlant ? (
+        <PlantTab
+          project={project}
+          saved={typeof saved === "string" ? saved : undefined}
           returnTo={path}
         />
       ) : null}

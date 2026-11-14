@@ -175,6 +175,7 @@ model Tenant {
   qualitySettings     QualitySettings?
   checklistTemplates  ChecklistTemplate[]
   safetySettings      SafetySettings?
+  plantSettings       PlantSettings?
 
   @@map("tenants")
 }
@@ -281,6 +282,7 @@ model Project {
 
   completions       ProjectCompletion[]
   correctiveActions CorrectiveAction[]
+  plantOperators    PlantOperator[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -342,6 +344,13 @@ model Site {
   firstAidKits       FirstAidKit[]
   firstAiders        FirstAider[]
   firstAidTreatments FirstAidTreatment[]
+  plantItems         PlantItem[]
+  plantMovesFrom     PlantMove[]           @relation("PlantMovesFrom")
+  plantMovesTo       PlantMove[]           @relation("PlantMovesTo")
+  plantUsageLogs     PlantUsageLog[]
+  plantFuelIssues    PlantFuelIssue[]
+  plantBreakdowns    PlantBreakdown[]
+  plantServices      PlantService[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -704,6 +713,7 @@ model BqItem {
   costJournalLines  CostJournalLine[]
   pettyCashExpenses PettyCashExpense[]
   inspections       Inspection[]
+  plantUsageLogs    PlantUsageLog[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, versionId, lineageId])
@@ -1103,6 +1113,7 @@ model Supplier {
   costEntries       CostEntry[]
   costJournalLines  CostJournalLine[]
   pettyCashExpenses PettyCashExpense[]
+  plantItems        PlantItem[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1381,6 +1392,9 @@ model Labourer {
   safetyIncidentPersons SafetyIncidentPerson[]
   firstAiders           FirstAider[]
   firstAidTreatments    FirstAidTreatment[]
+  plantOperators        PlantOperator[]
+  plantUsageLogs        PlantUsageLog[]
+  plantFuelIssues       PlantFuelIssue[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, workerNo])
@@ -2650,6 +2664,7 @@ model Lpo {
   lines                LpoLine[]
   grns                 Grn[]
   invoices             SupplierInvoice[]
+  plantItems           PlantItem[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -3593,6 +3608,7 @@ model CostCode {
   costEntries       CostEntry[]
   journalLines      CostJournalLine[]
   pettyCashExpenses PettyCashExpense[]
+  plantUsageLogs    PlantUsageLog[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -4735,4 +4751,297 @@ model FirstAidTreatment {
   @@unique([tenantId, projectId, number])
   @@index([tenantId, projectId, treatedAt])
   @@map("first_aid_treatments")
+}
+
+// Plant and equipment company settings (D8.3): the fuel variance tolerance and minimum sample, the
+// idle-hire and hire-ending windows, the service warning and the operator certificate categories.
+model PlantSettings {
+  tenantId              String   @id @map("tenant_id") @db.Uuid
+  fuelVariancePercent   Int      @default(15) @map("fuel_variance_percent")
+  fuelMinHours          Int      @default(10) @map("fuel_min_hours")
+  fuelMinKm             Int      @default(100) @map("fuel_min_km")
+  idleHireDays          Int      @default(3) @map("idle_hire_days")
+  hireEndingDays        Int      @default(7) @map("hire_ending_days")
+  serviceDueSoonPercent Int      @default(10) @map("service_due_soon_percent")
+  certificateCategories String[] @map("certificate_categories") @db.VarChar(20)
+  version               Int      @default(1)
+  updatedBy             String   @map("updated_by") @db.Uuid
+  updatedAt             DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("plant_settings")
+}
+
+// A plant item in the company register (owned or hired). Its location is the last move's
+// destination (null = the yard); its status follows the location, open major/unsafe breakdowns
+// and closure (off hire / disposed, final).
+model PlantItem {
+  id                  String            @id @db.Uuid
+  tenantId            String            @map("tenant_id") @db.Uuid
+  code                String            @db.VarChar(20)
+  name                String            @db.VarChar(120)
+  category            String            @db.VarChar(20)
+  ownership           String            @db.VarChar(6)
+  quantity            Int               @default(1)
+  makeModel           String?           @map("make_model") @db.VarChar(120)
+  registration        String?           @db.VarChar(30)
+  supplierId          String?           @map("supplier_id") @db.Uuid
+  lpoId               String?           @map("lpo_id") @db.Uuid
+  hireRateMinor       BigInt?           @map("hire_rate_minor")
+  hireRateUnit        String?           @map("hire_rate_unit") @db.VarChar(5)
+  hireStartOn         DateTime?         @map("hire_start_on") @db.Date
+  hireEndOn           DateTime?         @map("hire_end_on") @db.Date
+  meterType           String            @map("meter_type") @db.VarChar(5)
+  fuelType            String            @map("fuel_type") @db.VarChar(6)
+  standardConsumption Decimal?          @map("standard_consumption") @db.Decimal(5, 2)
+  openingOn           DateTime          @map("opening_on") @db.Date
+  openingReading      Decimal?          @map("opening_reading") @db.Decimal(8, 1)
+  serviceEvery        Decimal?          @map("service_every") @db.Decimal(6, 1)
+  serviceEveryDays    Int?              @map("service_every_days")
+  status              String            @default("available") @db.VarChar(12)
+  statusReason        String?           @map("status_reason") @db.VarChar(500)
+  closedOn            DateTime?         @map("closed_on") @db.Date
+  projectId           String?           @map("project_id") @db.Uuid
+  siteId              String?           @map("site_id") @db.Uuid
+  notes               String?           @db.VarChar(1000)
+  version             Int               @default(1)
+  createdBy           String            @map("created_by") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy           String            @map("updated_by") @db.Uuid
+  updatedAt           DateTime          @default(now()) @map("updated_at") @db.Timestamptz
+  supplier            Supplier?         @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  lpo                 Lpo?              @relation(fields: [tenantId, lpoId], references: [tenantId, id], onDelete: Restrict)
+  site                Site?             @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  moves               PlantMove[]
+  operators           PlantOperator[]
+  resets              PlantMeterReset[]
+  usageLogs           PlantUsageLog[]
+  fuelIssues          PlantFuelIssue[]
+  breakdowns          PlantBreakdown[]
+  services            PlantService[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, projectId, siteId])
+  @@index([tenantId, supplierId])
+  @@index([tenantId, lpoId])
+  @@map("plant_items")
+}
+
+// A move of a plant item between the yard and project sites (append-only, numbered per item).
+model PlantMove {
+  id            String    @id @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  plantId       String    @map("plant_id") @db.Uuid
+  seq           Int
+  movedOn       DateTime  @map("moved_on") @db.Date
+  fromProjectId String?   @map("from_project_id") @db.Uuid
+  fromSiteId    String?   @map("from_site_id") @db.Uuid
+  toProjectId   String?   @map("to_project_id") @db.Uuid
+  toSiteId      String?   @map("to_site_id") @db.Uuid
+  reason        String?   @db.VarChar(500)
+  movedBy       String    @map("moved_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  plant         PlantItem @relation(fields: [tenantId, plantId], references: [tenantId, id], onDelete: Restrict)
+  fromSite      Site?     @relation("PlantMovesFrom", fields: [tenantId, fromProjectId, fromSiteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  toSite        Site?     @relation("PlantMovesTo", fields: [tenantId, toProjectId, toSiteId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, plantId, seq])
+  @@index([tenantId, toProjectId, toSiteId])
+  @@index([tenantId, fromProjectId, fromSiteId])
+  @@map("plant_moves")
+}
+
+// An operator assigned to a plant item on a project for a period: a labourer engaged on the
+// project or a staff member, with the certificate the category may need (CR-PLT-01).
+model PlantOperator {
+  id                   String    @id @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  plantId              String    @map("plant_id") @db.Uuid
+  projectId            String    @map("project_id") @db.Uuid
+  kind                 String    @db.VarChar(8)
+  labourerId           String?   @map("labourer_id") @db.Uuid
+  userId               String?   @map("user_id") @db.Uuid
+  fromOn               DateTime  @map("from_on") @db.Date
+  toOn                 DateTime? @map("to_on") @db.Date
+  certificateRef       String?   @map("certificate_ref") @db.VarChar(60)
+  certificateExpiresOn DateTime? @map("certificate_expires_on") @db.Date
+  assignedBy           String    @map("assigned_by") @db.Uuid
+  assignedAt           DateTime  @default(now()) @map("assigned_at") @db.Timestamptz
+  endedBy              String?   @map("ended_by") @db.Uuid
+  endedAt              DateTime? @map("ended_at") @db.Timestamptz
+  version              Int       @default(1)
+  plant                PlantItem @relation(fields: [tenantId, plantId], references: [tenantId, id], onDelete: Restrict)
+  project              Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  labourer             Labourer? @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, plantId])
+  @@index([tenantId, projectId])
+  @@index([tenantId, labourerId])
+  @@map("plant_operators")
+}
+
+// A recorded meter replacement or reset: a new epoch of readings starts at `reset_at`.
+model PlantMeterReset {
+  id         String    @id @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  plantId    String    @map("plant_id") @db.Uuid
+  resetAt    DateTime  @map("reset_at") @db.Timestamptz
+  oldReading Decimal   @map("old_reading") @db.Decimal(8, 1)
+  newReading Decimal   @map("new_reading") @db.Decimal(8, 1)
+  reason     String    @db.VarChar(16)
+  note       String    @db.VarChar(500)
+  recordedBy String    @map("recorded_by") @db.Uuid
+  recordedAt DateTime  @default(now()) @map("recorded_at") @db.Timestamptz
+  plant      PlantItem @relation(fields: [tenantId, plantId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, plantId, resetAt])
+  @@map("plant_meter_resets")
+}
+
+// A day's usage of a plant item at a site (append-only; a correction or void is a new row naming
+// the row it replaces, once). Offline-ready: client ID + Idempotency-Key + request digest.
+model PlantUsageLog {
+  id                 String          @id @db.Uuid
+  tenantId           String          @map("tenant_id") @db.Uuid
+  plantId            String          @map("plant_id") @db.Uuid
+  projectId          String          @map("project_id") @db.Uuid
+  siteId             String          @map("site_id") @db.Uuid
+  usedOn             DateTime        @map("used_on") @db.Date
+  dayStatus          String          @map("day_status") @db.VarChar(10)
+  startReading       Decimal?        @map("start_reading") @db.Decimal(8, 1)
+  endReading         Decimal?        @map("end_reading") @db.Decimal(8, 1)
+  operatorLabourerId String?         @map("operator_labourer_id") @db.Uuid
+  operatorUserId     String?         @map("operator_user_id") @db.Uuid
+  bqVersionId        String?         @map("bq_version_id") @db.Uuid
+  bqItemLineageId    String?         @map("bq_item_lineage_id") @db.Uuid
+  costCodeId         String?         @map("cost_code_id") @db.Uuid
+  notes              String?         @db.VarChar(500)
+  correctsId         String?         @map("corrects_id") @db.Uuid
+  correctionReason   String?         @map("correction_reason") @db.VarChar(500)
+  isVoid             Boolean         @default(false) @map("is_void")
+  idempotencyKey     String          @map("idempotency_key") @db.VarChar(100)
+  requestDigest      String          @map("request_digest") @db.Char(64)
+  capturedAt         DateTime        @map("captured_at") @db.Timestamptz
+  recordedBy         String          @map("recorded_by") @db.Uuid
+  recordedAt         DateTime        @default(now()) @map("recorded_at") @db.Timestamptz
+  plant              PlantItem       @relation(fields: [tenantId, plantId], references: [tenantId, id], onDelete: Restrict)
+  site               Site            @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  operatorLabourer   Labourer?       @relation(fields: [tenantId, operatorLabourerId], references: [tenantId, id], onDelete: Restrict)
+  bqItem             BqItem?         @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  costCode           CostCode?       @relation(fields: [tenantId, costCodeId], references: [tenantId, id], onDelete: Restrict)
+  corrects           PlantUsageLog?  @relation("PlantUsageCorrections", fields: [tenantId, correctsId], references: [tenantId, id], onDelete: Restrict)
+  correctedBy        PlantUsageLog[] @relation("PlantUsageCorrections")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, idempotencyKey])
+  @@unique([tenantId, correctsId])
+  @@index([tenantId, plantId, usedOn])
+  @@index([tenantId, projectId, usedOn])
+  @@map("plant_usage_logs")
+}
+
+// Fuel issued to a plant item at a site with the meter reading at fuelling (append-only like usage;
+// the standard consumption in force is copied on). No stores or cost-ledger posting (D-93).
+model PlantFuelIssue {
+  id                   String           @id @db.Uuid
+  tenantId             String           @map("tenant_id") @db.Uuid
+  plantId              String           @map("plant_id") @db.Uuid
+  projectId            String           @map("project_id") @db.Uuid
+  siteId               String           @map("site_id") @db.Uuid
+  issuedAt             DateTime         @map("issued_at") @db.Timestamptz
+  litres               Decimal          @db.Decimal(5, 1)
+  meterReading         Decimal?         @map("meter_reading") @db.Decimal(8, 1)
+  tankFilled           Boolean          @map("tank_filled")
+  fuelType             String           @map("fuel_type") @db.VarChar(6)
+  standardConsumption  Decimal?         @map("standard_consumption") @db.Decimal(5, 2)
+  source               String           @db.VarChar(12)
+  reference            String?          @db.VarChar(60)
+  receivedByLabourerId String?          @map("received_by_labourer_id") @db.Uuid
+  receivedByUserId     String?          @map("received_by_user_id") @db.Uuid
+  notes                String?          @db.VarChar(500)
+  correctsId           String?          @map("corrects_id") @db.Uuid
+  correctionReason     String?          @map("correction_reason") @db.VarChar(500)
+  isVoid               Boolean          @default(false) @map("is_void")
+  idempotencyKey       String           @map("idempotency_key") @db.VarChar(100)
+  requestDigest        String           @map("request_digest") @db.Char(64)
+  capturedAt           DateTime         @map("captured_at") @db.Timestamptz
+  recordedBy           String           @map("recorded_by") @db.Uuid
+  recordedAt           DateTime         @default(now()) @map("recorded_at") @db.Timestamptz
+  plant                PlantItem        @relation(fields: [tenantId, plantId], references: [tenantId, id], onDelete: Restrict)
+  site                 Site             @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  receivedByLabourer   Labourer?        @relation(fields: [tenantId, receivedByLabourerId], references: [tenantId, id], onDelete: Restrict)
+  corrects             PlantFuelIssue?  @relation("PlantFuelCorrections", fields: [tenantId, correctsId], references: [tenantId, id], onDelete: Restrict)
+  correctedBy          PlantFuelIssue[] @relation("PlantFuelCorrections")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, idempotencyKey])
+  @@unique([tenantId, correctsId])
+  @@index([tenantId, plantId, issuedAt])
+  @@index([tenantId, projectId, issuedAt])
+  @@map("plant_fuel_issues")
+}
+
+// A breakdown (BRK-NNNN per company) reported at a site: open → repaired | off_hire (hired) |
+// written_off (owned). Major and unsafe breakdowns put the item under repair.
+model PlantBreakdown {
+  id             String    @id @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  plantId        String    @map("plant_id") @db.Uuid
+  projectId      String    @map("project_id") @db.Uuid
+  siteId         String    @map("site_id") @db.Uuid
+  number         Int
+  reportedAt     DateTime  @map("reported_at") @db.Timestamptz
+  severity       String    @db.VarChar(8)
+  description    String    @db.VarChar(1000)
+  status         String    @default("open") @db.VarChar(12)
+  reportedBy     String    @map("reported_by") @db.Uuid
+  recordedAt     DateTime  @default(now()) @map("recorded_at") @db.Timestamptz
+  resolvedOn     DateTime? @map("resolved_on") @db.Date
+  resolutionNote String?   @map("resolution_note") @db.VarChar(500)
+  repairedBy     String?   @map("repaired_by") @db.VarChar(120)
+  costReference  String?   @map("cost_reference") @db.VarChar(60)
+  resolvedBy     String?   @map("resolved_by") @db.Uuid
+  resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz
+  version        Int       @default(1)
+  plant          PlantItem @relation(fields: [tenantId, plantId], references: [tenantId, id], onDelete: Restrict)
+  site           Site      @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, number])
+  @@index([tenantId, plantId, status])
+  @@index([tenantId, projectId, status])
+  @@map("plant_breakdowns")
+}
+
+// A service, repair or inspection record (append-only; voided with a reason). A service restarts
+// the maintenance interval.
+model PlantService {
+  id            String    @id @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  plantId       String    @map("plant_id") @db.Uuid
+  projectId     String?   @map("project_id") @db.Uuid
+  siteId        String?   @map("site_id") @db.Uuid
+  servicedAt    DateTime  @map("serviced_at") @db.Timestamptz
+  kind          String    @db.VarChar(10)
+  meterReading  Decimal?  @map("meter_reading") @db.Decimal(8, 1)
+  description   String    @db.VarChar(500)
+  doneBy        String?   @map("done_by") @db.VarChar(120)
+  costReference String?   @map("cost_reference") @db.VarChar(60)
+  status        String    @default("recorded") @db.VarChar(10)
+  recordedBy    String    @map("recorded_by") @db.Uuid
+  recordedAt    DateTime  @default(now()) @map("recorded_at") @db.Timestamptz
+  voidedBy      String?   @map("voided_by") @db.Uuid
+  voidedAt      DateTime? @map("voided_at") @db.Timestamptz
+  voidReason    String?   @map("void_reason") @db.VarChar(500)
+  version       Int       @default(1)
+  plant         PlantItem @relation(fields: [tenantId, plantId], references: [tenantId, id], onDelete: Restrict)
+  site          Site?     @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, plantId, servicedAt])
+  @@map("plant_services")
 }

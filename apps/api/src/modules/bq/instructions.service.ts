@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Request } from "express";
-import { isProjectReadOnly } from "@pm-buddy/domain";
-import type { ProjectStatus } from "@pm-buddy/types";
+import { isInstructionOpen, isProjectReadOnly, nairobiDate } from "@pm-buddy/domain";
+import type {
+  InstructionIssuerRole,
+  InstructionKind,
+  InstructionLifecycleStatus,
+  ProjectStatus,
+} from "@pm-buddy/types";
 import {
   instructionResponseSchema,
   instructionsResponseSchema,
@@ -15,7 +20,7 @@ import type { Prisma } from "../../generated/prisma/client.js";
 import type { Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
-import { BqAccess, bqConflict, recordConflict } from "./bq-access.js";
+import { BqAccess, bqConflict, bqProblem, recordConflict } from "./bq-access.js";
 import { peopleOf, personOf, type People } from "./bq-mappers.js";
 
 type InstructionRow = Prisma.InstructionGetPayload<object>;
@@ -23,6 +28,21 @@ type Counts = { total: number; approved: number; pending: number };
 
 const calendar = (value: string) => new Date(`${value}T00:00:00.000Z`);
 const calendarText = (value: Date) => value.toISOString().slice(0, 10);
+
+/** The log's kind from the issuer's role (D8.4 adds the kind; the BQ register does not ask). */
+const kindOf = (role: InstructionIssuerRole): InstructionKind =>
+  role === "architect"
+    ? "architect_instruction"
+    : role === "engineer"
+      ? "engineer_instruction"
+      : "other";
+
+/** The BQ register's two-state view of the D8.4 lifecycle: open until closed. */
+const registerStatus = (status: string): Instruction["status"] =>
+  isInstructionOpen(status as InstructionLifecycleStatus) ? "open" : "closed";
+
+const futureIssue = () =>
+  bqProblem(422, "invalid-transition", "An instruction cannot be issued in the future");
 
 /** Field names (never values) for audit summaries. */
 const changedFields = (input: object) =>
@@ -41,7 +61,7 @@ function toInstruction(row: InstructionRow, people: People, counts: Counts): Ins
     subject: row.subject,
     description: row.description,
     attachments: row.attachments as Instruction["attachments"],
-    status: row.status as Instruction["status"],
+    status: registerStatus(row.status),
     variations: counts,
     createdBy: personOf(people, row.createdBy),
     createdAt: row.createdAt.toISOString(),
@@ -114,7 +134,11 @@ export class InstructionsService {
         where: {
           tenantId: scope.access.tenantId,
           projectId,
-          ...(query.status ? { status: query.status } : {}),
+          ...(query.status === "open"
+            ? { status: { not: "closed" } }
+            : query.status === "closed"
+              ? { status: "closed" }
+              : {}),
         },
         orderBy: [{ issuedOn: "desc" }, { number: "desc" }],
       });
@@ -144,6 +168,7 @@ export class InstructionsService {
         async (scope) => {
           const { tx, access } = scope;
           await this.access.editable(scope, projectId);
+          if (input.issuedOn > nairobiDate()) throw futureIssue();
           const row = await tx.instruction.create({
             data: {
               id: uuidv7(),
@@ -151,6 +176,8 @@ export class InstructionsService {
               projectId,
               number: input.number,
               issuedOn: calendar(input.issuedOn),
+              receivedOn: calendar(input.issuedOn),
+              kind: kindOf(input.issuerRole),
               issuerName: input.issuerName,
               issuerRole: input.issuerRole,
               subject: input.subject,
@@ -198,19 +225,55 @@ export class InstructionsService {
           const row = await InstructionsService.row(scope, projectId, instructionId);
           if (row.version !== input.version) throw recordConflict();
           const { version, ...fields } = input;
+          const wasOpen = isInstructionOpen(row.status as InstructionLifecycleStatus);
+          const closing = fields.status === "closed" && wasOpen;
+          const reopening = fields.status === "open" && !wasOpen;
+          const edits = Object.entries(fields).some(
+            ([key, value]) => key !== "status" && value !== undefined,
+          );
+          // The log (D8.4) locks a closed instruction: reopen first, then change it.
+          if (!wasOpen && edits)
+            throw bqConflict(
+              "instruction-closed",
+              "A closed instruction is locked; reopen it first",
+            );
+          if (fields.issuedOn !== undefined && fields.issuedOn > nairobiDate()) throw futureIssue();
           const data: Prisma.InstructionUpdateManyMutationInput = {
             version: { increment: 1 },
             updatedBy: access.userId,
             updatedAt: new Date(),
           };
           if (fields.number !== undefined) data.number = fields.number;
-          if (fields.issuedOn !== undefined) data.issuedOn = calendar(fields.issuedOn);
+          if (fields.issuedOn !== undefined) {
+            data.issuedOn = calendar(fields.issuedOn);
+            // The date received is never before the date issued.
+            if (!row.receivedOn || calendarText(row.receivedOn) < fields.issuedOn)
+              data.receivedOn = calendar(fields.issuedOn);
+          }
           if (fields.issuerName !== undefined) data.issuerName = fields.issuerName;
           if (fields.issuerRole !== undefined) data.issuerRole = fields.issuerRole;
           if (fields.subject !== undefined) data.subject = fields.subject;
           if (fields.description !== undefined) data.description = fields.description;
           if (fields.attachments !== undefined) data.attachments = fields.attachments;
-          if (fields.status !== undefined) data.status = fields.status;
+          if (closing || reopening) {
+            // The status moves only through the log's append-only responses (D-115).
+            const to: InstructionLifecycleStatus = closing ? "closed" : "received";
+            await tx.instructionResponse.create({
+              data: {
+                id: uuidv7(),
+                tenantId: access.tenantId,
+                instructionId,
+                kind: closing ? "close" : "reopen",
+                body: closing
+                  ? "Closed in the BQ instruction register"
+                  : "Reopened in the BQ instruction register",
+                fromStatus: row.status,
+                toStatus: to,
+                recordedBy: access.userId,
+              },
+            });
+            data.status = to;
+          }
           const updated = await tx.instruction.updateMany({
             where: { tenantId: access.tenantId, id: instructionId, version },
             data,
@@ -219,8 +282,8 @@ export class InstructionsService {
           await this.scope.audit(tx, "instruction.updated", instructionId, {
             projectId,
             fields: changedFields(fields),
-            ...(fields.status !== undefined && fields.status !== row.status
-              ? { from: row.status, to: fields.status }
+            ...(closing || reopening
+              ? { from: registerStatus(row.status), to: fields.status }
               : {}),
           });
           const after = await InstructionsService.row(scope, projectId, instructionId);

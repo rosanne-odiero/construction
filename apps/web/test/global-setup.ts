@@ -100,6 +100,14 @@ const ROUTES = [
   "/spending/journals",
   "/spending/journals/00000000-0000-4000-8000-000000000000",
   "/spending/settings",
+  "/valuations",
+  "/valuations/approvals",
+  "/valuations/projects/30000000-0000-4000-8000-000000000001",
+  "/valuations/projects/30000000-0000-4000-8000-000000000001?tab=retention",
+  "/valuations/projects/30000000-0000-4000-8000-000000000001?tab=earned-value",
+  "/valuations/projects/30000000-0000-4000-8000-000000000001/measure",
+  "/valuations/projects/30000000-0000-4000-8000-000000000001/measurements/77300000-0000-4000-8000-000000000003",
+  "/valuations/77200000-0000-4000-8000-000000000001",
 ];
 
 export default async function warmUp(config: FullConfig) {

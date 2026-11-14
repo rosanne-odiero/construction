@@ -282,6 +282,9 @@ model Project {
   completions       ProjectCompletion[]
   correctiveActions CorrectiveAction[]
 
+  contractSettings ContractSettings[]
+  valuations       Valuation[]
+
   @@unique([tenantId, id])
   @@unique([tenantId, code])
   @@index([tenantId, status])
@@ -606,6 +609,7 @@ model BqVersion {
   rateLinks       BqItemRateLink[]
   measurements    ProgressMeasurement[]
   budgets         Budget[]
+  valuations      Valuation[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, bqId, versionNo])
@@ -704,6 +708,8 @@ model BqItem {
   costJournalLines  CostJournalLine[]
   pettyCashExpenses PettyCashExpense[]
   inspections       Inspection[]
+  valuationLines    ValuationLine[]
+  valuationMaterial ValuationMaterial[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, versionId, lineageId])
@@ -2370,38 +2376,39 @@ model PayrollDayClaim {
 // at capture; `verified` = location inside and time ok. Originals and metadata-free thumbnails
 // are private objects under tenant/project/photo keys.
 model SitePhoto {
-  id                   String                @id @db.Uuid
-  tenantId             String                @map("tenant_id") @db.Uuid
-  projectId            String                @map("project_id") @db.Uuid
-  siteId               String                @map("site_id") @db.Uuid
-  diaryId              String?               @map("diary_id") @db.Uuid
-  caption              String?               @db.VarChar(500)
-  purpose              String                @default("general") @db.VarChar(20)
-  objectKey            String                @map("object_key") @db.VarChar(300)
-  thumbnailKey         String                @map("thumbnail_key") @db.VarChar(300)
-  fileSha256           String                @map("file_sha256") @db.Char(64)
-  sizeBytes            Int                   @map("size_bytes")
+  id                   String                     @id @db.Uuid
+  tenantId             String                     @map("tenant_id") @db.Uuid
+  projectId            String                     @map("project_id") @db.Uuid
+  siteId               String                     @map("site_id") @db.Uuid
+  diaryId              String?                    @map("diary_id") @db.Uuid
+  caption              String?                    @db.VarChar(500)
+  purpose              String                     @default("general") @db.VarChar(20)
+  objectKey            String                     @map("object_key") @db.VarChar(300)
+  thumbnailKey         String                     @map("thumbnail_key") @db.VarChar(300)
+  fileSha256           String                     @map("file_sha256") @db.Char(64)
+  sizeBytes            Int                        @map("size_bytes")
   width                Int
   height               Int
-  scanStatus           String                @map("scan_status") @db.VarChar(20)
-  scanEngine           String                @map("scan_engine") @db.VarChar(60)
-  scannedAt            DateTime              @map("scanned_at") @db.Timestamptz
-  capturedAt           DateTime?             @map("captured_at") @db.Timestamptz
-  timeSource           String?               @map("time_source") @db.VarChar(20)
-  latitude             Decimal?              @db.Decimal(9, 6)
-  longitude            Decimal?              @db.Decimal(9, 6)
-  camera               String?               @db.VarChar(120)
-  geofenceVersion      Int?                  @map("geofence_version")
-  locationCheck        String                @map("location_check") @db.VarChar(12)
-  timeCheck            String                @map("time_check") @db.VarChar(16)
-  distanceM            Decimal?              @map("distance_m") @db.Decimal(10, 1)
+  scanStatus           String                     @map("scan_status") @db.VarChar(20)
+  scanEngine           String                     @map("scan_engine") @db.VarChar(60)
+  scannedAt            DateTime                   @map("scanned_at") @db.Timestamptz
+  capturedAt           DateTime?                  @map("captured_at") @db.Timestamptz
+  timeSource           String?                    @map("time_source") @db.VarChar(20)
+  latitude             Decimal?                   @db.Decimal(9, 6)
+  longitude            Decimal?                   @db.Decimal(9, 6)
+  camera               String?                    @db.VarChar(120)
+  geofenceVersion      Int?                       @map("geofence_version")
+  locationCheck        String                     @map("location_check") @db.VarChar(12)
+  timeCheck            String                     @map("time_check") @db.VarChar(16)
+  distanceM            Decimal?                   @map("distance_m") @db.Decimal(10, 1)
   verified             Boolean
-  uploadedBy           String                @map("uploaded_by") @db.Uuid
-  uploadedAt           DateTime              @default(now()) @map("uploaded_at") @db.Timestamptz
-  site                 Site                  @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_site_fkey")
-  diary                SiteDiary?            @relation(fields: [tenantId, siteId, diaryId], references: [tenantId, siteId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_diary_fkey")
+  uploadedBy           String                     @map("uploaded_by") @db.Uuid
+  uploadedAt           DateTime                   @default(now()) @map("uploaded_at") @db.Timestamptz
+  site                 Site                       @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_site_fkey")
+  diary                SiteDiary?                 @relation(fields: [tenantId, siteId, diaryId], references: [tenantId, siteId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_diary_fkey")
   inspectionItems      InspectionItemPhoto[]
   snags                SnagPhoto[]
+  measurements         ProgressMeasurementPhoto[]
   toolboxTalks         ToolboxTalk[]
   safetyIncidentPhotos SafetyIncidentPhoto[]
 
@@ -3318,30 +3325,247 @@ model StockReorderLevel {
 // submission, approval, photos and valuations): quantity completed to date of a BQ item lineage,
 // append-only; a correction is a new row naming the one it corrects.
 model ProgressMeasurement {
-  id               String               @id @default(uuid(7)) @db.Uuid
-  tenantId         String               @map("tenant_id") @db.Uuid
-  projectId        String               @map("project_id") @db.Uuid
-  bqId             String               @map("bq_id") @db.Uuid
-  versionId        String               @map("version_id") @db.Uuid
-  itemLineageId    String               @map("item_lineage_id") @db.Uuid
-  measuredOn       DateTime             @map("measured_on") @db.Date
-  quantityToDate   Decimal              @map("quantity_to_date") @db.Decimal(20, 4)
-  status           String               @default("recorded") @db.VarChar(12)
-  note             String?              @db.VarChar(500)
-  correctsId       String?              @map("corrects_id") @db.Uuid
-  correctionReason String?              @map("correction_reason") @db.VarChar(500)
-  measuredBy       String               @map("measured_by") @db.Uuid
-  recordedAt       DateTime             @default(now()) @map("recorded_at") @db.Timestamptz
-  bq               Bq                   @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Restrict)
-  version          BqVersion            @relation(fields: [tenantId, bqId, versionId], references: [tenantId, bqId, id], onDelete: Restrict)
-  item             BqItem               @relation(fields: [tenantId, versionId, itemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
-  corrects         ProgressMeasurement? @relation("MeasurementCorrection", fields: [tenantId, correctsId], references: [tenantId, id], onDelete: Restrict)
-  correctedBy      ProgressMeasurement? @relation("MeasurementCorrection")
+  id                String                     @id @default(uuid(7)) @db.Uuid
+  tenantId          String                     @map("tenant_id") @db.Uuid
+  projectId         String                     @map("project_id") @db.Uuid
+  bqId              String                     @map("bq_id") @db.Uuid
+  versionId         String                     @map("version_id") @db.Uuid
+  itemLineageId     String                     @map("item_lineage_id") @db.Uuid
+  measuredOn        DateTime                   @map("measured_on") @db.Date
+  quantityToDate    Decimal                    @map("quantity_to_date") @db.Decimal(20, 4)
+  status            String                     @default("recorded") @db.VarChar(12)
+  note              String?                    @db.VarChar(500)
+  correctsId        String?                    @map("corrects_id") @db.Uuid
+  correctionReason  String?                    @map("correction_reason") @db.VarChar(500)
+  measuredBy        String                     @map("measured_by") @db.Uuid
+  recordedAt        DateTime                   @default(now()) @map("recorded_at") @db.Timestamptz
+  // D6.3: quantity or percent (null on D5.3 rows), the reason for an over-measure, and the
+  // offline contract (Idempotency-Key with the request digest).
+  basis             String?                    @db.VarChar(10)
+  overMeasureReason String?                    @map("over_measure_reason") @db.VarChar(500)
+  idempotencyKey    String?                    @map("idempotency_key") @db.VarChar(100)
+  requestDigest     String?                    @map("request_digest") @db.Char(64)
+  bq                Bq                         @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Restrict)
+  version           BqVersion                  @relation(fields: [tenantId, bqId, versionId], references: [tenantId, bqId, id], onDelete: Restrict)
+  item              BqItem                     @relation(fields: [tenantId, versionId, itemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  corrects          ProgressMeasurement?       @relation("MeasurementCorrection", fields: [tenantId, correctsId], references: [tenantId, id], onDelete: Restrict)
+  correctedBy       ProgressMeasurement?       @relation("MeasurementCorrection")
+  photos            ProgressMeasurementPhoto[]
+  review            ProgressMeasurementReview?
+  valuationLines    ValuationLine[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
   @@unique([tenantId, correctsId])
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId, projectId, itemLineageId, measuredOn])
   @@map("progress_measurements")
+}
+
+// D6.3: site photos given as evidence of a measurement; added while it waits for review, never
+// removed (append-only).
+model ProgressMeasurementPhoto {
+  tenantId      String              @map("tenant_id") @db.Uuid
+  projectId     String              @map("project_id") @db.Uuid
+  measurementId String              @map("measurement_id") @db.Uuid
+  photoId       String              @map("photo_id") @db.Uuid
+  addedBy       String              @map("added_by") @db.Uuid
+  addedAt       DateTime            @default(now()) @map("added_at") @db.Timestamptz
+  measurement   ProgressMeasurement @relation(fields: [tenantId, projectId, measurementId], references: [tenantId, projectId, id], onDelete: Restrict)
+  photo         SitePhoto           @relation(fields: [tenantId, projectId, photoId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@id([tenantId, measurementId, photoId])
+  @@index([tenantId, projectId, photoId])
+  @@map("progress_measurement_photos")
+}
+
+// D6.3: the independent review of a measurement (one per measurement, append-only).
+model ProgressMeasurementReview {
+  id            String              @id @default(uuid(7)) @db.Uuid
+  tenantId      String              @map("tenant_id") @db.Uuid
+  projectId     String              @map("project_id") @db.Uuid
+  measurementId String              @map("measurement_id") @db.Uuid
+  decision      String              @db.VarChar(10)
+  reason        String?             @db.VarChar(500)
+  decidedBy     String              @map("decided_by") @db.Uuid
+  decidedAt     DateTime            @default(now()) @map("decided_at") @db.Timestamptz
+  measurement   ProgressMeasurement @relation(fields: [tenantId, projectId, measurementId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, measurementId])
+  @@index([tenantId, projectId, decidedAt])
+  @@map("progress_measurement_reviews")
+}
+
+// D6.3: retention, VAT and materials-on-site terms of a project's contract; append-only versions,
+// the newest in force; certificates store the version and the values they used.
+model ContractSettings {
+  tenantId                String   @map("tenant_id") @db.Uuid
+  projectId               String   @map("project_id") @db.Uuid
+  version                 Int
+  retentionPercent        Decimal  @map("retention_percent") @db.Decimal(5, 2)
+  retentionCapPercent     Decimal? @map("retention_cap_percent") @db.Decimal(5, 2)
+  vatPercent              Decimal  @map("vat_percent") @db.Decimal(5, 2)
+  materialsPercent        Decimal  @map("materials_percent") @db.Decimal(5, 2)
+  practicalReleasePercent Decimal  @map("practical_release_percent") @db.Decimal(5, 2)
+  createdBy               String   @map("created_by") @db.Uuid
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz
+  project                 Project  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, projectId, version])
+  @@map("contract_settings")
+}
+
+// D6.3: an interim valuation and its payment certificate (or a retention release). Figures are
+// frozen at submission and never change once certified (database-enforced).
+model Valuation {
+  id                       String                @id @default(uuid(7)) @db.Uuid
+  tenantId                 String                @map("tenant_id") @db.Uuid
+  projectId                String                @map("project_id") @db.Uuid
+  number                   Int
+  certificateNumber        Int?                  @map("certificate_number")
+  kind                     String                @db.VarChar(20)
+  releaseStage             String?               @map("release_stage") @db.VarChar(10)
+  status                   String                @default("draft") @db.VarChar(10)
+  valuationDate            DateTime              @map("valuation_date") @db.Date
+  notes                    String?               @db.VarChar(1000)
+  materialsFromStores      Boolean               @default(false) @map("materials_from_stores")
+  revision                 Int                   @default(0)
+  bqVersionId              String?               @map("bq_version_id") @db.Uuid
+  settingsVersion          Int?                  @map("settings_version")
+  ruleVersion              String?               @map("rule_version") @db.VarChar(20)
+  retentionPercent         Decimal?              @map("retention_percent") @db.Decimal(5, 2)
+  retentionCapPercent      Decimal?              @map("retention_cap_percent") @db.Decimal(5, 2)
+  vatPercent               Decimal?              @map("vat_percent") @db.Decimal(5, 2)
+  materialsPercent         Decimal?              @map("materials_percent") @db.Decimal(5, 2)
+  practicalReleasePercent  Decimal?              @map("practical_release_percent") @db.Decimal(5, 2)
+  originalContractSumMinor BigInt?               @map("original_contract_sum_minor")
+  revisedContractSumMinor  BigInt?               @map("revised_contract_sum_minor")
+  workDoneMinor            BigInt?               @map("work_done_minor")
+  materialsGrossMinor      BigInt?               @map("materials_gross_minor")
+  materialsMinor           BigInt?               @map("materials_minor")
+  grossMinor               BigInt?               @map("gross_minor")
+  retentionStage           String?               @map("retention_stage") @db.VarChar(10)
+  retentionCapMinor        BigInt?               @map("retention_cap_minor")
+  retentionComputedMinor   BigInt?               @map("retention_computed_minor")
+  retentionHeldMinor       BigInt?               @map("retention_held_minor")
+  adjustmentsMinor         BigInt?               @map("adjustments_minor")
+  adjustmentsToDateMinor   BigInt?               @map("adjustments_to_date_minor")
+  netToDateMinor           BigInt?               @map("net_to_date_minor")
+  previousCertifiedMinor   BigInt?               @map("previous_certified_minor")
+  amountDueMinor           BigInt?               @map("amount_due_minor")
+  vatMinor                 BigInt?               @map("vat_minor")
+  totalMinor               BigInt?               @map("total_minor")
+  lineCount                Int                   @default(0) @map("line_count")
+  digest                   String?               @db.Char(64)
+  contributors             String[]              @default([]) @db.Uuid
+  createdBy                String                @map("created_by") @db.Uuid
+  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy                String                @map("updated_by") @db.Uuid
+  updatedAt                DateTime              @default(now()) @map("updated_at") @db.Timestamptz
+  submittedBy              String?               @map("submitted_by") @db.Uuid
+  submittedAt              DateTime?             @map("submitted_at") @db.Timestamptz
+  certifiedBy              String?               @map("certified_by") @db.Uuid
+  certifiedAt              DateTime?             @map("certified_at") @db.Timestamptz
+  cancelledBy              String?               @map("cancelled_by") @db.Uuid
+  cancelledAt              DateTime?             @map("cancelled_at") @db.Timestamptz
+  cancelReason             String?               @map("cancel_reason") @db.VarChar(500)
+  returnReason             String?               @map("return_reason") @db.VarChar(500)
+  version                  Int                   @default(1)
+  project                  Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  bqVersion                BqVersion?            @relation(fields: [tenantId, bqVersionId], references: [tenantId, id], onDelete: Restrict)
+  lines                    ValuationLine[]
+  materials                ValuationMaterial[]
+  adjustments              ValuationAdjustment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@unique([tenantId, projectId, certificateNumber])
+  @@index([tenantId, projectId, status])
+  @@map("valuations")
+}
+
+// D6.3: the lines frozen with each submission (revision) of a valuation: items valued from
+// approved measurements, materials on site and agreed adjustments. Append-only.
+model ValuationLine {
+  tenantId        String               @map("tenant_id") @db.Uuid
+  valuationId     String               @map("valuation_id") @db.Uuid
+  revision        Int
+  lineNo          Int                  @map("line_no")
+  kind            String               @db.VarChar(12)
+  bqVersionId     String?              @map("bq_version_id") @db.Uuid
+  bqItemLineageId String?              @map("bq_item_lineage_id") @db.Uuid
+  billLineageId   String?              @map("bill_lineage_id") @db.Uuid
+  itemKind        String?              @map("item_kind") @db.VarChar(20)
+  ref             String?              @db.VarChar(30)
+  description     String               @db.VarChar(4000)
+  unit            String?              @db.VarChar(20)
+  basis           String?              @db.VarChar(10)
+  itemQuantity    Decimal?             @map("item_quantity") @db.Decimal(20, 4)
+  rate            Decimal?             @db.Decimal(20, 4)
+  itemAmountMinor BigInt?              @map("item_amount_minor")
+  measurementId   String?              @map("measurement_id") @db.Uuid
+  measuredOn      DateTime?            @map("measured_on") @db.Date
+  quantityToDate  Decimal?             @map("quantity_to_date") @db.Decimal(20, 4)
+  percentComplete String?              @map("percent_complete") @db.VarChar(20)
+  overMeasured    Boolean              @default(false) @map("over_measured")
+  previousMinor   BigInt               @default(0) @map("previous_minor")
+  amountMinor     BigInt               @map("amount_minor")
+  source          String?              @db.VarChar(10)
+  storeId         String?              @map("store_id") @db.Uuid
+  materialId      String?              @map("material_id") @db.Uuid
+  quantity        Decimal?             @db.Decimal(24, 6)
+  reference       String?              @db.VarChar(60)
+  adjustmentKind  String?              @map("adjustment_kind") @db.VarChar(20)
+  valuation       Valuation            @relation(fields: [tenantId, valuationId], references: [tenantId, id], onDelete: Restrict)
+  item            BqItem?              @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  measurement     ProgressMeasurement? @relation(fields: [tenantId, measurementId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, valuationId, revision, lineNo])
+  @@index([tenantId, measurementId])
+  @@map("valuation_lines")
+}
+
+// D6.3: materials on site entered against a BQ item while a valuation is a draft.
+model ValuationMaterial {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  projectId       String    @map("project_id") @db.Uuid
+  valuationId     String    @map("valuation_id") @db.Uuid
+  bqVersionId     String    @map("bq_version_id") @db.Uuid
+  bqItemLineageId String    @map("bq_item_lineage_id") @db.Uuid
+  description     String    @db.VarChar(200)
+  unit            String?   @db.VarChar(20)
+  quantity        Decimal   @db.Decimal(20, 4)
+  amountMinor     BigInt    @map("amount_minor")
+  reference       String?   @db.VarChar(60)
+  createdBy       String    @map("created_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  valuation       Valuation @relation(fields: [tenantId, projectId, valuationId], references: [tenantId, projectId, id], onDelete: Restrict)
+  item            BqItem    @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, valuationId])
+  @@map("valuation_materials")
+}
+
+// D6.3: agreed adjustments (advance, recovery, contra charge, other) entered on a draft.
+model ValuationAdjustment {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  valuationId String    @map("valuation_id") @db.Uuid
+  kind        String    @db.VarChar(20)
+  description String    @db.VarChar(200)
+  amountMinor BigInt    @map("amount_minor")
+  createdBy   String    @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  valuation   Valuation @relation(fields: [tenantId, projectId, valuationId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, valuationId])
+  @@map("valuation_adjustments")
 }
 
 // Maps a material line of an (immutable) build-up version to a catalogue material and the

@@ -34,6 +34,7 @@ import { seedQuality, type QualitySeedSummary } from "./quality-seed.js";
 import { seedSafety, type SafetySeedSummary } from "./safety-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
+import { seedValuations, type ValuationsSeedSummary } from "./demo-valuations.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -44,7 +45,10 @@ import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
  * and (D5.1) the starter catalogue with synthetic suppliers, prices and payout details
  * (demo-procurement.ts), and (D6.2) the RUI-HTS schedule with a baseline, slipped actuals and
  * delays (schedule-seed.ts), and (D5.4) an approved RUI-HTS budget, cost codes, a petty-cash float
- * with expenses, a count, a journal and forecast lines (demo-spending.ts). Idempotent: existing records are kept as they are. Never runs in
+ * with expenses, a count, a journal and forecast lines (demo-spending.ts), and (D6.3) approved
+ * measurements with photos, certified payment certificates on RUI-HTS and JUJ-DPX with a
+ * practical-completion retention release, and earned value inputs (demo-valuations.ts).
+ * Idempotent: existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
  */
@@ -404,6 +408,7 @@ export type SeedSummary = {
   schedule: ScheduleSeedSummary;
   spending: SpendingSeedSummary;
   quality: QualitySeedSummary;
+  valuations: ValuationsSeedSummary;
   safety: SafetySeedSummary;
 };
 
@@ -615,6 +620,14 @@ export async function seedDemo(
     siteAgentId: userOf("siteAgent").id,
   });
 
+  // After spending (budgets, the ledger) and quality (JUJ-DPX's certified practical completion).
+  const valuations = await seedValuations(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    financeId: userOf("finance").id,
+  });
+
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
     accounts: accounts.map(({ id: _id, key: _key, ...account }) => account),
@@ -629,6 +642,7 @@ export async function seedDemo(
     schedule,
     spending,
     quality,
+    valuations,
     safety,
   };
 }

@@ -100,6 +100,13 @@ function print(summary: SeedSummary) {
     `  ${quality.cubeSets} cube sets (${quality.failedCubeSets} failed at 28 days, ${quality.overdueCubeSets} overdue); ${quality.slumpTests} slump tests; ${quality.diaries} diaries with an attendance workforce`,
     `  JUJ-DPX practical completion ${quality.practicalCompletion ?? "not certified"}; defects liability period ends ${quality.dlpEndsOn ?? "—"}`,
   );
+  const { valuations } = summary;
+  lines.push(
+    "",
+    `Measurement and valuations (synthetic, ${valuations.created ? "created" : "already present"}): ${valuations.measurements.approved} approved and ${valuations.measurements.pending} pending measurements`,
+    `  certified: ${valuations.certificates.join(", ")}`,
+    `  retention held: ${valuations.retentionHeld.join("; ")}; RUI-HTS CPI ${valuations.earnedValue.cpi ?? "unavailable"}, SPI ${valuations.earnedValue.spi ?? "unavailable"}`,
+  );
   const { safety } = summary;
   lines.push(
     "",

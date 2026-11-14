@@ -1,4 +1,5 @@
 import {
+  MEASUREMENT_BASES,
   STOCK_ENTRY_KINDS,
   STOCK_MOVEMENT_KINDS,
   STOCK_MOVEMENT_STATUSES,
@@ -8,7 +9,6 @@ import {
   TRANSFER_STATUSES,
   VARIANCE_STATES,
   WASTAGE_REASONS,
-  MEASUREMENT_STATUSES,
 } from "@pm-buddy/types";
 import { z } from "zod";
 import { pageInfoSchema } from "./api.js";
@@ -18,7 +18,7 @@ import { positiveQuantitySchema, quantitySchema, unitCodeSchema } from "./procur
  * D5.3 stores contracts: stores per site, the append-only stock ledger and balances (base units,
  * weighted average value), issues to a BQ item or gang, returns, wastage, inter-site transfers,
  * stock takes with independent approval, reorder levels, theoretical-versus-actual consumption
- * variance, the minimal progress measurement and build-up line → material mappings. Movement,
+ * variance and build-up line → material mappings (progress measurements: valuations.ts). Movement,
  * transfer and count requests are offline-ready: the client chooses the record's ID and sends an
  * `Idempotency-Key`; a replay returns the original result. Requests are strict and never carry a
  * tenant, recorder, approver, cost or value the server computes. Quantities are decimal strings
@@ -85,6 +85,8 @@ export const storesBqItemSchema = z.strictObject({
   ref: z.string().nullable(),
   description: z.string(),
   unit: z.string().nullable(),
+  /** How the item is measured (D6.3): a quantity in its unit or percent complete; null: not measured. */
+  basis: z.enum(MEASUREMENT_BASES).nullable().optional(),
 });
 export type StoresBqItem = z.infer<typeof storesBqItemSchema>;
 const gangRef = z.strictObject({ id: uuid, name: z.string() });
@@ -708,51 +710,6 @@ export const varianceResponseSchema = z.strictObject({
   }),
 });
 export type VarianceResponse = z.infer<typeof varianceResponseSchema>;
-
-// Progress measurements (minimal; D6.3 extends) ---------------------------------------------
-
-export const createMeasurementRequestSchema = z
-  .strictObject({
-    bqItemLineageId: uuid,
-    measuredOn: calendarDate,
-    /** Quantity completed to date, in the BQ item's unit (up to four decimals). */
-    quantityToDate: z
-      .string()
-      .trim()
-      .regex(/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/, "invalid_quantity"),
-    note: optionalText(500, true).optional(),
-    correctsMeasurementId: uuid.nullable().default(null),
-    correctionReason: optionalText(500).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.correctsMeasurementId && !value.correctionReason)
-      ctx.addIssue({ code: "custom", path: ["correctionReason"], message: "required" });
-  });
-export type CreateMeasurementRequest = z.input<typeof createMeasurementRequestSchema>;
-export type ParsedMeasurementRequest = z.infer<typeof createMeasurementRequestSchema>;
-
-export const measurementSchema = z.strictObject({
-  id: uuid,
-  bqItem: storesBqItemSchema,
-  measuredOn: calendarDate,
-  quantityToDate: z.string(),
-  status: z.enum(MEASUREMENT_STATUSES),
-  note: z.string().nullable(),
-  measuredBy: person,
-  recordedAt: timestamp,
-  correctsMeasurementId: uuid.nullable(),
-  correctionReason: z.string().nullable(),
-  /** A later measurement corrected this one (it no longer counts). */
-  corrected: z.boolean(),
-});
-export type Measurement = z.infer<typeof measurementSchema>;
-export const measurementResponseSchema = z.strictObject({ measurement: measurementSchema });
-export const measurementsResponseSchema = z.strictObject({
-  measurements: z.array(measurementSchema),
-  permissions: z.strictObject({ canRecord: z.boolean() }),
-});
-export type MeasurementsResponse = z.infer<typeof measurementsResponseSchema>;
-export const measurementListQuerySchema = z.object({ bqItemLineageId: uuid.optional() });
 
 // Build-up line → catalogue material mappings ----------------------------------------------
 

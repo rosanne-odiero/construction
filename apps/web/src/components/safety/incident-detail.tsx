@@ -284,6 +284,7 @@ export function IncidentDetail({
             projectId={projectId}
             siteId={incident.siteId}
             caption={t("report.photoCaption")}
+            purpose="safety_incident"
             label={t("detail.addPhotos")}
             disabled={busy}
             onUploaded={(photo) => {

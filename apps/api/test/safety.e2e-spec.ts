@@ -128,14 +128,19 @@ describe("Health and safety (real runtime role)", () => {
       (body) => siteResponseSchema.parse(body).site.id,
       201,
     );
-  const photo = async (browser: Browser, target = siteId) => {
-    const res = await request(app.getHttpServer())
+  const photo = async (browser: Browser, target = siteId, purpose?: "safety_incident") => {
+    const upload = request(app.getHttpServer())
       .post(`/api/v1/projects/${projectId}/photos`)
       .set("Cookie", [...browser.cookies].map(([key, value]) => `${key}=${value}`).join("; "))
       .set("Origin", origin)
       .set("X-CSRF-Token", browser.csrf)
-      .field("siteId", target)
-      .attach("file", await jpegWithExif({ make: randomUUID().slice(0, 20) }), "IMG.jpg");
+      .field("siteId", target);
+    if (purpose) upload.field("purpose", purpose);
+    const res = await upload.attach(
+      "file",
+      await jpegWithExif({ make: randomUUID().slice(0, 20) }),
+      "IMG.jpg",
+    );
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     return sitePhotoResponseSchema.parse(res.body).photo.id;
   };
@@ -143,25 +148,24 @@ describe("Health and safety (real runtime role)", () => {
     ok(res, (body) => incidentDetailResponseSchema.parse(body), status);
   const action = (res: request.Response, status = 200) =>
     ok(res, (body) => correctiveActionResponseSchema.parse(body).action, status);
+  const reportCall = (extra: object = {}, browser = foreman) =>
+    browser.call("post", `${base()}/incidents`, {
+      siteId,
+      kind: "injury",
+      severity: "moderate",
+      occurredAt: `${today}T08:15:00+03:00`,
+      location: "Block A scaffold, second lift",
+      description: `Synthetic slip on wet boards ${randomUUID().slice(0, 8)}`,
+      immediateActions: "Area cordoned off and boards dried",
+      firstAidGiven: true,
+      people: [
+        { role: "injured", labourerId: labourers[0], injuryType: "sprain", bodyPart: "foot" },
+        { role: "witness", name: "Synthetic Witness Wanjiku" },
+      ],
+      ...extra,
+    });
   const report = async (extra: object = {}, browser = foreman) =>
-    incident(
-      await browser.call("post", `${base()}/incidents`, {
-        siteId,
-        kind: "injury",
-        severity: "moderate",
-        occurredAt: `${today}T08:15:00+03:00`,
-        location: "Block A scaffold, second lift",
-        description: `Synthetic slip on wet boards ${randomUUID().slice(0, 8)}`,
-        immediateActions: "Area cordoned off and boards dried",
-        firstAidGiven: true,
-        people: [
-          { role: "injured", labourerId: labourers[0], injuryType: "sprain", bodyPart: "foot" },
-          { role: "witness", name: "Synthetic Witness Wanjiku" },
-        ],
-        ...extra,
-      }),
-      201,
-    );
+    incident(await reportCall(extra, browser), 201);
   const raise = async (
     detail: IncidentDetailResponse,
     ownerBrowser: Browser,
@@ -362,8 +366,47 @@ describe("Health and safety (real runtime role)", () => {
   });
 
   it("runs incident → investigation → corrective actions → done → verified → closed, then locks it", async () => {
-    const evidence = await photo(foreman);
+    // Incident photos are uploaded as such: a general site photo is not incident evidence.
+    const general = await photo(foreman);
+    problem(
+      await reportCall({ severity: "serious", photoIds: [general] }),
+      422,
+      "photo-not-on-site",
+    );
+    const evidence = await photo(foreman, siteId, "safety_incident");
     let detail = await report({ severity: "serious", photoIds: [evidence] });
+    // They stay out of the project's photo list, and only health and safety readers open them:
+    // the QS (reports.view, a photo reader) can open the general photo but not the incident one.
+    const listed = (
+      (await surveyor.call("get", `projects/${projectId}/photos?limit=60`)).body as {
+        photos: { id: string }[];
+      }
+    ).photos.map((entry) => entry.id);
+    expect(listed).toContain(general);
+    expect(listed).not.toContain(evidence);
+    await expect(
+      db.run(context(manager), (tx) =>
+        tx.safetyIncidentPhoto.create({
+          data: {
+            tenantId,
+            projectId,
+            incidentId: detail.incident.id,
+            photoId: general,
+            addedBy: manager.auth.user.id,
+          },
+        }),
+      ),
+    ).rejects.toThrow(/must be an incident photo/);
+    expect(
+      (await surveyor.download(`projects/${projectId}/photos/${general}/thumbnail`)).status,
+    ).toBe(200);
+    for (const variant of ["thumbnail", "original"])
+      expect(
+        (await surveyor.download(`projects/${projectId}/photos/${evidence}/${variant}`)).status,
+      ).toBe(403);
+    expect(
+      (await manager.download(`projects/${projectId}/photos/${evidence}/original`)).status,
+    ).toBe(200);
     expect(detail.incident).toMatchObject({
       code: "INC-0001",
       status: "reported",
@@ -416,6 +459,17 @@ describe("Health and safety (real runtime role)", () => {
       }),
     );
     expect(detail.incident.status).toBe("investigated");
+    // Another safety manager saving it unchanged changes nothing (no 500, the author stays).
+    const unchanged = incident(
+      await agent.call("post", `${base()}/incidents/${detail.incident.id}/investigation`, {
+        version: detail.incident.version,
+        rootCauseCategory: "unsafe_condition",
+        rootCause: "Boards were wet after rain and the lift had no toe boards",
+        contributingFactors: "Morning briefing skipped",
+      }),
+    );
+    expect(unchanged.incident.version).toBe(detail.incident.version);
+    expect(unchanged.incident.investigation?.investigatedBy.id).toBe(manager.auth.user.id);
     problem(
       await manager.call("post", `${base()}/incidents/${detail.incident.id}/close`, {
         version: detail.incident.version,
@@ -468,6 +522,16 @@ describe("Health and safety (real runtime role)", () => {
       }),
     );
     expect(detail.incident.regulator).toMatchObject({ state: "notified", notifiedOn: today });
+    const sameDecision = incident(
+      await agent.call("post", `${base()}/incidents/${detail.incident.id}/regulator`, {
+        version: detail.incident.version,
+        decision: "notified",
+        notifiedOn: today,
+        reference: "DOSH/SYN/0001",
+      }),
+    );
+    expect(sameDecision.incident.version).toBe(detail.incident.version);
+    expect(sameDecision.incident.regulator.decidedBy?.id).toBe(manager.auth.user.id);
     // A first-aid treatment linked while the incident is open.
     const treatment = ok(
       await foreman.call("post", `${base()}/first-aid/treatments`, {
@@ -555,6 +619,60 @@ describe("Health and safety (real runtime role)", () => {
         }),
       ),
     ).rejects.toThrow(/locked|final/);
+    // New rows naming the closed incident are refused by the database itself, not only the API.
+    const lateEvidence = await photo(foreman, siteId, "safety_incident");
+    const loose = ok(
+      await foreman.call("post", `${base()}/first-aid/treatments`, {
+        siteId,
+        treatedAt: new Date().toISOString(),
+        personName: "Synthetic Visitor Otieno",
+        injuryType: "cut",
+        treatment: "cleaned_dressed",
+        referral: "none",
+      }),
+      (body) => treatmentResponseSchema.parse(body).treatment,
+      201,
+    );
+    await expect(
+      db.run(context(manager), (tx) =>
+        tx.correctiveAction.create({
+          data: {
+            id: randomUUID(),
+            tenantId,
+            projectId,
+            number: 9_999,
+            source: "incident",
+            incidentId: id,
+            description: "Raised in SQL after closing",
+            ownerId: agent.auth.user.id,
+            dueOn: new Date(`${today}T00:00:00.000Z`),
+            raisedBy: manager.auth.user.id,
+            updatedBy: manager.auth.user.id,
+          },
+        }),
+      ),
+    ).rejects.toThrow(/Corrective actions of a closed or voided incident are locked/);
+    await expect(
+      db.run(context(manager), (tx) =>
+        tx.safetyIncidentPhoto.create({
+          data: {
+            tenantId,
+            projectId,
+            incidentId: id,
+            photoId: lateEvidence,
+            addedBy: manager.auth.user.id,
+          },
+        }),
+      ),
+    ).rejects.toThrow(/Photos are added while the incident is open/);
+    await expect(
+      db.run(context(manager), (tx) =>
+        tx.firstAidTreatment.updateMany({
+          where: { id: loose.id },
+          data: { incidentId: id, updatedBy: manager.auth.user.id, version: { increment: 1 } },
+        }),
+      ),
+    ).rejects.toThrow(/Treatments are linked to open incidents/);
     const schemaOwner = new PrismaClient({
       adapter: new PrismaPg({ connectionString: testDatabaseUrls().migrationUrl }),
     });
@@ -1101,12 +1219,43 @@ describe("Health and safety (real runtime role)", () => {
       }),
       403,
     );
+    // Voiding a replacement entered by mistake puts the item it replaced back in use (still
+    // due), so it can be returned or replaced again.
+    const glovesBefore = list.issues.find((entry) => entry.id === gloves.id)!;
     issue(
       await agent.call("post", `${base()}/ppe/${replacement.id}/void`, {
         version: replacement.version,
         reason: "Issued to the wrong worker",
       }),
     );
+    list = ok(await foreman.call("get", `${base()}/ppe?labourerId=${labourers[0]}`), (body) =>
+      ppeIssuesResponseSchema.parse(body),
+    );
+    const glovesAgain = list.issues.find((entry) => entry.id === gloves.id)!;
+    expect(glovesAgain).toMatchObject({ status: "issued", replacementState: "due" });
+    expect(glovesAgain.version).toBe(glovesBefore.version + 1);
+    const second = issue(
+      await foreman.call("post", `${base()}/ppe`, {
+        siteId,
+        labourerId: labourers[0],
+        item: "gloves",
+        size: "L",
+        quantity: 2,
+        issuedOn: today,
+        replacesIssueId: gloves.id,
+      }),
+      201,
+    );
+    // The database refuses putting an item back in use while a live replacement names it.
+    await expect(
+      db.run(context(agent), (tx) =>
+        tx.ppeIssue.updateMany({
+          where: { id: gloves.id },
+          data: { status: "issued", updatedBy: agent.auth.user.id, version: { increment: 1 } },
+        }),
+      ),
+    ).rejects.toThrow(/back in use only when its replacement is voided/);
+    expect(second.replacesIssueId).toBe(gloves.id);
     await expect(
       db.run(context(agent), (tx) =>
         tx.ppeIssue.updateMany({

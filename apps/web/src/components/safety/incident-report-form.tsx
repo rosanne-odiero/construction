@@ -492,6 +492,7 @@ export function IncidentReportForm({
             projectId={projectId}
             siteId={siteId}
             caption={t("report.photoCaption")}
+            purpose="safety_incident"
             label={t("report.addPhoto")}
             disabled={busy}
             onUploaded={(photo) => setPhotos((current) => [...current, photo])}

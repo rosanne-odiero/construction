@@ -108,6 +108,7 @@ export { PIN_LENGTH, pinProblem, PIN_PROBLEMS, type PinProblem } from "./pin.js"
 export {
   PHOTO_LIMITS,
   PHOTO_LOCATION_CHECKS,
+  PHOTO_PURPOSES,
   PHOTO_TIME_CHECKS,
   PHOTO_TIME_SOURCES,
   PHOTO_VERIFICATION_DEFAULTS,
@@ -115,6 +116,7 @@ export {
   type PhotoEvidence,
   type PhotoEvidenceInput,
   type PhotoLocationCheck,
+  type PhotoPurpose,
   type PhotoTimeCheck,
   type PhotoTimeSource,
 } from "./photo-evidence.js";

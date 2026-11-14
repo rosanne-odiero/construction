@@ -286,7 +286,7 @@ export class ToolboxTalksService {
     notFuture(input.heldOn);
     await requireStaff(scope, projectId, input.presenterId, SAFETY_RECORD_PERMISSIONS);
     if (input.photoId)
-      await requireSitePhotos(scope.tx, tenantId, projectId, siteId, [input.photoId]);
+      await requireSitePhotos(scope.tx, tenantId, projectId, siteId, [input.photoId], "general");
     const attendees = new Map<string, string | null>();
     if (input.gangIds.length) {
       const gangs = await scope.tx.gang.count({

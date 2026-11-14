@@ -381,7 +381,9 @@ CREATE UNIQUE INDEX "ppe_issues_tenant_id_id_key" ON "ppe_issues"("tenant_id", "
 CREATE UNIQUE INDEX "ppe_issues_tenant_id_project_id_id_key" ON "ppe_issues"("tenant_id", "project_id", "id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ppe_issues_tenant_id_replaces_issue_id_key" ON "ppe_issues"("tenant_id", "replaces_issue_id");
+-- One live replacement per item; a voided replacement frees the item to be replaced again.
+CREATE UNIQUE INDEX "ppe_issues_tenant_id_replaces_issue_id_key" ON "ppe_issues"("tenant_id", "replaces_issue_id")
+  WHERE status <> 'voided';
 
 -- CreateIndex
 CREATE INDEX "safety_incidents_tenant_id_project_id_status_idx" ON "safety_incidents"("tenant_id", "project_id", "status");
@@ -902,7 +904,14 @@ BEGIN
     NEW.issued_at := now();
     RETURN NEW;
   END IF;
-  IF OLD.status <> 'issued' THEN
+  -- A replacement voided as a mistake puts the item it replaced back in use.
+  IF OLD.status = 'replaced' AND NEW.status = 'issued' THEN
+    IF EXISTS (SELECT 1 FROM ppe_issues
+        WHERE tenant_id = OLD.tenant_id AND replaces_issue_id = OLD.id AND status <> 'voided') THEN
+      RAISE EXCEPTION 'A replaced item is back in use only when its replacement is voided'
+        USING ERRCODE = '23514';
+    END IF;
+  ELSIF OLD.status <> 'issued' THEN
     RAISE EXCEPTION 'Returned, replaced and voided PPE issues are final' USING ERRCODE = '23514';
   END IF;
   IF ROW(NEW.id, NEW.tenant_id, NEW.project_id, NEW.site_id, NEW.labourer_id, NEW.item, NEW.size,
@@ -915,7 +924,9 @@ BEGIN
     RAISE EXCEPTION 'A PPE issue is fixed; it can only be returned, replaced or voided'
       USING ERRCODE = '23514';
   END IF;
-  IF NEW.status = 'returned' THEN
+  IF OLD.status = 'replaced' THEN
+    RETURN NEW;
+  ELSIF NEW.status = 'returned' THEN
     IF NEW.returned_by IS DISTINCT FROM app.current_user_id()
       OR NEW.returned_on > app.business_today() THEN
       RAISE EXCEPTION 'A return is recorded by the signed-in user, not in the future'
@@ -1218,8 +1229,16 @@ CREATE CONSTRAINT TRIGGER safety_incident_people_kind AFTER INSERT OR DELETE
   ON "safety_incident_people" DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION app.check_incident_people();
 
--- Photos are site photos of the incident's site, added while it is open (at most six, packages/types
--- SAFETY_LIMITS.maxIncidentPhotos); never removed or changed.
+-- Incident photos can show injured people (D-74): they are uploaded as `safety_incident` site
+-- photos, kept off diaries and out of the project's photo list, and opened only by health and
+-- safety readers (packages/domain PHOTO_PURPOSES; the API enforces who reads them).
+ALTER TABLE "site_photos" ADD COLUMN "purpose" VARCHAR(20) NOT NULL DEFAULT 'general';
+ALTER TABLE "site_photos" ADD CONSTRAINT "site_photos_purpose_check" CHECK (
+  purpose IN ('general', 'safety_incident') AND (purpose = 'general' OR diary_id IS NULL)
+);
+
+-- Photos are incident photos of the incident's site, added while it is open (at most six,
+-- packages/types SAFETY_LIMITS.maxIncidentPhotos); never removed or changed.
 CREATE FUNCTION app.guard_safety_incident_photo() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   parent safety_incidents%ROWTYPE;
@@ -1248,8 +1267,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM site_photos
       WHERE tenant_id = NEW.tenant_id AND project_id = NEW.project_id AND id = NEW.photo_id
-        AND site_id = parent.site_id) THEN
-    RAISE EXCEPTION 'The photo must be from the incident''s site' USING ERRCODE = '23514';
+        AND site_id = parent.site_id AND purpose = 'safety_incident') THEN
+    RAISE EXCEPTION 'The photo must be an incident photo from the incident''s site'
+      USING ERRCODE = '23514';
   END IF;
   IF (SELECT count(*) FROM safety_incident_photos
        WHERE tenant_id = NEW.tenant_id AND incident_id = NEW.incident_id) >= 6 THEN

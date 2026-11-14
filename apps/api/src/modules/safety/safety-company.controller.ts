@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Put, Req, UseGuards, UseInterceptors } from "@nestjs/common";
 import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   safetyOverviewResponseSchema,
@@ -10,11 +10,13 @@ import { openApi } from "../../common/openapi.js";
 import { AuthService } from "../identity/auth.service.js";
 import { BrowserGuard } from "../identity/identity.controller.js";
 import { SafetySettingsService } from "./safety-settings.service.js";
+import { SafetyDatabaseErrors } from "./safety-errors.js";
 
 /** Company health and safety settings and the overview across projects (D8.2). */
 @ApiTags("safety")
 @UseGuards(BrowserGuard)
 @Controller({ path: "safety", version: "1" })
+@UseInterceptors(SafetyDatabaseErrors)
 export class SafetyCompanyController {
   constructor(
     private readonly auth: AuthService,

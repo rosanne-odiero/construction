@@ -248,9 +248,17 @@ export class PpeService {
           },
         });
         if (changed.count !== 1) throw versionConflict();
+        // A replacement recorded by mistake: the item it replaced is in use again.
+        const restored = row.replacesIssueId
+          ? await scope.tx.ppeIssue.updateMany({
+              where: { tenantId, projectId, id: row.replacesIssueId, status: "replaced" },
+              data: { status: "issued", updatedBy: userId, version: { increment: 1 } },
+            })
+          : { count: 0 };
         await this.scope.audit(scope.tx, "safety.ppe_voided", issueId, {
           projectId,
           item: row.item,
+          restoredIssueId: restored.count ? row.replacesIssueId : null,
           version: input.version + 1,
         });
         return this.detail(scope, context, issueId);

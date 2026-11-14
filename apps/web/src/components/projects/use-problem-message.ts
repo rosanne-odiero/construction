@@ -310,6 +310,7 @@ const codes: Record<string, ProblemKey> = {
   "ppe-replacement-invalid": "ppeReplacementInvalid",
   "ppe-return-before-issue": "ppeReturnBeforeIssue",
   "incident-not-open": "incidentNotOpen",
+  "safety-rule": "safetyRule",
   "incident-close-blocked": "incidentCloseBlocked",
   "incident-actions-outstanding": "incidentActionsOutstanding",
   "incident-follow-up-invalid": "incidentFollowUpInvalid",

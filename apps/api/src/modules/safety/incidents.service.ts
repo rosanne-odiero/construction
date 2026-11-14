@@ -27,7 +27,7 @@ import type { Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import { changedFields, peopleOf } from "../procurement/procurement-mappers.js";
-import { fromCalendarDate } from "../projects/project-mappers.js";
+import { fromCalendarDate, toCalendarDate } from "../projects/project-mappers.js";
 import {
   labourerRefs,
   lockProject,
@@ -148,7 +148,14 @@ export class IncidentsService {
         await requireSite(scope.tx, tenantId, projectId, input.siteId);
         notFutureMoment(input.occurredAt);
         await this.checkPeople(scope, projectId, input.people);
-        await requireSitePhotos(scope.tx, tenantId, projectId, input.siteId, input.photoIds);
+        await requireSitePhotos(
+          scope.tx,
+          tenantId,
+          projectId,
+          input.siteId,
+          input.photoIds,
+          "safety_incident",
+        );
         if (input.followUpOfId) {
           const original = await scope.tx.safetyIncident.findFirst({
             where: { tenantId, projectId, id: input.followUpOfId },
@@ -298,6 +305,14 @@ export class IncidentsService {
         const context = await this.safety.manager(scope, projectId);
         const { tenantId, userId } = scope.access;
         const row = await this.loadOpen(scope, projectId, incidentId, input.version);
+        // Saving the investigation unchanged keeps its author (the database refuses re-stamping).
+        if (
+          row.status === "investigated" &&
+          row.rootCauseCategory === input.rootCauseCategory &&
+          row.rootCause === input.rootCause &&
+          row.contributingFactors === input.contributingFactors
+        )
+          return this.detail(scope, context, incidentId);
         const changed = await scope.tx.safetyIncident.updateMany({
           where: { tenantId, projectId, id: incidentId, version: input.version },
           data: {
@@ -341,6 +356,21 @@ export class IncidentsService {
         const row = await this.loadOpen(scope, projectId, incidentId, input.version);
         if (input.notifiedOn) notFuture(input.notifiedOn);
         const notified = input.decision === "notified";
+        const next = {
+          regulatorDecision: input.decision,
+          regulatorNotifiedOn: notified ? input.notifiedOn! : null,
+          regulatorReference: notified ? (input.reference ?? null) : null,
+          regulatorReason: notified ? null : input.reason!,
+        };
+        // Recording the same decision again keeps its author (the database refuses re-stamping).
+        if (
+          row.regulatorDecision === next.regulatorDecision &&
+          (row.regulatorNotifiedOn ? toCalendarDate(row.regulatorNotifiedOn) : null) ===
+            next.regulatorNotifiedOn &&
+          row.regulatorReference === next.regulatorReference &&
+          row.regulatorReason === next.regulatorReason
+        )
+          return this.detail(scope, context, incidentId);
         const changed = await scope.tx.safetyIncident.updateMany({
           where: { tenantId, projectId, id: incidentId, version: input.version },
           data: {
@@ -490,7 +520,14 @@ export class IncidentsService {
         const context = await this.safety.recorder(scope, projectId);
         const { tenantId, userId } = scope.access;
         const row = await this.loadOpen(scope, projectId, incidentId, input.version);
-        await requireSitePhotos(scope.tx, tenantId, projectId, row.siteId, input.photoIds);
+        await requireSitePhotos(
+          scope.tx,
+          tenantId,
+          projectId,
+          row.siteId,
+          input.photoIds,
+          "safety_incident",
+        );
         const existing = await scope.tx.safetyIncidentPhoto.findMany({
           where: { tenantId, incidentId },
           select: { photoId: true },

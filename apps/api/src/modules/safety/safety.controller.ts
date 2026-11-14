@@ -10,6 +10,7 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import {
   ApiBody,
@@ -78,6 +79,7 @@ import { InductionsService } from "./inductions.service.js";
 import { PpeService } from "./ppe.service.js";
 import { SafetySettingsService } from "./safety-settings.service.js";
 import { ToolboxTalksService } from "./toolbox-talks.service.js";
+import { SafetyDatabaseErrors } from "./safety-errors.js";
 
 const read =
   "Requires projects.view plus one of safety.manage, site.diary or projects.manage on the project (role ∩ assignment); clients, suppliers, labourers and office roles without a site permission are refused (403).";
@@ -101,6 +103,7 @@ const search = { name: "search", required: false, description: "Number or text" 
 @ApiTags("safety")
 @UseGuards(BrowserGuard)
 @Controller({ path: "projects/:projectId/safety", version: "1" })
+@UseInterceptors(SafetyDatabaseErrors)
 export class SafetyController {
   constructor(
     private readonly auth: AuthService,

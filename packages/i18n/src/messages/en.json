@@ -1725,6 +1725,7 @@
     "ppeReplacementInvalid": "A replacement must be the same item, still issued to the same labourer.",
     "ppeReturnBeforeIssue": "An item cannot be returned before it was issued.",
     "incidentNotOpen": "This incident is closed or voided and cannot be changed.",
+    "safetyRule": "That change breaks a health and safety rule. Reload the page and check the record.",
     "incidentCloseBlocked": "The incident cannot close yet: verify or cancel every action and record any regulator decision.",
     "incidentActionsOutstanding": "Cancel the incident's open corrective actions before voiding it.",
     "incidentFollowUpInvalid": "A follow-up refers to a closed incident of this project.",

@@ -144,7 +144,7 @@ Overdue = open after its due date (a done action awaiting verification is not ov
 | draft → confirmed | Recorder; at least one attendee or counted other (may happen on creation) | **Locked**: the talk and attendance cannot change; `safety.talk_confirmed` |
 | draft → cancelled | Recorder; reason | **Final**; `safety.talk_cancelled` |
 
-**Records without a lifecycle.** An **induction** (`IND-NNNN`) is recorded once by a recorder and can only be **voided** by a manager with a reason. A **PPE issue** is `issued` → `returned` (recorder; date, condition) or → `replaced` (only by recording the newer issue that names it) or → `voided` (manager, reason). A **first-aid kit** is active → retired (manager, reason) and its **checks** are append-only (recorder). A **first-aider** is active → removed (manager, reason). A **treatment** (`FA-NNNN`) is recorded (recorder), linked to an open incident once (manager) or voided (manager, reason); a treatment linked to a closed incident cannot change.
+**Records without a lifecycle.** An **induction** (`IND-NNNN`) is recorded once by a recorder and can only be **voided** by a manager with a reason. A **PPE issue** is `issued` → `returned` (recorder; date, condition) or → `replaced` (only by recording the newer issue that names it) or → `voided` (manager, reason); voiding a replacement puts the item it replaced back to `issued`. A **first-aid kit** is active → retired (manager, reason) and its **checks** are append-only (recorder). A **first-aider** is active → removed (manager, reason). A **treatment** (`FA-NNNN`) is recorded (recorder), linked to an open incident once (manager) or voided (manager, reason); a treatment linked to a closed incident cannot change.
 
 ## Schedule baseline and delay log (D6.2)
 

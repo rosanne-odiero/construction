@@ -2376,6 +2376,7 @@ model SitePhoto {
   siteId               String                @map("site_id") @db.Uuid
   diaryId              String?               @map("diary_id") @db.Uuid
   caption              String?               @db.VarChar(500)
+  purpose              String                @default("general") @db.VarChar(20)
   objectKey            String                @map("object_key") @db.VarChar(300)
   thumbnailKey         String                @map("thumbnail_key") @db.VarChar(300)
   fileSha256           String                @map("file_sha256") @db.Char(64)
@@ -4483,7 +4484,6 @@ model PpeIssue {
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
-  @@unique([tenantId, replacesIssueId])
   @@index([tenantId, projectId, status, replacementDueOn])
   @@index([tenantId, labourerId])
   @@map("ppe_issues")

@@ -25,6 +25,13 @@ export const PHOTO_VERIFICATION_DEFAULTS = {
   futureSkewMinutes: 10,
 } as const;
 
+/**
+ * What a photo is for. Incident photos (D8.2) can show injured people: they stay out of the
+ * project's photo list and only health and safety readers can open them.
+ */
+export const PHOTO_PURPOSES = ["general", "safety_incident"] as const;
+export type PhotoPurpose = (typeof PHOTO_PURPOSES)[number];
+
 export const PHOTO_LOCATION_CHECKS = ["inside", "outside", "missing", "no_geofence"] as const;
 export type PhotoLocationCheck = (typeof PHOTO_LOCATION_CHECKS)[number];
 export const PHOTO_TIME_CHECKS = ["ok", "future", "stale", "missing", "diary_mismatch"] as const;

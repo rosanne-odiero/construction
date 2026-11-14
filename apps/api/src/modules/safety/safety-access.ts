@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { isProjectReadOnly, nairobiDate } from "@pm-buddy/domain";
+import { isProjectReadOnly, nairobiDate, type PhotoPurpose } from "@pm-buddy/domain";
 import {
   DEFAULT_PPE_REPLACEMENT_DAYS,
   DEFAULT_SAFETY_SETTINGS,
@@ -55,7 +55,8 @@ export type SafetyProblem =
   | "kit-retired"
   | "first-aider-exists"
   | "first-aider-not-on-site"
-  | "treatment-linked";
+  | "treatment-linked"
+  | "safety-rule";
 
 export function safetyProblem(
   status: 403 | 404 | 409 | 422,
@@ -302,17 +303,21 @@ export async function requireStaff(
   return member;
 }
 
-/** Refuses photos that are not site photos of this site (422 photo-not-on-site). */
+/**
+ * Refuses photos that are not site photos of this site with the given purpose (422
+ * photo-not-on-site): incident photos are uploaded as `safety_incident`, talk photos as `general`.
+ */
 export async function requireSitePhotos(
   tx: Tx,
   tenantId: string,
   projectId: string,
   siteId: string,
   ids: readonly string[],
+  purpose: PhotoPurpose,
 ) {
   if (!ids.length) return;
   const found = await tx.sitePhoto.count({
-    where: { tenantId, projectId, siteId, id: { in: [...ids] } },
+    where: { tenantId, projectId, siteId, purpose, id: { in: [...ids] } },
   });
   if (found !== new Set(ids).size)
     throw safetyProblem(422, "photo-not-on-site", "A photo is not one of this site's photos");

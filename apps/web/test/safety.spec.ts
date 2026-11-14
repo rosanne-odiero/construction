@@ -271,8 +271,14 @@ test("flags labourers who worked without an induction and records inductions", a
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(page).toHaveURL(/view=inductions.*filter=flagged/);
   await expect(page.getByText(/^Worked here without a valid induction on /)).toHaveCount(2);
-  await page.getByRole("button", { name: "Record an induction for Grace Atieno Odhiambo" }).click();
   const dialog = page.getByRole("dialog", { name: "Record an induction" });
+  // The filter reloads the page; a click before it hydrates opens nothing, so retry until it does.
+  await expect(async () => {
+    await page
+      .getByRole("button", { name: "Record an induction for Grace Atieno Odhiambo" })
+      .click({ timeout: 2_000 });
+    await expect(dialog).toBeVisible({ timeout: 2_000 });
+  }).toPass();
   await expect(dialog).toContainText("Chosen: Grace Atieno Odhiambo (WRK-0003)");
   await dialog.getByText("Electrical safety", { exact: true }).click();
   await dialog.getByLabel("Acknowledged by").selectOption("thumbprint");

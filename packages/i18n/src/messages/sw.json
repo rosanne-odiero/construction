@@ -1725,6 +1725,7 @@
     "ppeReplacementInvalid": "Kifaa mbadala lazima kiwe kile kile, ambacho bado kiko kwa mfanyakazi yule yule.",
     "ppeReturnBeforeIssue": "Kifaa hakiwezi kurudishwa kabla ya kutolewa.",
     "incidentNotOpen": "Ajali hii imefungwa au imebatilishwa na haiwezi kubadilishwa.",
+    "safetyRule": "Mabadiliko hayo yanavunja kanuni ya afya na usalama. Pakia ukurasa upya na ukague rekodi.",
     "incidentCloseBlocked": "Ajali haiwezi kufungwa bado: thibitisha au ghairi kila hatua na uandike uamuzi wowote wa mamlaka.",
     "incidentActionsOutstanding": "Ghairi hatua za kurekebisha zilizo wazi kabla ya kubatilisha ajali.",
     "incidentFollowUpInvalid": "Ufuatiliaji unarejelea ajali iliyofungwa ya mradi huu.",

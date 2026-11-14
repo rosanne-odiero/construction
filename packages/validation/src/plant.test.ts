@@ -105,8 +105,9 @@ describe("plant contracts", () => {
       startReading: "1200.0",
       endReading: "1208.5",
     });
+    // An end below the start is left to the API (right only across a meter reset that day).
+    expect(recordUsageRequestSchema.safeParse({ ...usage, endReading: "6" }).success).toBe(true);
     for (const bad of [
-      { endReading: "1199.9" },
       { endReading: null },
       { operatorLabourerId: id, operatorUserId: other },
       { bqItemLineageId: id, costCodeId: other },
@@ -128,7 +129,7 @@ describe("plant contracts", () => {
         ...usage,
         action: "correct",
         reason: "Typed the end reading wrong",
-        endReading: "1100",
+        endReading: null,
       }).success,
     ).toBe(false);
   });

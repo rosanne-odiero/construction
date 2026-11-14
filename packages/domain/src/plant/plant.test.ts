@@ -22,6 +22,7 @@ import {
   plantBusinessDate,
   plantDayEnd,
   plantDayStart,
+  usageRun,
   roundRatio,
   serviceStatus,
   truncateRatio,
@@ -110,6 +111,25 @@ describe("plant meter", () => {
     expect(checkUsageReadings(readings, [], "2026-11-01", 10_000, 10_030, "u1").ok).toBe(false);
     expect(checkUsageReadings(readings, [], "2026-11-01", 10_000, 10_070).ok).toBe(false);
     expect(checkUsageReadings(readings, [], "2026-11-01", 10_000, 10_070, "u1").ok).toBe(true);
+  });
+
+  it("logs the day of a reset from the old meter to the new one and counts the run across it", () => {
+    const resets: MeterReset[] = [
+      { id: "r1", at: at("2026-11-03", "08:00"), oldTenths: 10_200, newTenths: 0 },
+    ];
+    // Start 1,018.5 on the old meter (≤ its last 1,020.0), end 6.0 on the new one:
+    // (1,020.0 − 1,018.5) + (6.0 − 0.0) = 7.5.
+    expect(checkUsageReadings(readings, resets, "2026-11-03", 10_185, 60).ok).toBe(true);
+    expect(usageRun(resets, "2026-11-03", 10_185, 60)).toBe(75);
+    // The start still respects the old meter, the end the new one.
+    expect(checkUsageReadings(readings, resets, "2026-11-03", 10_210, 60).ok).toBe(false);
+    expect(checkUsageReadings(readings, resets, "2026-11-03", 10_180, 60).ok).toBe(false);
+    // The next day starts on the new meter.
+    const after = [...readings, { at: plantDayEnd("2026-11-03"), tenths: 60, sourceId: "u3" }];
+    expect(checkUsageReadings(after, resets, "2026-11-04", 60, 140).ok).toBe(true);
+    // Without a reset that day, the end may not be below the start.
+    expect(usageRun([], "2026-11-03", 10_185, 60)).toBe(-10_125);
+    expect(checkUsageReadings(readings, [], "2026-11-03", 10_185, 60).ok).toBe(false);
   });
 
   it("starts a new epoch at a recorded meter reset", () => {

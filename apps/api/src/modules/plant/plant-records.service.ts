@@ -10,6 +10,7 @@ import {
   parseTenths,
   plantBusinessDate,
   plantDayStart,
+  usageRun,
   type MeterReading,
   type MeterReset,
 } from "@pm-buddy/domain";
@@ -125,7 +126,7 @@ export class PlantRecordsService {
         projectId: { in: [...caller.projects.keys()].filter((id) => caller.canRead(id)) },
       };
       const offset = query.cursor ?? 0;
-      const [rows, corrections, recent] = await Promise.all([
+      const [rows, corrections, recent, resetRows] = await Promise.all([
         tx.plantUsageLog.findMany({
           where,
           orderBy: [{ usedOn: "desc" }, { recordedAt: "desc" }],
@@ -143,13 +144,20 @@ export class PlantRecordsService {
             isVoid: false,
           },
         }),
+        tx.plantMeterReset.findMany({ where: { tenantId: access.tenantId, plantId } }),
       ]);
+      const resets = resetRows.map(resetOf);
       const supersededBy = new Map(corrections.map((row) => [row.correctsId!, row.id]));
       const current = recent.filter((row) => !supersededBy.has(row.id));
       const runs = current
         .map((row) =>
           row.startReading && row.endReading
-            ? tenthsOf(row.endReading)! - tenthsOf(row.startReading)!
+            ? usageRun(
+                resets,
+                toCalendarDate(row.usedOn),
+                tenthsOf(row.startReading)!,
+                tenthsOf(row.endReading)!,
+              )
             : null,
         )
         .filter((run): run is number => run !== null);
@@ -450,6 +458,8 @@ export class PlantRecordsService {
           await tx.plantFuelIssue.create({
             data: {
               ...this.fuelData(scope, item, projectId, input, key, digest),
+              // Judged by the standard it was recorded under, not a later one (D-94).
+              standardConsumption: original.standardConsumption,
               correctsId: issueId,
               correctionReason: input.reason,
             },
@@ -491,6 +501,9 @@ export class PlantRecordsService {
             "meter-reset-order",
             "A meter reset comes after every reading already recorded",
           );
+        // A usage day spans at most one reset (its run is counted across it).
+        if (history.resets.some((reset) => plantBusinessDate(reset.at) === plantBusinessDate(at)))
+          throw plantProblem(409, "meter-reset-order", "The meter was already reset that day");
         const check = checkMeterReading(
           history.readings,
           history.resets,
@@ -631,7 +644,12 @@ export class PlantRecordsService {
     if (metered) {
       const start = parseTenths(input.startReading!)!;
       const end = parseTenths(input.endReading!)!;
-      if (end - start > DAY_LIMIT_TENTHS[item.meterType as "hours" | "km"])
+      const history = await meterHistory(tx, access.tenantId, item.id, excluded);
+      // Across a reset recorded that day, the run is counted from the old meter to the new one.
+      if (
+        usageRun(history.resets, usedOn, start, end) >
+        DAY_LIMIT_TENTHS[item.meterType as "hours" | "km"]
+      )
         throw plantProblem(
           409,
           "meter-day-limit",
@@ -639,7 +657,6 @@ export class PlantRecordsService {
             ? "One day's usage cannot exceed 24 hours"
             : "One day's usage cannot exceed 1,500 km",
         );
-      const history = await meterHistory(tx, access.tenantId, item.id, excluded);
       const check = checkUsageReadings(history.readings, history.resets, usedOn, start, end);
       if (!check.ok) throw outOfOrder(check.previous, check.next);
     }
@@ -808,7 +825,7 @@ export class PlantRecordsService {
     supersededBy: Map<string, string>,
   ) {
     const { tx, access } = scope;
-    const [people, labourers, sites, costCodes, bqItems] = await Promise.all([
+    const [people, labourers, sites, costCodes, bqItems, resetRows] = await Promise.all([
       peopleOf(
         tx,
         rows.flatMap((row) => [row.recordedBy, row.operatorUserId]),
@@ -843,8 +860,10 @@ export class PlantRecordsService {
         },
         select: { versionId: true, lineageId: true, ref: true, description: true },
       }),
+      tx.plantMeterReset.findMany({ where: { tenantId: access.tenantId, plantId: item.id } }),
     ]);
     const closed = isPlantClosed(item.status as PlantStatus);
+    const resets = resetRows.map(resetOf);
     return rows.map((row) => {
       const superseded = supersededBy.get(row.id) ?? null;
       const state = superseded ? "superseded" : row.isVoid ? "voided" : "current";
@@ -877,7 +896,10 @@ export class PlantRecordsService {
         dayStatus: row.dayStatus,
         startReading: decimal1(row.startReading),
         endReading: decimal1(row.endReading),
-        run: start !== null && end !== null ? formatTenths(end - start) : null,
+        run:
+          start !== null && end !== null
+            ? formatTenths(usageRun(resets, toCalendarDate(row.usedOn), start, end))
+            : null,
         operator: row.operatorLabourerId
           ? {
               id: row.operatorLabourerId,

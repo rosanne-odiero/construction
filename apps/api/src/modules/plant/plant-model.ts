@@ -174,7 +174,10 @@ export async function loadPlantFacts(
                            WHERE c.tenant_id = u.tenant_id AND c.corrects_id = u.id)
         GROUP BY u.plant_id`,
       tx.$queryRaw<{ plant_id: string; run: Prisma.Decimal | null }[]>`
-        SELECT u.plant_id, sum(u.end_reading - u.start_reading) AS run FROM plant_usage_logs u
+        SELECT u.plant_id,
+               sum(app.plant_usage_run(u.tenant_id, u.plant_id, u.used_on, u.start_reading,
+                                       u.end_reading)) AS run
+          FROM plant_usage_logs u
         JOIN plant_items p ON p.tenant_id = u.tenant_id AND p.id = u.plant_id
         WHERE u.tenant_id = ${tenantId}::uuid AND u.plant_id IN (${ids(plantIds)})
           AND p.hire_start_on IS NOT NULL AND u.used_on >= p.hire_start_on
@@ -193,11 +196,30 @@ export async function loadPlantFacts(
         select: { plantId: true, certificateRef: true, certificateExpiresOn: true },
       }),
     ]);
+  // Grouped once (a filter per item was quadratic on a large register).
+  const byPlant = <T>(rows: readonly T[], plantOf: (row: T) => string) => {
+    const groups = new Map<string, T[]>();
+    for (const row of rows) {
+      const group = groups.get(plantOf(row));
+      if (group) group.push(row);
+      else groups.set(plantOf(row), [row]);
+    }
+    return groups;
+  };
+  const resetsOf = byPlant(resets, (row) => row.plantId);
+  const latestOf = new Map(latest.map((row) => [row.plant_id, row]));
+  const servicesOf = byPlant(services, (row) => row.plantId);
+  const fuelOf = byPlant(fuelRows, (row) => row.plantId);
+  const breakdownsOf = byPlant(breakdowns, (row) => row.plantId);
+  const workingOf = new Map(working.map((row) => [row.plant_id, row]));
+  const hoursOf = new Map(hours.map((row) => [row.plant_id, row]));
+  const operatorsOf = byPlant(operators, (row) => row.plantId);
   for (const item of items) {
-    const itemResets = resets.filter((row) => row.plantId === item.id).map(resetOf);
-    const last = latest.find((row) => row.plant_id === item.id);
-    const service = services.find((row) => row.plantId === item.id);
-    const points = fuelRows.filter((row) => row.plantId === item.id).map(fuelPointOf);
+    const itemResets = (resetsOf.get(item.id) ?? []).map(resetOf);
+    const last = latestOf.get(item.id);
+    // Ordered newest first: the latest service.
+    const service = servicesOf.get(item.id)?.[0];
+    const points = (fuelOf.get(item.id) ?? []).map(fuelPointOf);
     result.set(item.id, {
       latest: last ? { at: last.read_at.getTime(), tenths: tenthsOf(last.reading)! } : null,
       resets: itemResets,
@@ -214,26 +236,24 @@ export async function loadPlantFacts(
           },
       fuelPoints: points,
       fuel: fuelWindows(points, itemResets, fuelRules(item.meterType, settings)),
-      openBreakdowns: breakdowns
-        .filter((row) => row.plantId === item.id)
-        .map((row) => row.severity as BreakdownSeverity),
+      openBreakdowns: (breakdownsOf.get(item.id) ?? []).map(
+        (row) => row.severity as BreakdownSeverity,
+      ),
       lastWorkingOn: (() => {
-        const row = working.find((entry) => entry.plant_id === item.id);
+        const row = workingOf.get(item.id);
         return row ? toCalendarDate(row.last) : null;
       })(),
-      hoursOnHireTenths: tenthsOf(hours.find((row) => row.plant_id === item.id)?.run ?? null) ?? 0,
-      operatorCertificates: operators
-        .filter((row) => row.plantId === item.id)
-        .map((row) =>
-          operatorCertificateState({
-            category: item.category as PlantCategory,
-            requiredCategories: settings.certificateCategories,
-            certificateRef: row.certificateRef,
-            expiresOn: optionalDate(row.certificateExpiresOn),
-            today,
-            warningDays: PLANT_LIMITS.certificateWarningDays,
-          }),
-        ),
+      hoursOnHireTenths: tenthsOf(hoursOf.get(item.id)?.run ?? null) ?? 0,
+      operatorCertificates: (operatorsOf.get(item.id) ?? []).map((row) =>
+        operatorCertificateState({
+          category: item.category as PlantCategory,
+          requiredCategories: settings.certificateCategories,
+          certificateRef: row.certificateRef,
+          expiresOn: optionalDate(row.certificateExpiresOn),
+          today,
+          warningDays: PLANT_LIMITS.certificateWarningDays,
+        }),
+      ),
     });
   }
   return result;
@@ -322,9 +342,14 @@ export function summarisePlant(
     idleHireDays: settings.idleHireDays,
     service: service.state,
     openBreakdowns: facts.openBreakdowns,
-    fuelOverStandard: recentWindows(facts.fuel, today).some(
-      (window) => window.state === "over_standard",
-    ),
+    // The latest judged window decides (D-93): a later window back within the standard clears it.
+    fuelOverStandard:
+      recentWindows(facts.fuel, today)
+        .filter((window) => window.state !== "short_sample")
+        .reduce<(typeof facts.fuel.windows)[number] | null>(
+          (latest, window) => (!latest || window.toAt > latest.toAt ? window : latest),
+          null,
+        )?.state === "over_standard",
     fuelMeterStatic: recentStaticIssues(facts, today).length > 0,
     operatorCertificates: facts.operatorCertificates,
   });

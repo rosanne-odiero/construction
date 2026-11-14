@@ -347,6 +347,7 @@ const codes: Record<string, ProblemKey> = {
   "treatment-linked": "treatmentLinked",
   // Plant and equipment (D8.3)
   "plant-code-taken": "plantCodeTaken",
+  "plant-register-full": "plantRegisterFull",
   "plant-closed": "plantClosed",
   "plant-not-on-site": "plantNotOnSite",
   "plant-not-metered": "plantNotMetered",

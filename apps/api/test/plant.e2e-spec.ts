@@ -69,6 +69,15 @@ describe("Plant and equipment (real runtime role)", () => {
   const today = nairobiDate();
   const day = (offset: number) => addCalendarDays(today, offset);
   const at = (offset: number, time: string) => `${day(offset)}T${time}:00+03:00`;
+  // A recent moment, never before today began in Nairobi (records sit on their business date, so
+  // "20 minutes ago" just after midnight would be yesterday); the API allows five minutes ahead.
+  const recently = (minutes: number, floorMinutes = 1) =>
+    new Date(
+      Math.max(
+        Date.now() - minutes * 60_000,
+        Date.parse(`${nairobiDate()}T00:00:00+03:00`) + floorMinutes * 60_000,
+      ),
+    ).toISOString();
   const context = (browser = owner, tenant = tenantId) => ({
     userId: browser.auth.user.id,
     tenantId: tenant,
@@ -415,12 +424,28 @@ describe("Plant and equipment (real runtime role)", () => {
     ]);
     expect(list.pending).toEqual({ issueCount: 1, litres: "300.0", advance: "5.0" });
     expect(list.rules).toEqual({ tolerancePercent: 15, minSample: 10, meterType: "hours" });
-    const alerts = ok(await manager.call("get", "plant/alerts"), (body) =>
-      plantAlertsResponseSchema.parse(body),
-    );
-    expect(
-      alerts.alerts.filter((alert) => alert.plantId === id).map((alert) => alert.kind),
-    ).toContain("fuel_over_standard");
+    const alertKinds = async () =>
+      ok(await manager.call("get", "plant/alerts"), (body) => plantAlertsResponseSchema.parse(body))
+        .alerts.filter((alert) => alert.plantId === id)
+        .map((alert) => alert.kind);
+    // The latest judged window decides the alert: back within the standard, no alert (the
+    // +30.0 % window stays listed for review)...
+    expect(await alertKinds()).not.toContain("fuel_over_standard");
+    // ...until the next judged window is over again: the 5.0 h short sample rolls in, so 300.0 +
+    // 50.0 L over 20.0 h against 280.0 L expected = +25.0 %.
+    const again = await fuel(agent, id, {
+      issuedAt: at(-1, "17:00"),
+      litres: "50",
+      meterReading: "1240",
+    });
+    expect(again.window).toMatchObject({
+      litres: "350.0",
+      advance: "20.0",
+      expectedLitres: "280.0",
+      variancePercent: "25.0",
+      state: "over_standard",
+    });
+    expect(await alertKinds()).toContain("fuel_over_standard");
 
     // Another item with one window at +10.0 % and one short sample: no fuel alert at all.
     const quiet = await register(excavator("EX-02"));
@@ -449,7 +474,7 @@ describe("Plant and equipment (real runtime role)", () => {
       severity: "warning",
     });
 
-    // A looser company tolerance (35 %) clears the first alert: only the rule decides.
+    // A looser company tolerance (35 %) clears the alert (+25.0 % is within it): only the rule decides.
     const settings = ok(await owner.call("get", "plant/settings"), (body) =>
       plantSettingsResponseSchema.parse(body),
     ).settings;
@@ -572,7 +597,7 @@ describe("Plant and equipment (real runtime role)", () => {
       ),
     ).rejects.toThrow(/meter reading cannot be lower/);
     // A replaced meter: plant.manage records the reset with a reason after the last reading.
-    const resetAt = new Date(Date.now() - 20 * 60_000).toISOString();
+    const resetAt = recently(20, 1);
     problem(
       await agent.call("post", `plant/${id}/meter-resets`, {
         resetAt,
@@ -618,12 +643,48 @@ describe("Plant and equipment (real runtime role)", () => {
     expect(reset.resets).toHaveLength(1);
     // After the reset the new meter starts again from 0.0.
     const after = await fuel(agent, id, {
-      issuedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+      issuedAt: recently(10, 2),
       litres: "20",
       meterReading: "1.5",
     });
     expect(after.entry.meterReading).toBe("1.5");
     expect((await reload(id)).item.meter.reading).toBe("1.5");
+    // One reset a day, in the API and the database (a usage day spans at most one).
+    const second = await manager.call("post", `plant/${id}/meter-resets`, {
+      resetAt: recently(5, 3),
+      oldReading: "1.5",
+      newReading: "0",
+      reason: "meter_replaced",
+      note: "A second meter the same day",
+    });
+    problem(second, 409, "meter-reset-order");
+    expect((second.body as { detail?: string }).detail).toMatch(/already reset that day/);
+    await expect(
+      db.run(context(manager), (tx) =>
+        tx.plantMeterReset.create({
+          data: {
+            id: randomUUID(),
+            tenantId,
+            plantId: id,
+            resetAt: new Date(recently(5, 3)),
+            oldReading: "1.5",
+            newReading: "0",
+            reason: "other",
+            note: "A second reset in SQL",
+            recordedBy: manager.auth.user.id,
+          },
+        }),
+      ),
+    ).rejects.toThrow(/at most once a day/);
+    // The reset day is logged as it happened: the start on the old meter, the end on the new one,
+    // the run counted across the reset: (1216.5 − 1216.0) + (2.0 − 0.0) = 2.5 h.
+    const resetDay = await usage(agent, id, {
+      usedOn: today,
+      dayStatus: "working",
+      startReading: "1216",
+      endReading: "2",
+    });
+    expect(resetDay.entry).toMatchObject({ startReading: "1216.0", endReading: "2.0", run: "2.5" });
     await expect(
       db.run(context(manager), (tx) =>
         tx.plantMeterReset.create({
@@ -736,6 +797,55 @@ describe("Plant and equipment (real runtime role)", () => {
       issuedAt: at(-2, "12:00"),
       litres: "45",
       meterReading: "1203",
+    });
+    const kept = await fuel(agent, id, {
+      issuedAt: at(-2, "15:00"),
+      litres: "30",
+      meterReading: "1205",
+      reference: "SR-0001",
+    });
+    // The item's standard changes afterwards: voids and corrections keep the standard the issue
+    // was recorded under, so a closed window is never re-judged by the new one (D-94).
+    const edited = await reload(id);
+    detail(
+      await manager.call("patch", `plant/${id}`, {
+        version: edited.item.version,
+        name: edited.item.name,
+        category: "excavator",
+        supplierId,
+        hireRateMinor: 1_500_000,
+        hireRateUnit: "day",
+        hireStartOn: day(-10),
+        standardConsumption: "12.00",
+      }),
+    );
+    const fixed = ok(
+      await manager.call(
+        "post",
+        `plant/${id}/fuel/${kept.entry.id}/corrections`,
+        {
+          action: "correct",
+          id: randomUUID(),
+          capturedAt: new Date().toISOString(),
+          reason: "Store reference typed wrong",
+          siteId: mainSite,
+          issuedAt: at(-2, "15:00"),
+          litres: "30",
+          meterReading: "1205",
+          tankFilled: true,
+          source: "site_store",
+          reference: "SR-0002",
+        },
+        true,
+        { "Idempotency-Key": key() },
+      ),
+      (res) => plantFuelResponseSchema.parse(res),
+      201,
+    ).entry;
+    expect(fixed).toMatchObject({
+      correctsId: kept.entry.id,
+      reference: "SR-0002",
+      standardConsumption: "14.00",
     });
     const voided = ok(
       await manager.call(
@@ -905,7 +1015,7 @@ describe("Plant and equipment (real runtime role)", () => {
       409,
       "plant-not-on-site",
     );
-    await usage(agent, id, {
+    const mainPlotDay = await usage(agent, id, {
       usedOn: day(-1),
       dayStatus: "working",
       startReading: "1200",
@@ -923,21 +1033,60 @@ describe("Plant and equipment (real runtime role)", () => {
       409,
       "move-strands-records",
     );
+    // It really was at Block B: voiding the Main plot log (void rows do not count) makes the late
+    // move possible, and the day is logged again where it was by correcting the void entry.
+    const voidedDay = ok(
+      await manager.call(
+        "post",
+        `plant/${id}/usage/${mainPlotDay.entry.id}/corrections`,
+        {
+          action: "void",
+          id: randomUUID(),
+          capturedAt: new Date().toISOString(),
+          reason: "It was at Block B; the move was not recorded",
+        },
+        true,
+        { "Idempotency-Key": key() },
+      ),
+      (res) => plantUsageResponseSchema.parse(res),
+      201,
+    ).entry;
     current = detail(
       await manager.call("post", `plant/${id}/moves`, {
-        version: current.item.version,
+        version: (await reload(id)).item.version,
         siteId: yardSite,
-        movedOn: today,
+        movedOn: day(-3),
         reason: "Trenching for the drainage line",
       }),
     );
+    ok(
+      await manager.call(
+        "post",
+        `plant/${id}/usage/${voidedDay.id}/corrections`,
+        {
+          action: "correct",
+          id: randomUUID(),
+          capturedAt: new Date().toISOString(),
+          reason: "Logged again at Block B, where it was",
+          siteId: yardSite,
+          dayStatus: "working",
+          startReading: "1200",
+          endReading: "1205",
+        },
+        true,
+        { "Idempotency-Key": key() },
+      ),
+      (res) => plantUsageResponseSchema.parse(res),
+      201,
+    );
+    current = await reload(id);
     expect(current.item.location).toMatchObject({ siteId: yardSite, siteName: "Block B" });
     expect(current.moves.map((move) => move.seq)).toEqual([2, 1]);
     problem(
       await manager.call("post", `plant/${id}/moves`, {
         version: current.item.version,
         siteId: mainSite,
-        movedOn: day(-2),
+        movedOn: day(-4),
       }),
       409,
       "invalid-transition",
@@ -947,7 +1096,7 @@ describe("Plant and equipment (real runtime role)", () => {
     current = detail(
       await agent.call("post", `plant/${id}/breakdowns`, {
         siteId: yardSite,
-        reportedAt: new Date(Date.now() - 30 * 60_000).toISOString(),
+        reportedAt: recently(30, 1),
         severity: "unsafe",
         description: "Hydraulic hose burst on the boom",
       }),
@@ -1042,7 +1191,7 @@ describe("Plant and equipment (real runtime role)", () => {
     expect(current.item.alerts.map((alert) => alert.kind)).toContain("service_overdue");
     current = detail(
       await agent.call("post", `plant/${id}/services`, {
-        servicedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+        servicedAt: recently(5, 2),
         kind: "service",
         meterReading: "1205",
         description: "250-hour service: oil and filters",
@@ -1094,7 +1243,7 @@ describe("Plant and equipment (real runtime role)", () => {
     current = detail(
       await agent.call("post", `plant/${id}/breakdowns`, {
         siteId: yardSite,
-        reportedAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+        reportedAt: recently(2, 2),
         severity: "major",
         description: "Track tensioner cracked",
       }),
@@ -1355,7 +1504,7 @@ describe("Plant and equipment (real runtime role)", () => {
     const reported = detail(
       await agent.call("post", `plant/${id}/breakdowns`, {
         siteId: mainSite,
-        reportedAt: new Date(Date.now() - 60_000).toISOString(),
+        reportedAt: recently(1, 2),
         severity: "minor",
         description: "Cab light not working",
       }),
@@ -1433,7 +1582,7 @@ describe("Plant and equipment (real runtime role)", () => {
     });
     const service = (description: string) =>
       manager.call("post", `plant/${item.item.id}/services`, {
-        servicedAt: new Date(Date.now() - 60_000).toISOString(),
+        servicedAt: recently(1, 2),
         kind: "inspection",
         meterReading: "1200",
         description,

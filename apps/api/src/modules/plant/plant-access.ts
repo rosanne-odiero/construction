@@ -29,6 +29,7 @@ export type PlantProblem =
   | "project-read-only"
   | "invalid-transition"
   | "plant-code-taken"
+  | "plant-register-full"
   | "plant-closed"
   | "plant-not-on-site"
   | "plant-not-metered"

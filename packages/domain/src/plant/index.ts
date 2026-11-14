@@ -16,6 +16,7 @@ export {
   plantDayEnd,
   plantDayStart,
   readingFits,
+  usageRun,
   type MeterBounds,
   type MeterReading,
   type MeterReset,

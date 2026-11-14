@@ -58,6 +58,7 @@ import { operatorState } from "./plant-mappers.js";
 
 /** The register holds at most this many items per company for the in-memory summaries. */
 const REGISTER_CAP = 2000;
+const CLOSED_STATUSES = ["off_hire", "disposed"] as const;
 
 /**
  * The company plant register (D8.3): items with their location, meter, service state, hire
@@ -251,6 +252,17 @@ export class PlantRegisterService {
           })
         )
           throw plantProblem(409, "plant-code-taken", "This plant code is already in the register");
+        // The register reads every item in service at once: past the cap it would drop some.
+        if (
+          (await tx.plantItem.count({
+            where: { tenantId, status: { notIn: [...CLOSED_STATUSES] } },
+          })) >= REGISTER_CAP
+        )
+          throw plantProblem(
+            409,
+            "plant-register-full",
+            `The register holds at most ${REGISTER_CAP} items in service; off-hire or dispose of some first`,
+          );
         const id = uuidv7();
         await tx.plantItem.create({
           data: {
@@ -515,7 +527,11 @@ export class PlantRegisterService {
 
   // Shared with the other plant services --------------------------------------------------------
 
-  /** Every item matching `where` (capped), summarised for the caller. */
+  /**
+   * Every item matching `where`, summarised for the caller: all items in service (registration
+   * stops at REGISTER_CAP of them), then the most recently closed ones up to the cap, so off-hired
+   * and disposed plant never pushes plant in service out of the register.
+   */
   async summaries(
     scope: Scope,
     caller: PlantCaller,
@@ -523,12 +539,24 @@ export class PlantRegisterService {
     where: Prisma.PlantItemWhereInput,
     canSeeCost = caller.costSomewhere,
   ): Promise<PlantItem[]> {
-    const rows = await scope.tx.plantItem.findMany({
-      where,
+    const inService = await scope.tx.plantItem.findMany({
+      where: { AND: [where, { status: { notIn: [...CLOSED_STATUSES] } }] },
       include: plantInclude,
       orderBy: { code: "asc" },
       take: REGISTER_CAP,
     });
+    const closed =
+      inService.length < REGISTER_CAP
+        ? await scope.tx.plantItem.findMany({
+            where: { AND: [where, { status: { in: [...CLOSED_STATUSES] } }] },
+            include: plantInclude,
+            orderBy: [{ closedOn: "desc" }, { code: "asc" }],
+            take: REGISTER_CAP - inService.length,
+          })
+        : [];
+    const rows = [...inService, ...closed].sort((left, right) =>
+      left.code.localeCompare(right.code),
+    );
     const today = nairobiDate();
     const facts = await loadPlantFacts(scope.tx, scope.access.tenantId, rows, settings, today);
     return rows.map((row) =>
@@ -639,22 +667,23 @@ export class PlantRegisterService {
         "A move is dated on or after the previous move and the opening date",
       );
     if (item.siteId) {
-      const after = fromCalendarDate(movedOn);
+      // Only rows still in force: voiding entries is how a late move is made possible.
       const [usage, fuel] = await Promise.all([
-        tx.plantUsageLog.count({
-          where: {
-            tenantId: access.tenantId,
-            plantId: item.id,
-            siteId: item.siteId,
-            usedOn: { gt: after },
-          },
-        }),
         tx.$queryRaw<{ count: bigint }[]>`
-          SELECT count(*) AS count FROM plant_fuel_issues
-          WHERE tenant_id = ${access.tenantId}::uuid AND plant_id = ${item.id}::uuid
-            AND site_id = ${item.siteId}::uuid AND app.plant_business_date(issued_at) > ${movedOn}::date`,
+          SELECT count(*) AS count FROM plant_usage_logs u
+          WHERE u.tenant_id = ${access.tenantId}::uuid AND u.plant_id = ${item.id}::uuid
+            AND u.site_id = ${item.siteId}::uuid AND u.used_on > ${movedOn}::date AND NOT u.is_void
+            AND NOT EXISTS (SELECT 1 FROM plant_usage_logs c
+                             WHERE c.tenant_id = u.tenant_id AND c.corrects_id = u.id)`,
+        tx.$queryRaw<{ count: bigint }[]>`
+          SELECT count(*) AS count FROM plant_fuel_issues f
+          WHERE f.tenant_id = ${access.tenantId}::uuid AND f.plant_id = ${item.id}::uuid
+            AND f.site_id = ${item.siteId}::uuid
+            AND app.plant_business_date(f.issued_at) > ${movedOn}::date AND NOT f.is_void
+            AND NOT EXISTS (SELECT 1 FROM plant_fuel_issues c
+                             WHERE c.tenant_id = f.tenant_id AND c.corrects_id = f.id)`,
       ]);
-      if (usage || Number(fuel[0]?.count ?? 0))
+      if (Number(usage[0]?.count ?? 0) || Number(fuel[0]?.count ?? 0))
         throw plantProblem(
           409,
           "move-strands-records",

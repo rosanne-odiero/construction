@@ -313,12 +313,7 @@ type UsageShape = {
 const usageIssues = (value: UsageShape): string[] => {
   const issues: string[] = [];
   if (Boolean(value.startReading) !== Boolean(value.endReading)) issues.push("endReading");
-  if (
-    value.startReading &&
-    value.endReading &&
-    parseTenths(value.endReading)! < parseTenths(value.startReading)!
-  )
-    issues.push("endReading");
+  // An end below the start is decided by the API: right only across a meter reset that day.
   if (value.operatorLabourerId && value.operatorUserId) issues.push("operatorUserId");
   if (value.bqItemLineageId && value.costCodeId) issues.push("costCodeId");
   return issues;

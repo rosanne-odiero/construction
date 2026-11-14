@@ -1761,6 +1761,7 @@
     "valuationTooLarge": "This valuation has too many lines to work out. Contact support.",
     "asOfFuture": "The data date cannot be in the future.",
     "plantCodeTaken": "This plant code is already in the register.",
+    "plantRegisterFull": "The register holds at most 2,000 items in service. Off-hire or dispose of some first.",
     "plantClosed": "This item is off hire or disposed of; nothing more can be recorded.",
     "plantNotOnSite": "The item was not at this site on that day.",
     "plantNotMetered": "Readings do not match the item's meter: enter them for metered plant only.",

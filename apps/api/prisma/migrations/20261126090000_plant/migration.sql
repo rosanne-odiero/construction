@@ -446,6 +446,19 @@ CREATE FUNCTION app.plant_day_end(target_day date) RETURNS timestamptz
   LANGUAGE sql STABLE AS $$
   SELECT (target_day + 1)::timestamp AT TIME ZONE 'Africa/Nairobi' - interval '1 millisecond'
 $$;
+-- How far the meter ran over a usage day: end − start, or across the reset recorded during the day
+-- (at most one per day): the old meter's last reading − start + end − the new meter's first
+-- (packages/domain usageRun).
+CREATE FUNCTION app.plant_usage_run(target_tenant uuid, target_plant uuid, target_day date,
+  day_start numeric, day_end numeric) RETURNS numeric LANGUAGE sql STABLE AS $$
+  SELECT COALESCE(
+    (SELECT (r.old_reading - day_start) + (day_end - r.new_reading) FROM plant_meter_resets r
+      WHERE r.tenant_id = target_tenant AND r.plant_id = target_plant
+        AND r.reset_at > app.plant_day_start(target_day)
+        AND r.reset_at <= app.plant_day_end(target_day)
+      ORDER BY r.reset_at LIMIT 1),
+    day_end - day_start)
+$$;
 CREATE FUNCTION app.plant_business_date(moment timestamptz) RETURNS date
   LANGUAGE sql STABLE AS $$
   SELECT (moment AT TIME ZONE 'Africa/Nairobi')::date
@@ -759,14 +772,20 @@ BEGIN
     RAISE EXCEPTION 'A move is dated after the previous one and not in the future'
       USING ERRCODE = '23514';
   END IF;
-  -- Leaving a site must not strand usage or fuel already recorded there after the move.
+  -- Leaving a site must not strand usage or fuel still in force there after the move (void and
+  -- superseded rows do not count: voiding them is how a late move is made possible).
   IF NEW.from_site_id IS NOT NULL AND (
     EXISTS (SELECT 1 FROM plant_usage_logs u
       WHERE u.tenant_id = NEW.tenant_id AND u.plant_id = NEW.plant_id
-        AND u.site_id = NEW.from_site_id AND u.used_on > NEW.moved_on)
+        AND u.site_id = NEW.from_site_id AND u.used_on > NEW.moved_on AND NOT u.is_void
+        AND NOT EXISTS (SELECT 1 FROM plant_usage_logs c
+                         WHERE c.tenant_id = u.tenant_id AND c.corrects_id = u.id))
     OR EXISTS (SELECT 1 FROM plant_fuel_issues f
       WHERE f.tenant_id = NEW.tenant_id AND f.plant_id = NEW.plant_id
-        AND f.site_id = NEW.from_site_id AND app.plant_business_date(f.issued_at) > NEW.moved_on)
+        AND f.site_id = NEW.from_site_id AND app.plant_business_date(f.issued_at) > NEW.moved_on
+        AND NOT f.is_void
+        AND NOT EXISTS (SELECT 1 FROM plant_fuel_issues c
+                         WHERE c.tenant_id = f.tenant_id AND c.corrects_id = f.id))
   ) THEN
     RAISE EXCEPTION 'Usage or fuel is recorded at this site after the move date'
       USING ERRCODE = '23514';
@@ -879,6 +898,12 @@ BEGIN
   IF NEW.reset_at > now() + interval '5 minutes' THEN
     RAISE EXCEPTION 'A meter reset cannot be in the future' USING ERRCODE = '23514';
   END IF;
+  -- One reset per item and business day: a usage day spans at most one (app.plant_usage_run).
+  IF EXISTS (SELECT 1 FROM plant_meter_resets r
+      WHERE r.tenant_id = NEW.tenant_id AND r.plant_id = NEW.plant_id
+        AND app.plant_business_date(r.reset_at) = app.plant_business_date(NEW.reset_at)) THEN
+    RAISE EXCEPTION 'An item''s meter is reset at most once a day' USING ERRCODE = '23514';
+  END IF;
   SELECT max(read_at) INTO latest FROM app.plant_meter_readings(NEW.tenant_id, NEW.plant_id, NULL);
   IF latest IS NOT NULL AND NEW.reset_at <= latest THEN
     RAISE EXCEPTION 'A meter reset comes after every reading already recorded'
@@ -899,7 +924,7 @@ CREATE TRIGGER plant_meter_reset_guard BEFORE INSERT OR UPDATE OR DELETE ON "pla
 ALTER TABLE "plant_usage_logs" ADD CONSTRAINT "plant_usage_logs_check" CHECK (
   day_status IN ('working', 'idle', 'breakdown')
   AND (start_reading IS NULL) = (end_reading IS NULL)
-  AND (start_reading IS NULL OR (start_reading >= 0 AND end_reading >= start_reading))
+  AND (start_reading IS NULL OR (start_reading >= 0 AND end_reading >= 0))
   AND (operator_labourer_id IS NULL OR operator_user_id IS NULL)
   AND (bq_version_id IS NULL) = (bq_item_lineage_id IS NULL)
   AND (bq_item_lineage_id IS NULL OR cost_code_id IS NULL)
@@ -916,6 +941,7 @@ DECLARE
   item plant_items%ROWTYPE;
   corrected plant_usage_logs%ROWTYPE;
   day_limit numeric;
+  day_run numeric;
 BEGIN
   IF TG_OP <> 'INSERT' THEN
     RAISE EXCEPTION 'Usage logs are append-only; record a correction' USING ERRCODE = '42501';
@@ -935,7 +961,13 @@ BEGIN
       USING ERRCODE = '23514';
   END IF;
   day_limit := CASE item.meter_type WHEN 'hours' THEN 24.0 ELSE 1500.0 END;
-  IF NEW.end_reading - NEW.start_reading > day_limit THEN
+  day_run := app.plant_usage_run(NEW.tenant_id, NEW.plant_id, NEW.used_on, NEW.start_reading,
+    NEW.end_reading);
+  IF day_run < 0 THEN
+    RAISE EXCEPTION 'The end reading is below the start (no meter reset that day)'
+      USING ERRCODE = '23514';
+  END IF;
+  IF day_run > day_limit THEN
     RAISE EXCEPTION 'One day''s usage cannot exceed 24 hours or 1,500 km' USING ERRCODE = '23514';
   END IF;
   IF NOT app.plant_present(NEW.tenant_id, NEW.plant_id, NEW.site_id, NEW.used_on) THEN
@@ -1025,8 +1057,16 @@ BEGIN
     RAISE EXCEPTION 'Fuel is issued only to plant that uses it, of its type'
       USING ERRCODE = '23514';
   END IF;
-  IF NEW.standard_consumption IS DISTINCT FROM item.standard_consumption THEN
+  -- A new issue carries the standard in force; a correction or void keeps the standard the issue
+  -- was recorded under, so a closed window is never re-judged by a later standard (D-94).
+  IF NEW.corrects_id IS NULL AND NEW.standard_consumption IS DISTINCT FROM item.standard_consumption THEN
     RAISE EXCEPTION 'A fuel issue carries the standard consumption in force'
+      USING ERRCODE = '23514';
+  END IF;
+  IF NEW.corrects_id IS NOT NULL AND NEW.standard_consumption IS DISTINCT FROM (
+       SELECT standard_consumption FROM plant_fuel_issues
+        WHERE tenant_id = NEW.tenant_id AND id = NEW.corrects_id) THEN
+    RAISE EXCEPTION 'A correction keeps the standard consumption of the issue it corrects'
       USING ERRCODE = '23514';
   END IF;
   IF (item.meter_type = 'none') <> (NEW.meter_reading IS NULL) THEN
@@ -1278,6 +1318,7 @@ $$;
 REVOKE EXECUTE ON FUNCTION app.assert_plant_writable(uuid, uuid) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.plant_day_start(date) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.plant_day_end(date) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION app.plant_usage_run(uuid, uuid, date, numeric, numeric) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.plant_business_date(timestamptz) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.plant_present(uuid, uuid, uuid, date) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.plant_meter_readings(uuid, uuid, uuid) FROM PUBLIC;

@@ -89,8 +89,10 @@ export function checkMeterReading(
 }
 
 /**
- * A usage day's start and end readings: the start at the day's start, the end at its end (and
- * end ≥ start). `previous` is the bound for the start and `next` the bound for the end.
+ * A usage day's start and end readings: the start at the day's start, the end at its end. When a
+ * meter reset was recorded during the day the start is on the old meter and the end on the new
+ * one (the run is then counted across the reset); otherwise end ≥ start. `previous` is the bound
+ * for the start and `next` the bound for the end.
  */
 export function checkUsageReadings(
   readings: readonly MeterReading[],
@@ -103,7 +105,10 @@ export function checkUsageReadings(
   const start = meterBounds(readings, resets, plantDayStart(usedOn), excludeId);
   const end = meterBounds(readings, resets, plantDayEnd(usedOn), excludeId);
   return {
-    ok: endTenths >= startTenths && readingFits(start, startTenths) && readingFits(end, endTenths),
+    ok:
+      usageRun(resets, usedOn, startTenths, endTenths) >= 0 &&
+      readingFits(start, startTenths) &&
+      readingFits(end, endTenths),
     previous: start.previous,
     next: end.next,
   };
@@ -127,6 +132,23 @@ export function meterAdvance(
   for (let index = 1; index < between.length; index += 1)
     total += between[index]!.oldTenths - between[index - 1]!.newTenths;
   return total + to.tenths - between.at(-1)!.newTenths;
+}
+
+/**
+ * How far the meter ran over a usage day: end − start, or across a reset recorded during the day
+ * (the old meter's last reading − start, plus end − the new meter's first reading).
+ */
+export function usageRun(
+  resets: readonly MeterReset[],
+  usedOn: string,
+  startTenths: number,
+  endTenths: number,
+): number {
+  return meterAdvance(
+    { at: plantDayStart(usedOn), tenths: startTenths },
+    { at: plantDayEnd(usedOn), tenths: endTenths },
+    resets,
+  );
 }
 
 /** The latest reading in time (the highest value at that moment), including reset readings. */

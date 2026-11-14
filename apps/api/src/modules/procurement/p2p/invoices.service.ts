@@ -14,6 +14,7 @@ import {
 import {
   BQ_VAT_RULE,
   type EtimsNumberFormat,
+  type InvoiceSource,
   type InvoiceStatus,
   type MatchStaleReason,
   type VatTreatment,
@@ -69,7 +70,8 @@ import {
   type ProjectAccess,
 } from "./p2p-common.js";
 
-type InvoiceRow = Prisma.SupplierInvoiceGetPayload<object>;
+export type InvoiceRow = Prisma.SupplierInvoiceGetPayload<object>;
+type LpoRow = Prisma.LpoGetPayload<object>;
 type MatchRow = Prisma.ThreeWayMatchGetPayload<object>;
 const RECORDERS = ["finance.manage", "procurement.manage_suppliers"] as const;
 const ACCRUED: InvoiceStatus[] = ["approved", "partly_settled", "settled"];
@@ -103,6 +105,7 @@ export class InvoicesService {
       lpoId?: string;
       supplierId?: string;
       status?: InvoiceStatus;
+      source?: InvoiceSource;
       cursor?: string;
       limit: number;
     },
@@ -117,6 +120,11 @@ export class InvoicesService {
           ...(query.lpoId ? { lpoId: query.lpoId } : {}),
           ...(query.supplierId ? { supplierId: query.supplierId } : {}),
           ...(query.status ? { status: query.status } : {}),
+          ...(query.source === "supplier_portal"
+            ? { submissions: { some: {} } }
+            : query.source === "company"
+              ? { submissions: { none: {} } }
+              : {}),
           ...(query.cursor ? { id: { lt: query.cursor } } : {}),
         },
         orderBy: { id: "desc" },
@@ -151,55 +159,69 @@ export class InvoicesService {
         principal,
         req,
         async (scope) => {
-          const { tx, access } = scope;
           const lpo = await this.lpos.row(scope, input.lpoId);
           await this.access.require(scope, lpo.projectId, RECORDERS);
-          if (lpo.status !== "approved")
-            throw p2pConflict("lpo-not-approved", "Invoices are recorded against approved LPOs");
-          const key = invoiceNumberKey(input.invoiceNumber);
-          await this.assertNumberFree(scope, lpo.supplierId, key, null);
-          const rate = this.config.get("BQ_VAT_RATE_PERCENT");
-          const priced = await this.priceLines(scope, lpo, input.invoiceDate, input.lines, rate);
-          const totals = documentTotals(priced, rate);
-          const id = nextId();
-          await tx.supplierInvoice.create({
-            data: {
-              id,
-              tenantId: access.tenantId,
-              projectId: lpo.projectId,
-              lpoId: lpo.id,
-              supplierId: lpo.supplierId,
-              invoiceNumber: input.invoiceNumber,
-              invoiceNumberKey: key,
-              invoiceDate: fromCalendarDate(input.invoiceDate),
-              dueDate: dueDate(input.invoiceDate, lpo.creditDays),
-              etimsInvoiceNumber: input.etimsInvoiceNumber?.value ?? null,
-              etimsFormat: input.etimsInvoiceNumber?.format ?? null,
-              vatRatePercent: rate,
-              vatRuleStatus: BQ_VAT_RULE.status,
-              subtotalMinor: BigInt(input.subtotalMinor),
-              vatMinor: BigInt(input.vatMinor),
-              totalMinor: BigInt(input.totalMinor),
-              computedSubtotalMinor: BigInt(totals.subtotalMinor),
-              computedVatMinor: BigInt(totals.vatMinor),
-              notes: input.notes ?? null,
-              createdBy: access.userId,
-              updatedBy: access.userId,
-            },
-          });
-          await this.writeLines(scope, id, lpo.id, priced);
-          await this.scope.audit(tx, "invoice.recorded", id, {
-            projectId: lpo.projectId,
-            lpoId: lpo.id,
-            supplierId: lpo.supplierId,
-            lines: priced.length,
-            etims: input.etimsInvoiceNumber?.format ?? "missing",
-          });
+          const id = await this.record(scope, lpo, input, nextId());
           return this.detail(scope, id);
         },
         true,
       )
       .catch(numberTaken);
+  }
+
+  /**
+   * Records a draft invoice against an approved LPO (the caller has checked who may): the number
+   * is unique per supplier, every line is priced net of VAT per base unit, and the audit event
+   * carries IDs and codes only. Shared by staff capture and supplier-portal submission (D7.2).
+   */
+  async record(
+    scope: Scope,
+    lpo: LpoRow,
+    input: Omit<ParsedCreateInvoiceRequest, "lpoId">,
+    id: string,
+  ): Promise<string> {
+    const { tx, access } = scope;
+    if (lpo.status !== "approved")
+      throw p2pConflict("lpo-not-approved", "Invoices are recorded against approved LPOs");
+    const key = invoiceNumberKey(input.invoiceNumber);
+    await this.assertNumberFree(scope, lpo.supplierId, key, null);
+    const rate = this.config.get("BQ_VAT_RATE_PERCENT");
+    const priced = await this.priceLines(scope, lpo, input.invoiceDate, input.lines, rate);
+    const totals = documentTotals(priced, rate);
+    await tx.supplierInvoice.create({
+      data: {
+        id,
+        tenantId: access.tenantId,
+        projectId: lpo.projectId,
+        lpoId: lpo.id,
+        supplierId: lpo.supplierId,
+        invoiceNumber: input.invoiceNumber,
+        invoiceNumberKey: key,
+        invoiceDate: fromCalendarDate(input.invoiceDate),
+        dueDate: dueDate(input.invoiceDate, lpo.creditDays),
+        etimsInvoiceNumber: input.etimsInvoiceNumber?.value ?? null,
+        etimsFormat: input.etimsInvoiceNumber?.format ?? null,
+        vatRatePercent: rate,
+        vatRuleStatus: BQ_VAT_RULE.status,
+        subtotalMinor: BigInt(input.subtotalMinor),
+        vatMinor: BigInt(input.vatMinor),
+        totalMinor: BigInt(input.totalMinor),
+        computedSubtotalMinor: BigInt(totals.subtotalMinor),
+        computedVatMinor: BigInt(totals.vatMinor),
+        notes: input.notes ?? null,
+        createdBy: access.userId,
+        updatedBy: access.userId,
+      },
+    });
+    await this.writeLines(scope, id, lpo.id, priced);
+    await this.scope.audit(tx, "invoice.recorded", id, {
+      projectId: lpo.projectId,
+      lpoId: lpo.id,
+      supplierId: lpo.supplierId,
+      lines: priced.length,
+      etims: input.etimsInvoiceNumber?.format ?? "missing",
+    });
+    return id;
   }
 
   update(principal: Principal, id: string, input: ParsedUpdateInvoiceRequest, req: Request) {
@@ -298,18 +320,25 @@ export class InvoicesService {
         await this.access.require(scope, row.projectId, RECORDERS);
         if (row.status !== "draft") throw invalidTransition(row.status);
         if (row.version !== input.version) throw p2pVersionConflict();
-        const now = new Date();
-        await this.bump(scope, row, {
-          status: "submitted",
-          submittedBy: scope.access.userId,
-          submittedAt: now,
-        });
-        await this.scope.audit(scope.tx, "invoice.submitted", id, { projectId: row.projectId });
-        await this.matchAndMove(scope, await this.row(scope, id));
+        await this.submitRow(scope, row);
         return this.detail(scope, id);
       },
       true,
     );
+  }
+
+  /**
+   * Moves a draft to submitted and runs the three-way match in the same transaction (matched or
+   * disputed). The caller has checked who may; staff and the supplier portal share it.
+   */
+  async submitRow(scope: Scope, row: InvoiceRow): Promise<void> {
+    await this.bump(scope, row, {
+      status: "submitted",
+      submittedBy: scope.access.userId,
+      submittedAt: new Date(),
+    });
+    await this.scope.audit(scope.tx, "invoice.submitted", row.id, { projectId: row.projectId });
+    await this.matchAndMove(scope, await this.row(scope, row.id));
   }
 
   /** Runs the match again (e.g. after another delivery); matched ↔ disputed follows it. */
@@ -339,6 +368,11 @@ export class InvoicesService {
         await this.access.require(scope, row.projectId, RECORDERS);
         if (!["disputed", "matched"].includes(row.status)) throw invalidTransition(row.status);
         if (row.version !== input.version) throw p2pVersionConflict();
+        if (await this.fromPortal(scope, id))
+          throw p2pConflict(
+            "supplier-invoice-locked",
+            "The supplier submitted this invoice: cancel it with a reason and ask for a new one",
+          );
         await this.bump(scope, row, { status: "draft", submittedBy: null, submittedAt: null });
         await this.scope.audit(scope.tx, "invoice.reopened", id, { from: row.status });
         return this.detail(scope, id);
@@ -768,7 +802,7 @@ export class InvoicesService {
     return matchId;
   }
 
-  private latestMatch(scope: Scope, invoiceId: string) {
+  latestMatch(scope: Scope, invoiceId: string) {
     return scope.tx.threeWayMatch.findFirst({
       where: { tenantId: scope.access.tenantId, invoiceId },
       orderBy: [{ computedAt: "desc" }, { id: "desc" }],
@@ -814,6 +848,14 @@ export class InvoicesService {
     });
     if (!row) throw new NotFoundException("Invoice not found");
     return row;
+  }
+
+  /** Whether the supplier submitted this invoice through the supplier portal (D7.2). */
+  async fromPortal(scope: Scope, invoiceId: string): Promise<boolean> {
+    const count = await scope.tx.supplierInvoiceSubmission.count({
+      where: { tenantId: scope.access.tenantId, invoiceId },
+    });
+    return count > 0;
   }
 
   private async bump(
@@ -941,7 +983,7 @@ export class InvoicesService {
       });
   }
 
-  private async settledMinor(scope: Scope, invoiceId: string): Promise<number> {
+  async settledMinor(scope: Scope, invoiceId: string): Promise<number> {
     const total = await scope.tx.invoiceSettlement.aggregate({
       where: { tenantId: scope.access.tenantId, invoiceId },
       _sum: { amountMinor: true },
@@ -959,7 +1001,7 @@ export class InvoicesService {
 
   async summary(scope: Scope, row: InvoiceRow) {
     const { tx, access } = scope;
-    const [project, lpo, supplier, people, settled] = await Promise.all([
+    const [project, lpo, supplier, people, settled, portal] = await Promise.all([
       tx.project.findUniqueOrThrow({
         where: { tenantId_id: { tenantId: access.tenantId, id: row.projectId } },
         select: { id: true, code: true, name: true },
@@ -971,6 +1013,7 @@ export class InvoicesService {
       this.store.supplier(scope, row.supplierId),
       peopleOf(tx, [row.createdBy, row.submittedBy]),
       this.settledMinor(scope, row.id),
+      this.fromPortal(scope, row.id),
     ]);
     return {
       id: row.id,
@@ -986,6 +1029,7 @@ export class InvoicesService {
       etimsInvoiceNumber: row.etimsInvoiceNumber,
       etimsFormat: row.etimsFormat as EtimsNumberFormat | null,
       status: row.status as InvoiceStatus,
+      source: (portal ? "supplier_portal" : "company") as InvoiceSource,
       contentVersion: row.contentVersion,
       vatRatePercent: row.vatRatePercent.toFixed(),
       subtotalMinor: Number(row.subtotalMinor),
@@ -1177,7 +1221,8 @@ export class InvoicesService {
         canRematch:
           (recorder || has("payments.approve")) &&
           ["submitted", "disputed", "matched"].includes(row.status),
-        canReopen: recorder && ["disputed", "matched"].includes(row.status),
+        canReopen:
+          recorder && ["disputed", "matched"].includes(row.status) && summary.source === "company",
         canCancel: recorder && ["draft", "submitted", "disputed", "matched"].includes(row.status),
         canAttach: recorder && row.status !== "cancelled",
         canApprove: has("payments.approve") && needsApproval && !contributor,

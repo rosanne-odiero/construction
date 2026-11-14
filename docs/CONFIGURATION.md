@@ -225,6 +225,15 @@ One row of `safety_settings` per company (no row means the defaults, reported as
 | `safety.regulator_review_rule` | platform | A regulator decision is required before closing a **serious or fatal injury** or any **dangerous occurrence** (`packages/domain` `regulatorReviewRequired`, re-checked by `app.guard_safety_incident`) | OSHA 2007 / WIBA 2007 reporting duties as understood; COMPLIANCE-REVIEW CR-HS-01 | COMPLIANCE-REVIEW | D8.2 |
 | `safety.limits` | platform | 200 labourers per toolbox talk (500 others counted); 20 people and 6 photos per incident; PPE quantity 1–20; 100 rows per page. Code constant `SAFETY_LIMITS` | ARCHITECTURE §4.9 | PRODUCT | D8.2 |
 
+### Supplier portal (D7.2)
+
+No company settings: the portal uses the D5.2 procurement settings (match tolerances, `procurement.block_payment_without_etims`) as they are. Limits are code constants until per-tenant configuration exists.
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `supplier_portal.limits` | platform | 30 invoice submissions per portal user per hour; 3 documents from the supplier per invoice, across all its portal users (PDF or photo within the D5.2 document limit; also enforced by `app.stamp_procurement_document_source`); statements default to the last 90 days, at most 1,096 days, PDF up to 5,000 lines (Excel unlimited); 30 statement exports per user per 10 minutes; 20 portal invitations per staff user per hour; 50 rows per page (≤ 200). Code constant `SUPPLIER_PORTAL_LIMITS` | ARCHITECTURE §4.12; THREAT_MODEL A-86 | PRODUCT | D7.2 |
+| `supplier_portal.etims_required` | platform | Always: a portal invoice needs an eTIMS number (staff-recorded invoices follow `procurement.block_payment_without_etims`) | COMPLIANCE_TODO CR-SUP-01 | COMPLIANCE-REVIEW | D7.2 |
+
 ### Plant and equipment (D8.3)
 
 One row of `plant_settings` per company (no row means the defaults, reported as version 0), read with `GET plant/settings` (any plant reader or `config.manage`) and changed with `PUT plant/settings` (`config.manage`, optimistic `version`; audited `plant.settings_updated` with the changed field names only). The web form is `/plant/settings`. Defaults are `DEFAULT_PLANT_SETTINGS` in `packages/types`; the limits are `PLANT_SETTINGS_LIMITS` and the CHECK in migration `20261126090000_plant`. Alerts are computed on read, so a change applies to every item at once (old fuel windows are judged by the standard each issue carried, D-94).

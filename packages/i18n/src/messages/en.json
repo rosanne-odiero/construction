@@ -1785,6 +1785,19 @@
     "usageIdConflict": "This usage entry was already sent. Reload to see it.",
     "fuelIdConflict": "This fuel issue was already sent. Reload to see it.",
     "plantRule": "That change breaks a plant rule. Reload the page and check the record.",
+    "supplierInvoiceLocked": "The supplier submitted this invoice: it cannot be reopened. Cancel it with a reason and ask the supplier for a corrected one.",
+    "supplierPortalUser": "Supplier portal users are linked to their supplier, not to projects.",
+    "portalUserExists": "This email or phone number already has supplier portal access or an invitation in this company.",
+    "alreadyMember": "This email or phone number already belongs to a member of the company.",
+    "supplierPortalNotLinked": "Your supplier portal access has ended or is not linked to a supplier.",
+    "lpoAlreadyAcknowledged": "This order is already acknowledged.",
+    "invoiceIdConflict": "This invoice was already submitted. Reload your invoices to check.",
+    "invoiceDateInvalid": "The invoice date cannot be in the future.",
+    "tooManyDocuments": "This invoice already has the most documents you can attach.",
+    "invoiceNotAttachable": "Documents can be attached only to your own open invoices.",
+    "statementPeriodInvalid": "Choose a start date on or before the end date, at most three years apart.",
+    "supplierPortalRule": "The change breaks a supplier portal rule. Reload and try again.",
+    "supplierPortalForbidden": "A supplier cannot make this change.",
     "documentsRule": "This change breaks a document or compliance rule. Reload and check the record.",
     "unsupportedDocumentType": "This file type is not accepted. Upload a PDF, JPEG, PNG, WebP, Word (.docx) or Excel (.xlsx) file. CAD files (DWG, DXF) must be uploaded as the issued PDF.",
     "macroDocument": "Office files with macros, ActiveX controls or embedded programs are not accepted.",
@@ -2825,7 +2838,8 @@
       "sent": "Invitation sent to {phone}. The link expires in 48 hours.",
       "invalidPhone": "Enter a Kenyan mobile number, for example 0712 345 678.",
       "alreadyMember": "This phone number already belongs to someone in the company."
-    }
+    },
+    "supplierName": "Supplier portal"
   },
   "livePhotos": {
     "title": "Site photos",
@@ -4836,6 +4850,42 @@
       "makerChecker": "You made or contributed to these details, so someone else must verify them.",
       "needsPermission": "Verification needs payment approval rights.",
       "cancel": "Cancel"
+    },
+    "portalUsers": {
+      "title": "Supplier portal users",
+      "description": "This supplier's contacts who see its LPOs, deliveries, invoices and statement in the supplier portal and submit invoices. They see nothing else.",
+      "empty": "No one from this supplier uses the portal yet.",
+      "invite": "Invite a contact",
+      "inviteTitle": "Invite to the supplier portal",
+      "inviteDescription": "They receive an email or SMS link (valid 48 hours) to join as this supplier's portal user. Inviting needs a fresh MFA check.",
+      "contactName": "Contact name",
+      "identifier": "Email or Kenyan mobile number",
+      "send": "Send invitation",
+      "sending": "Sending…",
+      "revoke": "Revoke access",
+      "revokeTitle": "Revoke {name}'s access",
+      "revokeDescription": "Their portal access, membership and sessions in this company end now. The record is kept.",
+      "reason": "Reason",
+      "confirmRevoke": "Revoke access",
+      "statuses": {
+        "invited": "Invited",
+        "active": "Active",
+        "revoked": "Revoked"
+      },
+      "invitedBy": "Invited by {name} on {date}",
+      "expires": "Invitation expires {date}",
+      "expired": "Invitation expired {date}: invite again to send a new link",
+      "activated": "Joined {date} as {name}",
+      "revokedBy": "Revoked by {name} on {date}",
+      "membershipEnded": "Ended {date}: the membership was removed or changed role",
+      "superseded": "Replaced {date} by a new invitation",
+      "submitted": "{count, plural, =0 {No invoices submitted} one {# invoice submitted} other {# invoices submitted}}",
+      "invited": "Invitation sent.",
+      "revoked": "Access revoked.",
+      "blocked": "This supplier is blocked: no new invitations.",
+      "cancel": "Cancel",
+      "nameRequired": "Enter the contact's name (at least 2 characters).",
+      "identifierInvalid": "Enter an email address or a Kenyan mobile number such as 0712 345 678."
     }
   },
   "p2p": {
@@ -5308,7 +5358,9 @@
           "approved": "Approved",
           "returned": "Returned: {reason}",
           "cancelled": "Cancelled: {reason}"
-        }
+        },
+        "acknowledged": "Acknowledged by the supplier ({name}) on {date}",
+        "notAcknowledged": "Not yet acknowledged by the supplier"
       },
       "print": {
         "title": "Local purchase order {number}",
@@ -5469,7 +5521,13 @@
         "create": "Save as draft",
         "update": "Save changes",
         "chooseLine": "Bill at least one line."
-      }
+      },
+      "source": {
+        "company": "Recorded by staff",
+        "supplier_portal": "Submitted by the supplier"
+      },
+      "sourceFilter": "Source",
+      "allSources": "All sources"
     },
     "match": {
       "title": "Three-way match",
@@ -5630,7 +5688,8 @@
         "submitted": "Submitted",
         "cancelled": "Cancelled: {reason}"
       },
-      "uploadFailed": "The invoice was saved but its file was not attached. Attach it again below."
+      "uploadFailed": "The invoice was saved but its file was not attached. Attach it again below.",
+      "portalNote": "The supplier submitted this invoice through the supplier portal. It cannot be reopened for edits: cancel it with a reason and ask the supplier for a corrected one."
     },
     "settings": {
       "title": "Procurement settings",
@@ -9079,6 +9138,328 @@
       "saved": "Settings saved.",
       "readOnly": "Only people who manage company settings can change these.",
       "invalid": "Each value must be a whole number within its range."
+    }
+  },
+  "supplierStatementExport": {
+    "title": "Supplier statement",
+    "sheet": "Statement",
+    "supplier": "Supplier",
+    "customer": "Customer",
+    "project": "Project",
+    "allProjects": "All projects",
+    "period": "Period {from} to {to}",
+    "currency": "Currency",
+    "generated": "Generated {date} (Africa/Nairobi)",
+    "page": "Page {page} of {pages}",
+    "columns": {
+      "date": "Date",
+      "details": "Details",
+      "invoiced": "Invoiced",
+      "paid": "Paid",
+      "balance": "Balance",
+      "invoice": "Invoice",
+      "project": "Project",
+      "dueDate": "Due",
+      "total": "Total",
+      "outstanding": "Outstanding"
+    },
+    "opening": "Opening balance",
+    "closing": "Closing balance",
+    "invoiceLine": "Invoice {number}",
+    "paymentLine": "Payment for {number} · {method} · ref. {reference}",
+    "methods": {
+      "bank_transfer": "Bank transfer",
+      "cheque": "Cheque",
+      "mpesa_b2b": "M-Pesa",
+      "other": "Other"
+    },
+    "outstandingHeading": "Invoices not fully paid",
+    "nothingOutstanding": "Nothing outstanding.",
+    "overdue": "overdue",
+    "note": "Invoices count once the company has approved them; payments are those the company recorded. This statement is not a receipt and does not confirm that money reached your account. Amounts in KES include VAT."
+  },
+  "supplierPortal": {
+    "nav": {
+      "label": "Supplier portal pages",
+      "home": "Home",
+      "lpos": "Orders",
+      "deliveries": "Deliveries",
+      "invoices": "Invoices",
+      "statement": "Statement"
+    },
+    "methods": {
+      "bank_transfer": "Bank transfer",
+      "cheque": "Cheque",
+      "mpesa_b2b": "M-Pesa",
+      "other": "Other"
+    },
+    "paymentNote": "Payment status is what {company} recorded. PM-Buddy never sends or confirms a payment: check your bank or M-Pesa statement.",
+    "home": {
+      "greeting": "Karibu, {name}",
+      "description": "{supplier} · orders from {company}",
+      "openLpos": "Open orders",
+      "toAcknowledge": "Orders to acknowledge",
+      "deliveries": "Deliveries recorded",
+      "underReview": "Invoices under review",
+      "disputed": "Invoices disputed",
+      "awaitingPayment": "Approved, awaiting payment",
+      "outstanding": "Outstanding",
+      "outstandingHint": "Approved invoices less the payments {company} recorded, VAT included.",
+      "viewLpos": "View your orders",
+      "submitInvoice": "Submit an invoice",
+      "viewStatement": "View your statement",
+      "empty": "No approved orders yet. They appear here as soon as {company} approves an LPO for you."
+    },
+    "lpos": {
+      "title": "Orders (LPOs)",
+      "description": "Approved LPOs from {company}. An approved LPO never changes; an amendment is a cancellation and a new LPO.",
+      "empty": "No approved orders yet.",
+      "project": "Project",
+      "allProjects": "All projects",
+      "status": "Status",
+      "allStatuses": "All",
+      "apply": "Show",
+      "statuses": {
+        "approved": "Approved",
+        "cancelled": "Cancelled"
+      },
+      "acknowledged": "Acknowledged",
+      "notAcknowledged": "Not acknowledged",
+      "deliverTo": "Deliver to {site}",
+      "deliverBy": "Deliver by {date}",
+      "noDate": "No delivery date set",
+      "total": "{amount} incl. VAT",
+      "nextPage": "More orders",
+      "firstPage": "First page"
+    },
+    "lpo": {
+      "back": "All orders",
+      "approvedOn": "Approved {date}",
+      "deliveryTitle": "Delivery",
+      "site": "Site",
+      "address": "Address",
+      "date": "Delivery date",
+      "notSet": "Not set",
+      "terms": "Terms",
+      "noTerms": "None",
+      "credit": "{days, plural, =0 {Paid on delivery} one {# day's credit} other {# days' credit}}",
+      "linesTitle": "Lines",
+      "cols": {
+        "material": "Material",
+        "ordered": "Ordered",
+        "price": "Price",
+        "net": "Net amount",
+        "received": "Received",
+        "invoiced": "Invoiced (approved)",
+        "pending": "Under review",
+        "invoiceable": "Left to invoice"
+      },
+      "quantitiesNote": "Received, invoiced, under review and left to invoice are in the material's base unit ({unit}).",
+      "subtotal": "Subtotal (net of VAT)",
+      "vat": "VAT ({rate}%)",
+      "total": "Total",
+      "acknowledge": "Acknowledge this order",
+      "acknowledging": "Acknowledging…",
+      "acknowledgeHint": "Tells {company} you received the order. It does not change the order or its approval.",
+      "acknowledgedBy": "Acknowledged by {name} on {date}",
+      "deliveriesTitle": "Deliveries",
+      "noDeliveries": "Nothing delivered yet.",
+      "invoicesTitle": "Your invoices for this order",
+      "noInvoices": "No invoices yet.",
+      "submitInvoice": "Submit an invoice",
+      "cancelledNote": "{company} cancelled this LPO on {date}. Do not deliver against it."
+    },
+    "deliveries": {
+      "title": "Deliveries",
+      "description": "What {company} recorded as received against your orders (goods received notes).",
+      "empty": "No deliveries recorded yet.",
+      "received": "Received {date}",
+      "deliveryNote": "Delivery note {number}",
+      "noDeliveryNote": "No delivery note number",
+      "vehicle": "Vehicle {registration}",
+      "cols": {
+        "material": "Material",
+        "received": "Received",
+        "rejected": "Rejected",
+        "accepted": "Accepted",
+        "reason": "Reason"
+      },
+      "voided": "Voided by {company}: not counted.",
+      "nextPage": "More deliveries",
+      "firstPage": "First page"
+    },
+    "invoices": {
+      "title": "Invoices",
+      "description": "Invoices you submitted and those {company} recorded for you.",
+      "empty": "No invoices yet.",
+      "status": "Status",
+      "allStatuses": "All",
+      "apply": "Show",
+      "statuses": {
+        "submitted": "Submitted",
+        "under_review": "Under review",
+        "disputed": "Disputed",
+        "approved": "Approved",
+        "partly_paid": "Partly paid",
+        "paid": "Paid",
+        "cancelled": "Cancelled"
+      },
+      "source": {
+        "company": "Recorded by {company}",
+        "supplier_portal": "Submitted by you"
+      },
+      "overdue": "Overdue",
+      "due": "Due {date}",
+      "paidOf": "{paid} paid of {total}",
+      "outstanding": "{amount} outstanding",
+      "nextPage": "More invoices",
+      "firstPage": "First page",
+      "submitHint": "To submit an invoice, open the order it is for."
+    },
+    "invoice": {
+      "back": "All invoices",
+      "lpo": "For {number} · {project}",
+      "dates": "Dated {date}, due {due}",
+      "submitted": "Submitted {date}",
+      "etims": "KRA eTIMS number",
+      "etimsUnrecognised": "Unusual format: shown to {company} as a warning.",
+      "linesTitle": "Lines",
+      "cols": {
+        "material": "Material",
+        "quantity": "Quantity",
+        "price": "Unit price",
+        "vat": "VAT",
+        "net": "Net amount"
+      },
+      "totals": {
+        "subtotal": "Subtotal (net of VAT)",
+        "vat": "VAT",
+        "total": "Total",
+        "paid": "Paid (recorded)",
+        "outstanding": "Outstanding"
+      },
+      "disputeTitle": "Why this invoice is disputed",
+      "disputeHint": "{company} will contact you. If the invoice is wrong, they cancel it and you submit a corrected one.",
+      "lineReasons": "Line {line}: {reasons}",
+      "paymentsTitle": "Payments recorded by {company}",
+      "noPayments": "No payment recorded yet.",
+      "paymentLine": "{amount} on {date} · {method} · ref. {reference}",
+      "documentsTitle": "Documents",
+      "noDocuments": "No document attached yet.",
+      "documentMissing": "Attach your invoice (PDF) so {company} can review it.",
+      "open": "Open document {number}",
+      "byYou": "uploaded by you",
+      "byCompany": "attached by {company}",
+      "notScanned": "not scanned (development)",
+      "replayed": "This invoice was already submitted; nothing was sent twice.",
+      "cancelled": "Cancelled by {company}. Submit a corrected invoice if needed.",
+      "uploadFailed": "The invoice was submitted, but the document did not upload. Attach it below."
+    },
+    "form": {
+      "title": "Submit an invoice",
+      "description": "Against {lpo} ({project}). {company} checks it against the order and the deliveries before approving it.",
+      "back": "Back to {lpo}",
+      "invoiceNumber": "Your invoice number",
+      "invoiceDate": "Invoice date",
+      "etims": "KRA eTIMS invoice number",
+      "etimsHint": "As printed by your eTIMS control unit, e.g. KRACU0100000001/501.",
+      "etimsRequired": "Enter the eTIMS number printed on your invoice.",
+      "etimsOk": "Looks like an eTIMS number.",
+      "etimsUnrecognised": "Not the usual eTIMS format: it will be flagged for review.",
+      "etimsInvalid": "This cannot be an eTIMS number.",
+      "linesTitle": "What you are invoicing",
+      "include": "Invoice {material}",
+      "invoiceable": "Delivered and not yet invoiced: {quantity}",
+      "quantity": "Quantity",
+      "unit": "Unit",
+      "unitPrice": "Unit price (KES)",
+      "vat": "VAT",
+      "chooseLine": "Choose at least one line.",
+      "totalsTitle": "Totals as printed on your invoice",
+      "subtotal": "Subtotal (KES)",
+      "vatAmount": "VAT (KES)",
+      "totalAmount": "Total (KES)",
+      "computed": "PM-Buddy computes {subtotal} + VAT {vat} = {total}.",
+      "totalCheck": "The total must be the subtotal plus VAT.",
+      "file": "Your invoice (PDF or photo)",
+      "fileHint": "PDF or photo, at most 10 MB.",
+      "fileRequired": "Attach your invoice document.",
+      "notes": "Note to {company} (optional)",
+      "submit": "Submit invoice",
+      "submitting": "Submitting…",
+      "nothingToInvoice": "Nothing delivered is waiting to be invoiced on this order.",
+      "fixErrors": "Check the invoice number, the eTIMS number, the lines, the totals and the document."
+    },
+    "upload": {
+      "label": "Attach a document",
+      "hint": "PDF or photo, at most 10 MB."
+    },
+    "statement": {
+      "title": "Statement",
+      "description": "What {company} owes you: approved invoices less the payments it recorded.",
+      "from": "From",
+      "to": "To",
+      "project": "Project",
+      "allProjects": "All projects",
+      "show": "Show",
+      "opening": "Opening balance",
+      "closing": "Closing balance",
+      "invoiced": "Invoiced",
+      "paid": "Paid",
+      "cols": {
+        "date": "Date",
+        "details": "Details",
+        "invoiced": "Invoiced",
+        "paid": "Paid",
+        "balance": "Balance"
+      },
+      "invoiceLine": "Invoice {number}",
+      "paymentLine": "Payment for {number} · {method} · ref. {reference}",
+      "noEntries": "No invoices or payments in this period.",
+      "outstandingTitle": "Invoices not fully paid",
+      "noOutstanding": "Nothing outstanding.",
+      "notAcceptedTitle": "Not yet approved (not on the balance)",
+      "noNotAccepted": "None.",
+      "due": "Due {date}",
+      "overdue": "Overdue",
+      "exportPdf": "Download PDF",
+      "exportExcel": "Download Excel",
+      "period": "{from} to {to}",
+      "periodInvalid": "Choose a start date on or before the end date, at most three years apart."
+    },
+    "join": {
+      "title": "Join the supplier portal",
+      "description": "Create your PM-Buddy account or sign in, then accept your customer's invitation.",
+      "missingToken": "Open the link from your invitation email or SMS.",
+      "checking": "Checking…",
+      "signedInAs": "You are signed in as {name}. Accept the invitation to see your orders.",
+      "accept": "Accept invitation",
+      "anotherAccount": "Sign out and use another account",
+      "haveAccount": "Already have a PM-Buddy account?",
+      "signIn": "Sign in",
+      "createTitle": "Create your account",
+      "identifier": "Email or Kenyan mobile number",
+      "identifierHint": "Use the email address or phone number the invitation was sent to.",
+      "name": "Your full name",
+      "password": "Choose a password",
+      "passwordHint": "At least 12 characters. A phrase of a few words is easy to remember.",
+      "create": "Create my account",
+      "code": "Verification code",
+      "codeHint": "The 6-digit code sent to {identifier}.",
+      "verify": "Verify and continue",
+      "errors": {
+        "invalidLink": "This invitation is not valid, has expired or was sent to someone else. Ask your customer to invite you again.",
+        "weakPassword": "Choose a longer or less common password.",
+        "invalidCode": "That code is not right or has expired. If you already had a PM-Buddy account, no code was sent: sign in instead.",
+        "identifier": "Enter an email address or a Kenyan mobile number.",
+        "rateLimited": "Too many attempts. Wait a few minutes and try again.",
+        "network": "No connection. Check your network and try again.",
+        "unexpected": "Something went wrong. Try again."
+      }
+    },
+    "notLinked": {
+      "title": "No supplier access",
+      "description": "Your access to this company's supplier portal has ended or is not linked to a supplier. Ask the company to invite you again."
     }
   },
   "complianceExport": {

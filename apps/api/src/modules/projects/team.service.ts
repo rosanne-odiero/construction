@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Request } from "express";
 import {
   isProjectAssignablePermission,
@@ -105,6 +110,16 @@ export class TeamService {
         });
         if (!target) throw new NotFoundException("Project or member not found");
         if (!permissions.every(isProjectAssignablePermission)) throw notHeld();
+        // Supplier portal users (D7.2) are scoped by their supplier, never by a project.
+        if (
+          await tx.supplierPortalUser.count({
+            where: { tenantId: access.tenantId, userId, status: "active" },
+          })
+        )
+          throw new ConflictException({
+            code: "supplier-portal-user",
+            message: "Supplier portal users see their supplier's orders only; they join no project",
+          });
         const current = await tx.projectMembership.findUnique({
           where: { tenantId_projectId_userId: { tenantId: access.tenantId, projectId, userId } },
           select: { permissions: true },

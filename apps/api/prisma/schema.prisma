@@ -495,18 +495,19 @@ model ProjectMembership {
 }
 
 model Invitation {
-  id           String              @id @default(uuid()) @db.Uuid
-  tenantId     String              @map("tenant_id") @db.Uuid
-  identifier   String              @db.VarChar(254)
-  role         String              @db.VarChar(30)
-  customRoleId String?             @map("custom_role_id") @db.Uuid
-  digest       String              @unique @db.VarChar(64)
-  expiresAt    DateTime            @map("expires_at") @db.Timestamptz
-  acceptedAt   DateTime?           @map("accepted_at") @db.Timestamptz
-  createdBy    String              @map("created_by") @db.Uuid
-  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customRole   TenantRole?         @relation(fields: [tenantId, customRoleId], references: [tenantId, id], onDelete: Cascade)
-  projects     InvitationProject[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  tenantId            String               @map("tenant_id") @db.Uuid
+  identifier          String               @db.VarChar(254)
+  role                String               @db.VarChar(30)
+  customRoleId        String?              @map("custom_role_id") @db.Uuid
+  digest              String               @unique @db.VarChar(64)
+  expiresAt           DateTime             @map("expires_at") @db.Timestamptz
+  acceptedAt          DateTime?            @map("accepted_at") @db.Timestamptz
+  createdBy           String               @map("created_by") @db.Uuid
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customRole          TenantRole?          @relation(fields: [tenantId, customRoleId], references: [tenantId, id], onDelete: Cascade)
+  projects            InvitationProject[]
+  supplierPortalUsers SupplierPortalUser[]
 
   @@unique([tenantId, id])
   @@index([identifier])
@@ -1142,6 +1143,7 @@ model Supplier {
   costEntries       CostEntry[]
   costJournalLines  CostJournalLine[]
   pettyCashExpenses PettyCashExpense[]
+  portalUsers       SupplierPortalUser[]
   plantItems        PlantItem[]
 
   @@unique([tenantId, id])
@@ -2650,55 +2652,57 @@ model QuotationLine {
 // A Local Purchase Order (LPO-NNNN): the awarded quotation, priced lines and a supplier snapshot.
 // Approved LPOs are commitments and never change; an amendment is a cancellation and a reissue.
 model Lpo {
-  id                   String            @id @default(uuid(7)) @db.Uuid
-  tenantId             String            @map("tenant_id") @db.Uuid
-  projectId            String            @map("project_id") @db.Uuid
-  number               String            @db.VarChar(20)
-  rfqId                String            @map("rfq_id") @db.Uuid
-  quotationId          String            @map("quotation_id") @db.Uuid
-  supplierId           String            @map("supplier_id") @db.Uuid
-  replacesLpoId        String?           @map("replaces_lpo_id") @db.Uuid
-  status               String            @default("draft") @db.VarChar(20)
-  deliverySiteId       String?           @map("delivery_site_id") @db.Uuid
-  deliveryDate         DateTime?         @map("delivery_date") @db.Date
-  terms                String?           @db.VarChar(2000)
-  creditDays           Int               @map("credit_days")
-  supplierName         String            @map("supplier_name") @db.VarChar(200)
-  supplierKraPinMasked String?           @map("supplier_kra_pin_masked") @db.VarChar(16)
-  supplierEtimsStatus  String            @map("supplier_etims_status") @db.VarChar(20)
-  vatRatePercent       Decimal           @map("vat_rate_percent") @db.Decimal(7, 4)
-  vatRuleStatus        String            @map("vat_rule_status") @db.VarChar(30)
-  subtotalMinor        BigInt            @map("subtotal_minor")
-  vatMinor             BigInt            @map("vat_minor")
-  totalMinor           BigInt            @map("total_minor")
-  contributors         String[]          @default([]) @db.Uuid
-  version              Int               @default(1)
-  createdBy            String            @map("created_by") @db.Uuid
-  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy            String            @map("updated_by") @db.Uuid
-  updatedAt            DateTime          @default(now()) @map("updated_at") @db.Timestamptz
-  submittedBy          String?           @map("submitted_by") @db.Uuid
-  submittedAt          DateTime?         @map("submitted_at") @db.Timestamptz
-  approvedBy           String?           @map("approved_by") @db.Uuid
-  approvedAt           DateTime?         @map("approved_at") @db.Timestamptz
-  returnReason         String?           @map("return_reason") @db.VarChar(500)
-  cancelledBy          String?           @map("cancelled_by") @db.Uuid
-  cancelledAt          DateTime?         @map("cancelled_at") @db.Timestamptz
-  cancelReason         String?           @map("cancel_reason") @db.VarChar(500)
-  project              Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
-  rfq                  Rfq               @relation(fields: [tenantId, projectId, rfqId], references: [tenantId, projectId, id], onDelete: Restrict)
-  quotation            Quotation         @relation(fields: [tenantId, rfqId, quotationId], references: [tenantId, rfqId, id], onDelete: Restrict)
-  supplier             Supplier          @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
-  deliverySite         Site?             @relation(fields: [tenantId, deliverySiteId], references: [tenantId, id], onDelete: Restrict)
-  replaces             Lpo?              @relation("LpoReissue", fields: [tenantId, replacesLpoId], references: [tenantId, id], onDelete: Restrict)
-  replacedBy           Lpo[]             @relation("LpoReissue")
+  id                   String               @id @default(uuid(7)) @db.Uuid
+  tenantId             String               @map("tenant_id") @db.Uuid
+  projectId            String               @map("project_id") @db.Uuid
+  number               String               @db.VarChar(20)
+  rfqId                String               @map("rfq_id") @db.Uuid
+  quotationId          String               @map("quotation_id") @db.Uuid
+  supplierId           String               @map("supplier_id") @db.Uuid
+  replacesLpoId        String?              @map("replaces_lpo_id") @db.Uuid
+  status               String               @default("draft") @db.VarChar(20)
+  deliverySiteId       String?              @map("delivery_site_id") @db.Uuid
+  deliveryDate         DateTime?            @map("delivery_date") @db.Date
+  terms                String?              @db.VarChar(2000)
+  creditDays           Int                  @map("credit_days")
+  supplierName         String               @map("supplier_name") @db.VarChar(200)
+  supplierKraPinMasked String?              @map("supplier_kra_pin_masked") @db.VarChar(16)
+  supplierEtimsStatus  String               @map("supplier_etims_status") @db.VarChar(20)
+  vatRatePercent       Decimal              @map("vat_rate_percent") @db.Decimal(7, 4)
+  vatRuleStatus        String               @map("vat_rule_status") @db.VarChar(30)
+  subtotalMinor        BigInt               @map("subtotal_minor")
+  vatMinor             BigInt               @map("vat_minor")
+  totalMinor           BigInt               @map("total_minor")
+  contributors         String[]             @default([]) @db.Uuid
+  version              Int                  @default(1)
+  createdBy            String               @map("created_by") @db.Uuid
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy            String               @map("updated_by") @db.Uuid
+  updatedAt            DateTime             @default(now()) @map("updated_at") @db.Timestamptz
+  submittedBy          String?              @map("submitted_by") @db.Uuid
+  submittedAt          DateTime?            @map("submitted_at") @db.Timestamptz
+  approvedBy           String?              @map("approved_by") @db.Uuid
+  approvedAt           DateTime?            @map("approved_at") @db.Timestamptz
+  returnReason         String?              @map("return_reason") @db.VarChar(500)
+  cancelledBy          String?              @map("cancelled_by") @db.Uuid
+  cancelledAt          DateTime?            @map("cancelled_at") @db.Timestamptz
+  cancelReason         String?              @map("cancel_reason") @db.VarChar(500)
+  project              Project              @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  rfq                  Rfq                  @relation(fields: [tenantId, projectId, rfqId], references: [tenantId, projectId, id], onDelete: Restrict)
+  quotation            Quotation            @relation(fields: [tenantId, rfqId, quotationId], references: [tenantId, rfqId, id], onDelete: Restrict)
+  supplier             Supplier             @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  deliverySite         Site?                @relation(fields: [tenantId, deliverySiteId], references: [tenantId, id], onDelete: Restrict)
+  replaces             Lpo?                 @relation("LpoReissue", fields: [tenantId, replacesLpoId], references: [tenantId, id], onDelete: Restrict)
+  replacedBy           Lpo[]                @relation("LpoReissue")
   lines                LpoLine[]
   grns                 Grn[]
   invoices             SupplierInvoice[]
+  acknowledgements     LpoAcknowledgement[]
   plantItems           PlantItem[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
+  @@unique([tenantId, supplierId, id])
   @@unique([tenantId, number])
   @@index([tenantId, projectId, status])
   @@index([tenantId, supplierId])
@@ -2814,50 +2818,52 @@ model GrnLine {
 // A supplier invoice against one LPO with the KRA eTIMS number (CR-TAX-02). content_version
 // increments with every content change; matches and payables bind to it.
 model SupplierInvoice {
-  id                    String                @id @default(uuid(7)) @db.Uuid
-  tenantId              String                @map("tenant_id") @db.Uuid
-  projectId             String                @map("project_id") @db.Uuid
-  lpoId                 String                @map("lpo_id") @db.Uuid
-  supplierId            String                @map("supplier_id") @db.Uuid
-  invoiceNumber         String                @map("invoice_number") @db.VarChar(60)
-  invoiceNumberKey      String                @map("invoice_number_key") @db.VarChar(60)
-  invoiceDate           DateTime              @map("invoice_date") @db.Date
-  dueDate               DateTime              @map("due_date") @db.Date
-  etimsInvoiceNumber    String?               @map("etims_invoice_number") @db.VarChar(40)
-  etimsFormat           String?               @map("etims_format") @db.VarChar(15)
-  vatRatePercent        Decimal               @map("vat_rate_percent") @db.Decimal(7, 4)
-  vatRuleStatus         String                @map("vat_rule_status") @db.VarChar(30)
-  subtotalMinor         BigInt                @map("subtotal_minor")
-  vatMinor              BigInt                @map("vat_minor")
-  totalMinor            BigInt                @map("total_minor")
-  computedSubtotalMinor BigInt                @map("computed_subtotal_minor")
-  computedVatMinor      BigInt                @map("computed_vat_minor")
-  status                String                @default("draft") @db.VarChar(20)
-  contentVersion        Int                   @default(1) @map("content_version")
-  notes                 String?               @db.VarChar(1000)
-  contributors          String[]              @default([]) @db.Uuid
-  version               Int                   @default(1)
-  createdBy             String                @map("created_by") @db.Uuid
-  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy             String                @map("updated_by") @db.Uuid
-  updatedAt             DateTime              @default(now()) @map("updated_at") @db.Timestamptz
-  submittedBy           String?               @map("submitted_by") @db.Uuid
-  submittedAt           DateTime?             @map("submitted_at") @db.Timestamptz
-  cancelledBy           String?               @map("cancelled_by") @db.Uuid
-  cancelledAt           DateTime?             @map("cancelled_at") @db.Timestamptz
-  cancelReason          String?               @map("cancel_reason") @db.VarChar(500)
-  project               Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
-  lpo                   Lpo                   @relation(fields: [tenantId, projectId, lpoId], references: [tenantId, projectId, id], onDelete: Restrict)
-  supplier              Supplier              @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  id                    String                      @id @default(uuid(7)) @db.Uuid
+  tenantId              String                      @map("tenant_id") @db.Uuid
+  projectId             String                      @map("project_id") @db.Uuid
+  lpoId                 String                      @map("lpo_id") @db.Uuid
+  supplierId            String                      @map("supplier_id") @db.Uuid
+  invoiceNumber         String                      @map("invoice_number") @db.VarChar(60)
+  invoiceNumberKey      String                      @map("invoice_number_key") @db.VarChar(60)
+  invoiceDate           DateTime                    @map("invoice_date") @db.Date
+  dueDate               DateTime                    @map("due_date") @db.Date
+  etimsInvoiceNumber    String?                     @map("etims_invoice_number") @db.VarChar(40)
+  etimsFormat           String?                     @map("etims_format") @db.VarChar(15)
+  vatRatePercent        Decimal                     @map("vat_rate_percent") @db.Decimal(7, 4)
+  vatRuleStatus         String                      @map("vat_rule_status") @db.VarChar(30)
+  subtotalMinor         BigInt                      @map("subtotal_minor")
+  vatMinor              BigInt                      @map("vat_minor")
+  totalMinor            BigInt                      @map("total_minor")
+  computedSubtotalMinor BigInt                      @map("computed_subtotal_minor")
+  computedVatMinor      BigInt                      @map("computed_vat_minor")
+  status                String                      @default("draft") @db.VarChar(20)
+  contentVersion        Int                         @default(1) @map("content_version")
+  notes                 String?                     @db.VarChar(1000)
+  contributors          String[]                    @default([]) @db.Uuid
+  version               Int                         @default(1)
+  createdBy             String                      @map("created_by") @db.Uuid
+  createdAt             DateTime                    @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy             String                      @map("updated_by") @db.Uuid
+  updatedAt             DateTime                    @default(now()) @map("updated_at") @db.Timestamptz
+  submittedBy           String?                     @map("submitted_by") @db.Uuid
+  submittedAt           DateTime?                   @map("submitted_at") @db.Timestamptz
+  cancelledBy           String?                     @map("cancelled_by") @db.Uuid
+  cancelledAt           DateTime?                   @map("cancelled_at") @db.Timestamptz
+  cancelReason          String?                     @map("cancel_reason") @db.VarChar(500)
+  project               Project                     @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  lpo                   Lpo                         @relation(fields: [tenantId, projectId, lpoId], references: [tenantId, projectId, id], onDelete: Restrict)
+  supplier              Supplier                    @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
   lines                 SupplierInvoiceLine[]
   matches               ThreeWayMatch[]
   payables              InvoicePayable[]
   documents             ProcurementDocument[]
   costEntries           CostEntry[]
+  submissions           SupplierInvoiceSubmission[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, lpoId, id])
   @@unique([tenantId, projectId, id])
+  @@unique([tenantId, supplierId, id])
   @@index([tenantId, projectId, status])
   @@index([tenantId, supplierId])
   @@map("supplier_invoices")
@@ -2975,25 +2981,27 @@ model InvoiceSettlement {
 
 // A private file kept with a quotation, GRN or invoice (images or PDF; malware hook; never public).
 model ProcurementDocument {
-  id          String           @id @default(uuid(7)) @db.Uuid
-  tenantId    String           @map("tenant_id") @db.Uuid
-  projectId   String           @map("project_id") @db.Uuid
-  kind        String           @db.VarChar(20)
-  quotationId String?          @map("quotation_id") @db.Uuid
-  grnId       String?          @map("grn_id") @db.Uuid
-  invoiceId   String?          @map("invoice_id") @db.Uuid
-  objectKey   String           @map("object_key") @db.VarChar(300)
-  contentType String           @map("content_type") @db.VarChar(40)
-  sizeBytes   Int              @map("size_bytes")
-  sha256      String           @db.Char(64)
-  scanStatus  String           @map("scan_status") @db.VarChar(15)
-  scanEngine  String           @map("scan_engine") @db.VarChar(40)
-  scannedAt   DateTime         @map("scanned_at") @db.Timestamptz
-  uploadedBy  String           @map("uploaded_by") @db.Uuid
-  uploadedAt  DateTime         @default(now()) @map("uploaded_at") @db.Timestamptz
-  quotation   Quotation?       @relation(fields: [tenantId, quotationId], references: [tenantId, id], onDelete: Restrict)
-  grn         Grn?             @relation(fields: [tenantId, grnId], references: [tenantId, id], onDelete: Restrict)
-  invoice     SupplierInvoice? @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict)
+  id                 String           @id @default(uuid(7)) @db.Uuid
+  tenantId           String           @map("tenant_id") @db.Uuid
+  projectId          String           @map("project_id") @db.Uuid
+  kind               String           @db.VarChar(20)
+  quotationId        String?          @map("quotation_id") @db.Uuid
+  grnId              String?          @map("grn_id") @db.Uuid
+  invoiceId          String?          @map("invoice_id") @db.Uuid
+  objectKey          String           @map("object_key") @db.VarChar(300)
+  contentType        String           @map("content_type") @db.VarChar(40)
+  sizeBytes          Int              @map("size_bytes")
+  sha256             String           @db.Char(64)
+  scanStatus         String           @map("scan_status") @db.VarChar(15)
+  scanEngine         String           @map("scan_engine") @db.VarChar(40)
+  scannedAt          DateTime         @map("scanned_at") @db.Timestamptz
+  uploadedBy         String           @map("uploaded_by") @db.Uuid
+  uploadedAt         DateTime         @default(now()) @map("uploaded_at") @db.Timestamptz
+  // Stamped by the database (D7.2): true when a supplier-role member uploaded it.
+  uploadedBySupplier Boolean          @default(false) @map("uploaded_by_supplier")
+  quotation          Quotation?       @relation(fields: [tenantId, quotationId], references: [tenantId, id], onDelete: Restrict)
+  grn                Grn?             @relation(fields: [tenantId, grnId], references: [tenantId, id], onDelete: Restrict)
+  invoice            SupplierInvoice? @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
   @@unique([tenantId, objectKey])
@@ -5000,6 +5008,80 @@ model FirstAidTreatment {
   @@unique([tenantId, projectId, number])
   @@index([tenantId, projectId, treatedAt])
   @@map("first_aid_treatments")
+}
+
+// D7.2 supplier portal (ARCHITECTURE §4.12). A supplier contact's access, bound to exactly one
+// supplier: invited → active (on accepting the invitation, as a `supplier`-role member without
+// project assignments) → revoked (kept as history). One active binding per user and company and
+// one open binding per supplier and identifier (partial unique indexes in SQL).
+model SupplierPortalUser {
+  id               String                      @id @default(uuid(7)) @db.Uuid
+  tenantId         String                      @map("tenant_id") @db.Uuid
+  supplierId       String                      @map("supplier_id") @db.Uuid
+  invitationId     String                      @map("invitation_id") @db.Uuid
+  identifier       String                      @db.VarChar(254)
+  contactName      String                      @map("contact_name") @db.VarChar(100)
+  userId           String?                     @map("user_id") @db.Uuid
+  status           String                      @default("invited") @db.VarChar(10)
+  version          Int                         @default(1)
+  invitedBy        String                      @map("invited_by") @db.Uuid
+  invitedAt        DateTime                    @default(now()) @map("invited_at") @db.Timestamptz
+  activatedAt      DateTime?                   @map("activated_at") @db.Timestamptz
+  revokedBy        String?                     @map("revoked_by") @db.Uuid
+  revokedAt        DateTime?                   @map("revoked_at") @db.Timestamptz
+  revokeCause      String?                     @map("revoke_cause") @db.VarChar(20)
+  revokeReason     String?                     @map("revoke_reason") @db.VarChar(500)
+  supplier         Supplier                    @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  invitation       Invitation                  @relation(fields: [tenantId, invitationId], references: [tenantId, id], onDelete: Restrict)
+  submissions      SupplierInvoiceSubmission[]
+  acknowledgements LpoAcknowledgement[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, supplierId, id])
+  @@unique([tenantId, invitationId])
+  @@index([tenantId, supplierId])
+  @@index([tenantId, userId])
+  @@map("supplier_portal_users")
+}
+
+// An invoice the supplier submitted through the portal: offline-ready (the invoice ID comes from
+// the client, an Idempotency-Key and the request digest). One row per invoice, never changed.
+model SupplierInvoiceSubmission {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  tenantId       String             @map("tenant_id") @db.Uuid
+  invoiceId      String             @map("invoice_id") @db.Uuid
+  supplierId     String             @map("supplier_id") @db.Uuid
+  portalUserId   String             @map("portal_user_id") @db.Uuid
+  submittedBy    String             @map("submitted_by") @db.Uuid
+  idempotencyKey String             @map("idempotency_key") @db.VarChar(100)
+  requestDigest  String             @map("request_digest") @db.Char(64)
+  submittedAt    DateTime           @default(now()) @map("submitted_at") @db.Timestamptz
+  invoice        SupplierInvoice    @relation(fields: [tenantId, supplierId, invoiceId], references: [tenantId, supplierId, id], onDelete: Restrict)
+  portalUser     SupplierPortalUser @relation(fields: [tenantId, supplierId, portalUserId], references: [tenantId, supplierId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, invoiceId])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, supplierId, portalUserId])
+  @@map("supplier_invoice_submissions")
+}
+
+// A supplier's acknowledgement of an approved LPO through the portal (once; never an approval).
+model LpoAcknowledgement {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  tenantId       String             @map("tenant_id") @db.Uuid
+  lpoId          String             @map("lpo_id") @db.Uuid
+  supplierId     String             @map("supplier_id") @db.Uuid
+  portalUserId   String             @map("portal_user_id") @db.Uuid
+  acknowledgedBy String             @map("acknowledged_by") @db.Uuid
+  acknowledgedAt DateTime           @default(now()) @map("acknowledged_at") @db.Timestamptz
+  lpo            Lpo                @relation(fields: [tenantId, supplierId, lpoId], references: [tenantId, supplierId, id], onDelete: Restrict)
+  portalUser     SupplierPortalUser @relation(fields: [tenantId, supplierId, portalUserId], references: [tenantId, supplierId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, lpoId])
+  @@index([tenantId, supplierId, portalUserId])
+  @@map("lpo_acknowledgements")
 }
 
 // Plant and equipment company settings (D8.3): the fuel variance tolerance and minimum sample, the

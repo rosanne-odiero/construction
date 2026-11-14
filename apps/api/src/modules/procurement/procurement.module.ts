@@ -94,6 +94,14 @@ import { VarianceService } from "./stores/variance.service.js";
     TransfersService,
     VarianceService,
   ],
-  exports: [SupplierCrypto],
+  exports: [
+    CatalogueStore,
+    InvoicesService,
+    LposService,
+    P2pAccess,
+    P2pDocumentsService,
+    P2pUploadGuard,
+    SupplierCrypto,
+  ],
 })
 export class ProcurementModule {}

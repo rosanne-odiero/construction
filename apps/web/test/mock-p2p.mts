@@ -40,6 +40,7 @@ import {
   type GrnLocationState,
   type GrnPhotoKind,
   type InboxKind,
+  type InvoiceSource,
   type InvoiceStatus,
   type LocationError,
   type LpoAction,
@@ -360,6 +361,8 @@ type MockInvoice = {
   dueDate: string;
   etims: { value: string; format: EtimsNumberFormat } | null;
   status: InvoiceStatus;
+  /** Keyed by staff, or submitted by the supplier through the supplier portal (D7.2). */
+  source: InvoiceSource;
   contentVersion: number;
   subtotalMinor: number;
   vatMinor: number;
@@ -1303,6 +1306,7 @@ class P2p {
           openMinor: Math.max(0, committed - accrued),
         },
         contributors: lpo.contributors,
+        acknowledgement: null,
         permissions: {
           canManage: held.has("procurement.manage_suppliers") && lpo.status !== "cancelled",
           canApprove:
@@ -1761,6 +1765,7 @@ class P2p {
       etimsInvoiceNumber: invoice.etims?.value ?? null,
       etimsFormat: invoice.etims?.format ?? null,
       status: invoice.status,
+      source: invoice.source,
       contentVersion: invoice.contentVersion,
       vatRatePercent: VAT,
       subtotalMinor: invoice.subtotalMinor,
@@ -1886,6 +1891,7 @@ class P2p {
             ["submitted", "disputed", "matched"].includes(invoice.status),
           canReopen:
             RECORDERS.some((key) => held.has(key)) &&
+            invoice.source === "company" &&
             ["disputed", "matched"].includes(invoice.status),
           canCancel:
             RECORDERS.some((key) => held.has(key)) &&
@@ -1923,6 +1929,7 @@ class P2p {
       dueDate: addDays(input.invoiceDate, lpo.creditDays),
       etims: input.etimsInvoiceNumber,
       status: "draft",
+      source: "company",
       contentVersion: 1,
       subtotalMinor: input.subtotalMinor,
       vatMinor: input.vatMinor,
@@ -2655,13 +2662,15 @@ export function handleP2p(
     if (method === "POST") return p2p.invoiceDetail(p2p.createInvoice(body), 201);
     const ids = visible();
     const lpoFilter = query.get("lpoId");
+    const sourceFilter = query.get("source");
     const rows = [...state.invoices]
       .reverse()
       .filter(
         (invoice) =>
           ids.includes(invoice.projectId) &&
           (!statusFilter || invoice.status === statusFilter) &&
-          (!lpoFilter || invoice.lpoId === lpoFilter),
+          (!lpoFilter || invoice.lpoId === lpoFilter) &&
+          (!sourceFilter || invoice.source === sourceFilter),
       );
     const { items, page } = listPage(rows.map((invoice) => p2p.invoiceWire(invoice)));
     return {
@@ -2855,5 +2864,7 @@ export function initialP2p(base: Omit<P2pDeps, "persona">): P2pState {
     ],
   });
   finance.invoiceCommand(second, "submit", { version: second.version });
+  // The supplier submitted this one through the supplier portal (D7.2): it cannot be reopened.
+  second.source = "supplier_portal";
   return state;
 }

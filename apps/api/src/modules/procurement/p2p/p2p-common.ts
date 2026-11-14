@@ -78,6 +78,7 @@ export type P2pProblem =
   | "payload-too-large"
   | "malware-detected"
   | "invoice-number-taken"
+  | "supplier-invoice-locked"
   | "invoice-total-arithmetic"
   | "match-stale"
   | "match-not-passing"

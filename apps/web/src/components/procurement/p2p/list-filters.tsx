@@ -6,6 +6,15 @@ import type { ProjectOption } from "@/lib/p2p-server";
 const selectClass =
   "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none";
 
+/** One more select on a list's filter form (e.g. the invoice source). */
+export type ExtraFilter = {
+  name: string;
+  label: string;
+  allLabel: string;
+  options: { value: string; label: string }[];
+  value?: string;
+};
+
 /** Project and status filters for a procure-to-pay list (a GET form; the URL keeps them). */
 export async function ListFilters({
   action,
@@ -13,18 +22,20 @@ export async function ListFilters({
   statuses,
   project,
   status,
+  extra,
 }: {
   action: string;
   projects: ProjectOption[];
   statuses: { value: string; label: string }[];
   project?: string;
   status?: string;
+  extra?: ExtraFilter;
 }) {
   const t = await getTranslations("p2p.common");
-  const filtered = Boolean(project || status);
+  const filtered = Boolean(project || status || extra?.value);
   return (
     <form
-      key={`${project ?? ""}|${status ?? ""}`}
+      key={`${project ?? ""}|${status ?? ""}|${extra?.value ?? ""}`}
       method="get"
       action={action}
       className="flex flex-wrap items-end gap-3 print:hidden"
@@ -66,6 +77,26 @@ export async function ListFilters({
           ))}
         </select>
       </div>
+      {extra ? (
+        <div className="space-y-1.5">
+          <label htmlFor={`filter-${extra.name}`} className="block text-sm font-medium">
+            {extra.label}
+          </label>
+          <select
+            id={`filter-${extra.name}`}
+            name={extra.name}
+            defaultValue={extra.value ?? ""}
+            className={selectClass}
+          >
+            <option value="">{extra.allLabel}</option>
+            {extra.options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       <Button type="submit" variant="secondary">
         {t("apply")}
       </Button>

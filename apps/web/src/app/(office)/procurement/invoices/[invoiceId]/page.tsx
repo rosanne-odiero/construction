@@ -181,6 +181,15 @@ export default async function InvoicePage({
           {t("lpo", { number: invoice.lpo.number })}
         </Link>
       </p>
+      {invoice.source === "supplier_portal" ? (
+        <div
+          data-testid="invoice-source"
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-info/30 p-3 text-sm"
+        >
+          <StatusBadge tone="info">{tInvoices("source.supplier_portal")}</StatusBadge>
+          <span>{t("portalNote")}</span>
+        </div>
+      ) : null}
 
       <Card data-testid="etims">
         <CardHeader>

@@ -1785,6 +1785,19 @@
     "usageIdConflict": "Rekodi hii ya matumizi tayari imetumwa. Pakia upya uione.",
     "fuelIdConflict": "Utoaji huu wa mafuta tayari umetumwa. Pakia upya uuone.",
     "plantRule": "Badiliko hilo linavunja kanuni ya mitambo. Pakia upya ukurasa na ukague rekodi.",
+    "supplierInvoiceLocked": "Msambazaji aliwasilisha ankara hii: haiwezi kufunguliwa tena. Ighairi kwa sababu na umuombe msambazaji iliyosahihishwa.",
+    "supplierPortalUser": "Watumiaji wa lango la msambazaji wameunganishwa na msambazaji wao, si na miradi.",
+    "portalUserExists": "Barua pepe au nambari hii tayari ina ufikiaji wa lango la msambazaji au mwaliko katika kampuni hii.",
+    "alreadyMember": "Barua pepe au nambari hii tayari ni ya mwanachama wa kampuni.",
+    "supplierPortalNotLinked": "Ufikiaji wako wa lango la msambazaji umekwisha au haujaunganishwa na msambazaji.",
+    "lpoAlreadyAcknowledged": "Agizo hili tayari limekiriwa.",
+    "invoiceIdConflict": "Ankara hii ilikuwa imeshawasilishwa. Pakia upya ankara zako ili uhakikishe.",
+    "invoiceDateInvalid": "Tarehe ya ankara haiwezi kuwa ya baadaye.",
+    "tooManyDocuments": "Ankara hii tayari ina nyaraka nyingi zaidi unazoweza kuambatisha.",
+    "invoiceNotAttachable": "Nyaraka zinaweza kuambatishwa tu kwenye ankara zako zilizo wazi.",
+    "statementPeriodInvalid": "Chagua tarehe ya kuanzia iliyo kabla au sawa na ya mwisho, zisizozidi miaka mitatu.",
+    "supplierPortalRule": "Mabadiliko haya yanavunja kanuni ya lango la msambazaji. Pakia upya ujaribu tena.",
+    "supplierPortalForbidden": "Msambazaji hawezi kufanya mabadiliko haya.",
     "documentsRule": "Mabadiliko haya yanavunja kanuni ya nyaraka au ya utii wa sheria. Pakia upya na ukague rekodi.",
     "unsupportedDocumentType": "Aina hii ya faili haikubaliwi. Pakia PDF, JPEG, PNG, WebP, Word (.docx) au Excel (.xlsx). Faili za CAD (DWG, DXF) zipakiwe kama PDF iliyotolewa.",
     "macroDocument": "Faili za Office zenye macro, vidhibiti vya ActiveX au programu zilizopachikwa hazikubaliwi.",
@@ -2825,7 +2838,8 @@
       "sent": "Mwaliko umetumwa kwa {phone}. Kiungo kinaisha baada ya saa 48.",
       "invalidPhone": "Weka nambari ya simu ya Kenya, kwa mfano 0712 345 678.",
       "alreadyMember": "Nambari hii ya simu tayari ni ya mtu aliye kwenye kampuni."
-    }
+    },
+    "supplierName": "Lango la msambazaji"
   },
   "livePhotos": {
     "title": "Picha za eneo",
@@ -4836,6 +4850,42 @@
       "makerChecker": "Uliandaa au ulichangia maelezo haya, kwa hiyo mtu mwingine lazima ayathibitishe.",
       "needsPermission": "Uthibitisho unahitaji haki za kuidhinisha malipo.",
       "cancel": "Ghairi"
+    },
+    "portalUsers": {
+      "title": "Watumiaji wa lango la msambazaji",
+      "description": "Watu wa msambazaji huyu wanaoona LPO, mapokezi, ankara na taarifa yake kwenye lango la msambazaji na kuwasilisha ankara. Hawaoni kitu kingine.",
+      "empty": "Bado hakuna mtu wa msambazaji huyu anayetumia lango.",
+      "invite": "Alika mtu",
+      "inviteTitle": "Alika kwenye lango la msambazaji",
+      "inviteDescription": "Atapokea kiungo kwa barua pepe au SMS (halali kwa saa 48) ili ajiunge kama mtumiaji wa msambazaji huyu. Kualika kunahitaji uthibitisho mpya wa MFA.",
+      "contactName": "Jina la mhusika",
+      "identifier": "Barua pepe au nambari ya simu ya Kenya",
+      "send": "Tuma mwaliko",
+      "sending": "Inatuma…",
+      "revoke": "Ondoa ufikiaji",
+      "revokeTitle": "Ondoa ufikiaji wa {name}",
+      "revokeDescription": "Ufikiaji wake wa lango, uanachama na vipindi vyake katika kampuni hii vinaisha sasa hivi. Kumbukumbu inabaki.",
+      "reason": "Sababu",
+      "confirmRevoke": "Ondoa ufikiaji",
+      "statuses": {
+        "invited": "Amealikwa",
+        "active": "Anatumia",
+        "revoked": "Ameondolewa"
+      },
+      "invitedBy": "Alialikwa na {name} tarehe {date}",
+      "expires": "Mwaliko unaisha {date}",
+      "expired": "Mwaliko uliisha {date}: alika tena kutuma kiungo kipya",
+      "activated": "Alijiunga {date} kama {name}",
+      "revokedBy": "Aliondolewa na {name} tarehe {date}",
+      "membershipEnded": "Iliisha {date}: uanachama uliondolewa au jukumu lilibadilishwa",
+      "superseded": "Ilibadilishwa {date} na mwaliko mpya",
+      "submitted": "{count, plural, =0 {Hakuna ankara iliyowasilishwa} one {Ankara # imewasilishwa} other {Ankara # zimewasilishwa}}",
+      "invited": "Mwaliko umetumwa.",
+      "revoked": "Ufikiaji umeondolewa.",
+      "blocked": "Msambazaji huyu amezuiwa: hakuna mialiko mipya.",
+      "cancel": "Ghairi",
+      "nameRequired": "Weka jina la mhusika (angalau herufi 2).",
+      "identifierInvalid": "Weka anwani ya barua pepe au namba ya simu ya Kenya kama 0712 345 678."
     }
   },
   "p2p": {
@@ -5308,7 +5358,9 @@
           "approved": "Imeidhinishwa",
           "returned": "Imerudishwa: {reason}",
           "cancelled": "Imeghairiwa: {reason}"
-        }
+        },
+        "acknowledged": "Imekiriwa na msambazaji ({name}) tarehe {date}",
+        "notAcknowledged": "Bado haijakiriwa na msambazaji"
       },
       "print": {
         "title": "Agizo la ununuzi {number}",
@@ -5469,7 +5521,13 @@
         "create": "Hifadhi kama rasimu",
         "update": "Hifadhi mabadiliko",
         "chooseLine": "Toza angalau mstari mmoja."
-      }
+      },
+      "source": {
+        "company": "Imerekodiwa na wafanyakazi",
+        "supplier_portal": "Imewasilishwa na msambazaji"
+      },
+      "sourceFilter": "Chanzo",
+      "allSources": "Vyanzo vyote"
     },
     "match": {
       "title": "Ulinganisho wa njia tatu",
@@ -5630,7 +5688,8 @@
         "submitted": "Imewasilishwa",
         "cancelled": "Imeghairiwa: {reason}"
       },
-      "uploadFailed": "Ankara imehifadhiwa lakini faili yake haikuambatishwa. Iambatishe tena hapa chini."
+      "uploadFailed": "Ankara imehifadhiwa lakini faili yake haikuambatishwa. Iambatishe tena hapa chini.",
+      "portalNote": "Msambazaji aliwasilisha ankara hii kupitia lango la msambazaji. Haiwezi kufunguliwa tena kwa marekebisho: ighairi kwa sababu na umuombe msambazaji iliyosahihishwa."
     },
     "settings": {
       "title": "Mipangilio ya ununuzi",
@@ -9079,6 +9138,328 @@
       "saved": "Mipangilio imehifadhiwa.",
       "readOnly": "Wanaosimamia mipangilio ya kampuni pekee wanaweza kubadilisha haya.",
       "invalid": "Kila thamani iwe namba kamili ndani ya kiwango chake."
+    }
+  },
+  "supplierStatementExport": {
+    "title": "Taarifa ya mgavi",
+    "sheet": "Taarifa",
+    "supplier": "Mgavi",
+    "customer": "Mteja",
+    "project": "Mradi",
+    "allProjects": "Miradi yote",
+    "period": "Kipindi {from} hadi {to}",
+    "currency": "Sarafu",
+    "generated": "Imetolewa {date} (Africa/Nairobi)",
+    "page": "Ukurasa {page} kati ya {pages}",
+    "columns": {
+      "date": "Tarehe",
+      "details": "Maelezo",
+      "invoiced": "Ankara",
+      "paid": "Imelipwa",
+      "balance": "Salio",
+      "invoice": "Ankara",
+      "project": "Mradi",
+      "dueDate": "Tarehe ya kulipwa",
+      "total": "Jumla",
+      "outstanding": "Inadaiwa"
+    },
+    "opening": "Salio la mwanzo",
+    "closing": "Salio la mwisho",
+    "invoiceLine": "Ankara {number}",
+    "paymentLine": "Malipo ya {number} · {method} · kumb. {reference}",
+    "methods": {
+      "bank_transfer": "Uhamisho wa benki",
+      "cheque": "Hundi",
+      "mpesa_b2b": "M-Pesa",
+      "other": "Nyingine"
+    },
+    "outstandingHeading": "Ankara ambazo hazijalipwa kikamilifu",
+    "nothingOutstanding": "Hakuna kinachodaiwa.",
+    "overdue": "imechelewa",
+    "note": "Ankara huhesabiwa baada ya kampuni kuziidhinisha; malipo ni yale kampuni iliyorekodi. Taarifa hii si risiti na haithibitishi kwamba pesa zimefika kwenye akaunti yako. Kiasi ni kwa KES pamoja na VAT."
+  },
+  "supplierPortal": {
+    "nav": {
+      "label": "Kurasa za lango la msambazaji",
+      "home": "Mwanzo",
+      "lpos": "Maagizo",
+      "deliveries": "Mapokezi",
+      "invoices": "Ankara",
+      "statement": "Taarifa"
+    },
+    "methods": {
+      "bank_transfer": "Uhamisho wa benki",
+      "cheque": "Hundi",
+      "mpesa_b2b": "M-Pesa",
+      "other": "Nyingine"
+    },
+    "paymentNote": "Hali ya malipo ni ile {company} iliyorekodi. PM-Buddy haitumi wala haithibitishi malipo: angalia taarifa ya benki au ya M-Pesa.",
+    "home": {
+      "greeting": "Karibu, {name}",
+      "description": "{supplier} · maagizo kutoka {company}",
+      "openLpos": "Maagizo yaliyo wazi",
+      "toAcknowledge": "Maagizo ya kukiri kupokea",
+      "deliveries": "Mapokezi yaliyorekodiwa",
+      "underReview": "Ankara zinazokaguliwa",
+      "disputed": "Ankara zenye mzozo",
+      "awaitingPayment": "Zimeidhinishwa, zinasubiri malipo",
+      "outstanding": "Kinachodaiwa",
+      "outstandingHint": "Ankara zilizoidhinishwa kutoa malipo ambayo {company} imerekodi, pamoja na VAT.",
+      "viewLpos": "Tazama maagizo yako",
+      "submitInvoice": "Wasilisha ankara",
+      "viewStatement": "Tazama taarifa yako",
+      "empty": "Bado hakuna maagizo yaliyoidhinishwa. Yataonekana hapa mara {company} itakapoidhinisha LPO kwa ajili yako."
+    },
+    "lpos": {
+      "title": "Maagizo (LPO)",
+      "description": "LPO zilizoidhinishwa kutoka {company}. LPO iliyoidhinishwa haibadiliki; marekebisho ni kughairi na LPO mpya.",
+      "empty": "Bado hakuna maagizo yaliyoidhinishwa.",
+      "project": "Mradi",
+      "allProjects": "Miradi yote",
+      "status": "Hali",
+      "allStatuses": "Zote",
+      "apply": "Onyesha",
+      "statuses": {
+        "approved": "Imeidhinishwa",
+        "cancelled": "Imeghairiwa"
+      },
+      "acknowledged": "Imekiriwa",
+      "notAcknowledged": "Haijakiriwa",
+      "deliverTo": "Peleka {site}",
+      "deliverBy": "Peleka kabla ya {date}",
+      "noDate": "Tarehe ya kupeleka haijawekwa",
+      "total": "{amount} pamoja na VAT",
+      "nextPage": "Maagizo zaidi",
+      "firstPage": "Ukurasa wa kwanza"
+    },
+    "lpo": {
+      "back": "Maagizo yote",
+      "approvedOn": "Iliidhinishwa {date}",
+      "deliveryTitle": "Kupeleka",
+      "site": "Eneo",
+      "address": "Anwani",
+      "date": "Tarehe ya kupeleka",
+      "notSet": "Haijawekwa",
+      "terms": "Masharti",
+      "noTerms": "Hakuna",
+      "credit": "{days, plural, =0 {Malipo wakati wa kupokea} one {Mkopo wa siku #} other {Mkopo wa siku #}}",
+      "linesTitle": "Mistari",
+      "cols": {
+        "material": "Kifaa",
+        "ordered": "Kilichoagizwa",
+        "price": "Bei",
+        "net": "Kiasi bila VAT",
+        "received": "Kilichopokelewa",
+        "invoiced": "Kilichotozwa (kimeidhinishwa)",
+        "pending": "Kinachokaguliwa",
+        "invoiceable": "Kilichobaki kutozwa"
+      },
+      "quantitiesNote": "Kilichopokelewa, kilichotozwa, kinachokaguliwa na kilichobaki ni kwa kipimo cha msingi cha kifaa ({unit}).",
+      "subtotal": "Jumla ndogo (bila VAT)",
+      "vat": "VAT ({rate}%)",
+      "total": "Jumla",
+      "acknowledge": "Kiri kupokea agizo hili",
+      "acknowledging": "Inakiri…",
+      "acknowledgeHint": "Inaijulisha {company} kwamba umepokea agizo. Haibadilishi agizo wala idhini yake.",
+      "acknowledgedBy": "Limekiriwa na {name} tarehe {date}",
+      "deliveriesTitle": "Mapokezi",
+      "noDeliveries": "Bado hakuna kilichopelekwa.",
+      "invoicesTitle": "Ankara zako za agizo hili",
+      "noInvoices": "Bado hakuna ankara.",
+      "submitInvoice": "Wasilisha ankara",
+      "cancelledNote": "{company} ilighairi LPO hii tarehe {date}. Usipeleke bidhaa kwa LPO hii."
+    },
+    "deliveries": {
+      "title": "Mapokezi",
+      "description": "Kile ambacho {company} ilirekodi kuwa imepokea kwa maagizo yako (GRN).",
+      "empty": "Bado hakuna mapokezi yaliyorekodiwa.",
+      "received": "Ilipokelewa {date}",
+      "deliveryNote": "Hati ya kupeleka {number}",
+      "noDeliveryNote": "Hakuna nambari ya hati ya kupeleka",
+      "vehicle": "Gari {registration}",
+      "cols": {
+        "material": "Kifaa",
+        "received": "Kilichopokelewa",
+        "rejected": "Kilichokataliwa",
+        "accepted": "Kilichokubaliwa",
+        "reason": "Sababu"
+      },
+      "voided": "Imebatilishwa na {company}: haihesabiwi.",
+      "nextPage": "Mapokezi zaidi",
+      "firstPage": "Ukurasa wa kwanza"
+    },
+    "invoices": {
+      "title": "Ankara",
+      "description": "Ankara ulizowasilisha na zile ambazo {company} ilirekodi kwa ajili yako.",
+      "empty": "Bado hakuna ankara.",
+      "status": "Hali",
+      "allStatuses": "Zote",
+      "apply": "Onyesha",
+      "statuses": {
+        "submitted": "Imewasilishwa",
+        "under_review": "Inakaguliwa",
+        "disputed": "Ina mzozo",
+        "approved": "Imeidhinishwa",
+        "partly_paid": "Imelipwa sehemu",
+        "paid": "Imelipwa",
+        "cancelled": "Imeghairiwa"
+      },
+      "source": {
+        "company": "Imerekodiwa na {company}",
+        "supplier_portal": "Imewasilishwa na wewe"
+      },
+      "overdue": "Imechelewa",
+      "due": "Inalipwa {date}",
+      "paidOf": "{paid} zimelipwa kati ya {total}",
+      "outstanding": "{amount} zinadaiwa",
+      "nextPage": "Ankara zaidi",
+      "firstPage": "Ukurasa wa kwanza",
+      "submitHint": "Kuwasilisha ankara, fungua agizo linalohusika."
+    },
+    "invoice": {
+      "back": "Ankara zote",
+      "lpo": "Kwa {number} · {project}",
+      "dates": "Tarehe {date}, inalipwa {due}",
+      "submitted": "Iliwasilishwa {date}",
+      "etims": "Nambari ya eTIMS ya KRA",
+      "etimsUnrecognised": "Muundo usio wa kawaida: {company} itaona onyo.",
+      "linesTitle": "Mistari",
+      "cols": {
+        "material": "Kifaa",
+        "quantity": "Kiasi",
+        "price": "Bei kwa kipimo",
+        "vat": "VAT",
+        "net": "Kiasi bila VAT"
+      },
+      "totals": {
+        "subtotal": "Jumla ndogo (bila VAT)",
+        "vat": "VAT",
+        "total": "Jumla",
+        "paid": "Imelipwa (iliyorekodiwa)",
+        "outstanding": "Kinachodaiwa"
+      },
+      "disputeTitle": "Kwa nini ankara hii ina mzozo",
+      "disputeHint": "{company} itawasiliana nawe. Ankara ikiwa na kosa, wataighairi nawe utawasilisha iliyosahihishwa.",
+      "lineReasons": "Mstari {line}: {reasons}",
+      "paymentsTitle": "Malipo yaliyorekodiwa na {company}",
+      "noPayments": "Bado hakuna malipo yaliyorekodiwa.",
+      "paymentLine": "{amount} tarehe {date} · {method} · kumb. {reference}",
+      "documentsTitle": "Nyaraka",
+      "noDocuments": "Bado hakuna nyaraka iliyoambatishwa.",
+      "documentMissing": "Ambatisha ankara yako (PDF) ili {company} iweze kuikagua.",
+      "open": "Fungua nyaraka {number}",
+      "byYou": "imepakiwa na wewe",
+      "byCompany": "imeambatishwa na {company}",
+      "notScanned": "haijachunguzwa (majaribio)",
+      "replayed": "Ankara hii ilikuwa imeshawasilishwa; hakuna kilichotumwa mara mbili.",
+      "cancelled": "Imeghairiwa na {company}. Wasilisha ankara iliyosahihishwa ikihitajika.",
+      "uploadFailed": "Ankara imewasilishwa, lakini nyaraka haikupakiwa. Iambatishe hapa chini."
+    },
+    "form": {
+      "title": "Wasilisha ankara",
+      "description": "Kwa {lpo} ({project}). {company} huilinganisha na agizo na mapokezi kabla ya kuiidhinisha.",
+      "back": "Rudi kwenye {lpo}",
+      "invoiceNumber": "Nambari ya ankara yako",
+      "invoiceDate": "Tarehe ya ankara",
+      "etims": "Nambari ya ankara ya eTIMS ya KRA",
+      "etimsHint": "Kama ilivyochapishwa na kifaa chako cha eTIMS, mf. KRACU0100000001/501.",
+      "etimsRequired": "Andika nambari ya eTIMS iliyo kwenye ankara yako.",
+      "etimsOk": "Inaonekana kuwa nambari ya eTIMS.",
+      "etimsUnrecognised": "Si muundo wa kawaida wa eTIMS: itawekwa alama ili ikaguliwe.",
+      "etimsInvalid": "Hii haiwezi kuwa nambari ya eTIMS.",
+      "linesTitle": "Unachotoza",
+      "include": "Toza {material}",
+      "invoiceable": "Kimepelekwa na bado hakijatozwa: {quantity}",
+      "quantity": "Kiasi",
+      "unit": "Kipimo",
+      "unitPrice": "Bei kwa kipimo (KES)",
+      "vat": "VAT",
+      "chooseLine": "Chagua angalau mstari mmoja.",
+      "totalsTitle": "Jumla kama zilivyo kwenye ankara yako",
+      "subtotal": "Jumla ndogo (KES)",
+      "vatAmount": "VAT (KES)",
+      "totalAmount": "Jumla (KES)",
+      "computed": "PM-Buddy inakokotoa {subtotal} + VAT {vat} = {total}.",
+      "totalCheck": "Jumla lazima iwe jumla ndogo pamoja na VAT.",
+      "file": "Ankara yako (PDF au picha)",
+      "fileHint": "PDF au picha, isiyozidi MB 10.",
+      "fileRequired": "Ambatisha nyaraka ya ankara yako.",
+      "notes": "Ujumbe kwa {company} (hiari)",
+      "submit": "Wasilisha ankara",
+      "submitting": "Inawasilisha…",
+      "nothingToInvoice": "Hakuna kilichopelekwa kinachosubiri kutozwa kwenye agizo hili.",
+      "fixErrors": "Kagua nambari ya ankara, nambari ya eTIMS, mistari, jumla na nyaraka."
+    },
+    "upload": {
+      "label": "Ambatisha nyaraka",
+      "hint": "PDF au picha, isiyozidi MB 10."
+    },
+    "statement": {
+      "title": "Taarifa",
+      "description": "Kile ambacho {company} inakudai: ankara zilizoidhinishwa kutoa malipo iliyorekodi.",
+      "from": "Kuanzia",
+      "to": "Hadi",
+      "project": "Mradi",
+      "allProjects": "Miradi yote",
+      "show": "Onyesha",
+      "opening": "Salio la mwanzo",
+      "closing": "Salio la mwisho",
+      "invoiced": "Ankara",
+      "paid": "Imelipwa",
+      "cols": {
+        "date": "Tarehe",
+        "details": "Maelezo",
+        "invoiced": "Ankara",
+        "paid": "Imelipwa",
+        "balance": "Salio"
+      },
+      "invoiceLine": "Ankara {number}",
+      "paymentLine": "Malipo ya {number} · {method} · kumb. {reference}",
+      "noEntries": "Hakuna ankara wala malipo katika kipindi hiki.",
+      "outstandingTitle": "Ankara ambazo hazijalipwa kikamilifu",
+      "noOutstanding": "Hakuna kinachodaiwa.",
+      "notAcceptedTitle": "Bado hazijaidhinishwa (haziko kwenye salio)",
+      "noNotAccepted": "Hakuna.",
+      "due": "Inalipwa {date}",
+      "overdue": "Imechelewa",
+      "exportPdf": "Pakua PDF",
+      "exportExcel": "Pakua Excel",
+      "period": "{from} hadi {to}",
+      "periodInvalid": "Chagua tarehe ya kuanzia iliyo kabla au sawa na ya mwisho, zisizozidi miaka mitatu."
+    },
+    "join": {
+      "title": "Jiunge na lango la msambazaji",
+      "description": "Fungua akaunti yako ya PM-Buddy au ingia, kisha ukubali mwaliko wa mteja wako.",
+      "missingToken": "Fungua kiungo kilicho kwenye barua pepe au SMS ya mwaliko.",
+      "checking": "Inakagua…",
+      "signedInAs": "Umeingia kama {name}. Kubali mwaliko ili uone maagizo yako.",
+      "accept": "Kubali mwaliko",
+      "anotherAccount": "Toka na utumie akaunti nyingine",
+      "haveAccount": "Tayari una akaunti ya PM-Buddy?",
+      "signIn": "Ingia",
+      "createTitle": "Fungua akaunti yako",
+      "identifier": "Barua pepe au nambari ya simu ya Kenya",
+      "identifierHint": "Tumia barua pepe au nambari ya simu ambayo mwaliko ulitumwa.",
+      "name": "Jina lako kamili",
+      "password": "Chagua nenosiri",
+      "passwordHint": "Herufi 12 au zaidi. Sentensi ya maneno machache ni rahisi kukumbuka.",
+      "create": "Fungua akaunti yangu",
+      "code": "Msimbo wa uthibitisho",
+      "codeHint": "Msimbo wa tarakimu 6 uliotumwa kwa {identifier}.",
+      "verify": "Thibitisha na uendelee",
+      "errors": {
+        "invalidLink": "Mwaliko huu si halali, umekwisha muda wake au ulitumwa kwa mtu mwingine. Muombe mteja wako akualike tena.",
+        "weakPassword": "Chagua nenosiri refu zaidi au lisilo la kawaida.",
+        "invalidCode": "Msimbo huo si sahihi au umekwisha muda. Kama tayari ulikuwa na akaunti ya PM-Buddy, hakuna msimbo uliotumwa: ingia badala yake.",
+        "identifier": "Andika barua pepe au nambari ya simu ya Kenya.",
+        "rateLimited": "Majaribio mengi mno. Subiri dakika chache kisha ujaribu tena.",
+        "network": "Hakuna mtandao. Angalia muunganisho wako kisha ujaribu tena.",
+        "unexpected": "Kuna tatizo. Jaribu tena."
+      }
+    },
+    "notLinked": {
+      "title": "Huna ufikiaji wa msambazaji",
+      "description": "Ufikiaji wako wa lango la msambazaji wa kampuni hii umekwisha au haujaunganishwa na msambazaji. Muombe kampuni ikualike tena."
     }
   },
   "complianceExport": {

@@ -1296,6 +1296,12 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         }),
         firstAidKits: await tx.firstAidKit.count({ where: { tenantId } }),
         treatments: await tx.firstAidTreatment.count({ where: { tenantId } }),
+        supplierPortalUsers: await tx.supplierPortalUser.findMany({
+          where: { tenantId },
+          select: { status: true },
+        }),
+        invoiceSubmissions: await tx.supplierInvoiceSubmission.count({ where: { tenantId } }),
+        lpoAcknowledgements: await tx.lpoAcknowledgement.count({ where: { tenantId } }),
         plantItems: await tx.plantItem.findMany({
           where: { tenantId },
           select: { code: true, status: true },
@@ -1332,8 +1338,9 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     const { attendanceDays, attendanceRecords, periods, timesheetLines, anomalies, ...registry } =
       afterFirst;
     expect(registry).toEqual({
-      // D5.3 adds the storekeeper, assigned to Ruiru Heights and Kitengela.
-      members: 5,
+      // D5.3 adds the storekeeper, assigned to Ruiru Heights and Kitengela; D7.2 the quarry's
+      // supplier portal user (no project assignment).
+      members: 6,
       // D6.1 adds JUJ-DPX (handed over: activated and completed), assigned to the PM and agent.
       projects: 4,
       sites: 4,
@@ -1352,8 +1359,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       // D8.3 adds the plant hire company.
       suppliers: 4,
       // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold;
-      // D5.3 three cement quotations.
-      prices: 17,
+      // D5.3 three cement quotations; D7.2 six more at the D5.2 prices (no new alert).
+      prices: 23,
       alerts: 1,
       payouts: [{ status: "pending" }, { status: "verified" }],
       labourers: 40,
@@ -1369,22 +1376,27 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       holidays: 23,
       // D5.2: REQ → RFQ (3 quotations) → approved LPO → partial GRN → one invoice matched,
       // approved and settled, one blocked by the three-way match (ballast not yet delivered).
-      // D5.3: a second REQ → RFQ → LPO → GRN for 120 bags of cement.
-      requisitions: 2,
-      quotations: 6,
-      lpos: [{ status: "approved" }, { status: "approved" }],
-      grns: 2,
+      // D5.3: a second REQ → RFQ → LPO → GRN for 120 bags of cement. D7.2 on Kitengela: REQ →
+      // RFQ (3 quotations) → LPO acknowledged by the supplier → GRN, and two invoices the
+      // supplier submitted: one approved and partly paid, one waiting for review.
+      requisitions: 3,
+      quotations: 9,
+      lpos: [{ status: "approved" }, { status: "approved" }, { status: "approved" }],
+      grns: 3,
       invoices: [
         { invoiceNumber: "MQ-INV-1001", status: "settled" },
         { invoiceNumber: "MQ-INV-1002", status: "disputed" },
+        { invoiceNumber: "MQ-INV-2001", status: "partly_settled" },
+        { invoiceNumber: "MQ-INV-2002", status: "matched" },
       ],
-      payables: 1,
-      settlements: 1,
+      payables: 2,
+      settlements: 2,
       // D5.3: two stores; 3 receipts, 3 issue lines, a return, wastage and two transfers (out,
       // in, out); a disputed and an in-transit transfer; a submitted stock take; one measurement
       // and the build-up's three material lines mapped.
+      // D7.2 receives sand and ballast into the Kitengela store (two receipt entries).
       stores: 2,
-      stockEntries: 11,
+      stockEntries: 13,
       movements: 3,
       transfers: [{ status: "disputed" }, { status: "dispatched" }],
       stockTakes: [{ status: "submitted" }],
@@ -1399,8 +1411,9 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       costCodes: 11,
       budgets: [{ status: "approved" }],
       budgetLines: 7,
-      // D6.3 adds the three lines of the substructure labour journal.
-      costEntries: 21,
+      // D6.3 adds the three lines of the substructure labour journal; D7.2 the accrual of the
+      // approved supplier invoice and the cost part of its part payment.
+      costEntries: 23,
       floats: 1,
       floatEntries: 9,
       expenses: [
@@ -1458,6 +1471,9 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       toolboxTalks: [{ status: "confirmed" }, { status: "confirmed" }, { status: "draft" }],
       firstAidKits: 2,
       treatments: 1,
+      supplierPortalUsers: [{ status: "active" }],
+      invoiceSubmissions: 2,
+      lpoAcknowledgements: 1,
       plantItems: [
         { code: "EX-01", status: "on_site" },
         { code: "GN-01", status: "available" },
@@ -1683,6 +1699,18 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     });
     expect(second.quality).toEqual({ ...first.quality, created: false });
     expect(second.safety).toEqual({ ...first.safety, created: false });
+    expect(second.supplierPortal).toEqual({
+      ...first.supplierPortal,
+      created: false,
+      account: { ...first.supplierPortal.account, password: null, created: false },
+    });
+    expect(second.supplierPortal).toMatchObject({
+      supplier: "SUP-0001 Mlolongo Quarry (synthetic)",
+      invoices: [
+        { number: "MQ-INV-2001", status: "partly_settled" },
+        { number: "MQ-INV-2002", status: "matched" },
+      ],
+    });
     expect(second.plant).toEqual({ ...first.plant, created: false });
     expect(second.documents).toEqual({ ...first.documents, created: false });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);

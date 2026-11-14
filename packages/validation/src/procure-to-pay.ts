@@ -7,6 +7,7 @@ import {
   GRN_SOURCES,
   GRN_STATUSES,
   INBOX_KINDS,
+  INVOICE_SOURCES,
   INVOICE_STATUSES,
   LOCATION_ERRORS,
   LPO_DELIVERY_STATES,
@@ -518,6 +519,8 @@ export const lpoDetailResponseSchema = z.strictObject({
     openMinor: minor,
   }),
   contributors: z.array(person),
+  /** The supplier's acknowledgement through the supplier portal (D7.2); never an approval. */
+  acknowledgement: z.strictObject({ acknowledgedAt: timestamp, acknowledgedBy: person }).nullable(),
   permissions: z.strictObject({
     canManage: z.boolean(),
     canApprove: z.boolean(),
@@ -724,7 +727,7 @@ export const invoiceLineInputSchema = z.strictObject({
   vatTreatment: z.enum(VAT_TREATMENTS),
 });
 
-const invoiceFields = {
+export const invoiceFields = {
   invoiceNumber: text(1, 60),
   invoiceDate: calendarDate,
   etimsInvoiceNumber: etimsInvoiceNumberSchema.nullable().default(null),
@@ -734,7 +737,7 @@ const invoiceFields = {
   notes: optionalText(1000, true).optional(),
   lines: z.array(invoiceLineInputSchema).min(1).max(P2P_LIMITS.linesPerDocument),
 };
-const checkInvoice = (
+export const checkInvoice = (
   value: {
     subtotalMinor?: number;
     vatMinor?: number;
@@ -828,6 +831,8 @@ export const invoiceSchema = z.strictObject({
   etimsInvoiceNumber: z.string().nullable(),
   etimsFormat: z.enum(ETIMS_NUMBER_FORMATS).nullable(),
   status: z.enum(INVOICE_STATUSES),
+  /** Keyed by company staff, or submitted by the supplier through the supplier portal (D7.2). */
+  source: z.enum(INVOICE_SOURCES),
   /** Increments with every content change; matches and approvals bind to it. */
   contentVersion: z.number().int().min(1),
   vatRatePercent: z.string(),
@@ -957,6 +962,7 @@ export const invoiceListQuerySchema = z.object({
   lpoId: uuid.optional(),
   supplierId: uuid.optional(),
   status: z.enum(INVOICE_STATUSES).optional(),
+  source: z.enum(INVOICE_SOURCES).optional(),
   cursor: uuid.optional(),
   limit: listLimit,
 });

@@ -144,6 +144,37 @@ export function remainingQuantity(left: string, right: string): string {
   return difference.below ? "0" : difference.value.toDecimal(6).value;
 }
 
+/** An ordered line as the invoice forms need it (staff LPO detail or the supplier portal). */
+export type InvoiceableLine = {
+  quantity: string;
+  unit: string;
+  baseQuantity: string;
+  priceUnit: string;
+  unitPriceMinor: number;
+  netUnitPriceBaseMinor: string;
+  vatTreatment: VatTreatment;
+  material: { baseUnit: string };
+};
+
+/** Price units in one base unit for the units an invoice form offers (the line's unit or the base). */
+export function unitsPerBase(line: InvoiceableLine, unit: string): Ratio {
+  if (unit === line.material.baseUnit) return Ratio.ONE;
+  return Ratio.fromDecimal(line.quantity).dividedBy(Ratio.fromDecimal(line.baseQuantity));
+}
+
+/** The LPO's price per the line's unit as written on an invoice (VAT treatment kept). */
+export function defaultInvoicePrice(line: InvoiceableLine, vatRate: string): number {
+  if (line.priceUnit === line.unit) return line.unitPriceMinor;
+  const perLineUnit = Ratio.fromDecimal(line.netUnitPriceBaseMinor)
+    .times(Ratio.fromDecimal(line.baseQuantity))
+    .dividedBy(Ratio.fromDecimal(line.quantity));
+  const gross =
+    line.vatTreatment === "inclusive"
+      ? perLineUnit.times(Ratio.of(100).plus(Ratio.fromDecimal(vatRate))).dividedBy(Ratio.of(100))
+      : perLineUnit;
+  return Number(gross.toDecimal(0).value);
+}
+
 /** A client-generated identifier (GRN IDs and idempotency keys). */
 export const newClientId = () => crypto.randomUUID();
 

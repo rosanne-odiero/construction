@@ -259,6 +259,16 @@ import {
   spendingSummaryResponseSchema,
   topUpResponseSchema,
   topUpsResponseSchema,
+  portalDeliveriesResponseSchema,
+  portalDocumentResponseSchema,
+  portalInvoiceDetailResponseSchema,
+  portalInvoicesResponseSchema,
+  portalLpoDetailResponseSchema,
+  portalLposResponseSchema,
+  supplierPortalOverviewResponseSchema,
+  supplierPortalUserResponseSchema,
+  supplierPortalUsersResponseSchema,
+  supplierStatementResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -309,6 +319,8 @@ export function responseContract(method: string, target: string) {
   if (path === "portal/client/projects") return clientProjectsResponseSchema;
   if (/^portal\/client\/projects\/[^/]+$/.test(path)) return clientProjectResponseSchema;
   if (path === "portal/worker") return workerPortalResponseSchema;
+  const supplierPortal = supplierPortalContract(method, path);
+  if (supplierPortal) return supplierPortal;
   if (/^projects\/[^/]+\/labourers\/invitations$/.test(path)) return invitationResponseSchema;
   if (path === "projects") return method === "get" ? projectsResponseSchema : projectResponseSchema;
   if (/^projects\/[^/]+\/photos(\?.*)?$/.test(path) && method === "get")
@@ -430,6 +442,27 @@ function documentsContract(method: string, path: string) {
   }
   if (rest === "") return get ? approvalListResponseSchema : approvalResponseSchema;
   return approvalResponseSchema;
+}
+
+/** The D7.2 supplier portal endpoints' success contracts (supplier and staff sides). */
+function supplierPortalContract(method: string, path: string) {
+  if (/^suppliers\/[^/]+\/portal-users$/.test(path))
+    return method === "get" ? supplierPortalUsersResponseSchema : supplierPortalUserResponseSchema;
+  if (/^suppliers\/[^/]+\/portal-users\/[^/]+\/revoke$/.test(path))
+    return supplierPortalUserResponseSchema;
+  if (!path.startsWith("portal/supplier")) return null;
+  if (path === "portal/supplier") return supplierPortalOverviewResponseSchema;
+  if (path === "portal/supplier/lpos") return portalLposResponseSchema;
+  if (/^portal\/supplier\/lpos\/[^/]+(\/acknowledge)?$/.test(path))
+    return portalLpoDetailResponseSchema;
+  if (path === "portal/supplier/deliveries") return portalDeliveriesResponseSchema;
+  if (path === "portal/supplier/invoices")
+    return method === "get" ? portalInvoicesResponseSchema : portalInvoiceDetailResponseSchema;
+  if (/^portal\/supplier\/invoices\/[^/]+\/document$/.test(path))
+    return portalDocumentResponseSchema;
+  if (/^portal\/supplier\/invoices\/[^/]+$/.test(path)) return portalInvoiceDetailResponseSchema;
+  if (path === "portal/supplier/statement") return supplierStatementResponseSchema;
+  return z.unknown();
 }
 
 /** The D8.3 plant endpoints' success contracts. */

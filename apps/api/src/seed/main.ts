@@ -71,6 +71,11 @@ function print(summary: SeedSummary) {
     `Procure-to-pay (synthetic, ${p2p.created ? "created" : "already present"}): ${p2p.requisition} → ${p2p.rfq} → ${p2p.lpo} → ${p2p.grn}`,
   );
   for (const invoice of p2p.invoices) lines.push(`  invoice ${invoice.number} — ${invoice.status}`);
+  const { schedule } = summary;
+  lines.push(
+    "",
+    `Schedule for RUI-HTS (synthetic, ${schedule.created ? "created" : "already present"}): ${schedule.activities} activities, ${schedule.dependencies} dependencies, ${schedule.baselines} baseline(s), ${schedule.delays} delays`,
+  );
   console.log(lines.join("\n"));
 }
 

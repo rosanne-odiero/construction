@@ -24,6 +24,7 @@
 | BQ versions, variations and build-ups (D2.3) | Live baseline approval and contract sums on `/projects/[id]/bq` and the project overview, `…/bq/variations` (list, editor, submit/approve/reject/reopen/cancel/rebase with step-up), `…/bq/instructions`, `…/bq/versions` (history and compare), `/rate-buildups` (company library, versions, item links) and `/bq`; browser tests run against the mock API; no approval limits by amount, no attachment upload, no theoretical consumption yet |
 | `/labour` (D3.1) | Live labourer registry (saved views, worker side panel with masked identifiers and audited reveal, registration with consent, consent screen, gangs, trades & rates, NCA alerts); the D0 labour screens moved to `/prototype/labour` and stay labelled. Built and verified locally on branch `phase-3/d3.1-labour-registry`; not pushed, not reviewed, not approved |
 | `/attendance` (D3.3, web slice) | Live attendance and timesheets: overview, daily muster roll per project/site/day (keyboard entry, bulk "present", gang filter, inline flags), submit and confirm by a different person, corrections, anomaly review, weekly timesheet periods (submit, approve with an immutable snapshot, reject, reopen), adjustments to approved periods, rules & holidays, and an attendance summary in the worker panel; the D0 attendance screens moved to `/prototype/attendance`. Web-manual capture only (no site app, QR/NFC, photos, GPS/geofence, offline or biometrics). Built and verified locally on branch `phase-3/d3.3-web-timesheets`; not pushed, not reviewed, not approved |
+| `/projects/[id]?tab=schedule` (D6.2) | Live schedule: SVG Gantt chart (critical path, baseline ghosts, actual dates, milestone diamonds, dependency arrows, today's line in Nairobi time, week/month zoom, keyboard item list, table alternative), activity editor with FS/SS/FF/SF links and lags, progress with a declared basis, per-project working calendar with the company's public holidays, CPM from `packages/domain`, append-only baselines with variance in working days, and the versioned delay log. Built and verified locally on `phase-6/d6.2-schedule`; not committed, not reviewed. No resource levelling, calendars per activity, MS Project/P6 import or client-portal schedule; measured progress and EVM are D6.3 |
 | CI | Existing lint/type/test/build/API/security workflows retained; browser/a11y job added |
 
 ## Executed evidence (this session)
@@ -893,3 +894,188 @@ thumbnails are generated in the API process; no client-portal photo timeline yet
 Remaining Phase 6 work: rest of D6.1 (inspections/checklists, cube/slump tests, snags,
 completion/DLP; attendance-backed workforce and site-app capture after Phase 3), D6.2 schedule
 (baseline, actuals, variance, delay log), D6.3 measurement, EVM and interim payment certificates.
+
+## D6.2 schedule (branch `phase-6/d6.2-schedule`)
+
+Status: **built, independently verified and reviewed** (findings below, all fixed). Work ran in the `construction-pin` worktree on `phase-6/d6.2-schedule` (from `origin/main` at `9d1baad`) with its own Docker stack (`pmb-pin`: PostgreSQL 55732, Valkey 56679, RustFS 9300, Mailpit 8325; API 4500, web 3500; Playwright 3510/3599). Roadmap: 🔎. **Done when "the baseline is frozen and variance is shown": met locally.** Baselines are append-only in PostgreSQL (no UPDATE or DELETE privilege, and triggers that refuse every role including the schema owner; mutation-checked below), and the Schedule tab shows variance in working days per activity, per milestone and for the project finish. Design: [ARCHITECTURE §4.6](./ARCHITECTURE.md#46-schedule-d62) and decisions D-14, D-44–D-48, [WORKFLOWS](./WORKFLOWS.md#schedule-baseline-and-delay-log-d62), [ERD §3](./ERD.md#3-projects-sites-and-schedule), [CONFIGURATION](./CONFIGURATION.md#schedule-d62), [INVARIANTS](./INVARIANTS.md), threat A-30 in [THREAT_MODEL](./THREAT_MODEL.md), acceptance rows in [ACCEPTANCE_MATRIX](./ACCEPTANCE_MATRIX.md), API contract in [apps/api/README.md](../apps/api/README.md#schedule-d62), walkthrough in the [Phase 6 demo](./demos/phase-6.md#d62-schedule-gantt-baseline-and-variance-delay-log).
+
+**Findings fixed after independent verification and code review**
+
+| # | Severity | Finding | Fix and regression test |
+|---|---|---|---|
+| 1 | High | Every schedule read needed only `projects.view`, which the client and supplier roles hold, so a client assigned to the project could read every delay's claim flag (`excusable`, `compensable`), description and history: the contractor's position on its own claims, readable by the other party | Schedule and baselines need a working permission; the delay log needs a contractor-staff permission (decision D-48). The web hides the tab and the view with the same lists. `schedule.e2e-spec.ts` refuses a client, a supplier and a view-only member everything, and a consultant the delay log only; `schedule.test.ts` covers `scheduleAccess`. Dropping either API check fails the e2e test |
+| 2 | Medium | Amending a delay could silently remove its site-diary link: the form only listed the newest 100 diaries, and the API turned an omitted `siteDiaryId` into null | Leaving `siteDiaryId` out of an amendment keeps the cited diary (null still clears it), and the form always offers every diary a delay cites (`withCitedDiaries`). The delay e2e test amends without the diary (kept) and with null (cleared); a unit test covers the form list. Using the raw request fails the e2e test |
+| 3 | Medium | A milestone linked from a task's start (SS or SF) showed on the working day before that task started, and its predecessor's float was one day too much | `startToMilestone` adds the missing day in the forward pass and takes it off in the backward pass. A unit test places such a milestone on the task's start day and makes its chain critical; reverting either pass fails it |
+| 4 | Medium | One milestone or project date more than about 16 years from the project start (a typo such as 2062, or 2045) made the whole schedule return 422, and with it every schedule edit | Planning dates (project, milestone, activity and delay requests) must be in 2000–2099 (`PLANNING_DATE_RANGE`), and the working-day index covers that whole range even on a seven-day week. Unit tests reach 31/12/2099 from 2000 and refuse 2100; the e2e test computes a schedule with a 2099 milestone and refuses 2100. The old cap fails it |
+
+**What changed**
+
+- **Shared packages.**
+  - `types`: `schedule.ts`. It holds the item kinds, the link types FS/SS/FF/SF, the progress bases `physical` and `quantity`, and the activity statuses. It has the 10 delay causes and the claim flags `not_assessed`, `non_excusable`, `excusable` and `compensable`. It has the delay statuses and `DEFAULT_WORKING_WEEKDAYS` (Monday–Saturday). `SCHEDULE_LIMITS` sets 500 activities, 2,000 links, durations of 1–1,000 working days, lags from −60 to +365, 50 baselines and 50 activities per delay.
+  - `domain`:
+    - `schedule/calendar.ts`: a working-day index over ISO weekdays and holidays.
+    - `schedule/cpm.ts`: `computeSchedule` does the forward and backward pass for all four link types with lags. It gives early and late dates, total float, the critical path and driving links, handles start-no-earlier-than, and computes progress at a data date. Also `findDependencyCycle` and `dependencyCreatesCycle`.
+    - `schedule/progress.ts`: progress checks, quantity percent, duration-weighted project progress, variance and delay days.
+    - 23 unit tests.
+  - `validation`: `schedule.ts`, with every request and response schema (4 tests).
+  - `i18n`: the `schedule` namespace, the `projectDetail.tabs.schedule` label and the schedule `apiErrors`, in EN and SW.
+- **Database.** Migration `20261119090000_schedule` adds seven tables. Each has `tenant_id`, forced RLS with `WITH CHECK` on `app.current_tenant_id()`, composite `(tenant_id, …)` foreign keys and grants to `pmb_app`.
+  - **Tables:**
+    - `schedule_settings`: one row per project, with the working weekdays and whether public holidays count. It cannot be deleted.
+    - `schedule_activities`: a task or a milestone link. A task has a code, name, WBS node, an optional BQ item lineage on an approved BQ version, a duration, an optional start-no-earlier-than date, actual start and finish, and progress (basis, percent, quantity done and total, unit). A milestone link points to a `milestones` row and is created on that milestone's first dependency. Both carry a version.
+    - `schedule_dependencies`: FS/SS/FF/SF with a lag and a version; one per pair, and no self-links.
+    - `schedule_baselines` and `schedule_baseline_items`: the append-only snapshot. A baseline stores its number, name, reason, data date, calendar, item count and who/when. Each item stores its kind, reference, code, name, duration and computed start and finish.
+    - `schedule_delays` and `schedule_delay_activities`: the versioned, append-only delay log. Each version stores the delay ID, version, `supersedes`, number, cause, claim flag, period, working days lost (half days), description, an optional site diary, status and reason.
+  - **CHECK constraints** cover shapes, dates and limits. A task is 100 % exactly when it has an actual finish. A quantity percent equals done ÷ total, rounded down to 0.01.
+  - **Triggers:**
+    - `app.assert_schedule_writable`: closed or cancelled projects are read-only.
+    - Actual dates, delay periods and a baseline's data date cannot be after `app.business_today()`.
+    - `app.reject_schedule_cycle`: recursive reachability under a project row lock.
+    - Baseline items and delay activities are accepted only in their parent's transaction, with a deferred item-count check at commit.
+    - `app.reject_history_mutation` on the four history tables, plus REVOKE of UPDATE and DELETE.
+  - **Existing tables:** new unique `(tenant_id, project_id, id)` indexes on `milestones` and `site_diaries`, needed for the composite references. No permission was added, so `tenant_roles_permissions_check` and `project_permissions_check` are unchanged.
+  - **Prisma:** seven models and their back-relations. `schedule_delays_one_number_per_project` is a partial unique index in SQL only; Prisma ignores it, so `migrate diff` stays clean.
+- **API.** `apps/api/src/modules/schedule/` is registered in `app.module.ts`. It has 17 OpenAPI operations under `/api/v1/projects/:projectId/schedule`:
+  - `GET`: the computed schedule with CPM results and variance; add `?baselineId=` to compare with another baseline.
+  - `PUT calendar`.
+  - Activities: `POST`, `PATCH` and `DELETE activities`, and `PUT activities/:activityId/progress`.
+  - Dependencies: `POST`, `PATCH` and `DELETE dependencies`.
+  - Baselines: `GET` and `POST baselines`, and `GET baselines/:baselineId`.
+  - Delays: `GET` and `POST delays`, `GET delays/:delayId` (with history), `POST delays/:delayId/amend` and `POST delays/:delayId/withdraw`.
+
+  `schedule-model.ts` loads the network (activities, linked milestones, links, and the calendar with the company's `public_holidays`) and computes it with the domain functions. Separate services handle activities, links and the calendar; baselines; and delays.
+  - Every edit checks an optimistic version (`expectedVersion`); a stale one returns 409 `version-conflict`.
+  - Cycles are refused before the insert.
+  - Every record's `permissions` come from the project permissions and the record's state, using the actions' own rules.
+  - Every change writes a hash-chained audit event (`schedule.*`) with IDs, codes and field names only.
+- **Seed.** `apps/api/src/seed/schedule-seed.ts` runs from the demo seed after payroll. RUI-HTS gets:
+  - 22 activities across the WBS;
+  - 30 dependencies (FS and SS, including one lead);
+  - the project's milestones linked into the network;
+  - baseline 1 "Contract programme", with a data date of 02/03/2026;
+  - actual dates that slipped;
+  - three delays (weather, supplier/material, client instruction).
+
+  On 14/11/2026 this shows a planned finish of 12/04/2027 against a baseline finish of 25/01/2027: **+64 working days**. Progress is 40.7 %, with 10 critical items and 27 baseline items.
+- **Web.** `/projects/[id]?tab=schedule` (`schedule-tab.tsx`) takes `view=gantt|baselines|delays`, and `baseline=` to compare. Components in `components/schedule/`:
+  - `gantt-chart.tsx`: an SVG chart with planned or forecast bars, the critical path, actual bars, baseline ghosts, milestone diamonds, dependency arrows, today's line in Nairobi time, and week or month zoom. It has a keyboard item list, and the chart scrolls inside a labelled, focusable region.
+  - `schedule-table.tsx`: the table alternative, with every figure.
+  - `activity-dialogs.tsx` (create, edit, progress), `dependencies-panel.tsx`, `calendar-panel.tsx` and `schedule-workspace.tsx`.
+  - `baselines-panel.tsx`: freeze or re-baseline with a reason, the list, the variance table and comparison.
+  - `delays-panel.tsx`: totals by cause, record, amend, withdraw and history.
+  - `variance-badge.tsx` and `use-schedule-mutation.tsx`.
+
+  `lib/schedule.ts` holds chart geometry and formatting (6 unit tests). `use-problem-message.ts` maps 20 new problem codes.
+- **Tests and mock.**
+  - `apps/api/test/schedule.e2e-spec.ts` (10 tests), and `scheduleContract` in `test/support.ts`.
+  - `apps/web/test/mock-schedule.mts` computes with the domain functions at a fixed data date (10/11/2026) and parses every response with the shared schemas. Its Ruiru fixture has 8 activities, 2 milestones, baseline 1 and a weather delay. It is wired into `mock-api.mts`.
+  - `schedule.spec.ts` (6 tests); `global-setup.ts` warms the schedule routes.
+- **Docs.** ROADMAP (D6.2 → 🔎), ARCHITECTURE (§4.6, permission rows, D-14 accepted, D-44–D-48), WORKFLOWS, ERD §3, CONFIGURATION, INVARIANTS, THREAT_MODEL A-30, ACCEPTANCE_MATRIX, the API README and the Phase 6 demo.
+- **Dependencies.** None added; `pnpm-lock.yaml` is unchanged.
+
+**Decisions**
+
+- **Calendar (D-44).**
+  - Each project has its own ISO working weekdays (default Monday–Saturday, editable), plus the company's public holidays from attendance (on by default).
+  - Durations, lags, float, variance and delay days are all in working days.
+  - Each baseline stores the calendar it was computed with.
+- **CPM (D-45).** The schedule is computed on every read in `packages/domain`; planned dates are never stored. The data date is today in Nairobi:
+  - Completed work keeps its actual dates.
+  - Started work ignores its predecessors. Its remaining time is the duration × (1 − percent), or the full duration when no percent is reported.
+  - Unstarted work cannot start before the data date.
+
+  Total float is late finish − early finish, and an item is critical when its float is ≤ 0. Milestones are zero-duration markers; a cancelled milestone leaves the network.
+- **Baseline immutability (D-46).**
+  - Freezing copies every task's and milestone's computed start and finish, with the name, reason, data date, who and when.
+  - The database makes baselines append-only.
+  - The newest baseline is current, so there is no pointer to update. Comparing with an older baseline is a query parameter.
+  - Variance is null ("unavailable") when there is no baseline, and for items added after it.
+- **Percent complete (D-47).**
+  - It is physical progress with a declared basis: a whole-percent estimate, or quantity done ÷ total. It is 100 % only with an actual finish.
+  - Project progress is weighted by planned duration and labelled as physical progress, not earned or certified value (brief §15 G). It is null when undefined.
+- **Permissions (D-48).** No new permission was added:
+  - Every change needs `projects.manage` (role ∩ assignment), as for the WBS and milestones. Reading the schedule and baselines needs `projects.view` plus a working permission (`SCHEDULE_READ_PERMISSIONS`), so portal-only roles never see them; the delay log, which holds the contractor's claim positions, needs a contractor-staff permission (`DELAY_LOG_READ_PERMISSIONS`: `projects.manage`, `site.diary`, `bq.edit`, `finance.manage`), so clients, suppliers and consultants never see it.
+  - Closed or cancelled projects are read-only.
+  - This avoids rewriting the permission CHECK constraints while D5.3 also changes them.
+- **Delay log (D-48).**
+  - Rows are versioned and append-only: amending or withdrawing appends a version with a reason.
+  - Causes come from a fixed list.
+  - The claim flag is the company's position, not a legal determination.
+  - Working days lost cannot exceed the working days in the period.
+- **Gantt (D-14).** It is drawn with SVG in React, with no library. The SVG is `aria-hidden`; the item list and the table carry the data.
+
+**Found and fixed**
+
+| # | Severity | Finding | Fix and regression test |
+|---|---|---|---|
+| 1 | Low | At 360 px the schedule page scrolled sideways (811 px wide). The `sr-only` table captions and headers are absolutely positioned, and they escaped the scroll regions because those were not positioned | Every schedule scroll region is now `relative`. The Kiswahili/dark/360 px test in `schedule.spec.ts` checks for horizontal scroll on all three views; it fails without the fix |
+| 2 | Low | `apiErrors.actualDateFuture` mentioned only the achieved date (milestones), but activity actual dates now return the same code | The message now reads "An actual or achieved date cannot be in the future." (EN and SW) |
+| 3 | Docs | The plan pointed at ERD §4 for `ScheduleActivity` and `ActivityDependency`, but they are in ERD §3 | "Implemented in D6.2" is noted in ERD §3 |
+
+**Behaviour changes to existing features**
+
+- A WBS node used by a schedule activity can no longer be deleted. The foreign key refuses it, and the existing `wbs-in-use` problem reports it.
+- Deleting a milestone removes its schedule link row and its dependencies (cascade).
+
+**Commands run (from the worktree root; PATH set to the arm64 Node 24.22.2 and the pnpm 12.17.0 shim) and actual results**
+
+| Command | Actual result |
+|---|---|
+| `pnpm run format:check` | "All matched files use Prettier code style!", after `prettier --write` on the new files |
+| `npx turbo run lint typecheck test i18n:check build --force` | **26 successful, 0 cached** (34 s). oxlint "Found 0 warnings and 0 errors"; ESLint clean in web. Unit tests: types 38, i18n 3, domain 356 (schedule 23), validation 104 (schedule 4), API 132, web 46 (schedule 6); **679** in total. "i18n OK: 4723 keys in en and sw". `next build` succeeded |
+| `bash reset-db.sh pmb-pin pmb_test`, then `PLAYWRIGHT_WEB_PORT=3510 PLAYWRIGHT_MOCK_API_PORT=3599 npx turbo run test:e2e` | **First full run passed:** API 18 files, 236 tests (schedule 10); web 107 passed (schedule 6). **Second run** (`--force`, after a small table layout change): API 236 passed; web 105 passed and **2 failed**, both in `procure-to-pay.spec.ts` (D5.2 code). One was an eTIMS hint that did not update; the other was axe reporting "Execution context was destroyed". The load average was about 15. That file alone then passed 6/6 (1.1 min). **Third run** (`--force`, `pmb_test` reset again): API 18 files, 236 tests passed; web 106 passed and **1 failed**. This time it was `variations.spec.ts` (D2.3): axe ran before the page `<title>` had streamed (`document-title`), at a load average of 16–20. That file alone then passed 5/5. **Final run** (`pmb_test` reset again, load about 10): **7 successful, 7 total**. API **18 files, 236 tests**; web **107 passed** (3.7 min). The e2e tasks ran; only the package builds came from the cache. Every run passed `schedule.spec.ts` and `schedule.e2e-spec.ts` |
+| `cd apps/api && npx vitest run --config ./vitest.config.e2e.ts test/schedule.e2e-spec.ts` (whole file, fresh `pmb_test`) | 10/10 |
+| **Mutation checks** on `pmb_test`, each with the whole file rerun and then restored | Dropping the baseline append-only triggers: the baseline test fails ("promise resolved [1,1] instead of rejecting": the schema owner's UPDATE and DELETE went through). Dropping `schedule_dependency_no_cycle`: the cycle test fails. Removing `relative` from the scroll regions: the 360 px browser test fails |
+| `cd apps/api && npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` (migrated dev database) | "No difference detected." |
+| `grep -c 'integrity: sha1-' pnpm-lock.yaml` | 0 |
+| **Real-API smoke** | The dev database `pmb` was reset, then `prisma migrate deploy` and `db:seed`. The API ran with `pnpm start` on :4500 and the web app with `next dev --port 3500`. A temporary Playwright script, kept outside the repository, signed in as the project manager and drove these flows: the Gantt; adding an activity and a dependency; a loop being refused; progress; re-baselining with a reason and comparing with baseline 1; recording, amending and withdrawing a delay, then its history. It then repeated them in Kiswahili with the dark theme at 360 px (no sideways scroll), and checked the site agent's read-only view. Everything worked. Afterwards dev was reseeded so the screenshots show a clean demo, and both servers were stopped |
+
+Screenshots from the real-API smoke are kept outside the repository, in the session folder `d62-screenshots/`:
+
+- the Gantt chart with the baseline and variance (EN);
+- the headline variance (EN);
+- the schedule table (EN);
+- the Gantt chart, dark theme (EN);
+- baselines and variance, and the comparison with baseline 1 (EN);
+- the delay log, delay form and history (EN);
+- the Gantt chart, baselines and delays in Kiswahili, dark theme, at 360 px;
+- the site agent's read-only view.
+
+**Not done / limitations**
+
+- Scheduling features not built:
+  - resource levelling;
+  - calendars per activity;
+  - constraints other than start-no-earlier-than;
+  - a "retained logic" option (started work always ignores its predecessors);
+  - schedule import or export (MS Project, P6).
+- The schedule is recomputed on every read, with no cache (bounded by 500 activities and 2,000 links).
+- Measured BQ progress, EVM and S-curves are D6.3. A client-portal schedule is D7.1.
+- Recording a delay needs `projects.manage`. There is no site-agent permission for delays yet; that needs an owner decision and the permission CHECK rewrite.
+- Actual dates and progress are corrections that overwrite the previous value; the audit keeps field names, not values. There is no maker-checker on progress or delays (THREAT_MODEL A-30 gaps).
+- The browser tests use the mock API. The real API is covered by the API e2e suite and the one-off smoke above, which is not automated.
+
+**Open risks**
+
+- **Merge conflicts** with parallel work (D5.3 and the Daraja work) are likely in these files:
+  - `packages/i18n/src/messages/{en,sw}.json`;
+  - `apps/web/test/mock-api.mts` and `global-setup.ts`;
+  - `use-problem-message.ts`;
+  - `schema.prisma`;
+  - `demo-seed.ts` and `main.ts`;
+  - these docs.
+
+  The migration timestamp `20261119090000` sorts between D5.3 (`20261118…`) and Daraja (`20261120…`).
+- During the smoke, clicking Withdraw on a delay just after another change, before the page refresh finished, sent a stale version. It returned 409 `version-conflict` with a message and changed nothing (safe, the standard behaviour).
+- In `next dev`, one intermittent hydration warning ("attributes didn't match") appeared once. It did not reproduce in about 30 later page loads.
+- The demo seed back-dates baseline 1's data date; the API always uses today. A baseline's data date can therefore be earlier than its creation (noted in A-30).
+- These Kiswahili terms need a native speaker's review:
+  - *ratiba* (schedule);
+  - *msingi uliogandishwa* (frozen baseline);
+  - *tofauti* (variance);
+  - *njia muhimu* (critical path);
+  - *utegemezi* (dependencies);
+  - *nafasi ya ziada* (float);
+  - *daftari la ucheleweshaji* (delay log);
+  - *msimamo wa madai* (claim position);
+  - *unasameheka* / *unafidiwa* (excusable / compensable).

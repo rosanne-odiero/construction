@@ -10,6 +10,7 @@ import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { StatusChangeButton } from "@/components/projects/status-change";
 import { StatusBadge } from "@/components/status-badge";
+import { scheduleAccess } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { serverApi, requireSession } from "@/lib/server-api";
 import { signInHref } from "@/lib/safe-next";
@@ -19,8 +20,9 @@ import { TeamTab } from "./team-tab";
 import { WbsTab } from "./wbs-tab";
 import { DiaryTab } from "./diary-tab";
 import { PhotosTab } from "./photos-tab";
+import { SCHEDULE_VIEWS, ScheduleTab } from "./schedule-tab";
 
-const TABS = ["overview", "sites", "team", "wbs", "diary", "photos"] as const;
+const TABS = ["overview", "sites", "team", "wbs", "schedule", "diary", "photos"] as const;
 type Tab = (typeof TABS)[number];
 const PROTOTYPE_IDS = new Set(["ruiru-heights", "kitengela-bungalow"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -44,9 +46,12 @@ export default async function ProjectPage({
   // The D0 prototype detail moved to /prototype/projects/…; keep its old links working.
   if (PROTOTYPE_IDS.has(projectId)) redirect(`/prototype/projects/${projectId}`);
   if (!UUID.test(projectId)) notFound();
-  const { tab: rawTab, cursor } = await searchParams;
+  const { tab: rawTab, cursor, view: rawView, baseline } = await searchParams;
   const tab: Tab = TABS.find((candidate) => candidate === rawTab) ?? "overview";
-  const path = `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}`;
+  const view = SCHEDULE_VIEWS.find((candidate) => candidate === rawView) ?? "gantt";
+  const path = `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}${
+    tab === "schedule" && view !== "gantt" ? `&view=${view}` : ""
+  }`;
 
   const session = await requireSession(path);
   if (!session) return <LiveUnavailable retryHref={path} />;
@@ -62,6 +67,8 @@ export default async function ProjectPage({
   const t = await getTranslations("projectDetail");
   const canManage = detail.permissions.includes("projects.manage");
   const canViewBq = detail.permissions.includes("bq.view");
+  // The same rules the API applies: portal-only roles see no schedule; the delay log is staff-only.
+  const { schedule: canReadSchedule, delays: canReadDelays } = scheduleAccess(detail.permissions);
   const readOnly = isProjectReadOnly(project.status);
   // Original vs revised contract sum on the overview, for people who can see the BQ.
   const sums =
@@ -99,7 +106,7 @@ export default async function ProjectPage({
       ) : null}
       <nav aria-label={t("sectionsLabel")} className="relative -mx-1 overflow-x-auto">
         <ul className="flex min-w-max gap-1 border-b px-1">
-          {TABS.map((key) => (
+          {TABS.filter((key) => key !== "schedule" || canReadSchedule).map((key) => (
             <li key={key}>
               <Link
                 href={`/projects/${project.id}${key === "overview" ? "" : `?tab=${key}`}`}
@@ -146,6 +153,17 @@ export default async function ProjectPage({
       ) : null}
       {tab === "wbs" ? (
         <WbsTab project={project} canManage={canManage && !readOnly} returnTo={path} />
+      ) : null}
+      {tab === "schedule" && !canReadSchedule ? <LiveForbidden /> : null}
+      {tab === "schedule" && canReadSchedule ? (
+        <ScheduleTab
+          project={project}
+          view={view === "delays" && !canReadDelays ? "gantt" : view}
+          canReadDelays={canReadDelays}
+          baselineId={typeof baseline === "string" ? baseline : undefined}
+          canPickBq={canViewBq}
+          returnTo={path}
+        />
       ) : null}
       {tab === "diary" ? (
         <DiaryTab

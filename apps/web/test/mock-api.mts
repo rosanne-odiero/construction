@@ -86,6 +86,7 @@ import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
 import { handlePhotos, initialPhotos } from "./mock-photos.mts";
 import { latestApproved } from "./mock-bq-model.mts";
 import { handleP2p, initialP2p, p2pDocument, type P2pDeps, type P2pState } from "./mock-p2p.mts";
+import { handleSchedule, initialSchedule, type ScheduleState } from "./mock-schedule.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -169,6 +170,8 @@ type State = {
   attendance: AttendanceState;
   diaries: SiteDiary[];
   photos: SitePhoto[];
+  /** D6.2 schedules by project (mock-schedule.mts). */
+  schedule: ScheduleState;
 };
 
 const states = new Map<string, State>();
@@ -368,6 +371,21 @@ function fixture(persona: Persona): State {
   return {
     persona,
     stepUpAt: new Map(),
+    schedule: new Map([
+      [
+        RUIRU_ID,
+        initialSchedule(
+          {
+            id: RUIRU_ID,
+            status: ruiru.project.status,
+            startDate: ruiru.project.startDate,
+          },
+          ruiru.milestones,
+          wbs,
+          { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+        ),
+      ],
+    ]),
     diaries: initialDiaries(RUIRU_ID, MAIN_PLOT_ID, OWNER_ID, AGENT_ID),
     photos: initialPhotos(RUIRU_ID, MAIN_PLOT_ID),
     bq,
@@ -856,6 +874,29 @@ async function handle(
       raw,
       (status, code) => new HttpError(status, code),
     );
+  }
+  if (rest === "schedule" || rest.startsWith("schedule/")) {
+    const entry = find(state, projectId!, "projects.view");
+    const { project } = entry;
+    return handleSchedule(
+      {
+        project: { id: project.id, status: project.status, startDate: project.startDate },
+        milestones: entry.milestones,
+        wbs: entry.wbs,
+        canEdit:
+          projectPermissions(state, entry).includes("projects.manage") &&
+          project.status !== "closed" &&
+          project.status !== "cancelled",
+        actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+        fail: (status, code) => new HttpError(status, code),
+        parse,
+      },
+      state.schedule,
+      method,
+      rest,
+      query,
+      body,
+    )!;
   }
   if (rest === "diaries" || rest.startsWith("diaries/")) {
     const entry = find(state, projectId!, method === "GET" ? "projects.view" : "site.diary");

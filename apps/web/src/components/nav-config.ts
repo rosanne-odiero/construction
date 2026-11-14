@@ -85,7 +85,8 @@ export const navGroups: {
   {
     key: "finance",
     items: [
-      { key: "payroll", href: "/payroll", icon: Wallet },
+      // The live payroll screens (D4.1 web) are not on main yet; the D0 prototype stands in.
+      { key: "payroll", href: "/prototype/payroll", icon: Wallet },
       { key: "payments", href: "/soon/payments", icon: Banknote, phase: 4 },
       { key: "spending", href: "/soon/spending", icon: Receipt, phase: 5 },
     ],

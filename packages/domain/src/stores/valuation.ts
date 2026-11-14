@@ -9,10 +9,13 @@ import { divideRound, fromMicro, microDivide, microTimes, toMicro } from "./deci
  * - Inflows carry their own unit cost: a receipt the LPO's net price per base unit (VAT
  *   excluded), a transfer in the dispatching store's average, a return the issue's unit cost, a
  *   stock-take surplus the current average. Value = round(quantity × unit cost, 6).
- * - Outflows (issues, transfers out, wastage, shortages, receipt reversals) leave at the average:
+ * - Outflows (issues, transfers out, wastage, shortages) leave at the average:
  *   value = round(quantity × value ÷ on-hand, 6); an outflow that empties the position takes all
  *   of its remaining value, so no rounding residue is ever left on zero stock.
- * - A reversal of an outflow puts back exactly the value it took out.
+ * - A reversal of an outflow puts back exactly the value it took out. A reversal of an inflow (a
+ *   voided receipt, a reversed return) takes out exactly the value it brought in, so correcting a
+ *   mistake leaves the position as it was; only when that value is no longer there (the position
+ *   would go negative) does it leave at the average, and emptying still takes all that is left.
  *
  * The database repeats these rules in `app.post_stock_entry` (division-free comparisons), so a
  * bypassed API check cannot post a mis-valued entry.
@@ -71,6 +74,32 @@ export function takeFromStock(position: StockPosition, quantity: string): Outflo
     valueMinor: fromMicro(out),
     unitCostMinor: fromMicro(microDivide(value, onHand)),
     after: { quantity: fromMicro(onHand - amount), valueMinor: fromMicro(value - out) },
+  };
+}
+
+/**
+ * The reversal of an inflow (`original` is the inflow as posted: positive quantity, its value and
+ * unit cost): out at the value it brought in, so a corrected mistake leaves the position as it
+ * was. Emptying the position takes all that is left; when the original value is no longer there
+ * (it would leave a negative value) it falls back to the average.
+ */
+export function reverseInflow(
+  position: StockPosition,
+  original: { quantity: string; valueMinor: string; unitCostMinor: string },
+): OutflowResult {
+  const amount = toMicro(original.quantity);
+  const value = toMicro(original.valueMinor);
+  if (amount <= 0n) throw new RangeError("Only an inflow is reversed at its own value");
+  const onHand = toMicro(position.quantity);
+  const held = toMicro(position.valueMinor);
+  if (amount > onHand)
+    return { ok: false, reason: "insufficient-stock", available: fromMicro(onHand) };
+  if (amount === onHand || value > held) return takeFromStock(position, original.quantity);
+  return {
+    ok: true,
+    valueMinor: fromMicro(value),
+    unitCostMinor: fromMicro(toMicro(original.unitCostMinor)),
+    after: { quantity: fromMicro(onHand - amount), valueMinor: fromMicro(held - value) },
   };
 }
 

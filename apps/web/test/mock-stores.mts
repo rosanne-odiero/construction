@@ -44,6 +44,7 @@ import {
 } from "@pm-buddy/domain";
 import {
   DEFAULT_CONSUMPTION_VARIANCE_PERCENT,
+  STORES_LIMITS,
   type Permission,
   type StockEntryKind,
   type StockMovementKind,
@@ -851,15 +852,24 @@ class Stores {
     };
   }
 
-  issueOptions(storeId: string): Reply {
+  issueOptions(storeId: string, query: URLSearchParams): Reply {
     const store = this.store(storeId);
     if (!this.held(store.projectId).has(MANAGE)) this.fail(403, "forbidden");
+    const needle = (query.get("bqSearch") ?? "").trim().toLowerCase();
+    const matching = this.state.items
+      .filter((item) => item.projectId === store.projectId)
+      .map((item) => this.item(item.lineageId)!)
+      .filter(
+        (item) =>
+          !needle ||
+          item.description.toLowerCase().includes(needle) ||
+          (item.ref ?? "").toLowerCase().includes(needle),
+      );
     return {
       body: {
         store: this.storeRef(store),
-        bqItems: this.state.items
-          .filter((item) => item.projectId === store.projectId)
-          .map((item) => this.item(item.lineageId)!),
+        bqItems: matching.slice(0, STORES_LIMITS.issueBqItems),
+        bqItemsTruncated: matching.length > STORES_LIMITS.issueBqItems,
         gangs: this.deps.gangs
           .filter((gang) => gang.projectId === store.projectId && gang.status === "active")
           .map((gang) => ({ id: gang.id, name: gang.name })),
@@ -1669,6 +1679,7 @@ class Stores {
       body: {
         stockTake: wire,
         replayed,
+        uncoveredMaterials: 0,
         permissions: {
           canCount: manage && draft,
           canSubmit: manage && draft && wire.countedCount === wire.lineCount,
@@ -2346,7 +2357,7 @@ export function handleStores(
     if (!sub && method === "GET") return stores.detail(storeId!);
     if (sub === "ledger" && method === "GET") return stores.ledger(storeId!, query);
     if (sub === "reorder-levels" && method === "PUT") return stores.reorderLevels(storeId!, body);
-    if (sub === "issue-options" && method === "GET") return stores.issueOptions(storeId!);
+    if (sub === "issue-options" && method === "GET") return stores.issueOptions(storeId!, query);
     if (sub === "transfer-targets" && method === "GET") return stores.transferTargets(storeId!);
     return null;
   }

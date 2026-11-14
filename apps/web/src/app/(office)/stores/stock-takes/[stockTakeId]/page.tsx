@@ -117,6 +117,11 @@ export default async function StockTakePage({
         ) : null}
       </div>
       <p className="text-sm text-muted-foreground">{t("howCounted")}</p>
+      {result.data.uncoveredMaterials > 0 ? (
+        <p className="rounded-xl border p-4 text-sm" role="status">
+          {t("inTurns", { lines: stockTake.lineCount, left: result.data.uncoveredMaterials })}
+        </p>
+      ) : null}
       {stockTake.returnReason && stockTake.status === "draft" ? (
         <p className="rounded-xl border p-4 text-sm" role="status">
           {t("returned", { reason: stockTake.returnReason })}

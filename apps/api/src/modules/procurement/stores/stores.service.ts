@@ -4,6 +4,7 @@ import { averageUnitCost, isLowStock, microToMinor, toMicro } from "@pm-buddy/do
 import {
   DEFAULT_CONSUMPTION_VARIANCE_PERCENT,
   DEFAULT_PRICE_CHANGE_ALERT_PERCENT,
+  STORES_LIMITS,
   type StockEntryKind,
 } from "@pm-buddy/types";
 import {
@@ -246,8 +247,12 @@ export class StoresService {
     );
   }
 
-  /** What an issue form needs: BQ items of the newest approved version, gangs and stock on hand. */
-  issueOptions(principal: Principal, id: string, req: Request) {
+  /**
+   * What an issue form needs: measured BQ items of the newest approved version in bill order (the
+   * first STORES_LIMITS.issueBqItems, or those matching `search`, with truncation reported), gangs
+   * and stock on hand. Scoped to stores.manage: storekeepers need not hold bq.view.
+   */
+  issueOptions(principal: Principal, id: string, search: string | undefined, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       const { tx, access } = scope;
       const store = await this.row(scope, id);
@@ -269,15 +274,23 @@ export class StoresService {
           include: { material: true },
         }),
       ]);
-      const items = version
+      const contains = search ? { contains: search, mode: "insensitive" as const } : null;
+      const found = version
         ? await tx.bqItem.findMany({
-            where: { tenantId: access.tenantId, versionId: version.id, kind: "measured" },
-            orderBy: [{ billId: "asc" }, { sortOrder: "asc" }],
-            take: 1000,
+            where: {
+              tenantId: access.tenantId,
+              versionId: version.id,
+              kind: "measured",
+              ...(contains ? { OR: [{ description: contains }, { ref: contains }] } : {}),
+            },
+            orderBy: [{ bill: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+            take: STORES_LIMITS.issueBqItems + 1,
           })
         : [];
+      const items = found.slice(0, STORES_LIMITS.issueBqItems);
       return issueOptionsResponseSchema.parse({
         store: refs.get(id),
+        bqItemsTruncated: found.length > STORES_LIMITS.issueBqItems,
         bqItems: items.map((item) => ({
           versionId: item.versionId,
           lineageId: item.lineageId,

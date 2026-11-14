@@ -32,6 +32,7 @@ import {
   createWastageRequestSchema,
   dispatchTransferRequestSchema,
   idempotencyKeySchema,
+  issueOptionsQuerySchema,
   issueOptionsResponseSchema,
   ledgerQuerySchema,
   ledgerResponseSchema,
@@ -257,9 +258,15 @@ export class StoresController {
     description: manageNote,
     operationId: "getIssueOptions",
   })
+  @ApiQuery({ name: "bqSearch", required: false })
   @ApiOkResponse({ schema: openApi(issueOptionsResponseSchema) })
-  async issueOptions(@Param("id") id: string, @Req() req: Request) {
-    return this.stores.issueOptions(await this.auth.principal(req), uuidSchema.parse(id), req);
+  async issueOptions(@Param("id") id: string, @Query() query: unknown, @Req() req: Request) {
+    return this.stores.issueOptions(
+      await this.auth.principal(req),
+      uuidSchema.parse(id),
+      issueOptionsQuerySchema.parse(query).bqSearch,
+      req,
+    );
   }
 
   @Get(":id/transfer-targets")

@@ -16,6 +16,7 @@ import {
   roundDecimal,
   STOCK_TAKE_TRANSITIONS,
   sumDecimals,
+  reverseInflow,
   takeFromStock,
   theoreticalConsumption,
   toMicro,
@@ -109,6 +110,50 @@ describe("weighted average valuation", () => {
     ).toThrow(RangeError);
     expect(() => receiveIntoStock(EMPTY_POSITION, "0", "1")).toThrow(RangeError);
     expect(() => takeFromStock(EMPTY_POSITION, "-1")).toThrow(RangeError);
+  });
+
+  it("reverses a mistaken receipt at its own value, so the position is as it was", () => {
+    // 50 bags worth KES 100,000; 100 bags received at KES 1,000 by mistake, then voided.
+    const before = { quantity: "50", valueMinor: "10000000" };
+    const received = receiveIntoStock(before, "100", "100000");
+    const voided = reverseInflow(received.after, {
+      quantity: "100",
+      valueMinor: received.valueMinor,
+      unitCostMinor: "100000",
+    });
+    expect(voided).toMatchObject({ ok: true, valueMinor: "10000000", unitCostMinor: "100000" });
+    expect(voided.ok && voided.after).toEqual(before);
+    // Emptying takes all that is left; a value no longer there falls back to the average.
+    expect(
+      reverseInflow(
+        { quantity: "10", valueMinor: "900" },
+        {
+          quantity: "10",
+          valueMinor: "1000",
+          unitCostMinor: "100",
+        },
+      ),
+    ).toMatchObject({ ok: true, valueMinor: "900", after: { quantity: "0", valueMinor: "0" } });
+    expect(
+      reverseInflow(
+        { quantity: "20", valueMinor: "900" },
+        {
+          quantity: "10",
+          valueMinor: "1000",
+          unitCostMinor: "100",
+        },
+      ),
+    ).toMatchObject({ ok: true, valueMinor: "450", unitCostMinor: "45" });
+    expect(
+      reverseInflow(
+        { quantity: "5", valueMinor: "500" },
+        {
+          quantity: "10",
+          valueMinor: "1000",
+          unitCostMinor: "100",
+        },
+      ),
+    ).toEqual({ ok: false, reason: "insufficient-stock", available: "5" });
   });
 
   it("flags low stock at or below a positive reorder level", () => {

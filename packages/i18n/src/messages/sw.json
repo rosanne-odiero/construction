@@ -5946,6 +5946,7 @@
       "noBqItem": "Hakuna kipengee cha BQ (kikundi tu)",
       "bqItemHint": "Vipengee vya BQ iliyoidhinishwa inayotumika.",
       "noApprovedBq": "Mradi bado hauna BQ iliyoidhinishwa: toa kwa kikundi.",
+      "bqItemsTruncated": "Vipengee {count} vya kwanza kwa mpangilio wa bili vimeorodheshwa: andika sehemu ya maelezo au rejea kupata vingine.",
       "gang": "Kikundi",
       "noGang": "Hakuna kikundi",
       "targetRequired": "Chagua kipengee cha BQ au kikundi.",
@@ -6166,6 +6167,7 @@
       },
       "makerChecker": "Ulihesabu au kuwasilisha hesabu hii, kwa hiyo mtu mwingine ndiye anayeiidhinisha.",
       "howCounted": "Kazi inaweza kuendelea wakati wa kuhesabu: kila hesabu inalinganishwa na kiasi cha mfumo wakati ilipohesabiwa, kwa hiyo utoaji na mapokezi wakati wa kuhesabu hayachukuliwi kama hasara.",
+      "inTurns": "Stoo hii ina vifaa vingi kuliko karatasi moja ya kuhesabu, kwa hiyo vinahesabiwa kwa zamu: hesabu hii inajumuisha vifaa {lines} vilivyohesabiwa zamani zaidi; vingine {left} vimebaki kwa hesabu inayofuata.",
       "returned": "Imerudishwa ihesabiwe upya: {reason}",
       "approvedBy": "Imeidhinishwa na {who} tarehe {when}; tofauti ziko kwenye leja."
     },

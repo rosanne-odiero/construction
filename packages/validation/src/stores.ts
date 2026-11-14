@@ -252,10 +252,19 @@ export type LedgerResponse = z.infer<typeof ledgerResponseSchema>;
 
 // Issue options -----------------------------------------------------------------------------
 
+export const issueOptionsQuerySchema = z.object({
+  /** Matches an item's reference or description (case-insensitive). */
+  bqSearch: z.string().trim().max(100).optional(),
+});
 export const issueOptionsResponseSchema = z.strictObject({
   store: storeRefSchema,
-  /** Items of the project's newest approved BQ version (empty before the baseline). */
+  /**
+   * Measured items of the project's newest approved BQ version, in bill order (empty before the
+   * baseline): the first STORES_LIMITS.issueBqItems, or those matching `bqSearch`.
+   */
   bqItems: z.array(storesBqItemSchema),
+  /** More items match than are listed: search to find the others. */
+  bqItemsTruncated: z.boolean(),
   gangs: z.array(gangRef),
   /** Materials on hand in this store. */
   stock: z.array(z.strictObject({ material: materialRef, quantity: z.string() })),
@@ -589,6 +598,11 @@ export type StockTake = z.infer<typeof stockTakeSchema>;
 export const stockTakeResponseSchema = z.strictObject({
   stockTake: stockTakeSchema,
   replayed: z.boolean(),
+  /**
+   * Materials on hand or with a reorder level in this store that this open count does not cover
+   * (a store with more than STORES_LIMITS.stockTakeLines is counted in turns; 0 once decided).
+   */
+  uncoveredMaterials: z.number().int().min(0),
   permissions: z.strictObject({
     canCount: z.boolean(),
     canSubmit: z.boolean(),

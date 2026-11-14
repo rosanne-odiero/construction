@@ -104,6 +104,8 @@ export const STORES_LIMITS = {
   /** Threshold 0–1000 % with up to four decimals. */
   maxVariancePercent: 1000,
   pageSize: 50,
+  /** BQ items an issue form lists at once (search for the rest; truncation is reported). */
+  issueBqItems: 200,
   /** Ledger quantities and costs are stored with six decimal places. */
   quantityDecimals: 6,
 } as const;

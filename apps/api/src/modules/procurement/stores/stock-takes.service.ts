@@ -8,7 +8,7 @@ import {
   subtractDecimals,
   toMicro,
 } from "@pm-buddy/domain";
-import type { StockTakeStatus } from "@pm-buddy/types";
+import { STORES_LIMITS, type StockTakeStatus } from "@pm-buddy/types";
 import {
   stockTakeResponseSchema,
   stockTakesResponseSchema,
@@ -136,11 +136,14 @@ export class StockTakesService {
               ];
           if (!wanted.length)
             throw storesConflict("stock-take-empty", "There is nothing to count in this store yet");
+          const sheet = input.materialIds?.length
+            ? wanted
+            : await this.longestUncounted(scope, store.id, wanted);
           const materials = await tx.material.findMany({
-            where: { tenantId: access.tenantId, id: { in: wanted } },
+            where: { tenantId: access.tenantId, id: { in: sheet } },
             orderBy: { name: "asc" },
           });
-          if (materials.length !== wanted.length) throw new NotFoundException("Material not found");
+          if (materials.length !== sheet.length) throw new NotFoundException("Material not found");
           const take = await tx.stockTake.create({
             data: {
               tenantId: access.tenantId,
@@ -454,6 +457,59 @@ export class StockTakesService {
     if (!updated.count) throw storesVersionConflict();
   }
 
+  /**
+   * A store holding more materials than one count sheet takes is counted in turns (cycle
+   * counting): the sheet gets those counted longest ago, never-counted first, then by name.
+   */
+  private async longestUncounted(scope: Scope, storeId: string, wanted: string[]) {
+    if (wanted.length <= STORES_LIMITS.stockTakeLines) return wanted;
+    const { tx, access } = scope;
+    const [counted, names] = await Promise.all([
+      tx.stockTakeLine.findMany({
+        where: {
+          tenantId: access.tenantId,
+          materialId: { in: wanted },
+          stockTake: { storeId, status: "approved" },
+        },
+        select: { materialId: true, stockTake: { select: { approvedAt: true } } },
+      }),
+      tx.material.findMany({
+        where: { tenantId: access.tenantId, id: { in: wanted } },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const last = new Map<string, number>();
+    for (const line of counted) {
+      const at = line.stockTake.approvedAt?.getTime() ?? 0;
+      if (at > (last.get(line.materialId) ?? -1)) last.set(line.materialId, at);
+    }
+    const name = new Map(names.map((material) => [material.id, material.name]));
+    return [...wanted]
+      .sort(
+        (left, right) =>
+          (last.get(left) ?? -1) - (last.get(right) ?? -1) ||
+          (name.get(left) ?? "").localeCompare(name.get(right) ?? ""),
+      )
+      .slice(0, STORES_LIMITS.stockTakeLines);
+  }
+
+  /** Materials to count in a store (on hand or with a reorder level) that `lines` leave out. */
+  private async uncovered(scope: Scope, storeId: string, lines: ReadonlySet<string>) {
+    const { tx, access } = scope;
+    const [balances, levels] = await Promise.all([
+      tx.stockBalance.findMany({
+        where: { tenantId: access.tenantId, storeId, quantity: { gt: 0 } },
+        select: { materialId: true },
+      }),
+      tx.stockReorderLevel.findMany({
+        where: { tenantId: access.tenantId, storeId },
+        select: { materialId: true },
+      }),
+    ]);
+    const all = new Set([...balances, ...levels].map((entry) => entry.materialId));
+    return [...all].filter((materialId) => !lines.has(materialId)).length;
+  }
+
   async response(scope: Scope, row: TakeRow, replayed: boolean) {
     const project = await this.access.on(scope, row.projectId);
     const [take] = await this.wire(scope, [row]);
@@ -464,6 +520,14 @@ export class StockTakesService {
     return stockTakeResponseSchema.parse({
       stockTake: take,
       replayed,
+      uncoveredMaterials:
+        draft || submitted
+          ? await this.uncovered(
+              scope,
+              row.storeId,
+              new Set(take!.lines.map((line) => line.material.id)),
+            )
+          : 0,
       permissions: {
         canCount: manage && draft,
         canSubmit: manage && draft && take!.countedCount === take!.lineCount,

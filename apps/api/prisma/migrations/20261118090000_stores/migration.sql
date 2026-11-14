@@ -895,12 +895,25 @@ BEGIN
       IF NEW.value_minor <> -bal.value_minor THEN
         RAISE EXCEPTION 'Emptying a position takes all of its value' USING ERRCODE = '23514';
       END IF;
-    ELSIF abs(abs(NEW.value_minor) * bal.quantity - magnitude * bal.value_minor) * 2
-          > bal.quantity * 0.000001 THEN
-      RAISE EXCEPTION 'An outflow is valued at the weighted average cost' USING ERRCODE = '23514';
-    END IF;
-    IF abs(NEW.unit_cost_minor * bal.quantity - bal.value_minor) * 2 > bal.quantity * 0.000001 THEN
-      RAISE EXCEPTION 'An outflow''s unit cost is the weighted average' USING ERRCODE = '23514';
+      IF abs(NEW.unit_cost_minor * bal.quantity - bal.value_minor) * 2
+         > bal.quantity * 0.000001 THEN
+        RAISE EXCEPTION 'An outflow''s unit cost is the weighted average' USING ERRCODE = '23514';
+      END IF;
+    ELSIF NEW.reverses_entry_id IS NOT NULL AND orig.value_minor <= bal.value_minor THEN
+      -- A reversed inflow (voided receipt, reversed return) leaves with the value it brought in,
+      -- so correcting a mistake restores the position; the average applies only below.
+      IF NEW.value_minor <> -orig.value_minor OR NEW.unit_cost_minor <> orig.unit_cost_minor THEN
+        RAISE EXCEPTION 'A reversed inflow takes out the value it brought in' USING ERRCODE = '23514';
+      END IF;
+    ELSE
+      IF abs(abs(NEW.value_minor) * bal.quantity - magnitude * bal.value_minor) * 2
+         > bal.quantity * 0.000001 THEN
+        RAISE EXCEPTION 'An outflow is valued at the weighted average cost' USING ERRCODE = '23514';
+      END IF;
+      IF abs(NEW.unit_cost_minor * bal.quantity - bal.value_minor) * 2
+         > bal.quantity * 0.000001 THEN
+        RAISE EXCEPTION 'An outflow''s unit cost is the weighted average' USING ERRCODE = '23514';
+      END IF;
     END IF;
   END IF;
   PERFORM app.check_stock_entry_source(NEW, store_site);

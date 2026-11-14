@@ -5946,6 +5946,7 @@
       "noBqItem": "No BQ item (gang only)",
       "bqItemHint": "Items of the approved BQ in force.",
       "noApprovedBq": "The project has no approved BQ yet: issue to a gang.",
+      "bqItemsTruncated": "The first {count} items in bill order are listed: type part of a description or reference to find the others.",
       "gang": "Gang",
       "noGang": "No gang",
       "targetRequired": "Choose a BQ item or a gang.",
@@ -6166,6 +6167,7 @@
       },
       "makerChecker": "You counted or submitted this stock take, so someone else approves it.",
       "howCounted": "Work can go on during the count: each count is compared with the system quantity at the moment it was counted, so issues and deliveries during the count are not mistaken for losses.",
+      "inTurns": "This store holds more materials than one count sheet takes, so it is counted in turns: this count covers the {lines} materials counted longest ago; {left} more are left for the next count.",
       "returned": "Returned for a recount: {reason}",
       "approvedBy": "Approved by {who} on {when}; the variances are in the ledger."
     },

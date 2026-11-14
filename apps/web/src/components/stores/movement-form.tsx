@@ -1,14 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Plus, Trash2 } from "lucide-react";
 import { WASTAGE_REASONS, type StandardUnitCode, type WastageReason } from "@pm-buddy/types";
 import {
+  issueOptionsResponseSchema,
   movementResponseSchema,
   type IssueOptionsResponse,
   type MovementResponse,
+  type StoresBqItem,
   type UnitWire,
 } from "@pm-buddy/validation";
 import { selectClass } from "@/components/procurement/material-form";
@@ -60,15 +62,46 @@ export function MovementForm({
   const [failure, setFailure] = useState<string | null>(null);
   const [result, setResult] = useState<MovementResponse | null>(null);
 
+  // The API lists the first items in bill order; typing searches the whole BQ on the server.
+  const [searched, setSearched] = useState<{
+    query: string;
+    items: StoresBqItem[];
+    truncated: boolean;
+  } | null>(null);
+  const [chosen, setChosen] = useState<StoresBqItem | null>(null);
+  const needle = filter.trim();
+  useEffect(() => {
+    if (needle.length < 2) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      liveRequest(
+        `/stores/${options.store.id}/issue-options?bqSearch=${encodeURIComponent(needle)}`,
+        issueOptionsResponseSchema,
+      )
+        .then((result) => {
+          if (current)
+            setSearched({
+              query: needle,
+              items: result.bqItems,
+              truncated: result.bqItemsTruncated,
+            });
+        })
+        .catch(() => {});
+    }, 300);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [needle, options.store.id]);
+  // Results count only for what is typed now; until they arrive the first items stay listed.
+  const found = needle.length >= 2 && searched?.query === needle ? searched : null;
+  const listed = found?.items ?? options.bqItems;
+  const truncated = found?.truncated ?? options.bqItemsTruncated;
+  const items =
+    chosen && !listed.some((item) => item.lineageId === chosen.lineageId)
+      ? [chosen, ...listed]
+      : listed;
   const stock = new Map(options.stock.map((entry) => [entry.material.id, entry]));
-  const needle = filter.trim().toLowerCase();
-  const items = options.bqItems.filter(
-    (item) =>
-      !needle ||
-      item.lineageId === bqItem ||
-      item.description.toLowerCase().includes(needle) ||
-      (item.ref ?? "").toLowerCase().includes(needle),
-  );
   const lineState = lines.map((line) => {
     const entry = stock.get(line.materialId);
     const quantity = positiveQuantity(line.quantity);
@@ -193,7 +226,10 @@ export function MovementForm({
               id="issue-bq-item"
               className={`${selectClass} h-11 max-w-full`}
               value={bqItem}
-              onChange={(event) => setBqItem(event.target.value)}
+              onChange={(event) => {
+                setBqItem(event.target.value);
+                setChosen(items.find((item) => item.lineageId === event.target.value) ?? null);
+              }}
             >
               <option value="">{t("noBqItem")}</option>
               {items.map((item) => (
@@ -207,7 +243,11 @@ export function MovementForm({
               ))}
             </select>
             <FieldDescription>
-              {options.bqItems.length ? t("bqItemHint") : t("noApprovedBq")}
+              {!options.bqItems.length
+                ? t("noApprovedBq")
+                : truncated
+                  ? t("bqItemsTruncated", { count: listed.length })
+                  : t("bqItemHint")}
             </FieldDescription>
           </Field>
           <Field>

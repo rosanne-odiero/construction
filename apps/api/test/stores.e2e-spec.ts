@@ -496,6 +496,20 @@ describe("Stores (real runtime role)", () => {
     item.excavation = find("Excavate for column bases").lineageId;
     item.versionId = find("Reinforced concrete class 25 in column bases").versionId;
     expect(options.stock.map((entry) => entry.quantity).sort()).toEqual(["10", "120", "30"]);
+    expect(options.bqItemsTruncated).toBe(false);
+    // The storekeeper (no bq.view) searches the whole BQ on the server, not a truncated list.
+    const searched = issueOptionsResponseSchema.parse(
+      ok(await keeper.call("get", `stores/${storeId}/issue-options?bqSearch=column%20BASES`)),
+    );
+    expect(searched.bqItems.map((entry) => entry.lineageId)).toEqual(
+      expect.arrayContaining([item.columnBases, item.excavation]),
+    );
+    expect(
+      searched.bqItems.every((entry) =>
+        `${entry.ref ?? ""} ${entry.description}`.toLowerCase().includes("column bases"),
+      ),
+    ).toBe(true);
+    expect(searched.bqItems.length).toBeLessThan(options.bqItems.length);
     // An issue needs a BQ item of the BQ in force or a gang of the project.
     refused(
       await issue(keeper, [{ materialId: material.cement, quantity: "1", unit: "bag_50kg" }], {
@@ -1196,6 +1210,151 @@ describe("Stores (real runtime role)", () => {
       "grn-stock-consumed",
     );
     expect((await balance(storeId, material.cement))!.quantity).toBe("4");
+  });
+
+  it("voids a mistaken receipt at its own value, so the store's value is restored exactly", async () => {
+    // A second order for cement at KES 1,000 a bag; the store holds 4 bags at KES 800.
+    let requisition = requisitionDetailResponseSchema.parse(
+      ok(
+        await keeper.call("post", "procurement/requisitions", {
+          projectId,
+          siteId,
+          neededBy: inDays(7),
+          lines: [{ materialId: material.cement, quantity: "100", unit: "bag_50kg" }],
+        }),
+        201,
+      ),
+    );
+    requisition = requisitionDetailResponseSchema.parse(
+      ok(
+        await keeper.call("post", `procurement/requisitions/${requisition.requisition.id}/submit`, {
+          version: requisition.requisition.version,
+        }),
+      ),
+    );
+    ok(
+      await pm.call("post", `procurement/requisitions/${requisition.requisition.id}/approve`, {
+        version: requisition.requisition.version,
+      }),
+    );
+    let rfq = rfqDetailResponseSchema.parse(
+      ok(
+        await owner.call("post", "procurement/rfqs", {
+          requisitionIds: [requisition.requisition.id],
+          supplierIds: [supplierId],
+        }),
+        201,
+      ),
+    );
+    rfq = rfqDetailResponseSchema.parse(
+      ok(
+        await owner.call("post", `procurement/rfqs/${rfq.rfq.id}/quotations`, {
+          supplierId,
+          quotedOn: today,
+          validUntil: inDays(30),
+          deliveryDays: 2,
+          lines: rfq.lines.map((line) => ({
+            requisitionLineId: line.requisitionLineId,
+            priceUnit: "bag_50kg",
+            unitPriceMinor: 100_000,
+            vatTreatment: "exclusive",
+          })),
+        }),
+        201,
+      ),
+    );
+    let second = lpoDetailResponseSchema.parse(
+      ok(
+        await owner.call("post", `procurement/rfqs/${rfq.rfq.id}/award`, {
+          version: rfq.rfq.version,
+          quotationId: rfq.quotations[0]!.id,
+          deliverySiteId: siteId,
+        }),
+        201,
+      ),
+    );
+    second = lpoDetailResponseSchema.parse(
+      ok(
+        await owner.call("post", `procurement/lpos/${second.lpo.id}/submit`, {
+          version: second.lpo.version,
+        }),
+      ),
+    );
+    await fresh(pm);
+    second = lpoDetailResponseSchema.parse(
+      ok(
+        await pm.call("post", `procurement/lpos/${second.lpo.id}/approve`, {
+          version: second.lpo.version,
+        }),
+      ),
+    );
+    const before = (await balance(storeId, material.cement))!;
+    expect(before).toMatchObject({ quantity: "4", valueMinor: 320_000 });
+    const mistaken = await keyed(keeper, "procurement/grns", {
+      id: randomUUID(),
+      lpoId: second.lpo.id,
+      capturedAt: now(),
+      receivedByName: "Grace (synthetic)",
+      vehicleRegistration: "KDA 123A",
+      location: { latitude: SITE.lat, longitude: SITE.lng, accuracyM: 8 },
+      lines: [{ lpoLineId: second.lines[0]!.id, receivedQuantity: "100" }],
+    });
+    expect(mistaken.status, JSON.stringify(mistaken.body)).toBe(201);
+    expect((await balance(storeId, material.cement))!).toMatchObject({
+      quantity: "104",
+      valueMinor: 10_320_000,
+    });
+    ok(
+      await keeper.call(
+        "post",
+        `procurement/grns/${(mistaken.body as { grn: { id: string } }).grn.id}/void`,
+        { reason: "Recorded against the wrong order (test)" },
+      ),
+    );
+    // Out at the KES 1,000 it came in at, not the KES 992.31 average: 4 bags worth KES 3,200 again.
+    expect((await balance(storeId, material.cement))!).toMatchObject({
+      quantity: "4",
+      valueMinor: 320_000,
+      averageUnitCostMinor: "80000",
+    });
+  });
+
+  it("counts a store with more materials than one sheet takes in turns, never failing", async () => {
+    // 301 materials with a reorder level in the other site's store: one sheet takes 300.
+    const ids = Array.from({ length: 301 }, () => randomUUID());
+    await db.run(context(owner), (tx) =>
+      tx.material.createMany({
+        data: ids.map((id, index) => ({
+          id,
+          tenantId: tenantA,
+          code: `MAT-${90_000 + index}`,
+          name: `Cycle count item ${String(index).padStart(3, "0")} (test)`,
+          category: "other",
+          baseUnit: "nr",
+          createdBy: owner.auth.user.id,
+          updatedBy: owner.auth.user.id,
+        })),
+      }),
+    );
+    for (const batch of [ids.slice(0, 200), ids.slice(200)])
+      ok(
+        await keeper.call("put", `stores/${otherStoreId}/reorder-levels`, {
+          levels: batch.map((materialId) => ({ materialId, reorderLevel: "1" })),
+        }),
+      );
+    const started = stockTakeResponseSchema.parse(
+      ok(await keeper.call("post", "stock-takes", { storeId: otherStoreId }), 201),
+    );
+    expect(started.stockTake.lineCount).toBe(300);
+    expect(started.uncoveredMaterials).toBeGreaterThanOrEqual(1);
+    // Never counted: by name, so the last test material waits for the next turn.
+    expect(started.stockTake.lines.map((line) => line.material.id)).not.toContain(ids[300]);
+    ok(
+      await keeper.call("post", `stock-takes/${started.stockTake.id}/cancel`, {
+        version: started.stockTake.version,
+        reason: "Test of counting in turns",
+      }),
+    );
   });
 
   it("documents every stores operation in OpenAPI", async () => {

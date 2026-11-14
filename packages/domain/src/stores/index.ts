@@ -17,6 +17,7 @@ export {
   isLowStock,
   negateDecimal,
   receiveIntoStock,
+  reverseInflow,
   subtractDecimals,
   sumDecimals,
   takeFromStock,

@@ -4,6 +4,7 @@ import {
   nairobiDate,
   negateDecimal,
   receiveIntoStock,
+  reverseInflow,
   takeFromStock,
   toMicro,
   type StockPosition,
@@ -137,7 +138,8 @@ export class StockLedger {
 
   /**
    * The correction of an entry: an outflow comes back with exactly the value it took; an inflow
-   * leaves again at the current average (409 when the stock was already used).
+   * leaves with the value it brought in (`reverseInflow`; the average only when that value is no
+   * longer there), 409 when the stock was already used.
    */
   async reverse(scope: Scope, original: LedgerRow, material: LedgerTarget["material"]) {
     const target = { storeId: original.storeId, projectId: original.projectId, material };
@@ -165,7 +167,11 @@ export class StockLedger {
         refs,
         original.id,
       );
-    const outflow = takeFromStock(position, quantity);
+    const outflow = reverseInflow(position, {
+      quantity,
+      valueMinor: dec(original.valueMinor),
+      unitCostMinor: dec(original.unitCostMinor),
+    });
     if (!outflow.ok) throw this.insufficient(target, outflow.available);
     return this.insert(
       scope,

@@ -1,4 +1,4 @@
--- D5.4 Spending and cash flow (ARCHITECTURE §4.7, ERD §8, WORKFLOWS "Budgets" and "Petty cash",
+-- D5.4 Spending and cash flow (ARCHITECTURE §4.8, ERD §8, WORKFLOWS "Budgets" and "Petty cash",
 -- brief §5.8 and §15 C/D). Enforces, in the database as well as the API:
 -- * AN APPEND-ONLY COST LEDGER (cost_entries): every entry is tagged with project, site, BQ item or
 --   cost code, category, counterparty and payment reference, in one of two measures (accrued,

@@ -93,6 +93,13 @@ function print(summary: SeedSummary) {
       .map(([kind, total]) => `${kind} ${total}`)
       .join(", ")}`,
   );
+  const { quality } = summary;
+  lines.push(
+    "",
+    `Quality (synthetic, ${quality.created ? "created" : "already present"}): ${quality.templates} checklist templates, ${quality.inspections} inspections, ${quality.snags} snags`,
+    `  ${quality.cubeSets} cube sets (${quality.failedCubeSets} failed at 28 days, ${quality.overdueCubeSets} overdue); ${quality.slumpTests} slump tests; ${quality.diaries} diaries with an attendance workforce`,
+    `  JUJ-DPX practical completion ${quality.practicalCompletion ?? "not certified"}; defects liability period ends ${quality.dlpEndsOn ?? "—"}`,
+  );
   console.log(lines.join("\n"));
 }
 

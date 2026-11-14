@@ -30,6 +30,7 @@ import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
 import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
 import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
 import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
+import { seedQuality, type QualitySeedSummary } from "./quality-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 
@@ -131,6 +132,8 @@ type DemoProject = {
   latitude: number | null;
   longitude: number | null;
   activate: boolean;
+  /** D6.1: practically complete (active → completed); quality-seed.ts certifies completion. */
+  complete?: boolean;
   sites: DemoSite[];
   wbs: DemoWbs[];
   milestones: DemoMilestone[];
@@ -277,6 +280,49 @@ export const DEMO_PROJECTS: readonly DemoProject[] = [
     milestones: [],
     team: [],
   },
+  {
+    // D6.1: handed over; practical completion certified and the defects liability period running
+    // (quality-seed.ts, dates relative to the seed day).
+    code: "JUJ-DPX",
+    name: "Juja Road Duplex",
+    description: "Two-storey 4-bedroom duplex, handed over; defects liability period running",
+    clientName: "Wairimu Family Trust (synthetic)",
+    clientEmail: "wairimu.trust@example.test",
+    clientPhone: null,
+    contractSumMinor: 2_150_000_000,
+    contractType: "lump_sum",
+    startDate: "2025-10-06",
+    endDate: "2026-08-31",
+    county: "kiambu",
+    town: "Juja",
+    latitude: -1.1012,
+    longitude: 37.0144,
+    activate: true,
+    complete: true,
+    sites: [
+      {
+        name: "Duplex plot",
+        address: "Off Juja Farm Road",
+        geofence: { kind: "radius", center: { lat: -1.1012, lng: 37.0144 }, radiusM: 45 },
+      },
+    ],
+    wbs: [
+      { code: "1", name: "Substructure", weight: 2_000 },
+      { code: "2", name: "Superstructure and roof", weight: 4_500 },
+      { code: "3", name: "Finishes and services", weight: 3_500 },
+    ],
+    milestones: [
+      {
+        name: "Roof covered",
+        dueDate: "2026-04-30",
+        wbs: "2",
+        status: "achieved",
+        actualDate: "2026-05-08",
+      },
+      { name: "Handover", dueDate: "2026-08-31", status: "achieved", actualDate: "2026-08-28" },
+    ],
+    team: ["projectManager", "siteAgent"],
+  },
 ];
 
 /**
@@ -356,6 +402,7 @@ export type SeedSummary = {
   stores: StoresSeedSummary;
   schedule: ScheduleSeedSummary;
   spending: SpendingSeedSummary;
+  quality: QualitySeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -553,6 +600,12 @@ export async function seedDemo(
     siteAgentId: userOf("siteAgent").id,
     financeId: userOf("finance").id,
   });
+  // After attendance (diary snapshots) and the schedule.
+  const quality = await seedQuality(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+  });
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
@@ -567,6 +620,7 @@ export async function seedDemo(
     stores,
     schedule,
     spending,
+    quality,
   };
 }
 
@@ -642,6 +696,36 @@ async function seedBuildup(
   };
 }
 
+/** Assigns the demo team to a project: each member without an assignment gets their role's. */
+async function assignTeam(
+  tx: Tx,
+  tenantId: string,
+  projectId: string,
+  demo: DemoProject,
+  userOf: (key: DemoAccount["key"]) => { id: string; role: TenantSystemRole },
+  audit: Audit,
+) {
+  for (const key of demo.team) {
+    const member = userOf(key);
+    const assigned = await tx.projectMembership.findFirst({
+      where: { tenantId, projectId, userId: member.id },
+      select: { userId: true },
+    });
+    if (assigned) continue;
+    const permissions = PROJECT_ASSIGNABLE_PERMISSIONS.filter((permission) =>
+      SYSTEM_ROLE_PERMISSIONS[member.role].includes(permission),
+    );
+    await tx.projectMembership.create({
+      data: { tenantId, projectId, userId: member.id, permissions },
+    });
+    await audit(tx, "project.permissions.changed", projectId, {
+      ...SOURCE,
+      userId: member.id,
+      permissions,
+    });
+  }
+}
+
 async function seedProject(
   tx: Tx,
   tenantId: string,
@@ -653,8 +737,12 @@ async function seedProject(
   const existing = await tx.project.findUnique({
     where: { tenantId_code: { tenantId, code: demo.code } },
   });
-  if (existing)
+  if (existing) {
+    // A database seeded before a team member was added (the storekeeper in D5.3) gets the new
+    // assignment; existing assignments are left as they are.
+    await assignTeam(tx, tenantId, existing.id, demo, userOf, audit);
     return { code: demo.code, name: existing.name, status: existing.status, created: false };
+  }
 
   const project = await tx.project.create({
     data: {
@@ -760,20 +848,7 @@ async function seedProject(
       });
   }
 
-  for (const key of demo.team) {
-    const member = userOf(key);
-    const permissions = PROJECT_ASSIGNABLE_PERMISSIONS.filter((permission) =>
-      SYSTEM_ROLE_PERMISSIONS[member.role].includes(permission),
-    );
-    await tx.projectMembership.create({
-      data: { tenantId, projectId: project.id, userId: member.id, permissions },
-    });
-    await audit(tx, "project.permissions.changed", project.id, {
-      ...SOURCE,
-      userId: member.id,
-      permissions,
-    });
-  }
+  await assignTeam(tx, tenantId, project.id, demo, userOf, audit);
 
   if (!demo.activate)
     return { code: demo.code, name: demo.name, status: project.status, created: true };
@@ -798,5 +873,27 @@ async function seedProject(
     action: "activate",
     reasonGiven: true,
   });
-  return { code: demo.code, name: demo.name, status: "active", created: true };
+  if (!demo.complete) return { code: demo.code, name: demo.name, status: "active", created: true };
+  await tx.project.update({
+    where: { tenantId_id: { tenantId, id: project.id } },
+    data: { status: "completed", version: { increment: 1 } },
+  });
+  await tx.projectStatusChange.create({
+    data: {
+      tenantId,
+      projectId: project.id,
+      fromStatus: "active",
+      toStatus: "completed",
+      reason: null,
+      changedBy: ownerId,
+    },
+  });
+  await audit(tx, "project.status_changed", project.id, {
+    ...SOURCE,
+    from: "active",
+    to: "completed",
+    action: "complete",
+    reasonGiven: false,
+  });
+  return { code: demo.code, name: demo.name, status: "completed", created: true };
 }

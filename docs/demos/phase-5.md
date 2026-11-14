@@ -205,7 +205,7 @@ This walkthrough takes about 25 minutes. **Spending** in the sidebar is live: bu
 
 ### 1. Run it
 
-Same prerequisites and commands as D5.1 (§1 above), on branch `phase-5/d5.4-spending`. `db:migrate` now includes `20261121090000_spending` (it also posts the cost of supplier invoices already approved and settled), and `db:seed` prints:
+Same prerequisites and commands as D5.1 (§1 above), on branch `phase-5/d5.4-spending`. `db:migrate` now includes `20261123090000_spending` (it also posts the cost of supplier invoices already approved and settled), and `db:seed` prints:
 
 ```text
 Spending for RUI-HTS (synthetic, created): budget v1 (approved); journal JNL-0001 (approved)

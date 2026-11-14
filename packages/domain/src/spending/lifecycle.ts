@@ -3,7 +3,7 @@ import type { TransitionTable } from "../procurement/lifecycle.js";
 
 /**
  * Spending state machines (docs/WORKFLOWS.md "Budgets" and "Petty cash", brief §15 C). Each table
- * is enforced by the API and repeated by a database trigger in migration `20261121090000_spending`
+ * is enforced by the API and repeated by a database trigger in migration `20261123090000_spending`
  * (`app.guard_budget`, `app.guard_petty_cash_top_up`), so a bypassed API check cannot skip a state.
  */
 

@@ -1,9 +1,10 @@
-# Phase 6 demo: site diary, verified photos and the schedule
+# Phase 6 demo: site diary, verified photos, quality and the schedule
 
-This is increment 1 of D6.1, **not** Phase 6 acceptance. It records online web diaries
-against real projects/sites. Workforce is manual; attendance auto-fill, photos,
-quality inspections/tests/snags, offline/site-app capture, schedules and valuations
-remain pending. No biometric collection, payouts, deployment or pilot is authorised.
+This walkthrough is **not** Phase 6 acceptance. It covers online web diaries (increment 1),
+verified photos (increment 2), the schedule (D6.2) and quality (D6.1: workforce from attendance,
+inspections, concrete tests, snags, practical completion and the defects liability period).
+Offline/site-app capture and valuations (D6.3) remain pending. No biometric collection, payouts,
+deployment or pilot is authorised.
 
 ## Start
 
@@ -57,6 +58,60 @@ review their own. Use separate browser profiles for the two identities.
 6. Switch EN/SW and test at 360 px. A verified badge means the photo's own metadata is
    consistent; metadata can be edited, so it is evidence for review, not proof.
 
+## D6.1 quality: workforce from attendance, inspections, tests, snags, completion and DLP
+
+Seeded data (`pnpm run db:seed`; synthetic): the seven starter checklist templates; on **Ruiru
+Heights Apartments (RUI-HTS)** a signed-off slab inspection (INS-0001), a **failed** walling
+inspection by the county inspector (INS-0002) with snags raised from its failed items, a roofing
+inspection awaiting sign-off (INS-0003), four cube sets (CUBE-0002 **fails at 28 days**, CUBE-0004
+has an **overdue** 7-day result), three slump tests (SLP-0002 outside tolerance), and two diaries
+whose workforce is an attendance snapshot; **Juja Road Duplex (JUJ-DPX)** at **practical
+completion** (certified 75 days before the seed day) with its **six-month defects liability period
+running** and two DLP defects. Sign in as the **site agent** (records; holds `site.diary` and
+`quality.manage`) and the **project manager** (independent reviewer; also `projects.manage`), in
+separate browser profiles. The seed output (kept outside the repository) lists the accounts.
+
+1. **Diary workforce.** As the site agent open **Projects → Ruiru Heights → Site diary**, choose
+   *New diary*, pick a day with a muster sheet and keep *From attendance*: *Show attendance for
+   this day* lists the people present by trade (half days counted). Save: the diary shows "N from
+   attendance" and "Snapshot: muster confirmed, <time>". Switch a draft to *Typed in* and enter a
+   count: it shows "(typed in)". Submit an attendance diary: the snapshot is taken again. An
+   approved diary keeps its figure even if attendance is corrected later.
+2. **Templates.** Open **Quality** in the sidebar → *Checklist templates*. Open *Suspended slab
+   before casting*, *Revise* it (add an item) and save: version 2 becomes current and version 1 stays in
+   the history. Retire a template: it can no longer start inspections. *Load the starter templates*
+   adds any missing starters in English or Kiswahili. The settings card shows the default DLP (6
+   months) and the cube grace days (2); only `config.manage` (the owner) can change them.
+3. **Inspection on a phone.** Project → **Quality** → *Inspections* → *New inspection*: site,
+   template (current versions only), location, inspector (internal, consultant or county) and
+   optional WBS item or schedule task. On the checklist page (try 360 px) answer each item
+   *Pass*, *Fail* or *N/A*, add a note and photos (from the project's site photos), *Save*, then
+   *Submit*: every item must be answered and every failure explained. The author's own sign-off is
+   not offered (and refused by the API and the database).
+4. **Independent sign-off.** As the project manager open INS-0003 (*Awaiting sign-off*): *Sign off and
+   lock* locks it (no edit anywhere), or *Return for changes* with a reason sends it back to draft. Open INS-0002
+   (failed): its failed items offer *Raise a snag*, and the snags already raised are listed.
+5. **Concrete tests.** *Concrete tests*: CUBE-0002 shows **Fail at 28 days** (mean, % of the class
+   and the weakest cube against C25 under rule KE-CUBE-1); CUBE-0004 shows **Overdue** for 7 days.
+   Record a 7-day result for CUBE-0004 (three strengths, one decimal place): the mean and an
+   indicative outcome appear. As the project manager *Correct* a result with a reason: the
+   original stays, marked "corrected", and the correction references it. Record a slump test:
+   the tolerance is suggested from the target (75 mm → ±20 mm) and the outcome follows. The rules
+   are flagged for an engineer's review (COMPLIANCE_TODO CR-QA-01/02).
+6. **Snags.** *Snags and defects*: counts by state; filter *Open* and search "SNG-0004". As the site
+   agent *Mark fixed* on SNG-0004 with a note. As the project manager *Verify and close* it, or
+   *Reopen* with a reason (the reopen count rises). The person who recorded the fix is never
+   offered verification. Edit SNG-0001's severity (project manager only).
+7. **Practical completion refused.** On Ruiru Heights *Completion and DLP*: proposing practical
+   completion is blocked by SNG-0001 (critical, open); it can only go ahead with an exception
+   reason, which the certificate keeps. Withdraw the proposal with a reason.
+8. **DLP running.** On Juja Road Duplex *Completion and DLP*: the certified practical completion
+   (locked), the DLP dates and days remaining, and the DLP defects. Raise a new snag: it is marked
+   *DLP*. Final completion stays blocked until the DLP has ended and no snags are open (this is
+   what D6.3 retention release will read).
+9. Switch to Kiswahili and the dark theme and narrow the window to 360 px: no sideways scrolling;
+   long badges wrap. A client account (portal) cannot open any quality record.
+
 ## D6.2 schedule: Gantt, baseline and variance, delay log
 
 Seeded data: the development seed gives **Ruiru Heights Apartments (RUI-HTS)** a schedule of 22
@@ -107,6 +162,10 @@ pnpm --filter @pm-buddy/domain test
 pnpm --filter @pm-buddy/validation test
 pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/diaries.e2e-spec.ts test/photos.e2e-spec.ts
 pnpm --filter @pm-buddy/web exec playwright test test/diaries.spec.ts test/photos.spec.ts
+# D6.1 quality and the diary workforce
+pnpm --filter @pm-buddy/domain exec vitest run src/quality
+pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/quality.e2e-spec.ts
+pnpm --filter @pm-buddy/web exec playwright test test/quality.spec.ts test/diaries.spec.ts
 # D6.2 schedule
 pnpm --filter @pm-buddy/domain exec vitest run src/schedule
 pnpm --filter @pm-buddy/api exec vitest run --config vitest.config.e2e.ts test/schedule.e2e-spec.ts

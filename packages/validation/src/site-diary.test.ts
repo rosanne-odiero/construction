@@ -35,10 +35,16 @@ describe("site diary contracts", () => {
       { workPerformed: "a".repeat(6001) },
       { tenantId: entry.siteId },
       { status: "approved" },
-      { workforceSource: "attendance" },
+      // An attendance count comes from the server's snapshot, never from the client.
+      { workforceSource: "attendance", workforceCount: 3 },
+      { workforceSource: "biometric" },
     ])
       expect(createDiaryRequestSchema.safeParse({ ...entry, ...changes }).success).toBe(false);
     expect(updateDiaryRequestSchema.safeParse({ version: 1, ...entry }).success).toBe(false);
+    expect(
+      createDiaryRequestSchema.parse({ ...entry, workforceSource: "attendance" }),
+    ).toMatchObject({ workforceSource: "attendance", workforceCount: null });
+    expect(createDiaryRequestSchema.parse(entry).workforceSource).toBe("manual");
   });
 
   it("requires a rejection reason and prevents ambiguous transition payloads", () => {
@@ -71,6 +77,7 @@ describe("site diary contracts", () => {
       id: entry.siteId,
       projectId: entry.siteId,
       workforceSource: "manual",
+      workforce: null,
       status: "draft",
       version: 1,
       createdBy: author,
@@ -99,6 +106,48 @@ describe("site diary contracts", () => {
       { ...approved, reviewedBy: author },
       { ...approved, status: "rejected" },
       { ...approved, reviewReason: "Unexpected reason" },
+    ])
+      expect(diarySchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it("binds an attendance snapshot to its count and keeps manual counts without one", () => {
+    const timestamp = "2026-11-11T08:00:00Z";
+    const draft = {
+      ...entry,
+      id: entry.siteId,
+      projectId: entry.siteId,
+      workforceSource: "attendance",
+      workforceCount: 3,
+      workforce: {
+        snapshotAt: timestamp,
+        musterStatus: "submitted",
+        trades: [
+          {
+            tradeId: entry.siteId,
+            key: "mason",
+            nameEn: "Mason",
+            nameSw: "Fundi mwashi",
+            headcount: 3,
+            halfDays: 1,
+          },
+        ],
+      },
+      status: "draft",
+      version: 1,
+      createdBy: entry.siteId,
+      submittedBy: null,
+      submittedAt: null,
+      reviewedBy: null,
+      reviewedAt: null,
+      reviewReason: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    expect(diarySchema.safeParse(draft).success).toBe(true);
+    for (const invalid of [
+      { ...draft, workforceCount: 4 },
+      { ...draft, workforce: null },
+      { ...draft, workforceSource: "manual" },
     ])
       expect(diarySchema.safeParse(invalid).success).toBe(false);
   });

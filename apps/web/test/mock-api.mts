@@ -94,6 +94,7 @@ import {
   type SpendingState,
 } from "./mock-spending.mts";
 import { handleSchedule, initialSchedule, type ScheduleState } from "./mock-schedule.mts";
+import { handleQuality, initialQuality, type QualityState } from "./mock-quality.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -183,6 +184,8 @@ type State = {
   photos: SitePhoto[];
   /** D6.2 schedules by project (mock-schedule.mts). */
   schedule: ScheduleState;
+  /** D6.1 quality: templates, inspections, tests, snags, completion (mock-quality.mts). */
+  quality: QualityState;
 };
 
 const states = new Map<string, State>();
@@ -398,6 +401,14 @@ function fixture(persona: Persona): State {
       ],
     ]),
     diaries: initialDiaries(RUIRU_ID, MAIN_PLOT_ID, OWNER_ID, AGENT_ID),
+    quality: initialQuality(
+      { projectId: RUIRU_ID, siteId: MAIN_PLOT_ID },
+      {
+        owner: { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+        pm: { id: PM_ID, displayName: "Brian Otieno" },
+        agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
+      },
+    ),
     photos: initialPhotos(RUIRU_ID, MAIN_PLOT_ID),
     bq,
     procurement,
@@ -422,7 +433,7 @@ function fixture(persona: Persona): State {
             userId: AGENT_ID,
             displayName: "Kevin Kiprono",
             role: "site_agent",
-            assignment: ["projects.view", "site.diary", "bq.view"],
+            assignment: ["projects.view", "site.diary", "site.photos", "bq.view"],
           },
           {
             userId: QS_ID,
@@ -964,6 +975,32 @@ async function handle(
     body,
   );
   if (buildups) return buildups;
+  const actor = {
+    id: PERSONAS[state.persona].id,
+    displayName: PERSONAS[state.persona].displayName,
+  };
+  const somewhere = [
+    ...new Set(state.projects.flatMap((entry) => projectPermissions(state, entry))),
+  ];
+  const qualityDeps = (entry: ProjectState | null) => ({
+    project: entry ? { id: entry.project.id, status: entry.project.status } : null,
+    sites: entry ? entry.sites.map(({ site }) => ({ id: site.id, name: site.name })) : [],
+    wbs: entry ? entry.wbs.map(({ id: nodeId, code, name }) => ({ id: nodeId, code, name })) : [],
+    permissions: entry ? projectPermissions(state, entry) : [],
+    somewhere,
+    companyPermissions: rolePermissions(state),
+    actor,
+    photo: (photoId: string) => {
+      const found = state.photos.find(
+        (photo) => photo.id === photoId && photo.projectId === entry?.project.id,
+      );
+      return found ? { id: found.id, verified: found.verified, caption: found.caption } : null;
+    },
+    fail: (status: number, code: string) => new HttpError(status, code),
+    parse,
+  });
+  if (path.startsWith("/quality/"))
+    return handleQuality(qualityDeps(null), state.quality, method, path, query, body)!;
   const match = /^\/projects\/([^/]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw new HttpError(404, "not-found");
   const [, projectId, rest = ""] = match;
@@ -1000,6 +1037,10 @@ async function handle(
       query,
       body,
     )!;
+  }
+  if (rest === "quality" || rest.startsWith("quality/")) {
+    const entry = find(state, projectId!, "projects.view");
+    return handleQuality(qualityDeps(entry), state.quality, method, path, query, body)!;
   }
   if (rest === "diaries" || rest.startsWith("diaries/")) {
     const entry = find(state, projectId!, method === "GET" ? "projects.view" : "site.diary");

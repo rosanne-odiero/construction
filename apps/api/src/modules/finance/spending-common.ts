@@ -112,7 +112,7 @@ export function spendingDatabaseProblem(error: unknown): Error | null {
 export type ProjectAccess = { project: ProjectRow; permissions: ReadonlySet<Permission> };
 
 /**
- * Spending authorisation (ARCHITECTURE §4.7), always on the record's project:
+ * Spending authorisation (ARCHITECTURE §4.8), always on the record's project:
  * - budgets, the cost ledger, budget vs actual, the forecast and alerts: SPENDING_READ_PERMISSIONS
  *   (`finance.view`, `finance.manage`); clients, suppliers and site agents hold neither;
  * - petty cash: PETTY_CASH_READ_PERMISSIONS (custodians with `finance.petty_cash`, finance, and the

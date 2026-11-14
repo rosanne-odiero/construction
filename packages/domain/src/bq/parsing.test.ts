@@ -320,7 +320,9 @@ describe("hostile layouts", () => {
     ]);
     const started = Date.now();
     analyseSheet(sheet(rows, "Hostile"), 0);
-    expect(Date.now() - started).toBeLessThan(1_000);
+    // About 0.2–1.3 s on a busy laptop or CI runner; backtracking over 200-character runs would
+    // take at least a hundred times longer, so a generous bound avoids timing flakes.
+    expect(Date.now() - started).toBeLessThan(5_000);
   });
 
   it("saves and re-applies a template whose reference column has no title", () => {

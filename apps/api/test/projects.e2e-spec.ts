@@ -3,6 +3,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { addCalendarDays, nairobiDate } from "@pm-buddy/domain";
 import { KENYA_STATUTORY_SEED, PROJECT_ASSIGNABLE_PERMISSIONS } from "@pm-buddy/types";
 import {
   auditEventsResponseSchema,
@@ -1253,6 +1254,23 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         counts: await tx.pettyCashCount.findMany({ where: { tenantId }, select: { status: true } }),
         journals: await tx.costJournal.findMany({ where: { tenantId }, select: { status: true } }),
         cashFlowItems: await tx.cashFlowItem.count({ where: { tenantId } }),
+        templates: await tx.checklistTemplate.count({ where: { tenantId } }),
+        inspections: await tx.inspection.findMany({
+          where: { tenantId },
+          select: { status: true, result: true },
+          orderBy: [{ status: "asc" }, { result: "asc" }],
+        }),
+        snags: await tx.snag.findMany({
+          where: { tenantId },
+          select: { status: true, phase: true },
+          orderBy: [{ phase: "asc" }, { status: "asc" }],
+        }),
+        cubeResults: await tx.cubeResult.count({ where: { tenantId } }),
+        slumpTests: await tx.slumpTest.count({ where: { tenantId } }),
+        completions: await tx.projectCompletion.findMany({
+          where: { tenantId },
+          select: { kind: true, status: true, dlpMonths: true },
+        }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1265,13 +1283,14 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     expect(registry).toEqual({
       // D5.3 adds the storekeeper, assigned to Ruiru Heights and Kitengela.
       members: 5,
-      projects: 3,
-      sites: 3,
-      geofences: 3,
-      wbs: 13,
-      milestones: 9,
-      history: 2,
-      assignments: 5,
+      // D6.1 adds JUJ-DPX (handed over: activated and completed), assigned to the PM and agent.
+      projects: 4,
+      sites: 4,
+      geofences: 4,
+      wbs: 16,
+      milestones: 11,
+      history: 4,
+      assignments: 7,
       buildups: 1,
       buildupLines: 5,
       // D5.1: the starter catalogue (21 materials, 6 factors) plus 2 supplier trip factors; three
@@ -1340,6 +1359,35 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       counts: [{ status: "approved" }],
       journals: [{ status: "approved" }],
       cashFlowItems: 3,
+      // D6.1: the seven starter templates; on RUI-HTS a signed-off and a failed (signed-off)
+      // inspection and one awaiting sign-off, on JUJ-DPX a signed-off pre-handover inspection;
+      // snags in every state, two reported in the DLP; four cube sets with six results; three
+      // slump tests; JUJ-DPX's practical completion certified with a six-month DLP.
+      templates: 7,
+      inspections: [
+        { status: "signed_off", result: "fail" },
+        { status: "signed_off", result: "pass" },
+        { status: "signed_off", result: "pass" },
+        { status: "submitted", result: "pass" },
+      ],
+      snags: [
+        { status: "closed", phase: "construction" },
+        { status: "closed", phase: "construction" },
+        { status: "closed", phase: "construction" },
+        { status: "fixed", phase: "construction" },
+        { status: "open", phase: "construction" },
+        { status: "open", phase: "construction" },
+        { status: "fixed", phase: "dlp" },
+        { status: "open", phase: "dlp" },
+      ],
+      cubeResults: 5,
+      slumpTests: 3,
+      completions: [{ kind: "practical", status: "certified", dlpMonths: 6 }],
+    });
+    expect(first.quality).toMatchObject({
+      failedCubeSets: 1,
+      overdueCubeSets: 1,
+      practicalCompletion: addCalendarDays(nairobiDate(), -75),
     });
     // Every spend-alert kind shows on the demo.
     expect(
@@ -1394,7 +1442,21 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     );
     expect(states.adjustment.status).toBe("approved");
     expect(states.adjustment.decidedBy).not.toBe(states.adjustment.requestedBy);
+    // A database seeded before the storekeeper joined the team: the next seed assigns them.
+    const keeperId = (
+      await prisma.user.findUniqueOrThrow({
+        where: {
+          identifier: DEMO_ACCOUNTS.find((account) => account.key === "storekeeper")!.identifier,
+        },
+      })
+    ).id;
+    const unassigned = await db.run(
+      { tenantId: first.company.id, userId: ownerId, requestId: "seed-older-db" },
+      (tx) => tx.projectMembership.deleteMany({ where: { userId: keeperId } }),
+    );
+    expect(unassigned.count).toBe(2);
     const second = await seedDemo(app);
+    expect((await counts(first.company.id, ownerId)).assignments).toBe(afterFirst.assignments);
     expect(second.company).toEqual({ ...first.company, created: false });
     expect(second.accounts.every((account) => !account.created && account.password === null)).toBe(
       true,
@@ -1406,6 +1468,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       ["RUI-HTS", "active", false],
       ["KIT-BNG", "active", false],
       ["SYO-TWN", "planning", false],
+      ["JUJ-DPX", "completed", false],
     ]);
     expect(second.buildups).toEqual([
       {
@@ -1467,6 +1530,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         { number: "MQ-INV-1002", status: "disputed" },
       ],
     });
+    expect(second.quality).toEqual({ ...first.quality, created: false });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
   });
 });

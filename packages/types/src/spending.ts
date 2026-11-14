@@ -1,9 +1,9 @@
 import type { Permission } from "./permissions.js";
 
 /**
- * Spending and cash-flow vocabulary (D5.4, brief §5.8 and §15 C/D; ARCHITECTURE §4.7; WORKFLOWS
+ * Spending and cash-flow vocabulary (D5.4, brief §5.8 and §15 C/D; ARCHITECTURE §4.8; WORKFLOWS
  * "Petty cash" and "Budgets"). The database CHECK constraints and triggers in migration
- * `20261121090000_spending` list the same values.
+ * `20261123090000_spending` list the same values.
  */
 
 /** Every shilling carries one of these categories (brief §5.8). */

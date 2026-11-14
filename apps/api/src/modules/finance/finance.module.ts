@@ -19,7 +19,7 @@ import { SpendingAccess } from "./spending-common.js";
 import { SpendingReportService } from "./spending-report.service.js";
 
 /**
- * Spending and cash flow (D5.4, ARCHITECTURE §4.7): company cost codes and settings, versioned
+ * Spending and cash flow (D5.4, ARCHITECTURE §4.8): company cost codes and settings, versioned
  * budgets, the append-only cost ledger and manual journals, budget against actual and committed,
  * petty-cash floats (expenses with receipts and the M-Pesa SMS draft, top-ups, counts), manual
  * cash-flow lines, the weekly forecast and spend alerts. Supplier invoice accruals and settlement

@@ -145,6 +145,21 @@ import {
   scheduleDependencyResponseSchema,
   scheduleResponseSchema,
   sitePhotosResponseSchema,
+  checklistTemplateResponseSchema,
+  checklistTemplatesResponseSchema,
+  completionResponseSchema,
+  cubeSetResponseSchema,
+  cubeSetsResponseSchema,
+  diaryAttendanceResponseSchema,
+  inspectionDetailResponseSchema,
+  inspectionsResponseSchema,
+  loadStarterTemplatesResponseSchema,
+  qualitySettingsResponseSchema,
+  qualitySummaryResponseSchema,
+  slumpTestResponseSchema,
+  slumpTestsResponseSchema,
+  snagResponseSchema,
+  snagsResponseSchema,
   buildupMaterialsResponseSchema,
   issueOptionsResponseSchema,
   ledgerResponseSchema,
@@ -245,6 +260,7 @@ export function responseContract(method: string, target: string) {
   if (path === "projects") return method === "get" ? projectsResponseSchema : projectResponseSchema;
   if (/^projects\/[^/]+\/photos(\?.*)?$/.test(path) && method === "get")
     return sitePhotosResponseSchema;
+  if (/^projects\/[^/]+\/diaries\/attendance$/.test(path)) return diaryAttendanceResponseSchema;
   if (/^projects\/[^/]+\/diaries$/.test(path))
     return method === "get" ? diariesResponseSchema : diaryResponseSchema;
   if (/^projects\/[^/]+\/diaries\/[^/]+(\/actions)?$/.test(path)) return diaryResponseSchema;
@@ -322,6 +338,8 @@ export function responseContract(method: string, target: string) {
   if (schedule) return schedule;
   const spending = spendingContract(method, path);
   if (spending) return spending;
+  const quality = qualityContract(method, path);
+  if (quality) return quality;
   return messageResponseSchema;
 }
 
@@ -361,6 +379,33 @@ function spendingContract(method: string, path: string) {
   if (path === "cash-flow-items")
     return get ? cashFlowItemsResponseSchema : cashFlowItemResponseSchema;
   if (/^cash-flow-items\/.+$/.test(path)) return cashFlowItemResponseSchema;
+  return null;
+}
+
+/** The D6.1 quality endpoints' success contracts. */
+function qualityContract(method: string, path: string) {
+  if (path === "quality/templates")
+    return method === "get" ? checklistTemplatesResponseSchema : checklistTemplateResponseSchema;
+  if (path === "quality/templates/starter") return loadStarterTemplatesResponseSchema;
+  if (/^quality\/templates\/[^/]+(\/(versions|retire))?$/.test(path))
+    return checklistTemplateResponseSchema;
+  if (path === "quality/settings") return qualitySettingsResponseSchema;
+  const match = /^projects\/[^/]+\/quality(\/.*)?$/.exec(path);
+  if (!match) return null;
+  const rest = match[1] ?? "";
+  if (rest === "/summary") return qualitySummaryResponseSchema;
+  if (rest === "/inspections")
+    return method === "get" ? inspectionsResponseSchema : inspectionDetailResponseSchema;
+  if (/^\/inspections\/[^/]+(\/actions)?$/.test(rest)) return inspectionDetailResponseSchema;
+  if (rest === "/snags") return method === "get" ? snagsResponseSchema : snagResponseSchema;
+  if (/^\/snags\/[^/]+(\/actions)?$/.test(rest)) return snagResponseSchema;
+  if (rest === "/cubes") return method === "get" ? cubeSetsResponseSchema : cubeSetResponseSchema;
+  if (/^\/cubes\/[^/]+(\/(results|void)|\/results\/[^/]+\/corrections)?$/.test(rest))
+    return cubeSetResponseSchema;
+  if (rest === "/slump-tests")
+    return method === "get" ? slumpTestsResponseSchema : slumpTestResponseSchema;
+  if (/^\/slump-tests\/[^/]+(\/corrections)?$/.test(rest)) return slumpTestResponseSchema;
+  if (/^\/completion(\/[^/]+\/actions)?$/.test(rest)) return completionResponseSchema;
   return null;
 }
 

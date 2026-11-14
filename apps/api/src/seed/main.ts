@@ -71,6 +71,13 @@ function print(summary: SeedSummary) {
     `Procure-to-pay (synthetic, ${p2p.created ? "created" : "already present"}): ${p2p.requisition} → ${p2p.rfq} → ${p2p.lpo} → ${p2p.grn}`,
   );
   for (const invoice of p2p.invoices) lines.push(`  invoice ${invoice.number} — ${invoice.status}`);
+  const { stores } = summary;
+  lines.push(
+    "",
+    `Stores (synthetic, ${stores.created ? "created" : "already present"}): ${stores.stores.join(", ")}`,
+    `  ${stores.movements.join(", ")}; transfers ${stores.transfers.join(", ")}; stock take ${stores.stockTake}`,
+    `  consumption variance alerts: ${stores.varianceAlerts}; low-stock items: ${stores.lowStock}`,
+  );
   console.log(lines.join("\n"));
 }
 

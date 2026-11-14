@@ -589,3 +589,4 @@ export {
 } from "./attendance.js";
 export * from "./payroll.js";
 export * from "./procure-to-pay.js";
+export * from "./stores.js";

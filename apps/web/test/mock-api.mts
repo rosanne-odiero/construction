@@ -86,6 +86,7 @@ import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
 import { handlePhotos, initialPhotos } from "./mock-photos.mts";
 import { latestApproved } from "./mock-bq-model.mts";
 import { handleP2p, initialP2p, p2pDocument, type P2pDeps, type P2pState } from "./mock-p2p.mts";
+import { handleStores, initialStores, type StoresState } from "./mock-stores.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -165,6 +166,8 @@ type State = {
   procurement: ProcurementState;
   /** D5.2 procure-to-pay records (mock-p2p.mts). */
   p2p: P2pState;
+  /** D5.3 stores, ledger, transfers, stock takes and variance (mock-stores.mts). */
+  stores: StoresState;
   labour: LabourState;
   attendance: AttendanceState;
   diaries: SiteDiary[];
@@ -373,6 +376,7 @@ function fixture(persona: Persona): State {
     bq,
     procurement,
     p2p: initialP2p(p2pBase(projects, procurement, bq)),
+    stores: initialStores(procurement, bq.buildups),
     projects,
     labour,
     attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
@@ -780,6 +784,49 @@ async function handle(
     ]);
     return { status: 201, body: { project }, schema: projectResponseSchema };
   }
+  const stores = handleStores(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      projects: state.projects.map(({ project, sites }) => ({
+        id: project.id,
+        code: project.code,
+        name: project.name,
+        status: project.status,
+        sites: sites.map(({ site }) => ({ id: site.id, name: site.name })),
+      })),
+      projectPermissions: (projectId) => {
+        const entry = state.projects.find((candidate) => candidate.project.id === projectId);
+        return entry ? projectPermissions(state, entry) : [];
+      },
+      companyPermissions: rolePermissions(state),
+      somewhere: () => [
+        ...new Set([
+          ...(isTenantWide(state.persona) ? rolePermissions(state) : []),
+          ...state.projects.flatMap((entry) => projectPermissions(state, entry)),
+        ]),
+      ],
+      catalogue: state.procurement,
+      buildups: state.bq.buildups,
+      gangs: state.labour.gangs.map((gang) => ({
+        id: gang.id,
+        projectId: gang.projectId,
+        name: gang.name,
+        status: gang.status,
+      })),
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+    },
+    state.stores,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (stores) return stores;
   const p2p = handleP2p(
     {
       ...p2pBase(state.projects, state.procurement, state.bq),

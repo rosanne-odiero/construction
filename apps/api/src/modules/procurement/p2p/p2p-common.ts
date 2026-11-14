@@ -70,6 +70,8 @@ export type P2pProblem =
   | "idempotency-key-reused"
   | "grn-id-conflict"
   | "grn-supports-approved-invoice"
+  | "grn-stock-consumed"
+  | "site-required"
   | "too-many-photos"
   | "file-required"
   | "unsupported-file-type"

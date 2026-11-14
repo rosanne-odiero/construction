@@ -114,6 +114,15 @@ function print(summary: SeedSummary) {
     `  incidents: ${safety.incidents.map((entry) => `${entry.code} ${entry.kind} (${entry.status})`).join(", ")}`,
     `  corrective actions: ${safety.actions.total} (${safety.actions.verified} verified, ${safety.actions.overdue} overdue); ${safety.kits} first-aid kits; ${safety.treatments} treatment(s)`,
   );
+  const { plant } = summary;
+  lines.push(
+    "",
+    `Plant and equipment (synthetic, ${plant.created ? "created" : "already present"}): ${plant.items.length} items in service, ${plant.fuelVarianceAlerts} fuel variance alert(s) (an estimate, not proof of theft)`,
+    ...plant.items.map(
+      (item) =>
+        `  ${item.code} ${item.status}${item.alerts.length ? `: ${item.alerts.join(", ")}` : ""}`,
+    ),
+  );
   console.log(lines.join("\n"));
 }
 

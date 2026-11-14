@@ -103,6 +103,7 @@ import {
   type ValuationsState,
 } from "./mock-valuations.mts";
 import { handleSafety, initialSafety, type SafetyState } from "./mock-safety.mts";
+import { handlePlant, initialPlant, type PlantState } from "./mock-plant.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -198,6 +199,8 @@ type State = {
   valuations: ValuationsState;
   /** D8.2 health and safety (mock-safety.mts). */
   safety: SafetyState;
+  /** D8.3 plant and equipment (mock-plant.mts). */
+  plant: PlantState;
 };
 
 const states = new Map<string, State>();
@@ -434,6 +437,19 @@ function fixture(persona: Persona): State {
         workerNo,
         fullName,
       })),
+    ),
+    plant: initialPlant(
+      { projectId: RUIRU_ID, siteId: MAIN_PLOT_ID },
+      {
+        id: procurement.suppliers[0]!.supplier.id,
+        name:
+          procurement.suppliers[0]!.supplier.tradingName ??
+          procurement.suppliers[0]!.supplier.legalName,
+      },
+      {
+        owner: { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+        agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
+      },
     ),
     photos,
     valuations: initialValuations(RUIRU_ID, [photos[0]!.id]),
@@ -1150,6 +1166,54 @@ async function handle(
   });
   if (path.startsWith("/safety/"))
     return handleSafety(safetyDeps(null), state.safety, method, path, query, body)!;
+  if (
+    path === "/plant" ||
+    path.startsWith("/plant/") ||
+    /^\/projects\/[^/]+\/plant(\/options)?$/.test(path)
+  ) {
+    const plant = handlePlant(
+      {
+        projects: state.projects.map((entry) => ({
+          id: entry.project.id,
+          code: entry.project.code,
+          name: entry.project.name,
+          status: entry.project.status,
+          sites: entry.sites.map(({ site }) => ({ id: site.id, name: site.name })),
+          permissions: projectPermissions(state, entry),
+        })),
+        companyPermissions: rolePermissions(state),
+        actor,
+        suppliers: state.procurement.suppliers.map(({ supplier }) => ({
+          id: supplier.id,
+          code: supplier.code,
+          name: supplier.tradingName ?? supplier.legalName,
+        })),
+        labourers: (projectId) =>
+          state.labour.labourers
+            .filter((labourer) =>
+              labourer.engagements.some((engagement) => engagement.projectId === projectId),
+            )
+            .map(({ id: labourerId, workerNo, fullName }) => ({
+              id: labourerId,
+              workerNo,
+              fullName,
+            })),
+        staff: [
+          { id: PM_ID, displayName: "Brian Otieno" },
+          { id: AGENT_ID, displayName: "Kevin Kiprono" },
+        ],
+        fail: (status: number, code: string) => new HttpError(status, code),
+        parse,
+      },
+      state.plant,
+      method,
+      path,
+      query,
+      body,
+    );
+    if (plant) return plant;
+    throw new HttpError(404, "not-found");
+  }
   const match = /^\/projects\/([^/]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw new HttpError(404, "not-found");
   const [, projectId, rest = ""] = match;

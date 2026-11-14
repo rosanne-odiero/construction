@@ -1759,7 +1759,32 @@
     "tooManyMaterials": "Too many materials lines on this valuation.",
     "tooManyAdjustments": "Too many adjustments on this valuation.",
     "valuationTooLarge": "This valuation has too many lines to work out. Contact support.",
-    "asOfFuture": "The data date cannot be in the future."
+    "asOfFuture": "The data date cannot be in the future.",
+    "plantCodeTaken": "This plant code is already in the register.",
+    "plantRegisterFull": "The register holds at most 2,000 items in service. Off-hire or dispose of some first.",
+    "plantClosed": "This item is off hire or disposed of; nothing more can be recorded.",
+    "plantNotOnSite": "The item was not at this site on that day.",
+    "plantNotMetered": "Readings do not match the item's meter: enter them for metered plant only.",
+    "plantNoFuel": "This item does not use fuel.",
+    "plantUnsafe": "This item has an open unsafe breakdown and must not be used.",
+    "plantHasOpenBreakdowns": "Resolve the item's open breakdowns first.",
+    "plantDateFuture": "This date cannot be in the future.",
+    "plantDateTooOld": "This is too far back to record; ask a project manager.",
+    "meterOutOfOrder": "A meter reading cannot be lower than an earlier one or higher than a later one. Check the readings, or record a meter reset.",
+    "meterDayLimit": "One day's usage cannot exceed 24 hours or 1,500 km.",
+    "meterResetOrder": "A meter reset comes after every reading already recorded.",
+    "usageDayExists": "This day is already logged for the item; correct that entry instead.",
+    "recordSuperseded": "This entry was already corrected; correct the newest one.",
+    "recordAlreadyVoid": "This entry is already void.",
+    "operatorNotAssigned": "This operator was not assigned to the item on that day.",
+    "operatorOverlap": "This operator is already assigned to the item for that period.",
+    "moveStrandsRecords": "Usage or fuel is recorded at the current site after that date.",
+    "moveSamePlace": "The item is already there.",
+    "breakdownResolutionInvalid": "Hired plant goes off hire; owned plant is written off.",
+    "lpoNotFound": "This LPO is not one of the supplier's.",
+    "usageIdConflict": "This usage entry was already sent. Reload to see it.",
+    "fuelIdConflict": "This fuel issue was already sent. Reload to see it.",
+    "plantRule": "That change breaks a plant rule. Reload the page and check the record."
   },
   "projectStatus": {
     "planning": "Planning",
@@ -1862,7 +1887,8 @@
       "quality": "Quality",
       "bq": "BQ",
       "photos": "Photos",
-      "safety": "Health and safety"
+      "safety": "Health and safety",
+      "plant": "Plant"
     },
     "prototypeBadge": "Prototype",
     "readOnly": "This project is closed or cancelled, so it is read-only.",
@@ -8605,6 +8631,412 @@
         "addAdjustment": "Add adjustment",
         "adjustmentAmount": "Amount (KES)"
       }
+    }
+  },
+  "plant": {
+    "title": "Plant and equipment",
+    "description": "Owned and hired plant: where it is, usage, fuel against the standard, breakdowns, services and hire.",
+    "complianceNote": "Fuel alerts compare litres with the item's standard consumption: an estimate for review, never proof of theft. Operator certificate rules and consumption standards await professional review (COMPLIANCE-REVIEW).",
+    "yard": "Yard (not on a site)",
+    "closed": "Closed on {date}: {reason}",
+    "recordedBy": "Recorded by {name}, {at}",
+    "category": {
+      "concrete_mixer": "Concrete mixer",
+      "vibrator": "Poker vibrator",
+      "excavator": "Excavator",
+      "loader": "Backhoe or wheel loader",
+      "roller": "Roller",
+      "compactor": "Plate compactor or rammer",
+      "generator": "Generator",
+      "pump": "Pump",
+      "crane_hoist": "Crane or hoist",
+      "scaffolding": "Scaffolding",
+      "formwork": "Formwork",
+      "vehicle": "Vehicle (tipper, pickup)",
+      "other": "Other"
+    },
+    "ownership": {
+      "owned": "Owned",
+      "hired": "Hired"
+    },
+    "status": {
+      "available": "In the yard",
+      "on_site": "On site",
+      "under_repair": "Under repair",
+      "off_hire": "Off hire",
+      "disposed": "Disposed of"
+    },
+    "meterType": {
+      "hours": "Hour meter",
+      "km": "Odometer (km)",
+      "none": "No meter"
+    },
+    "fuelType": {
+      "diesel": "Diesel",
+      "petrol": "Petrol",
+      "none": "No fuel"
+    },
+    "rateUnit": {
+      "day": "day",
+      "hour": "hour",
+      "month": "month"
+    },
+    "dayStatus": {
+      "working": "Working",
+      "idle": "Idle",
+      "breakdown": "Broken down"
+    },
+    "fuelSource": {
+      "site_store": "Site store",
+      "fuel_station": "Fuel station",
+      "bowser": "Bowser",
+      "other": "Other"
+    },
+    "resetReason": {
+      "meter_replaced": "Meter replaced",
+      "meter_reset": "Meter reset",
+      "rollover": "Meter rolled over",
+      "other": "Other"
+    },
+    "severity": {
+      "minor": "Minor (can work)",
+      "major": "Major (cannot work)",
+      "unsafe": "Unsafe (must not be used)"
+    },
+    "breakdownStatus": {
+      "open": "Open",
+      "repaired": "Repaired",
+      "off_hire": "Sent off hire",
+      "written_off": "Written off"
+    },
+    "serviceKind": {
+      "service": "Service",
+      "repair": "Repair",
+      "inspection": "Inspection"
+    },
+    "serviceState": {
+      "not_scheduled": "No schedule",
+      "ok": "Service OK",
+      "due": "Service due",
+      "overdue": "Service overdue"
+    },
+    "windowState": {
+      "within_standard": "Within the standard",
+      "over_standard": "Above the standard (estimate)",
+      "short_sample": "Too short to judge"
+    },
+    "recordState": {
+      "current": "Current",
+      "superseded": "Corrected",
+      "voided": "Voided"
+    },
+    "certificate": {
+      "not_required": "No certificate needed",
+      "valid": "Certificate recorded",
+      "expiring": "Certificate expiring",
+      "expired": "Certificate expired",
+      "missing": "No certificate recorded"
+    },
+    "alertKind": {
+      "fuel_over_standard": "Fuel above the standard (estimate, not proof of theft)",
+      "fuel_meter_static": "Fuel issued while the meter did not move (estimate)",
+      "unsafe_breakdown": "Unsafe: must not be used",
+      "breakdown_open": "Breakdown open",
+      "service_overdue": "Service overdue",
+      "service_due": "Service due",
+      "idle_on_hire": "Idle on hire",
+      "hire_overrun": "Hire period ended, still on hire",
+      "hire_ending": "Hire ends soon",
+      "operator_certificate": "Operator certificate missing or expiring"
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "edit": "Change details",
+      "move": "Move",
+      "offHire": "Send off hire",
+      "dispose": "Dispose of",
+      "assignOperator": "Assign an operator",
+      "reportBreakdown": "Report a breakdown",
+      "recordService": "Record a service",
+      "resetMeter": "Record a meter reset",
+      "recordUsage": "Record usage",
+      "recordFuel": "Record fuel",
+      "saveUsage": "Save usage",
+      "saveFuel": "Save fuel issue",
+      "correct": "Correct",
+      "void": "Void",
+      "backToPlant": "Back to the project's plant",
+      "openItem": "Open the item"
+    },
+    "filters": {
+      "status": "Status",
+      "all": "All",
+      "active": "In service",
+      "search": "Search",
+      "searchPlaceholder": "Code, name, make or registration",
+      "apply": "Apply",
+      "attention": "Only items that need attention"
+    },
+    "register": {
+      "title": "Register",
+      "new": "Register plant",
+      "newHint": "Owned or hired plant. The code, ownership, meter and fuel type cannot change later.",
+      "countsLabel": "Register counts",
+      "alertsLabel": "Needs attention",
+      "empty": "No plant matches.",
+      "pages": "Register pages",
+      "where": "Where",
+      "restricted": "On another project",
+      "meter": "Meter",
+      "service": "Service",
+      "hire": "Hire",
+      "quantity": "{count, plural, one {# unit} other {# units}}",
+      "hireLine": "{supplier} · {days, plural, one {# day} other {# days}} on hire, {idle, plural, one {# idle day} other {# idle days}}",
+      "hireEnds": "ends {date}",
+      "estimate": "estimated {amount} so far",
+      "counts": {
+        "total": "{count, plural, one {# item} other {# items}}",
+        "onSite": "{count} on site",
+        "available": "{count} in the yard",
+        "underRepair": "{count} under repair",
+        "hired": "{count} hired",
+        "attention": "{count} need attention"
+      }
+    },
+    "alerts": {
+      "title": "Needs attention",
+      "none": "Nothing needs attention.",
+      "estimateNote": "Fuel alerts are estimates for review, never proof of theft: tank levels, idling, ground and attachments all change consumption."
+    },
+    "form": {
+      "code": "Code",
+      "codeHint": "Unique in the company, e.g. EX-01 (letters, digits and hyphens).",
+      "name": "Name",
+      "category": "Category",
+      "quantity": "Quantity",
+      "quantityHint": "Scaffolding and formwork: frames, props or sets on hand.",
+      "makeModel": "Make and model (optional)",
+      "registration": "Registration or serial number (optional)",
+      "ownership": "Ownership",
+      "hireTerms": "Hire terms",
+      "supplier": "Supplier",
+      "lpo": "LPO (optional)",
+      "rate": "Hire rate (KES)",
+      "rateUnit": "Per",
+      "hireStart": "Hire start (DD/MM/YYYY)",
+      "hireEnd": "Hire end (optional, DD/MM/YYYY)",
+      "hireHint": "The hire charge shown is an estimate; the supplier's invoice is the charge (it is not posted to the cost ledger).",
+      "meterType": "Meter",
+      "fuelType": "Fuel",
+      "standardHours": "Standard consumption (litres per hour)",
+      "standardKm": "Standard consumption (litres per km)",
+      "standardHint": "From the manufacturer or your own records; fuel above it by more than the tolerance is flagged.",
+      "openingOn": "In service from (DD/MM/YYYY)",
+      "openingReading": "Meter reading then",
+      "serviceEveryHours": "Service every (hours, optional)",
+      "serviceEveryKm": "Service every (km, optional)",
+      "serviceEveryDays": "Service every (days, optional)",
+      "startsAt": "Starts at",
+      "notes": "Notes",
+      "notesOptional": "Notes (optional)",
+      "register": "Register",
+      "save": "Save changes",
+      "choose": "Choose…",
+      "none": "None",
+      "invalid": "Check the fields: dates as DD/MM/YYYY, readings with at most one decimal place, and hired plant needs a supplier, rate and start.",
+      "fixedHint": "The code, ownership, meter, fuel type and opening reading cannot change.",
+      "date": "Date (DD/MM/YYYY)",
+      "time": "Time (HH:MM)",
+      "reason": "Reason",
+      "reasonOptional": "Reason (optional)",
+      "searchFailed": "The search did not work. Try again."
+    },
+    "move": {
+      "hint": "Moves are kept as history. Usage and fuel are only accepted at a site on days the item was there.",
+      "to": "To",
+      "line": "{date}: {from} → {to}",
+      "restrictedLine": "{date}: moved (details on another project)",
+      "registered": "Registered {date} by {name}"
+    },
+    "close": {
+      "hint": "Final: the item returns to the yard, its operators are released and nothing more can be recorded."
+    },
+    "operator": {
+      "hint": "A labourer engaged on the project or a staff member. A missing certificate where the category needs one is flagged (COMPLIANCE-REVIEW), not blocked.",
+      "kind": "Operator",
+      "labourer": "Labourer",
+      "staff": "Staff member",
+      "search": "Find a labourer (name or worker number)",
+      "from": "From (DD/MM/YYYY)",
+      "to": "To (optional)",
+      "certificate": "Certificate or licence reference (optional)",
+      "expires": "Certificate expiry (optional, DD/MM/YYYY)",
+      "end": "End assignment",
+      "active": "Active",
+      "none": "No operators assigned.",
+      "expiresOn": "expires {date}"
+    },
+    "breakdown": {
+      "hint": "Major and unsafe breakdowns put the item under repair; unsafe plant cannot be logged as working.",
+      "severity": "Severity",
+      "description": "What happened",
+      "none": "No breakdowns recorded.",
+      "daysDown": "{count, plural, one {# day down} other {# days down}}",
+      "resolved": "Resolved {date} by {name}"
+    },
+    "resolve": {
+      "repaired": "Record the repair",
+      "off_hire": "Send off hire",
+      "written_off": "Write off",
+      "repairedBy": "Repaired by (optional)",
+      "closeHint": "This closes the item for good."
+    },
+    "service": {
+      "hint": "A service restarts the service interval.",
+      "kind": "Kind",
+      "description": "Work done",
+      "doneBy": "Done by (optional)",
+      "costReference": "Invoice or cost reference (optional)",
+      "none": "No services recorded.",
+      "voidTitle": "Void this service record"
+    },
+    "reset": {
+      "hint": "Only for a replaced or reset meter; readings may then start again from the new value.",
+      "old": "Last reading on the old meter",
+      "new": "First reading on the new meter",
+      "reason": "Why",
+      "listLabel": "Meter resets",
+      "line": "{at}: {old} → {new} ({reason})"
+    },
+    "correct": {
+      "title": "Correct this entry",
+      "voidTitle": "Void this entry",
+      "hint": "Entries are never edited: a correction or void is a new entry with your reason, and the original stays in the history.",
+      "start": "Start reading",
+      "end": "End reading",
+      "reading": "Meter reading",
+      "because": "Because: {reason}"
+    },
+    "detail": {
+      "overview": "Overview",
+      "fuel": "Fuel and consumption",
+      "usage": "Daily usage",
+      "breakdowns": "Breakdowns",
+      "maintenance": "Maintenance",
+      "operators": "Operators",
+      "moves": "Site history",
+      "standard": "Standard consumption",
+      "perHour": "{litres} L per hour",
+      "perKm": "{litres} L per km",
+      "remaining": "{remaining} {unit} to go",
+      "dueOn": "due by {date}",
+      "hirePeriod": "Hire period",
+      "openEnded": "open",
+      "hireDays": "{days, plural, one {# day} other {# days}} on hire, {idle, plural, one {# idle day} other {# idle days}}",
+      "estimate": "Estimated hire charge so far",
+      "estimateNote": "(an estimate; the supplier's invoice is the charge)"
+    },
+    "usage": {
+      "title": "Record usage",
+      "hint": "One entry per item and day: the meter at the start and end, or whether it worked.",
+      "item": "Item",
+      "at": "At {site}",
+      "status": "The day",
+      "operator": "Operator (optional)",
+      "costCode": "Cost code (optional)",
+      "costCodeHint": "What the item worked on; nothing is posted to the cost ledger.",
+      "noMeter": "This item has no meter: record whether it worked, stood idle or was broken down.",
+      "readingsHint": "Readings may not go below an earlier reading.",
+      "start": {
+        "hours": "Hours at start",
+        "km": "Km at start"
+      },
+      "end": {
+        "hours": "Hours at end",
+        "km": "Km at end"
+      },
+      "reading": {
+        "hours": "Hour meter reading",
+        "km": "Odometer reading",
+        "none": "Meter reading"
+      },
+      "run": {
+        "hours": "{run} hours today",
+        "km": "{run} km today"
+      },
+      "invalid": "Check the date (DD/MM/YYYY, not in the future).",
+      "invalidMetered": "Check the date (DD/MM/YYYY, not in the future) and the readings (one decimal place, the end not below the start).",
+      "totals": "Last 30 days: {working, plural, one {# working day} other {# working days}}, {idle} idle, {breakdown} broken down",
+      "run30": "{run} {unit} run",
+      "entriesLabel": "Usage entries",
+      "none": "No usage recorded yet.",
+      "pages": "Usage pages",
+      "operatorIs": "Operator: {name}"
+    },
+    "fuel": {
+      "title": "Record fuel",
+      "hint": "Litres issued to an item with the meter reading at fuelling. Fill the tank when you can: full fillings make the comparison fair.",
+      "litres": "Litres",
+      "tankFilled": "Filled to full",
+      "tankHint": "Leave ticked when the tank was filled to the top; untick for a top-up.",
+      "source": "From",
+      "reference": "Reference (optional, e.g. a store issue or receipt number)",
+      "receivedBy": "Received by (optional)",
+      "noFuelled": "No item on this project uses fuel.",
+      "lastReading": "last reading {reading}",
+      "invalid": "Check the date and time and the litres (0.1–2,000, one decimal place).",
+      "invalidMetered": "Check the date and time, the litres (0.1–2,000) and the meter reading (one decimal place).",
+      "recorded": "Fuel recorded for {code}",
+      "noWindow": "This filling did not close a full-tank window to compare yet.",
+      "windowLine": "{litres} L for {advance} {unit} against {expected} L expected ({variance}).",
+      "estimateNote": "An estimate for review, never proof of theft.",
+      "rules": "Full-tank windows of at least {sample} {unit} are compared with the standard; above it by more than {tolerance} % is flagged.",
+      "windowsLabel": "Fuel windows",
+      "window": "Window",
+      "advance": "Meter ({unit})",
+      "expected": "Expected L",
+      "rate": "L per unit",
+      "variance": "Variance",
+      "state": "Result",
+      "noWindows": "No full-tank window to compare yet.",
+      "pending": "{count, plural, one {# filling} other {# fillings}} since the last window: {litres} L over {advance} {unit} (not judged yet).",
+      "issuesLabel": "Fuel issues",
+      "full": "full",
+      "partial": "top-up",
+      "pages": "Fuel pages"
+    },
+    "tab": {
+      "title": "Plant",
+      "hint": "Plant on this project's sites today. Log the day's usage and fuel from a phone.",
+      "register": "Company register",
+      "empty": "No plant on this project's sites.",
+      "usageToday": "Today's usage logged",
+      "noUsageToday": "No usage logged today",
+      "fuelToday": "{litres} L fuel today",
+      "operators": "Operators: {names}",
+      "logUsage": "Log usage: {code}",
+      "logFuel": "Log fuel: {code}",
+      "saved": {
+        "usage": "Usage saved.",
+        "fuel": "Fuel issue saved."
+      }
+    },
+    "settings": {
+      "title": "Plant settings",
+      "hint": "The company's rules for the fuel variance, hire and service alerts.",
+      "fuelVariancePercent": "Fuel tolerance above the standard (%)",
+      "fuelMinHours": "Minimum sample (engine hours)",
+      "fuelMinKm": "Minimum sample (km)",
+      "idleHireDays": "Flag hired plant idle for (days)",
+      "hireEndingDays": "Warn before hire ends (days)",
+      "serviceDueSoonPercent": "Service due within the last (% of the interval)",
+      "range": "{min}–{max}",
+      "certificateCategories": "Categories whose operators need a certificate",
+      "certificateHint": "A conservative starting list for review (COMPLIANCE-REVIEW CR-PLT-01): a missing certificate is flagged, never blocked.",
+      "save": "Save settings",
+      "saved": "Settings saved.",
+      "readOnly": "Only people who manage company settings can change these.",
+      "invalid": "Each value must be a whole number within its range."
     }
   }
 }

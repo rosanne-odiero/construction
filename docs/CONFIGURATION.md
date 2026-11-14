@@ -225,6 +225,21 @@ One row of `safety_settings` per company (no row means the defaults, reported as
 | `safety.regulator_review_rule` | platform | A regulator decision is required before closing a **serious or fatal injury** or any **dangerous occurrence** (`packages/domain` `regulatorReviewRequired`, re-checked by `app.guard_safety_incident`) | OSHA 2007 / WIBA 2007 reporting duties as understood; COMPLIANCE-REVIEW CR-HS-01 | COMPLIANCE-REVIEW | D8.2 |
 | `safety.limits` | platform | 200 labourers per toolbox talk (500 others counted); 20 people and 6 photos per incident; PPE quantity 1–20; 100 rows per page. Code constant `SAFETY_LIMITS` | ARCHITECTURE §4.9 | PRODUCT | D8.2 |
 
+### Plant and equipment (D8.3)
+
+One row of `plant_settings` per company (no row means the defaults, reported as version 0), read with `GET plant/settings` (any plant reader or `config.manage`) and changed with `PUT plant/settings` (`config.manage`, optimistic `version`; audited `plant.settings_updated` with the changed field names only). The web form is `/plant/settings`. Defaults are `DEFAULT_PLANT_SETTINGS` in `packages/types`; the limits are `PLANT_SETTINGS_LIMITS` and the CHECK in migration `20261126090000_plant`. Alerts are computed on read, so a change applies to every item at once (old fuel windows are judged by the standard each issue carried, D-94).
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `plant.fuel_variance_percent` | company | **15 %**, 1–100: a full-tank window is flagged when actual litres > expected × (1 + tolerance) | Site practice; COMPLIANCE-REVIEW CR-PLT-02 | Proposed | D8.3 |
+| `plant.fuel_min_hours` / `plant.fuel_min_km` | company | **10 hours** (1–200) / **100 km** (10–5,000): a window shorter than this is not judged and extends to the next full filling | Measurement error on a few litres; CR-PLT-02 | Proposed | D8.3 |
+| `plant.idle_hire_days` | company | **3 days**, 1–60: hired plant with no working day for this long (today not counted) is flagged idle on hire | Site practice (ghost hire days, THREAT_MODEL A-72) | Proposed | D8.3 |
+| `plant.hire_ending_days` | company | **7 days**, 1–60: hired plant whose hire ends within this many days is flagged | Site practice | Proposed | D8.3 |
+| `plant.service_due_soon_percent` | company | **10 %**, 0–50: a service is due within the last 10 % of its meter or calendar interval, overdue after it | Dealer practice (service by hours or months, whichever first) | Proposed | D8.3 |
+| `plant.certificate_categories` | company | excavator, loader, roller, crane/hoist, vehicle: an operator of these without a current certificate is flagged (never blocked) | COMPLIANCE-REVIEW CR-PLT-01 | Proposed | D8.3 |
+| Per item: standard consumption, service interval | item | Entered on the register (litres per hour or km, two decimals; every N hours/km and/or N days, 1–3,650 days); none by default | The company / manufacturers' data; CR-PLT-02 | Proposed | D8.3 |
+| `plant.limits` | platform | `PLANT_LIMITS`: one day ≤ 24.0 hours or 1,500 km; one fuel issue 0.1–2,000.0 L; readings ≤ 9,999,999.9; usage, fuel, breakdowns, repairs, services, moves and closing back-dated at most 60 days; fuel windows listed for 180 days and alerts from the last 30 days; certificates expiring within 30 days warned; hire rates ≤ KES 10 million; 100 rows per page | Product limits | Proposed | D8.3 |
+
 ## 6. Security, auth and operations
 
 | Key | Scope | Seed / default | Source | Status | Used from |

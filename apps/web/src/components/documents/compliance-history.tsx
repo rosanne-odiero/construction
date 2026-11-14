@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import type { ComplianceHistoryResponse } from "@pm-buddy/validation";
 import { StatusBadge } from "@/components/status-badge";
@@ -6,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { complianceTypeLabel } from "@/lib/documents";
 import { formatCalendarDate, formatDateTime } from "@/lib/format";
 import { ComplianceStatusBadge } from "./compliance-status";
+import { EvidenceLink } from "./evidence-link";
 
 /** The item's derived status and every record, newest first (renewals are append-only). */
 export async function ComplianceHistory({ data }: { data: ComplianceHistoryResponse }) {
@@ -85,21 +85,7 @@ export async function ComplianceHistory({ data }: { data: ComplianceHistoryRespo
                         <div>
                           <dt className="text-muted-foreground">{t("compliance.cols.evidence")}</dt>
                           <dd>
-                            {record.evidence ? (
-                              record.evidence.restricted ? (
-                                t("common.restricted")
-                              ) : (
-                                <Link
-                                  className="underline"
-                                  href={`/projects/${record.evidence.projectId}/documents/${record.evidence.documentId}`}
-                                >
-                                  {record.evidence.title} ·{" "}
-                                  {t("common.revision", { revision: record.evidence.revision })}
-                                </Link>
-                              )
-                            ) : (
-                              "—"
-                            )}
+                            {record.evidence ? <EvidenceLink evidence={record.evidence} /> : "—"}
                           </dd>
                         </div>
                       </dl>

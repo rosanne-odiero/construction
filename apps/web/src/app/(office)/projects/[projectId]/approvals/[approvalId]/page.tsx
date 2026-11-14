@@ -5,6 +5,7 @@ import { Download } from "lucide-react";
 import { nairobiDate } from "@pm-buddy/domain";
 import { approvalResponseSchema, documentListResponseSchema } from "@pm-buddy/validation";
 import { ApprovalActions } from "@/components/documents/approval-forms";
+import { EvidenceLink } from "@/components/documents/evidence-link";
 import { DocumentsEyebrow, loadDocumentsPage, UUID } from "@/components/documents/page-shell";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -186,19 +187,10 @@ export default async function ApprovalPage({
                     <p className="whitespace-pre-line">{response.comments}</p>
                   ) : null}
                   {response.evidence ? (
-                    response.evidence.restricted ? (
-                      <p className="text-muted-foreground">{t("common.restricted")}</p>
-                    ) : (
-                      <p>
-                        {t("approvals.detail.evidence")}:{" "}
-                        <Link
-                          className="underline"
-                          href={`/projects/${response.evidence.projectId}/documents/${response.evidence.documentId}`}
-                        >
-                          {response.evidence.title}
-                        </Link>
-                      </p>
-                    )
+                    <p>
+                      {t("approvals.detail.evidence")}:{" "}
+                      <EvidenceLink evidence={response.evidence} />
+                    </p>
                   ) : null}
                   <p className="font-mono text-xs break-all text-muted-foreground">
                     {t("detail.sha256")} {response.reviewedSha256}
@@ -225,12 +217,20 @@ export default async function ApprovalPage({
         today={nairobiDate()}
         evidence={
           evidence?.ok
-            ? evidence.data.documents.map((option) => ({
-                versionId: option.current.id,
-                label: `${option.title} · ${t("common.revision", {
-                  revision: option.current.revision,
-                })}`,
-              }))
+            ? evidence.data.documents
+                // A paper response attaches a new scan (D-117): another document, uploaded
+                // after the request was raised (the API and the database refuse anything else).
+                .filter(
+                  (option) =>
+                    (document.restricted || option.id !== document.documentId) &&
+                    Date.parse(option.current.uploadedAt) >= Date.parse(approval.raisedAt),
+                )
+                .map((option) => ({
+                  versionId: option.current.id,
+                  label: `${option.title} · ${t("common.revision", {
+                    revision: option.current.revision,
+                  })}`,
+                }))
             : []
         }
       />

@@ -830,7 +830,10 @@ BEGIN
         OLD.cost_implication, OLD.time_implication, OLD.delay_id)) THEN
       RAISE EXCEPTION 'A closed instruction is locked; reopen it first' USING ERRCODE = '23514';
     END IF;
-    IF NEW.received_on IS NULL OR NEW.received_on > app.business_today() THEN
+    -- Only a changed date is checked: a D2.3 instruction dated in the future (D2.3 did not refuse
+    -- it; the backfill copied it) can still be answered, closed or corrected.
+    IF NEW.received_on IS NULL OR (NEW.received_on IS DISTINCT FROM OLD.received_on
+        AND NEW.received_on > app.business_today()) THEN
       RAISE EXCEPTION 'An instruction is received on a date, not in the future'
         USING ERRCODE = '23514';
     END IF;
@@ -1167,6 +1170,7 @@ CREATE FUNCTION app.guard_approval_response() RETURNS trigger LANGUAGE plpgsql A
 DECLARE
   request approval_requests%ROWTYPE;
   reviewed document_versions%ROWTYPE;
+  evidence document_versions%ROWTYPE;
 BEGIN
   IF TG_OP <> 'INSERT' THEN
     RAISE EXCEPTION 'Approval responses are append-only' USING ERRCODE = '42501';
@@ -1196,9 +1200,15 @@ BEGIN
       RAISE EXCEPTION 'An approval is answered by someone who neither raised it nor uploaded the file'
         USING ERRCODE = '23514';
     END IF;
-  ELSIF NEW.evidence_version_id = request.document_version_id THEN
-    RAISE EXCEPTION 'A paper response attaches the signed response, not the file sent'
-      USING ERRCODE = '23514';
+  ELSE
+    -- A paper response attaches a new scan of the signed response: another document, uploaded
+    -- after the request was raised (one response per scan: the partial unique index below).
+    SELECT * INTO evidence FROM document_versions
+      WHERE tenant_id = NEW.tenant_id AND id = NEW.evidence_version_id;
+    IF evidence.document_id = reviewed.document_id OR evidence.uploaded_at < request.raised_at THEN
+      RAISE EXCEPTION 'A paper response attaches a new scan of the signed response, not the file sent or an older file'
+        USING ERRCODE = '23514';
+    END IF;
   END IF;
   NEW.recorded_at := clock_timestamp();
   RETURN NEW;
@@ -1206,6 +1216,9 @@ END
 $$;
 CREATE TRIGGER approval_response_guard BEFORE INSERT OR UPDATE OR DELETE ON "approval_responses"
   FOR EACH ROW EXECUTE FUNCTION app.guard_approval_response();
+-- A scan is the evidence of one paper response only.
+CREATE UNIQUE INDEX "approval_responses_one_per_evidence" ON "approval_responses"
+  ("tenant_id", "evidence_version_id") WHERE "evidence_version_id" IS NOT NULL;
 
 -- The response decides the request (the request guard checks that the response exists).
 CREATE FUNCTION app.apply_approval_response() RETURNS trigger LANGUAGE plpgsql AS $$

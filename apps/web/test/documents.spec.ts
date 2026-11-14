@@ -285,11 +285,34 @@ test("a raiser cannot answer their own request but records the consultant's pape
   const digest = (await page.getByTestId("approval-digest").textContent())!.trim();
   expect(digest).toMatch(/^[0-9a-f]{64}$/);
 
+  // The consultant's signed answer is scanned and uploaded after the request (D-117): older files
+  // are not offered as its evidence.
+  const approvalUrl = page.url();
+  const scanChoice = page.getByLabel("Scan of the signed response");
+  await expect(scanChoice.locator("option", { hasText: "County building approval" })).toHaveCount(
+    0,
+  );
+  await page.goto(`/projects/${RUIRU_ID}/documents/new`);
+  await expect(async () => {
+    await page.getByLabel("Category").selectOption("correspondence");
+    await expect(page.getByLabel("Category")).toHaveValue("correspondence", { timeout: 2_000 });
+  }).toPass();
+  await page.getByLabel("Title").fill("Signed response to APR-0002 (scan)");
+  await page.getByLabel("Revision").fill("1");
+  await page.getByLabel("File").setInputFiles({
+    name: "apr-0002-signed.pdf",
+    mimeType: "application/pdf",
+    buffer: pdf("APR-0002 signed"),
+  });
+  await page.getByRole("button", { name: "Upload" }).click();
+  await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}$/);
+  await page.goto(approvalUrl);
+
   await page.getByLabel("Decision").selectOption("approved_with_comments");
   await page.getByLabel("Consultant's name").fill("Arch. Njeri Mwangi");
   await page
     .getByLabel("Scan of the signed response")
-    .selectOption({ label: "County building approval · Rev. 1" });
+    .selectOption({ label: "Signed response to APR-0002 (scan) · Rev. 1" });
   await page.getByLabel("Comments").fill("Approved; show the stair nosing detail.");
   await page.getByRole("button", { name: "Record the answer" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText(

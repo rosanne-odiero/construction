@@ -205,14 +205,16 @@ const RUI_DOCUMENTS: DocumentSpec[] = [
     revisions: [{ revision: "1", purpose: "for_approval", uploader: "owner" }],
     png: true,
   },
-  {
-    key: "response",
-    category: "correspondence",
-    title: "Signed response to APR-0001, scan (synthetic)",
-    revisions: [{ revision: "1" }],
-    png: true,
-  },
 ];
+
+/** The consultant's signed response to APR-0001, scanned after the request was raised (D-117). */
+const RESPONSE_SCAN: DocumentSpec = {
+  key: "response",
+  category: "correspondence",
+  title: "Signed response to APR-0001, scan (synthetic)",
+  revisions: [{ revision: "1" }],
+  png: true,
+};
 
 export async function seedDocuments(
   app: INestApplicationContext,
@@ -577,6 +579,7 @@ export async function seedDocuments(
   const ensureApproval = async (
     body: Record<string, unknown>,
     answer?: Record<string, unknown>,
+    scan?: DocumentSpec,
   ) => {
     if (existingApprovals.has(body["title"] as string)) return;
     created = true;
@@ -584,12 +587,20 @@ export async function seedDocuments(
       await approvals.raise(pm, facts.rui, raiseApprovalRequestSchema.parse(body), seedRequest)
     ).approval;
     if (!answer || raised.document.restricted) return;
+    // A paper response attaches a scan uploaded after the request was raised.
+    const evidence = scan
+      ? {
+          evidenceVersionId: (await ensureDocument(facts.rui, scan, RUI_DOCUMENTS.length)).current
+            .id,
+        }
+      : {};
     await approvals.respond(
       pm,
       facts.rui,
       raised.id,
       approvalResponseRequestSchema.parse({
         ...answer,
+        ...evidence,
         documentSha256: raised.document.sha256,
         version: raised.version,
       }),
@@ -612,8 +623,8 @@ export async function seedDocuments(
       channel: "paper",
       responderName: "Arch. Wanjiru Kamau (synthetic)",
       responderFirm: "Kamau Associates (synthetic)",
-      evidenceVersionId: rui.get("response")!.current.id,
     },
+    RESPONSE_SCAN,
   );
   await ensureApproval({
     kind: "method_statement",

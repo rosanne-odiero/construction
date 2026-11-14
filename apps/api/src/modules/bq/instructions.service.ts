@@ -14,7 +14,11 @@ import {
   type Instruction,
   type UpdateInstructionRequest,
 } from "@pm-buddy/validation";
-import { isUniqueViolation } from "../../common/database-errors.js";
+import {
+  hasDatabaseCode,
+  isCheckViolation,
+  isUniqueViolation,
+} from "../../common/database-errors.js";
 import { uuidv7 } from "../../common/uuid.js";
 import type { Prisma } from "../../generated/prisma/client.js";
 import type { Scope } from "../identity/access-policy.js";
@@ -50,6 +54,40 @@ const changedFields = (input: object) =>
     .filter(([key, value]) => key !== "version" && value !== undefined)
     .map(([key]) => key)
     .sort();
+
+type InstructionEdits = Omit<UpdateInstructionRequest, "version" | "status">;
+
+/** The submitted fields whose values differ from the stored row (undefined = not sent). */
+function fieldChanges(row: InstructionRow, fields: InstructionEdits): InstructionEdits {
+  const attachments = (value: unknown) =>
+    JSON.stringify(
+      ((value ?? []) as { name: string; reference?: string | null }[]).map((entry) => ({
+        name: entry.name,
+        reference: entry.reference ?? null,
+      })),
+    );
+  const changes: InstructionEdits = {};
+  if (fields.number !== undefined && fields.number !== row.number) changes.number = fields.number;
+  if (fields.issuedOn !== undefined && fields.issuedOn !== calendarText(row.issuedOn))
+    changes.issuedOn = fields.issuedOn;
+  if (fields.issuerName !== undefined && fields.issuerName !== row.issuerName)
+    changes.issuerName = fields.issuerName;
+  if (fields.issuerRole !== undefined && fields.issuerRole !== row.issuerRole)
+    changes.issuerRole = fields.issuerRole;
+  if (fields.subject !== undefined && fields.subject !== row.subject)
+    changes.subject = fields.subject;
+  if (
+    fields.description !== undefined &&
+    (fields.description ?? null) !== (row.description ?? null)
+  )
+    changes.description = fields.description;
+  if (
+    fields.attachments !== undefined &&
+    attachments(fields.attachments) !== attachments(row.attachments)
+  )
+    changes.attachments = fields.attachments;
+  return changes;
+}
 
 function toInstruction(row: InstructionRow, people: People, counts: Counts): Instruction {
   return {
@@ -204,6 +242,12 @@ export class InstructionsService {
             "instruction-number-taken",
             "Another instruction on this project has this number",
           );
+        // A rule of the instructions log (D8.4) the checks above did not catch: never a 500.
+        if (isCheckViolation(error) || hasDatabaseCode(error, ["42501"]))
+          throw bqConflict(
+            "invalid-transition",
+            "This change breaks an instructions log rule; reload the instruction and try again",
+          );
         throw error;
       });
   }
@@ -228,33 +272,41 @@ export class InstructionsService {
           const wasOpen = isInstructionOpen(row.status as InstructionLifecycleStatus);
           const closing = fields.status === "closed" && wasOpen;
           const reopening = fields.status === "open" && !wasOpen;
-          const edits = Object.entries(fields).some(
-            ([key, value]) => key !== "status" && value !== undefined,
-          );
-          // The log (D8.4) locks a closed instruction: reopen first, then change it.
-          if (!wasOpen && edits)
+          // The register's edit form sends every field; only values that differ are edits.
+          const changes = fieldChanges(row, fields);
+          // The log (D8.4) locks a closed instruction: reopen it (the same save may then edit it).
+          if (!wasOpen && !reopening && Object.keys(changes).length)
             throw bqConflict(
               "instruction-closed",
               "A closed instruction is locked; reopen it first",
             );
-          if (fields.issuedOn !== undefined && fields.issuedOn > nairobiDate()) throw futureIssue();
+          if (changes.issuedOn !== undefined && changes.issuedOn > nairobiDate())
+            throw futureIssue();
+          if (!closing && !reopening && !Object.keys(changes).length) {
+            // Nothing to change (e.g. saving a closed instruction as closed): the record as it is.
+            const [instruction] = await this.wire(scope, projectId, [row]);
+            return instructionResponseSchema.parse({ instruction });
+          }
           const data: Prisma.InstructionUpdateManyMutationInput = {
             version: { increment: 1 },
             updatedBy: access.userId,
             updatedAt: new Date(),
           };
-          if (fields.number !== undefined) data.number = fields.number;
-          if (fields.issuedOn !== undefined) {
-            data.issuedOn = calendar(fields.issuedOn);
-            // The date received is never before the date issued.
-            if (!row.receivedOn || calendarText(row.receivedOn) < fields.issuedOn)
-              data.receivedOn = calendar(fields.issuedOn);
+          if (changes.number !== undefined) data.number = changes.number;
+          if (changes.issuedOn !== undefined) {
+            data.issuedOn = calendar(changes.issuedOn);
+            // The date received is never before the date issued; a date received equal to the
+            // date issued (as the D2.3 backfill set it) follows a corrected date issued.
+            const received = row.receivedOn ? calendarText(row.receivedOn) : null;
+            if (!received || received === calendarText(row.issuedOn) || received < changes.issuedOn)
+              data.receivedOn = calendar(changes.issuedOn);
           }
-          if (fields.issuerName !== undefined) data.issuerName = fields.issuerName;
-          if (fields.issuerRole !== undefined) data.issuerRole = fields.issuerRole;
-          if (fields.subject !== undefined) data.subject = fields.subject;
-          if (fields.description !== undefined) data.description = fields.description;
-          if (fields.attachments !== undefined) data.attachments = fields.attachments;
+          if (changes.issuerName !== undefined) data.issuerName = changes.issuerName;
+          if (changes.issuerRole !== undefined) data.issuerRole = changes.issuerRole;
+          if (changes.subject !== undefined) data.subject = changes.subject;
+          if (changes.description !== undefined) data.description = changes.description;
+          if (changes.attachments !== undefined) data.attachments = changes.attachments;
+          let current = version;
           if (closing || reopening) {
             // The status moves only through the log's append-only responses (D-115).
             const to: InstructionLifecycleStatus = closing ? "closed" : "received";
@@ -272,16 +324,33 @@ export class InstructionsService {
                 recordedBy: access.userId,
               },
             });
-            data.status = to;
+            if (reopening && Object.keys(changes).length) {
+              // Reopening changes nothing but the status (the database locks a closed row), so the
+              // edits follow as a second version.
+              const reopened = await tx.instruction.updateMany({
+                where: { tenantId: access.tenantId, id: instructionId, version },
+                data: {
+                  status: to,
+                  version: { increment: 1 },
+                  updatedBy: access.userId,
+                  updatedAt: new Date(),
+                },
+              });
+              if (!reopened.count) throw recordConflict();
+              current = version + 1;
+            } else data.status = to;
           }
           const updated = await tx.instruction.updateMany({
-            where: { tenantId: access.tenantId, id: instructionId, version },
+            where: { tenantId: access.tenantId, id: instructionId, version: current },
             data,
           });
           if (!updated.count) throw recordConflict();
           await this.scope.audit(tx, "instruction.updated", instructionId, {
             projectId,
-            fields: changedFields(fields),
+            fields: changedFields({
+              ...changes,
+              status: closing || reopening ? fields.status : undefined,
+            }),
             ...(closing || reopening
               ? { from: registerStatus(row.status), to: fields.status }
               : {}),
@@ -297,6 +366,12 @@ export class InstructionsService {
           throw bqConflict(
             "instruction-number-taken",
             "Another instruction on this project has this number",
+          );
+        // A rule of the instructions log (D8.4) the checks above did not catch: never a 500.
+        if (isCheckViolation(error) || hasDatabaseCode(error, ["42501"]))
+          throw bqConflict(
+            "invalid-transition",
+            "This change breaks an instructions log rule; reload the instruction and try again",
           );
         throw error;
       });

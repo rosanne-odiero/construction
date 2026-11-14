@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { Download, Settings2 } from "lucide-react";
 import { complianceRegisterResponseSchema, type Project } from "@pm-buddy/validation";
 import { ComplianceStatusBadge } from "@/components/documents/compliance-status";
+import { EvidenceLink } from "@/components/documents/evidence-link";
 import { ReminderList } from "@/components/documents/reminder-list";
 import { LiveUnavailable } from "@/components/projects/live-state";
 import { StatusBadge } from "@/components/status-badge";
@@ -178,21 +179,7 @@ export async function ComplianceTab({ project, returnTo }: { project: Project; r
                           : t("compliance.noExpiry")}
                     </td>
                     <td className="p-2">
-                      {current?.evidence ? (
-                        current.evidence.restricted ? (
-                          <span className="text-muted-foreground">{t("common.restricted")}</span>
-                        ) : (
-                          <Link
-                            className="underline"
-                            href={`/projects/${current.evidence.projectId}/documents/${current.evidence.documentId}`}
-                          >
-                            {current.evidence.title} ·{" "}
-                            {t("common.revision", { revision: current.evidence.revision })}
-                          </Link>
-                        )
-                      ) : (
-                        "—"
-                      )}
+                      {current?.evidence ? <EvidenceLink evidence={current.evidence} /> : "—"}
                     </td>
                     <td className="p-2">
                       <Link className="underline" href={itemHref(item)}>

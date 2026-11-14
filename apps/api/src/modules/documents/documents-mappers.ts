@@ -148,6 +148,7 @@ export type LinkedVersion = {
   sha256: string;
   fileName: string;
   uploadedBy: string;
+  uploadedAt: Date;
 };
 
 /** Document versions by ID with their document's title, category and status. */
@@ -176,6 +177,7 @@ export async function linkedVersions(
       sha256: row.sha256,
       fileName: row.fileName,
       uploadedBy: row.uploadedBy,
+      uploadedAt: row.uploadedAt,
     });
   return result;
 }

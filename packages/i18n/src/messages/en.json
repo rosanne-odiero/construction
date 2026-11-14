@@ -10003,7 +10003,7 @@
         "respond": "Answer this request",
         "respondHint": "Your answer is recorded under your name, for the file shown above.",
         "recordPaper": "Record a consultant's paper response",
-        "recordPaperHint": "For a signed response on paper or by email: enter the consultant's name and attach the scan.",
+        "recordPaperHint": "For a signed response on paper or by email: upload the scan as a new document (for example, correspondence) after the request was raised, then enter the consultant's name and choose that scan. A scan is used for one response only.",
         "channel": "How was it answered?",
         "decision": "Decision",
         "comments": "Comments",

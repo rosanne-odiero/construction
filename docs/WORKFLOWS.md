@@ -285,7 +285,7 @@ stateDiagram-v2
 | Transition | Actor / preconditions | Effect / audit |
 |---|---|---|
 | new → pending | Manager; the current version of an active document; sent on (not in the future), due on or after; a resubmission names a rejected or *resubmit* request that has none yet | `APR-NNNN`; `approval.raised` |
-| pending → decision | Manager; **in the app**: answers as themselves and is neither the raiser nor the uploader (403); **paper**: the consultant's name and the scan (a version of the project) — the raiser may record it; the SHA-256 shown must match the version's (409 `approval-digest-mismatch`); responded on or after sent, not in the future; comments unless approved | **Final**; `approval.responded` |
+| pending → decision | Manager; **in the app**: answers as themselves and is neither the raiser nor the uploader (403); **paper**: the consultant's name and the scan (another document of the project, uploaded after the request was raised, used for no other response: 422 `approval-evidence-invalid`) — the raiser may record it; the SHA-256 shown must match the version's (409 `approval-digest-mismatch`); responded on or after sent, not in the future; comments unless approved | **Final**; `approval.responded` |
 | pending → cancelled | The raiser; reason | **Final**; `approval.cancelled` |
 | overdue | Pending and due before today (Nairobi) | Computed on read: an `approval_overdue` reminder on the project and company lists |
 

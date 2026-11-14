@@ -32,6 +32,7 @@ import {
   tenantCreatedResponseSchema,
   type ComplianceRegisterResponse,
   type DocumentDetail,
+  type Instruction,
 } from "@pm-buddy/validation";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { AppModule } from "../src/app.module.js";
@@ -536,16 +537,30 @@ describe("Documents and compliance register (real runtime role)", () => {
       await upload(manager, { category: "drawing", title: "No number (synthetic)", revision: "A" }),
       400,
     );
-    // The database caps a document at 50 versions.
-    await expect(
+    // A document keeps at most 50 versions: versions 2–50 added directly (in order), then the API
+    // refuses a 51st (409 version-limit) and so does the database.
+    const capped = document(
+      await upload(manager, {
+        category: "specification",
+        title: "Fifty versions (synthetic)",
+        revision: "1",
+      }),
+      201,
+    );
+    const insertVersions = (from: number, to: number) =>
       sql(
         manager,
-        `INSERT INTO document_versions (id, tenant_id, project_id, document_id, version_no, revision, change_note, file_name, content_type, size_bytes, sha256, object_key, scan_status, scan_engine, scanned_at, uploaded_by)
-         SELECT v, '${tenantId}', '${projectId}', '${a.id}', 51, 'Z9', 'Too many', 'x.pdf', 'application/pdf', 10, repeat('a', 64),
-           'tenants/${tenantId}/projects/${projectId}/documents/${a.id}/' || v, 'clean', 'test', now(), '${manager.auth.user.id}'
-         FROM gen_random_uuid() AS v`,
-      ),
-    ).rejects.toThrow(/document_versions_check|numbered in order/);
+        `WITH v AS (SELECT gen_random_uuid() AS id, n FROM generate_series(${from}, ${to}) AS n)
+         INSERT INTO document_versions (id, tenant_id, project_id, document_id, version_no, revision, change_note, file_name, content_type, size_bytes, sha256, object_key, scan_status, scan_engine, scanned_at, uploaded_by)
+         SELECT v.id, '${tenantId}', '${projectId}', '${capped.id}', v.n, 'V' || v.n, 'Version ' || v.n, 'x.pdf', 'application/pdf', 10, encode(sha256(v.id::text::bytea), 'hex'),
+           'tenants/${tenantId}/projects/${projectId}/documents/${capped.id}/' || v.id, 'clean', 'test', now(), '${manager.auth.user.id}'
+         FROM v ORDER BY v.n`,
+      );
+    await insertVersions(2, 50);
+    const fifty = document(await manager.call("get", `${base()}/documents/${capped.id}`));
+    expect([fifty.versionCount, fifty.current.versionNo]).toEqual([50, 50]);
+    problem(await newVersion(manager, fifty, "V51"), 409, "version-limit");
+    await expect(insertVersions(51, 51)).rejects.toThrow(/document_versions_check/);
   });
 
   it("accepts files by their content only and refuses CAD, old Office, macros, PDF scripts and unsafe archives", async () => {
@@ -564,6 +579,14 @@ describe("Documents and compliance register (real runtime role)", () => {
         officeParts("xl/workbook.xml"),
         "schedule.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ],
+      // A chart's data workbook, embedded as Word does, is a plain workbook and is accepted.
+      [
+        officeParts("word/document.xml", [
+          { name: "word/embeddings/Microsoft_Excel_Worksheet.xlsx", data: "x" },
+        ]),
+        "report-with-chart.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       ],
       [await plainJpeg(), "photo.jpg", "image/jpeg"],
       [
@@ -639,6 +662,22 @@ describe("Documents and compliance register (real runtime role)", () => {
         "launch.pdf",
         422,
         "pdf-active-content",
+      ],
+      // Names spelled with #xx hex escapes are decoded first: /J#61vaScript is /JavaScript.
+      [
+        pdf("escaped", "3 0 obj << /S /J#61vaScript /#4AS (app.alert(1)) >> endobj\n"),
+        "escaped.pdf",
+        422,
+        "pdf-active-content",
+      ],
+      // A macro-enabled workbook embedded in a document (Word's default name for one).
+      [
+        officeParts("word/document.xml", [
+          { name: "word/embeddings/Microsoft_Excel_Macro-Enabled_Worksheet.xlsm", data: "x" },
+        ]),
+        "embedded-macro.docx",
+        422,
+        "macro-document",
       ],
       [
         officeParts("word/document.xml", [{ name: "word/vbaProject.bin", data: "macro" }]),
@@ -784,6 +823,15 @@ describe("Documents and compliance register (real runtime role)", () => {
         otherTenant,
       ),
     ).rejects.toThrow();
+    // Row-level security's WITH CHECK on its own: a company setting with A's tenant ID, written in
+    // B's context (its guard looks nothing up, so only the policy can refuse it).
+    await expect(
+      sql(
+        outsider,
+        `INSERT INTO compliance_types (id, tenant_id, key, label, scope, expires, created_by, updated_by) VALUES (gen_random_uuid(), '${tenantId}', 'custom_999', 'Cross tenant item', 'project', true, '${outsider.auth.user.id}', '${outsider.auth.user.id}')`,
+        otherTenant,
+      ),
+    ).rejects.toThrow(/row-level security/);
   });
 
   it("raises a reminder for an expiring item and shows an expired one as expired (done-when)", async () => {
@@ -1608,6 +1656,78 @@ describe("Documents and compliance register (real runtime role)", () => {
     expect(list.counts).toMatchObject({ pending: 0, decided: 2, cancelled: 1 });
   });
 
+  it("records a paper response only with a new scan: another document, uploaded after the request, used once", async () => {
+    const approval = (res: request.Response, status = 200) =>
+      ok(res, (body) => approvalResponseSchema.parse(body).approval, status);
+    const sample = document(
+      await upload(surveyor, {
+        category: "submittal",
+        title: "Tile sample board (synthetic)",
+        revision: "1",
+        issuePurpose: "for_approval",
+      }),
+      201,
+    );
+    const older = document(
+      await upload(manager, {
+        category: "correspondence",
+        title: "Earlier letter from the architect (synthetic)",
+        revision: "1",
+      }),
+      201,
+    );
+    const raise = (versionId: string, title: string) =>
+      manager.call("post", `${base()}/approvals`, {
+        kind: "material_sample",
+        title,
+        documentVersionId: versionId,
+        addressedTo: "Arch. Wanjiru Kamau (synthetic)",
+        sentOn: day(-2),
+        dueOn: day(5),
+      });
+    const first = approval(await raise(sample.current.id, "Tile sample (synthetic)"), 201);
+    const paper = (target: typeof first, evidenceVersionId: string) =>
+      manager.call("post", `${base()}/approvals/${target.id}/response`, {
+        decision: "approved",
+        respondedOn: today,
+        channel: "paper",
+        responderName: "Arch. Wanjiru Kamau (synthetic)",
+        documentSha256: target.document.restricted ? "" : target.document.sha256,
+        version: target.version,
+        evidenceVersionId,
+      });
+    // A file uploaded before the request was raised is not the consultant's answer to it …
+    problem(await paper(first, older.current.id), 422, "approval-evidence-invalid");
+    // … nor is a revision of the document under review, even one uploaded afterwards.
+    const revised = document(await newVersion(surveyor, sample, "2"), 201);
+    problem(await paper(first, revised.current.id), 422, "approval-evidence-invalid");
+    const second = approval(
+      await raise(revised.current.id, "Tile sample, revision 2 (synthetic)"),
+      201,
+    );
+    const scan = document(
+      await upload(manager, {
+        category: "correspondence",
+        title: "Signed response to the tile sample, scan (synthetic)",
+        revision: "1",
+      }),
+      201,
+    );
+    expect(approval(await paper(first, scan.current.id)).status).toBe("approved");
+    // One scan answers one request.
+    problem(await paper(second, scan.current.id), 422, "approval-evidence-invalid");
+    // The database repeats the rules under the runtime role.
+    const insert = (evidenceVersionId: string) =>
+      sql(
+        manager,
+        `INSERT INTO approval_responses (id, tenant_id, project_id, request_id, decision, responded_on, channel, responder_name, evidence_version_id, reviewed_sha256, recorded_by)
+         VALUES (gen_random_uuid(), '${tenantId}', '${projectId}', '${second.id}', 'approved', '${today}', 'paper', 'Arch. Wanjiru Kamau (synthetic)', '${evidenceVersionId}', '${second.document.restricted ? "" : second.document.sha256}', '${manager.auth.user.id}')`,
+      );
+    await expect(insert(older.current.id)).rejects.toThrow(/new scan of the signed response/);
+    await expect(insert(sample.current.id)).rejects.toThrow(/new scan of the signed response/);
+    await expect(insert(scan.current.id)).rejects.toThrow(/approval_responses_one_per_evidence/);
+  });
+
   it("withdraws documents with a reason, finally, and keeps closed projects read-only", async () => {
     const draft = await drawing("A-901");
     problem(
@@ -1957,13 +2077,26 @@ describe("Documents and compliance register (real runtime role)", () => {
       status: "received",
       receivedOn: day(-1),
     });
-    const closed = ok(
-      await surveyor.call("patch", `${base()}/bq/instructions/${bq.id}`, {
-        status: "closed",
-        version: bq.version,
-      }),
-      (body) => instructionResponseSchema.parse(body).instruction,
-    );
+    // The register's edit dialog always sends every field with the status and version.
+    const dialog = (row: Instruction, extra: Record<string, unknown>) => ({
+      number: row.number,
+      issuedOn: row.issuedOn,
+      issuerName: row.issuerName,
+      issuerRole: row.issuerRole,
+      subject: row.subject,
+      description: row.description ?? "",
+      attachments: row.attachments,
+      status: row.status,
+      version: row.version,
+      ...extra,
+    });
+    const save = async (row: Instruction, extra: Record<string, unknown>, status = 200) =>
+      ok(
+        await surveyor.call("patch", `${base()}/bq/instructions/${row.id}`, dialog(row, extra)),
+        (body) => instructionResponseSchema.parse(body).instruction,
+        status,
+      );
+    const closed = await save(bq, { status: "closed" });
     expect(closed.status).toBe("closed");
     const after = ok(
       await manager.call("get", `${base()}/instructions/${bq.id}`),
@@ -1975,22 +2108,70 @@ describe("Documents and compliance register (real runtime role)", () => {
       fromStatus: "received",
       toStatus: "closed",
     });
+    // Saving a closed instruction unchanged changes nothing (no 500 from the database's lock).
+    expect(await save(closed, {})).toMatchObject({ status: "closed", version: closed.version });
     problem(
-      await surveyor.call("patch", `${base()}/bq/instructions/${bq.id}`, {
-        subject: "Edited while closed",
-        version: closed.version,
-      }),
+      await surveyor.call(
+        "patch",
+        `${base()}/bq/instructions/${bq.id}`,
+        dialog(closed, { subject: "Edited while closed" }),
+      ),
       409,
       "instruction-closed",
     );
-    const reopened = ok(
-      await surveyor.call("patch", `${base()}/bq/instructions/${bq.id}`, {
-        status: "open",
-        version: closed.version,
+    // Reopening from the dialog (every field sent, none changed) works …
+    const reopened = await save(closed, { status: "open" });
+    expect(reopened.status).toBe("open");
+    // … and so does reopening with an edit in the same save: the reopen, then the edit.
+    const closedAgain = await save(reopened, { status: "closed" });
+    const edited = await save(closedAgain, {
+      status: "open",
+      subject: "Window schedule revised again (synthetic)",
+    });
+    expect(edited).toMatchObject({
+      status: "open",
+      subject: "Window schedule revised again (synthetic)",
+      version: closedAgain.version + 2,
+    });
+    // A D2.3 instruction dated in the future (D2.3 did not refuse it; the backfill copied the date
+    // into the date received) can still be answered, closed and corrected.
+    const legacy = ok(
+      await surveyor.call("post", `${base()}/bq/instructions`, {
+        number: "AI-702",
+        issuedOn: day(-1),
+        issuerName: "Arch. Wanjiru Kamau (synthetic)",
+        issuerRole: "architect",
+        subject: "Dated ahead before the log (synthetic)",
       }),
       (body) => instructionResponseSchema.parse(body).instruction,
+      201,
     );
-    expect(reopened.status).toBe("open");
+    await ownerSql([
+      "ALTER TABLE instructions DISABLE TRIGGER instruction_guard",
+      `UPDATE instructions SET issued_on = '${day(5)}', received_on = '${day(5)}' WHERE id = '${legacy.id}'`,
+      // Runs the commit-time checks now, so the guard can be enabled again in this transaction.
+      "SET CONSTRAINTS ALL IMMEDIATE",
+      "ALTER TABLE instructions ENABLE TRIGGER instruction_guard",
+    ]);
+    const future = ok(
+      await manager.call("get", `${base()}/instructions/${legacy.id}`),
+      (body) => instructionLogResponseSchema.parse(body).instruction,
+    );
+    ok(await respond(manager, legacy.id, "acknowledge", future.version), () => null);
+    const ahead = ok(
+      await surveyor.call("get", `${base()}/bq/instructions/${legacy.id}`),
+      (body) => instructionResponseSchema.parse(body).instruction,
+    );
+    expect(ahead.issuedOn).toBe(day(5));
+    const corrected = await save(ahead, { issuedOn: day(-2) });
+    expect(corrected.issuedOn).toBe(day(-2));
+    expect(
+      ok(
+        await manager.call("get", `${base()}/instructions/${legacy.id}`),
+        (body) => instructionLogResponseSchema.parse(body).instruction,
+      ).receivedOn,
+    ).toBe(day(-2));
+    expect((await save(corrected, { status: "closed" })).status).toBe("closed");
     problem(
       await surveyor.call("post", `${base()}/bq/instructions`, {
         number: "AI-701",

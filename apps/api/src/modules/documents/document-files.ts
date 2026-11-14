@@ -42,8 +42,40 @@ const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
  * PDF names that run something when the file is opened: JavaScript, launch actions, embedded
  * files and rich media. A best-effort check of the raw bytes (names inside compressed object
  * streams are not seen); the malware scanner is the control, this only refuses the obvious.
+ * Names may spell characters as `#xx` hex escapes (`/J#61vaScript` is `/JavaScript`), so each name
+ * is decoded before it is compared.
  */
-const PDF_ACTIVE = /\/(JavaScript|JS|Launch|EmbeddedFiles?|RichMedia)(?=[\s/<>[\]()]|$)/;
+const PDF_ACTIVE_NAMES = new Set([
+  "JavaScript",
+  "JS",
+  "Launch",
+  "EmbeddedFile",
+  "EmbeddedFiles",
+  "RichMedia",
+]);
+const PDF_NAME = /\/([^\s/<>[\](){}%]*)/g;
+
+/** Whether a PDF's raw bytes name an active-content key (see PDF_ACTIVE_NAMES). */
+export function pdfHasActiveContent(text: string): boolean {
+  for (const match of text.matchAll(PDF_NAME)) {
+    const name = match[1]!;
+    if (name.length > 40) continue;
+    const decoded = name.includes("#")
+      ? name.replace(/#([0-9a-fA-F]{2})/g, (_, hex: string) =>
+          String.fromCharCode(parseInt(hex, 16)),
+        )
+      : name;
+    if (PDF_ACTIVE_NAMES.has(decoded)) return true;
+  }
+  return false;
+}
+
+/**
+ * Parts an Office file may embed (decision D-114): images and the plain workbooks and documents
+ * Word and Excel embed for charts and objects. Anything else under `embeddings/` (OLE binaries,
+ * macro-enabled or binary workbooks and documents such as .xlsm, .xlsb, .docm, .pptm) is refused.
+ */
+const OFFICE_EMBEDDINGS = /\.(xlsx|docx|pptx|png|jpe?g|gif|emf|wmf)$/;
 
 /**
  * The type of an uploaded document from its content (decision D-114): PDF, JPEG, PNG, WebP, and
@@ -74,7 +106,7 @@ export function inspectDocument(content: Buffer): {
     const tail = content.subarray(Math.max(0, content.length - 1024)).toString("latin1");
     if (!tail.includes("%%EOF"))
       throw new DocumentRefused("unsupported-file-type", "The PDF is incomplete (no end marker)");
-    if (PDF_ACTIVE.test(content.toString("latin1")))
+    if (pdfHasActiveContent(content.toString("latin1")))
       throw new DocumentRefused(
         "pdf-active-content",
         "PDFs with scripts, launch actions or embedded files are not accepted",
@@ -95,7 +127,7 @@ export function inspectDocument(content: Buffer): {
         (name) =>
           name.endsWith("vbaproject.bin") ||
           name.includes("/activex/") ||
-          (name.includes("/embeddings/") && name.endsWith(".bin")),
+          (name.includes("/embeddings/") && !OFFICE_EMBEDDINGS.test(name)),
       )
     )
       throw new DocumentRefused(

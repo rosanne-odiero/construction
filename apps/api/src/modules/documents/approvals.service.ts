@@ -436,16 +436,29 @@ export class ApprovalsService {
           const evidence = (
             await linkedVersions(tx, access.tenantId, [input.evidenceVersionId])
           ).get(input.evidenceVersionId!);
+          // A new scan of the signed response (D-117): another document of this project,
+          // uploaded after the request was raised, used for no other response. An older file or
+          // a revision of the document under review would let the raiser approve alone.
           if (
             !evidence ||
             evidence.projectId !== projectId ||
-            evidence.versionId === row.documentVersionId ||
+            evidence.documentId === sent.documentId ||
+            evidence.uploadedAt < row.raisedAt ||
             !canSeeLinked(caller, evidence)
           )
             throw documentsProblem(
               422,
               "approval-evidence-invalid",
-              "Attach the scan of the signed response (a document of this project)",
+              "Attach a new scan of the signed response: another document of this project, uploaded after the request was raised",
+            );
+          const used = await tx.approvalResponse.count({
+            where: { tenantId: access.tenantId, evidenceVersionId: evidence.versionId },
+          });
+          if (used)
+            throw documentsProblem(
+              422,
+              "approval-evidence-invalid",
+              "This scan is already the evidence of another response",
             );
         }
         const id = uuidv7();

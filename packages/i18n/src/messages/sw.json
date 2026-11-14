@@ -26,6 +26,11 @@
     "forgot": "Umesahau nenosiri",
     "requestReset": "Omba maelekezo ya kuweka upya",
     "reset": "Weka upya nenosiri",
+    "changePassword": "Badilisha nenosiri",
+    "currentPassword": "Nenosiri la sasa",
+    "newPassword": "Nenosiri jipya",
+    "changePasswordHint": "Weka nenosiri lako la sasa. Ikiwa MFA imewashwa, thibitisha msimbo mpya kwanza. Nenosiri jipya liwe na angalau herufi 12 na liwe gumu kukisia.",
+    "signOutOtherSessions": "Toa vipindi vyangu vingine",
     "account": "Akaunti yako",
     "signedInAs": "Umeingia kama {name}",
     "mfaNeeded": "Kamilisha MFA kabla ya kufikia rekodi za kampuni.",
@@ -271,6 +276,7 @@
       "instructions": "Ikiwa akaunti inastahili, maelekezo yanapatikana kupitia huduma ya ujumbe ya majaribio.",
       "verified": "Akaunti imethibitishwa. Unaweza kuingia sasa.",
       "passwordChanged": "Nenosiri limebadilishwa na vipindi vya awali vimebatilishwa. Ingia tena; MFA bado inahitajika.",
+      "passwordUpdated": "Nenosiri limebadilishwa. Ukichagua hivyo, vipindi vyako vingine vimefungwa; hiki kinaendelea.",
       "refreshed": "Kipindi kimesasishwa. Pakia tena eneo la kazi.",
       "signedOut": "Kipindi kimebatilishwa. Umetoka.",
       "mfaVerified": "MFA imethibitishwa. Pakia eneo la kazi kuendelea.",
@@ -302,6 +308,8 @@
       "unexpected": "Ombi limeshindwa bila kutarajiwa. Kagua hali ya mfumo na utoe rejeleo la usaidizi; mafanikio hayajachukuliwa.",
       "passwordWeak": "Nenosiri hili ni rahisi kukisia. Tumia kaulisiri ndefu zaidi isiyo na jina lako, barua pepe, nambari ya simu au PM-Buddy.",
       "passwordBreached": "Nenosiri hili limeonekana katika uvujaji wa data unaojulikana. Chagua nenosiri jingine ambalo hulitumii mahali pengine.",
+      "currentPasswordIncorrect": "Nenosiri la sasa si sahihi. Hakuna kilichobadilishwa.",
+      "reauthenticationRequired": "Ili kufunga kipindi kingine, ingia tena au thibitisha msimbo mpya wa MFA kwanza (ndani ya dakika tano zilizopita).",
       "passkeyInvalid": "Passkey haikuweza kuthibitishwa. Anza upya: kila ombi la passkey hutumika mara moja na huisha baada ya dakika tano.",
       "passkeyCancelled": "Ombi la passkey lilighairiwa, muda wake uliisha au halipatikani kwenye kifaa hiki. Hakuna kilichobadilishwa."
     }

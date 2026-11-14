@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { Logger } from "@nestjs/common";
+import type { ConfigService } from "@nestjs/config";
+import type { ApiEnv } from "@pm-buddy/validation";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AppConfig } from "../../config/app-config.js";
+import { AppConfig } from "../../config/app-config.js";
 import {
   breachCheckerFor,
   HibpBreachChecker,
@@ -79,10 +81,20 @@ describe("Password policy", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("selects the breach checker from configuration (off by default)", () => {
-    const config = (mode: string) => ({ get: () => mode }) as unknown as AppConfig;
-    expect(breachCheckerFor(config("off"))).toBeInstanceOf(NoBreachCheck);
-    expect(breachCheckerFor(config("hibp"))).toBeInstanceOf(HibpBreachChecker);
+  it("selects the breach checker from configuration (on by default in production only)", () => {
+    const config = (values: Record<string, string | undefined>) =>
+      new AppConfig({ get: (key: string) => values[key] } as unknown as ConfigService<
+        ApiEnv,
+        true
+      >);
+    const check = (values: Record<string, string | undefined>) => breachCheckerFor(config(values));
+    expect(check({ AUTH_BREACHED_PASSWORD_CHECK: "off" })).toBeInstanceOf(NoBreachCheck);
+    expect(check({ AUTH_BREACHED_PASSWORD_CHECK: "hibp" })).toBeInstanceOf(HibpBreachChecker);
+    expect(check({ NODE_ENV: "development" })).toBeInstanceOf(NoBreachCheck);
+    expect(check({ NODE_ENV: "production" })).toBeInstanceOf(HibpBreachChecker);
+    expect(check({ NODE_ENV: "production", AUTH_BREACHED_PASSWORD_CHECK: "off" })).toBeInstanceOf(
+      NoBreachCheck,
+    );
   });
 });
 

@@ -94,6 +94,21 @@ Defaults are design assumptions only, not owner approval. Under [brief §15](./P
 | Q-T3 | **FX rate source** for the diaspora display (for example a Central Bank of Kenya reference rate, or a commercial API) | Commercial API, cached hourly, labelled "indicative" | D7.1 |
 | Q-T4 | **Map tiles in production**: MapTiler, Mapbox, Google, or self-hosted? OpenStreetMap's tile policy doesn't allow heavy production use. | MapTiler free tier, then paid | D2.1 |
 
+## Security (D9.1)
+
+From the [security checklist](./SECURITY_CHECKLIST.md#4-deferred-items-and-decisions-for-the-owner) and [THREAT_MODEL §9](./THREAT_MODEL.md).
+
+| ID | Question | Default if no answer | Needed by |
+|---|---|---|---|
+| Q-SEC1 | Must **every office role** enrol MFA (ASVS V6.3.3), or only roles with MFA-required permissions (Owner, Finance, admins, approvers), as now? (OR-20, D-155) | MFA-required permissions only; others optional, step-up for sensitive actions | Before the first pilot |
+| Q-SEC2 | Submit the production domain for **HSTS preload**? It commits the domain and every subdomain to HTTPS for years | No `preload` token; HSTS two years with subdomains | D9.3 (domain choice) |
+| Q-SEC3 | Serve the client, supplier and labourer portals from **separate hostnames** (separate sign-in) to contain a portal XSS? | One origin and session, with the strict CSP | Before the first pilot |
+| Q-SEC4 | Hide the **prototype and design-system pages** (`/prototype/**`, `/design-system`, `/site`) in production builds? | Keep them (labelled static demos, no API access) | D9.3 |
+| Q-SEC5 | Keep **Have I Been Pwned** breached-password lookups on by default in production (five SHA-1 characters sent; fails open)? | On | Before the first pilot |
+| Q-SEC6 | Add **versioned blind indexes** so `FIELD_BLIND_INDEX_KEY` can rotate before real personal data is stored? (OR-21) | Not rotatable; incident procedure in OPERATIONS | Before real personal data |
+| Q-SEC7 | Keep one-time **invitation and PIN-reset tokens in URL query strings** (with the mitigations), or move them to the URL fragment? (A-131) | Keep | Before the first pilot |
+| Q-SEC8 | Which **pen-test vendor**, when, and who receives findings and the `security.txt` reports? (OR-13, OR-14) | Staging only, after D9.3; contacts to be named | D9.3 |
+
 ## Engineering process
 
 | ID | Question | Default if no answer | Needed by |

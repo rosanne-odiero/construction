@@ -4,7 +4,8 @@ import { assertSeedAllowed, seedDemo, type SeedSummary } from "./demo-seed.js";
 
 /**
  * `pnpm db:seed` (development only): creates or tops up the synthetic demo company and prints the
- * demo credentials. `--reset-credentials` issues new passwords and a new owner TOTP secret.
+ * demo credentials. `--reset-credentials` issues new passwords and a new owner TOTP secret;
+ * `--namespace <name>` seeds another separate company with its own accounts.
  */
 function print(summary: SeedSummary) {
   const lines = [
@@ -185,7 +186,15 @@ try {
 }
 const app = await NestFactory.createApplicationContext(AppModule, { logger: ["error", "warn"] });
 try {
-  print(await seedDemo(app, { resetCredentials: process.argv.includes("--reset-credentials") }));
+  // `--namespace <name>` seeds a second, separate demo company (for example for cross-company
+  // tests on staging, docs/PENTEST_SCOPE.md); seedDemo validates the name.
+  const at = process.argv.indexOf("--namespace");
+  print(
+    await seedDemo(app, {
+      resetCredentials: process.argv.includes("--reset-credentials"),
+      namespace: at >= 0 ? process.argv[at + 1] : undefined,
+    }),
+  );
 } finally {
   await app.close();
 }

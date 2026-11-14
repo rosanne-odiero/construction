@@ -10,6 +10,8 @@ const apiInternalUrl = process.env.API_INTERNAL_URL ?? "http://localhost:4000";
 const nextConfig: NextConfig = {
   // Browser tests must not contend with an already-running developer server.
   distDir: process.env.PLAYWRIGHT_TEST === "1" ? ".next-e2e" : ".next",
+  // Security headers and the nonce-based CSP are set in src/proxy.ts; don't advertise the framework.
+  poweredByHeader: false,
   // Cache Components is off for the D0 prototype: the locale cookie is read on every request.
   // Revisit in D1.2 when real data fetching lands.
   // Keeps the dev-only Next.js badge clear of the sidebar footer links.

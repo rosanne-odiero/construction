@@ -1,4 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
+import { GUARDS_METADATA } from "@nestjs/common/constants.js";
+import { ModulesContainer } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import {
   liveResponseSchema,
@@ -11,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../src/app.module.js";
 import { configureApp } from "../src/app.setup.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
+import { BrowserGuard } from "../src/modules/identity/identity.controller.js";
 
 // Requires the local services: `pnpm services:up && pnpm db:migrate` (CI does the same).
 describe("API (e2e)", () => {
@@ -69,6 +72,43 @@ describe("API (e2e)", () => {
       "default-src 'none';frame-ancestors 'none'",
     );
     expect(res.headers["x-powered-by"]).toBeUndefined();
+    // D9.1 review (ASVS 5.0.0 V3.4.1, V3.4.5): HSTS for a year on every subdomain, no referrer.
+    expect(res.headers["strict-transport-security"]).toBe("max-age=31536000; includeSubDomains");
+    expect(res.headers["referrer-policy"]).toBe("no-referrer");
+    expect(res.headers["cross-origin-opener-policy"]).toBe("same-origin");
+    expect(res.headers["cross-origin-resource-policy"]).toBe("same-origin");
+    expect(res.headers["content-type"]).toBe("application/json; charset=utf-8");
+  });
+
+  it("refuses TRACE and answers errors as problem+json with a charset (ASVS V13.4.4, V4.1.1)", async () => {
+    const trace = await request(app.getHttpServer()).trace("/api/v1/health/live");
+    expect(trace.status).toBe(404);
+    expect(trace.headers["content-type"]).toBe("application/problem+json; charset=utf-8");
+  });
+
+  it("puts every controller but health behind BrowserGuard: CSRF on writes, no-store on all", async () => {
+    const controllers = [...app.get(ModulesContainer).values()].flatMap((module) =>
+      [...module.controllers.values()].map((wrapper) => wrapper.metatype as object),
+    );
+    expect(controllers.length).toBeGreaterThan(40);
+    const unguarded = controllers
+      .filter(
+        (controller) =>
+          !((Reflect.getMetadata(GUARDS_METADATA, controller) ?? []) as unknown[]).includes(
+            BrowserGuard,
+          ),
+      )
+      .map((controller) => (controller as { name: string }).name);
+    expect(unguarded).toEqual(["HealthController"]);
+    // Even a refused request is never cached by the browser.
+    const refused = await request(app.getHttpServer()).get("/api/v1/auth/me").expect(401);
+    expect(refused.headers["cache-control"]).toBe("no-store");
+    const forged = await request(app.getHttpServer())
+      .post("/api/v1/projects")
+      .set("Origin", "https://attacker.example")
+      .send({});
+    expect(forged.status).toBe(403);
+    expect(forged.headers["cache-control"]).toBe("no-store");
   });
 
   it("serves Swagger UI under a CSP that still allows its same-origin scripts", async () => {

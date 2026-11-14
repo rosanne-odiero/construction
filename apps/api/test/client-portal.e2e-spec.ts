@@ -1017,6 +1017,8 @@ describe("Client portal (real runtime role)", () => {
     const image = await download(client, portal(`/photos/${photos.verified}/image`));
     expect(image.status).toBe(200);
     expect(image.headers["content-type"]).toContain("image/jpeg");
+    // Never kept in the browser cache of a shared or cyber-café computer (D9.1, ASVS V14.3.2).
+    expect(image.headers["cache-control"]).toBe("private, no-store");
     const meta = await sharp(image.body as Buffer).metadata();
     expect(meta.exif).toBeUndefined();
     for (const hidden of [photos.incident, photos.other, randomUUID()])

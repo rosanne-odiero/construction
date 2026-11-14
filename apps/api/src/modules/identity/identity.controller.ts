@@ -51,6 +51,7 @@ import { RolesService } from "./roles.service.js";
 import { TenancyService } from "./tenancy.service.js";
 import {
   acceptSchema,
+  changePasswordSchema,
   codeSchema,
   identifierBody,
   inviteSchema,
@@ -186,6 +187,27 @@ export class AuthController {
     const input = resetSchema.parse(body);
     return this.auth.reset(input.token, input.password, req);
   }
+  @Post("password/change")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Change the signed-in user's password",
+    description:
+      "Needs the current password and, when the account has MFA, MFA verified within the last five minutes (403 `step-up-required`). The new password meets the registration policy (400 `password-too-weak` or `password-breached`). Other sessions are signed out unless `signOutOtherSessions` is false; this session gets fresh credentials. 400 `current-password-incorrect`; 5 attempts per 15 minutes.",
+    operationId: "changePassword",
+  })
+  @ApiOkResponse({ schema: openApi(messageResponseSchema) })
+  async changePassword(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.changePassword(
+      await this.auth.principal(req),
+      changePasswordSchema.parse(body),
+      req,
+      res,
+    );
+  }
   @Get("passkeys")
   @ApiOperation({
     summary: "The caller's passkeys (names and dates; never credential IDs or keys)",
@@ -282,6 +304,12 @@ export class AuthController {
     return this.auth.sessions(await this.auth.principal(req));
   }
   @Delete("sessions/:id")
+  @ApiOperation({
+    summary: "Sign out one of the caller's sessions",
+    description:
+      "Another session needs a sign-in or MFA verification within the last five minutes (403 `reauthentication-required`); the current session can always be signed out.",
+    operationId: "revokeSession",
+  })
   async revoke(
     @Param("id") id: string,
     @Req() req: Request,

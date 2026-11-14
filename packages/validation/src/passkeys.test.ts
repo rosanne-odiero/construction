@@ -193,7 +193,7 @@ describe("Password policy and breach-check configuration", () => {
     expect(PASSWORD_PROBLEM_CODES).toEqual(["password-too-weak", "password-breached"]);
   });
 
-  it("defaults the breached-password check to off and accepts only known modes", () => {
+  it("leaves the breached-password check unset (resolved per environment) and accepts only known modes", () => {
     const env = {
       DATABASE_URL: "postgresql://user:pass@localhost:5432/db",
       REDIS_URL: "redis://localhost:6379",
@@ -202,7 +202,7 @@ describe("Password policy and breach-check configuration", () => {
       S3_ACCESS_KEY_ID: "key",
       S3_SECRET_ACCESS_KEY: "secret",
     };
-    expect(apiEnvSchema.parse(env).AUTH_BREACHED_PASSWORD_CHECK).toBe("off");
+    expect(apiEnvSchema.parse(env).AUTH_BREACHED_PASSWORD_CHECK).toBeUndefined();
     expect(
       apiEnvSchema.parse({ ...env, AUTH_BREACHED_PASSWORD_CHECK: "hibp" })
         .AUTH_BREACHED_PASSWORD_CHECK,

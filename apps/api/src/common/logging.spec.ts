@@ -1,6 +1,13 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
-import { requestId, serializeRequest, serializeResponse } from "./logging.js";
+import {
+  requestId,
+  requestLogLevel,
+  requestLogProps,
+  serializeRequest,
+  serializeResponse,
+  setRequestActor,
+} from "./logging.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -66,5 +73,27 @@ describe("log serializers", () => {
       raw: {} as ServerResponse,
     });
     expect(logged).toEqual({ statusCode: 201 });
+  });
+});
+
+describe("request log context", () => {
+  it("names the verified user, session and company, never an identifier", () => {
+    const req = {};
+    expect(requestLogProps("pm-buddy-api", req)).toEqual({ service: "pm-buddy-api" });
+    setRequestActor(req, { userId: "u-1", sessionId: "s-1", tenantId: "t-1" });
+    expect(requestLogProps("pm-buddy-api", req)).toEqual({
+      service: "pm-buddy-api",
+      userId: "u-1",
+      sessionId: "s-1",
+      tenantId: "t-1",
+    });
+  });
+
+  it("logs refused authentication, authorisation and rate limits as warnings", () => {
+    expect(requestLogLevel(200)).toBe("info");
+    expect(requestLogLevel(404)).toBe("info");
+    for (const status of [401, 403, 429]) expect(requestLogLevel(status)).toBe("warn");
+    expect(requestLogLevel(500)).toBe("error");
+    expect(requestLogLevel(200, new Error("aborted"))).toBe("error");
   });
 });

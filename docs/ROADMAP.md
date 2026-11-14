@@ -161,9 +161,11 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D9.1 | **Security**: OWASP ASVS L2 checklist; threat model refresh; header and CSP review; key rotation drill; pen-test preparation | Security checklist report | The checklist passes | L | ⬜ |
+| D9.1 | **Security**: OWASP ASVS L2 checklist; threat model refresh; header and CSP review; key rotation drill; pen-test preparation | Security checklist report | The checklist passes | L | 🔎 |
 | D9.2 | **Performance and reliability**: k6 load tests (payroll payout, attendance sync); index and query tuning; degradation drills (M-Pesa, SMS down) | Load test report | Performance budget met | M | ⬜ |
 | D9.3 | **Operations**: Terraform for the chosen cloud; backups with point-in-time recovery; **restore drill**; observability dashboards and alerts; deployment, incident and breach runbooks | Runbooks, dashboards | **Phase 9 acceptance:** restore drill documented | L | ⬜ |
+
+> **D9.1 is in review (🔎).** The [security checklist](./SECURITY_CHECKLIST.md) assesses all 253 OWASP ASVS 5.0.0 L1/L2 requirements (139 Pass, 51 N/A, 43 fixed in D9.1, 20 deferred to D9.3 infrastructure); the web app now sends a nonce-based CSP and security headers, keys rotate with `keys:rotate` (drilled on the development database, OPERATIONS "Key rotation"), the threat model is refreshed and [PENTEST_SCOPE](./PENTEST_SCOPE.md) prepares the pen test. Built on `phase-9/d9.1-security`, not yet independently reviewed.
 
 ---
 

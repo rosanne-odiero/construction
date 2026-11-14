@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { INestApplication } from "@nestjs/common";
+import { Logger, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -151,6 +151,123 @@ describe("Password strength and breached-password checks", () => {
       (await user.call("post", "auth/login", { identifier: user.identifier, password: next }))
         .status,
     ).toBe(200);
+  });
+
+  it("changes a password only with the current one and signs out the other sessions (D9.1)", async () => {
+    const user = new Browser(app);
+    await user.register();
+    const other = new Browser(app);
+    other.identifier = user.identifier;
+    await other.initialize();
+    await other.login();
+    const next = "Murram road to Kitengela, 2026 edition";
+    const change = (body: object) => user.call("post", "auth/password/change", body);
+    breaches.checked.length = 0;
+
+    const wrong = await change({ currentPassword: "not the current one", newPassword: next });
+    expect(wrong.status).toBe(400);
+    expect(problem(wrong.body).code).toBe("current-password-incorrect");
+    expect(breaches.checked).toEqual([]);
+    // The same policy as registration, in the account's context.
+    for (const [candidate, code] of [
+      [weak, "password-too-weak"],
+      [`${user.identifier.split("@")[0]!}1`, "password-too-weak"],
+      [breached, "password-breached"],
+    ] as const) {
+      const refused = await change({ currentPassword: password, newPassword: candidate });
+      expect(refused.status, candidate).toBe(400);
+      expect(problem(refused.body).code).toBe(code);
+    }
+    expect(
+      (await change({ currentPassword: password, newPassword: next, role: "owner" })).status,
+    ).toBe(400);
+    expect((await other.call("get", "auth/me")).status).toBe(200);
+
+    const changed = await change({ currentPassword: password, newPassword: next });
+    expect(changed.status, JSON.stringify(changed.body)).toBe(200);
+    expect((await user.call("get", "auth/me")).status).toBe(200);
+    expect((await other.call("get", "auth/me")).status).toBe(401);
+    expect((await other.call("post", "auth/refresh", {})).status).toBe(401);
+    const login = async (secret: string) => {
+      const browser = new Browser(app);
+      await browser.initialize();
+      return browser.call("post", "auth/login", { identifier: user.identifier, password: secret });
+    };
+    expect((await login(password)).status).toBe(401);
+    expect((await login(next)).status).toBe(200);
+    expect(notifications.get(user.identifier)?.at(-1)?.subject).toBe("Password changed");
+  });
+
+  it("keeps other sessions when asked, and needs a fresh step-up once MFA is on", async () => {
+    const user = new Browser(app);
+    await user.register();
+    await user.enroll();
+    const other = new Browser(app);
+    other.identifier = user.identifier;
+    await other.initialize();
+    await other.login();
+    await prisma.session.update({
+      where: { id: user.auth.session.id },
+      data: { mfaVerifiedAt: new Date(Date.now() - 10 * 60_000) },
+    });
+    const body = {
+      currentPassword: password,
+      newPassword: "Kiambu ring road ballast, phase two",
+      signOutOtherSessions: false,
+    };
+    const stale = await user.call("post", "auth/password/change", body);
+    expect(stale.status).toBe(403);
+    expect(problem(stale.body).code).toBe("step-up-required");
+    expect((await user.call("post", "auth/mfa/step-up", { code: user.code(30_000) })).status).toBe(
+      200,
+    );
+    const changed = await user.call("post", "auth/password/change", body);
+    expect(changed.status, JSON.stringify(changed.body)).toBe(200);
+    expect((await other.call("get", "auth/me")).status).toBe(200);
+  });
+
+  it("logs authentication outcomes as security events without identifiers or secrets", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn");
+    const log = vi.spyOn(Logger.prototype, "log");
+    try {
+      const user = new Browser(app);
+      await user.register();
+      const visitor = new Browser(app);
+      await visitor.initialize();
+      await visitor.call("post", "auth/login", { identifier: user.identifier, password: weak });
+      await visitor.call("post", "auth/login", {
+        identifier: `${randomUUID()}@example.test`,
+        password: weak,
+      });
+      const events = [...warn.mock.calls, ...log.mock.calls]
+        .map(([entry]) => entry as { securityEvent?: string; userId?: string; reason?: string })
+        .filter((entry) => typeof entry === "object" && entry?.securityEvent);
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            securityEvent: "auth.login.succeeded",
+            userId: user.auth.user.id,
+            method: "password",
+          }),
+          expect.objectContaining({
+            securityEvent: "auth.login.failed",
+            userId: user.auth.user.id,
+            reason: "wrong-password",
+          }),
+          expect.objectContaining({
+            securityEvent: "auth.login.failed",
+            reason: "unknown-account",
+          }),
+        ]),
+      );
+      const text = JSON.stringify(events);
+      expect(text).not.toContain(user.identifier);
+      expect(text).not.toContain(weak);
+      expect(text).not.toContain(password);
+    } finally {
+      warn.mockRestore();
+      log.mockRestore();
+    }
   });
 
   it("checks the reset token before the password, so invalid tokens trigger no lookup", async () => {

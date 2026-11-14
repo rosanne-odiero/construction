@@ -24,6 +24,13 @@ export function divideHalfUp(numerator: bigint, denominator: bigint): bigint {
 
 const DECIMAL = /^(-?)(\d+)(?:\.(\d+))?$/;
 
+/** Drops trailing zeros in linear time (a `/0+$/` replace is quadratic on long runs of zeros). */
+const trimTrailingZeros = (digits: string) => {
+  let end = digits.length;
+  while (end > 0 && digits.charCodeAt(end - 1) === 48) end -= 1;
+  return digits.slice(0, end);
+};
+
 /**
  * "12.345" with `places` 4 → 123450n. Refuses more decimals than `places` (never rounds an input
  * silently) and anything that is not a plain decimal.
@@ -31,7 +38,7 @@ const DECIMAL = /^(-?)(\d+)(?:\.(\d+))?$/;
 export function scaled(value: string, places: number): bigint {
   const match = DECIMAL.exec(value.trim());
   if (!match) throw new TypeError(`Not a decimal: "${value}"`);
-  const fraction = (match[3] ?? "").replace(/0+$/, "");
+  const fraction = trimTrailingZeros(match[3] ?? "");
   if (fraction.length > places) throw new RangeError(`More than ${places} decimals: "${value}"`);
   const units = BigInt(match[2]!) * 10n ** BigInt(places) + BigInt(fraction.padEnd(places, "0"));
   return match[1] ? -units : units;
@@ -43,7 +50,7 @@ export function unscaled(units: bigint, places: number): string {
   const magnitude = negative ? -units : units;
   const base = 10n ** BigInt(places);
   const whole = magnitude / base;
-  const fraction = (magnitude % base).toString().padStart(places, "0").replace(/0+$/, "");
+  const fraction = trimTrailingZeros((magnitude % base).toString().padStart(places, "0"));
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 

@@ -110,6 +110,11 @@ describe("arithmetic", () => {
     expect(scaled("7.100", 2)).toBe(710n);
     expect(() => scaled("1.23456", 4)).toThrow(RangeError);
     expect(() => scaled("1e3", 4)).toThrow(TypeError);
+    // Long runs of zeros are trimmed in linear time (a regex trim was quadratic: CodeQL).
+    const started = Date.now();
+    expect(scaled(`2.${"0".repeat(200_000)}`, 4)).toBe(20_000n);
+    expect(() => scaled(`1.${"0".repeat(200_000)}1`, 4)).toThrow(RangeError);
+    expect(Date.now() - started).toBeLessThan(1_000);
     expect(unscaled(123_450n, 4)).toBe("12.345");
     expect(unscaled(-50n, 2)).toBe("-0.5");
     expect(unscaled(1_000n, 2)).toBe("10");

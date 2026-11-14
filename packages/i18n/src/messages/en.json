@@ -1823,7 +1823,10 @@
     "stkPushUnavailable": "Pay with M-Pesa is not available yet. Use the Paybill instructions.",
     "nothingOutstanding": "Nothing is outstanding on that certificate.",
     "amountExceedsOutstanding": "That is more than is outstanding.",
-    "fxRateInvalid": "Enter a rate above zero with at most four decimal places, dated today or earlier."
+    "fxRateInvalid": "Enter a rate above zero with at most four decimal places, dated today or earlier.",
+    "receiptMethodRequired": "Say how the money was received: the line becomes a client receipt.",
+    "cashFlowItemNotLinkable": "This line is already linked or was cancelled. Reload and check.",
+    "cashFlowItemLinked": "This line is linked to a certificate: record the money as a client receipt on the Client payments page."
   },
   "projectStatus": {
     "planning": "Planning",
@@ -2976,6 +2979,7 @@
         "unpaid": "Unpaid",
         "part_paid": "Part paid",
         "paid": "Paid",
+        "nothing_due": "Nothing due",
         "credit": "Credit"
       },
       "overdueDays": "{days, plural, one {Overdue by # day} other {Overdue by # days}}",
@@ -3189,6 +3193,16 @@
       "daysInvalid": "Enter a whole number of days from {min} to {max}.",
       "save": "Save terms",
       "saving": "Saving…"
+    },
+    "linkTitle": "Client lines in the cash-flow forecast",
+    "linkDescription": "Lines entered by hand for money expected from or received from the client. Link each one that pays a certificate: it then counts only through the certificate. A line already received becomes a client receipt.",
+    "lineExpected": "{amount} expected {date}",
+    "lineReceived": "{amount} received {date}",
+    "link": {
+      "certificate": "Pays certificate",
+      "method": "How it was received",
+      "submit": "Link to certificate",
+      "linking": "Linking…"
     }
   },
   "clientSettings": {
@@ -11013,6 +11027,7 @@
       "unpaid": "Not paid",
       "part_paid": "Part paid",
       "paid": "Paid",
+      "nothing_due": "Nothing due",
       "credit": "Credit"
     },
     "overdue": "{state}, {days} days overdue",

@@ -4,6 +4,7 @@ import { Download } from "lucide-react";
 import { clientPaymentsResponseSchema } from "@pm-buddy/validation";
 import {
   ClientTermsForm,
+  LinkCashFlowItem,
   ReceiptForm,
   ReverseReceipt,
 } from "@/components/client-portal/staff-forms";
@@ -183,6 +184,45 @@ export default async function ClientPaymentsPage({
                 outstandingMinor: row.outstandingMinor,
               }))}
             />
+          </CardContent>
+        </Card>
+      ) : null}
+      {view.cashFlowItems.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2>{t("linkTitle")}</h2>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">{t("linkDescription")}</p>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-4" aria-label={t("linkTitle")}>
+              {view.cashFlowItems.map((item) => (
+                <li key={item.id} className="space-y-2 rounded-lg border p-3 text-sm">
+                  <p className="font-medium">{item.description}</p>
+                  <p className="text-muted-foreground">
+                    {item.status === "received" && item.receivedOn
+                      ? t("lineReceived", {
+                          amount: formatKES(item.receivedMinor ?? 0),
+                          date: formatCalendarDate(item.receivedOn),
+                        })
+                      : t("lineExpected", {
+                          amount: formatKES(item.amountMinor),
+                          date: formatCalendarDate(item.expectedOn),
+                        })}
+                  </p>
+                  {view.permissions.canRecord ? (
+                    <LinkCashFlowItem
+                      projectId={projectId}
+                      item={item}
+                      certificates={view.certificates
+                        .filter((row) => row.totalMinor > 0)
+                        .map((row) => ({ id: row.id, number: row.number }))}
+                    />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       ) : null}

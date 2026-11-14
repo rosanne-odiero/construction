@@ -124,6 +124,8 @@ export class EarnedValueService {
           projectId,
           direction: "in",
           status: "received",
+          // A line linked to a certificate became a client receipt (counted below).
+          valuationId: null,
           receivedOn: { lte: new Date(`${dataDate}T00:00:00.000Z`) },
         },
         _sum: { receivedMinor: true },

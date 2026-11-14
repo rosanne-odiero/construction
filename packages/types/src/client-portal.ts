@@ -28,7 +28,18 @@ export type ClientPaymentKind = (typeof CLIENT_PAYMENT_KINDS)[number];
  * certificates. "Paid" only ever means receipts recorded by the company (brief §15 D); overdue is
  * shown separately.
  */
-export const CLIENT_CERTIFICATE_STATES = ["unpaid", "part_paid", "paid", "credit"] as const;
+/**
+ * A certificate's payment state: `paid` only when recorded receipts cover its total; `nothing_due`
+ * when nothing is outstanding but receipts do not cover it (a zero certificate, or one covered by a
+ * later negative certificate's credit) — never shown as paid without a receipt (brief §15 D).
+ */
+export const CLIENT_CERTIFICATE_STATES = [
+  "unpaid",
+  "part_paid",
+  "paid",
+  "nothing_due",
+  "credit",
+] as const;
 export type ClientCertificateState = (typeof CLIENT_CERTIFICATE_STATES)[number];
 
 /** Lines of a client statement. */

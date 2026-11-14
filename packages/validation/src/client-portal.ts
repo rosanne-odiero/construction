@@ -101,10 +101,14 @@ export const displaySchema = z.strictObject({
 });
 export type ClientDisplay = z.infer<typeof displaySchema>;
 
+/** A rate as a client sees it: no staff identities (who entered it, or when). */
+export const clientFxRateSchema = fxRateSchema.omit({ enteredBy: true, enteredAt: true });
+export type ClientFxRate = z.infer<typeof clientFxRateSchema>;
+
 export const clientPreferencesResponseSchema = z.strictObject({
   displayCurrency: z.enum(DISPLAY_CURRENCIES),
   /** The newest rate per currency (usable or not), for the settings page. */
-  rates: z.array(fxRateSchema),
+  rates: z.array(clientFxRateSchema),
 });
 export type ClientPreferencesResponse = z.infer<typeof clientPreferencesResponseSchema>;
 
@@ -525,6 +529,32 @@ export const recordClientPaymentRequestSchema = z.strictObject({
 });
 export type RecordClientPaymentRequest = z.input<typeof recordClientPaymentRequestSchema>;
 
+/**
+ * Links a manual cash-flow line from the client (D5.4) to the certified certificate it pays
+ * (D-138). A line already received becomes a client receipt of the same amount, date and
+ * reference, so its method is needed then.
+ */
+export const linkCashFlowItemRequestSchema = z.strictObject({
+  valuationId: uuid,
+  version: z.number().int().min(1),
+  method: z.enum(CLIENT_PAYMENT_METHODS).optional(),
+});
+export type LinkCashFlowItemRequest = z.infer<typeof linkCashFlowItemRequestSchema>;
+
+/** A manual "in" cash-flow line of the project not yet linked to a certificate. */
+export const unlinkedCashFlowItemSchema = z.strictObject({
+  id: uuid,
+  description: z.string(),
+  expectedOn: calendarDate,
+  amountMinor: z.number().int(),
+  status: z.enum(["expected", "received"]),
+  receivedOn: calendarDate.nullable(),
+  receivedMinor: z.number().int().nullable(),
+  reference: z.string().nullable(),
+  version: z.number().int().min(1),
+});
+export type UnlinkedCashFlowItem = z.infer<typeof unlinkedCashFlowItemSchema>;
+
 export const reverseClientPaymentRequestSchema = z.strictObject({
   /** Client-generated ID of the reversal entry. */
   id: uuid,
@@ -561,6 +591,11 @@ export const clientPaymentsResponseSchema = z.strictObject({
   settings: clientSettingsSchema,
   /** Client members assigned to the project (they see these figures in the portal). */
   clientMembers: z.number().int().min(0),
+  /**
+   * Manual "in" cash-flow lines not linked to a certificate (D5.4 told finance to enter client
+   * receipts this way before certificates existed); link each that pays a certificate.
+   */
+  cashFlowItems: z.array(unlinkedCashFlowItemSchema),
   readOnly: z.boolean(),
   permissions: z.strictObject({
     canRecord: z.boolean(),

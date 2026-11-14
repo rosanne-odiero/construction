@@ -297,6 +297,99 @@ export function ReverseReceipt({ projectId, paymentId }: { projectId: string; pa
   );
 }
 
+/**
+ * Links a manual cash-flow line from the client (D5.4) to the certified certificate it pays
+ * (D-138). A line already received becomes a client receipt, so it needs the method.
+ */
+export function LinkCashFlowItem({
+  projectId,
+  item,
+  certificates,
+}: {
+  projectId: string;
+  item: { id: string; version: number; status: "expected" | "received" };
+  certificates: { id: string; number: string }[];
+}) {
+  const t = useTranslations("clientPayments.link");
+  const tMethods = useTranslations("clientPortal.methods");
+  const problem = useProblemMessage();
+  const router = useRouter();
+  const [valuationId, setValuationId] = useState(certificates[0]?.id ?? "");
+  const [method, setMethod] = useState<ClientPaymentMethod>("bank");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  if (!certificates.length) return null;
+  return (
+    <div className="flex w-full flex-wrap items-end gap-2">
+      <Field className="min-w-40 flex-1">
+        <FieldLabel htmlFor={`link-${item.id}`}>{t("certificate")}</FieldLabel>
+        <select
+          id={`link-${item.id}`}
+          className={selectClass}
+          value={valuationId}
+          onChange={(event) => setValuationId(event.target.value)}
+        >
+          {certificates.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.number}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {item.status === "received" ? (
+        <Field className="min-w-40 flex-1">
+          <FieldLabel htmlFor={`link-method-${item.id}`}>{t("method")}</FieldLabel>
+          <select
+            id={`link-method-${item.id}`}
+            className={selectClass}
+            value={method}
+            onChange={(event) => setMethod(event.target.value as ClientPaymentMethod)}
+          >
+            {CLIENT_PAYMENT_METHODS.map((value) => (
+              <option key={value} value={value}>
+                {tMethods(value)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        disabled={busy || !valuationId}
+        onClick={async () => {
+          setFailure(null);
+          setBusy(true);
+          try {
+            await liveRequest(
+              `/projects/${projectId}/client-payments/cash-flow-items/${item.id}/link`,
+              clientPaymentsResponseSchema,
+              {
+                method: "POST",
+                body: {
+                  valuationId,
+                  version: item.version,
+                  ...(item.status === "received" ? { method } : {}),
+                },
+              },
+            );
+            router.refresh();
+          } catch (error) {
+            setFailure(problem(error));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? t("linking") : t("submit")}
+      </Button>
+      <div className="w-full">
+        <Failure message={failure} />
+      </div>
+    </div>
+  );
+}
+
 /** The project's client terms: whether variations wait for the client, and the payment period. */
 export function ClientTermsForm({
   projectId,

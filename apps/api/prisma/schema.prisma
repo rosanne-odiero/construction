@@ -3537,6 +3537,7 @@ model Valuation {
   lines                    ValuationLine[]
   materials                ValuationMaterial[]
   adjustments              ValuationAdjustment[]
+  cashFlowItems            CashFlowItem[]
   clientPayments           ClientPayment[]
 
   @@unique([tenantId, id])
@@ -4276,26 +4277,31 @@ model PettyCashCount {
 // A manual cash-flow line: an expected client receipt (until certificates exist, D6.3/D7.1) or
 // another expected payment, with what was actually received.
 model CashFlowItem {
-  id            String    @id @default(uuid(7)) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  projectId     String    @map("project_id") @db.Uuid
-  direction     String    @db.VarChar(3)
-  description   String    @db.VarChar(200)
-  expectedOn    DateTime  @map("expected_on") @db.Date
-  amountMinor   BigInt    @map("amount_minor")
-  status        String    @default("expected") @db.VarChar(10)
-  receivedOn    DateTime? @map("received_on") @db.Date
-  receivedMinor BigInt?   @map("received_minor")
-  reference     String?   @db.VarChar(60)
-  version       Int       @default(1)
-  createdBy     String    @map("created_by") @db.Uuid
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy     String    @map("updated_by") @db.Uuid
-  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz
-  project       Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  id            String     @id @default(uuid(7)) @db.Uuid
+  tenantId      String     @map("tenant_id") @db.Uuid
+  projectId     String     @map("project_id") @db.Uuid
+  direction     String     @db.VarChar(3)
+  description   String     @db.VarChar(200)
+  expectedOn    DateTime   @map("expected_on") @db.Date
+  amountMinor   BigInt     @map("amount_minor")
+  status        String     @default("expected") @db.VarChar(10)
+  receivedOn    DateTime?  @map("received_on") @db.Date
+  receivedMinor BigInt?    @map("received_minor")
+  reference     String?    @db.VarChar(60)
+  version       Int        @default(1)
+  createdBy     String     @map("created_by") @db.Uuid
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy     String     @map("updated_by") @db.Uuid
+  updatedAt     DateTime   @default(now()) @map("updated_at") @db.Timestamptz
+  // The certified certificate this line pays (D7.1): set once; linked lines leave the forecast,
+  // the opening position and earned value, where the certificate and client receipts count it.
+  valuationId   String?    @map("valuation_id") @db.Uuid
+  project       Project    @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  valuation     Valuation? @relation(fields: [tenantId, valuationId], references: [tenantId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
   @@index([tenantId, projectId, status, expectedOn])
+  @@index([tenantId, valuationId])
   @@map("cash_flow_items")
 }
 

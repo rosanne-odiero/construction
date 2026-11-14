@@ -46,6 +46,7 @@ import {
   fxRatesResponseSchema,
   idempotencyKeySchema,
   paymentInstructionsResponseSchema,
+  linkCashFlowItemRequestSchema,
   recordClientPaymentRequestSchema,
   reverseClientPaymentRequestSchema,
   sendVariationToClientRequestSchema,
@@ -509,6 +510,31 @@ export class ClientPortalStaffController {
       id(projectId),
       recordClientPaymentRequestSchema.parse(body),
       idempotencyKey(req),
+      req,
+    );
+  }
+
+  @Post("projects/:projectId/client-payments/cash-flow-items/:itemId/link")
+  @HttpCode(200)
+  @ApiOperation({
+    operationId: "linkCashFlowItemToCertificate",
+    summary: "Link a manual cash-flow line from the client to the certificate it pays",
+    description:
+      "finance.manage on the project. Once per line: the line leaves the forecast, the opening position and earned value; a line already received becomes a client receipt of the same amount, date and reference (method required; never more than is outstanding). 409 cash-flow-item-not-linkable, certificate-not-certified, receipt-exceeds-outstanding, version-conflict; 422 receipt-method-required.",
+  })
+  @ApiBody({ schema: openApi(linkCashFlowItemRequestSchema) })
+  @ApiOkResponse({ schema: openApi(clientPaymentsResponseSchema) })
+  async linkCashFlowItem(
+    @Param("projectId") projectId: string,
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() req: Request,
+  ) {
+    return this.payments.linkCashFlowItem(
+      await this.auth.principal(req),
+      id(projectId),
+      id(itemId),
+      linkCashFlowItemRequestSchema.parse(body),
       req,
     );
   }

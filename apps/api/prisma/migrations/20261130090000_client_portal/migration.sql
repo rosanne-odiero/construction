@@ -383,6 +383,75 @@ $$;
 CREATE TRIGGER client_payment_guard BEFORE INSERT OR UPDATE OR DELETE ON "client_payments"
   FOR EACH ROW EXECUTE FUNCTION app.guard_client_payment();
 
+-- Manual cash-flow lines for a certificate's payment (D-138) ------------------------------------
+-- D5.4 told finance to enter expected client receipts as manual "in" lines until certificates
+-- existed. A line can now be linked, once, to the certified certificate it pays: a linked line
+-- leaves the forecast, the opening position and earned value (the certificate's outstanding amount
+-- and the client receipts take its place), and linking a line already received records the same
+-- money as a client receipt in the same transaction, so it is never counted twice.
+ALTER TABLE "cash_flow_items" ADD COLUMN "valuation_id" UUID;
+CREATE INDEX "cash_flow_items_tenant_id_valuation_id_idx" ON "cash_flow_items"("tenant_id", "valuation_id");
+ALTER TABLE "cash_flow_items" ADD CONSTRAINT "cash_flow_items_tenant_id_valuation_id_fkey" FOREIGN KEY ("tenant_id", "valuation_id") REFERENCES "valuations"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "cash_flow_items" ADD CONSTRAINT "cash_flow_items_valuation_check" CHECK (
+  valuation_id IS NULL OR direction = 'in'
+);
+CREATE OR REPLACE FUNCTION app.guard_cash_flow_item() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status <> 'expected' OR NEW.created_by IS DISTINCT FROM app.current_user_id() THEN
+      RAISE EXCEPTION 'A cash-flow line starts as expected, by the signed-in user'
+        USING ERRCODE = '23514';
+    END IF;
+  ELSE
+    IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.project_id IS DISTINCT FROM OLD.project_id
+       OR NEW.direction IS DISTINCT FROM OLD.direction OR NEW.created_by IS DISTINCT FROM OLD.created_by
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+      RAISE EXCEPTION 'A cash-flow line keeps its project and direction' USING ERRCODE = '23514';
+    END IF;
+    IF OLD.valuation_id IS NOT NULL AND NEW.valuation_id IS DISTINCT FROM OLD.valuation_id THEN
+      RAISE EXCEPTION 'A cash-flow line stays linked to its certificate' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  IF NEW.valuation_id IS NOT NULL AND (TG_OP = 'INSERT' OR OLD.valuation_id IS NULL) THEN
+    IF NOT EXISTS (SELECT 1 FROM valuations
+                    WHERE tenant_id = NEW.tenant_id AND id = NEW.valuation_id
+                      AND project_id = NEW.project_id AND status = 'certified') THEN
+      RAISE EXCEPTION 'A cash-flow line is linked to a certified certificate of its project'
+        USING ERRCODE = '23514';
+    END IF;
+    IF TG_OP = 'UPDATE' THEN
+      -- Linking changes nothing else; a received line is linked together with its client receipt.
+      IF ROW(NEW.status, NEW.description, NEW.expected_on, NEW.amount_minor, NEW.received_on,
+             NEW.received_minor, NEW.reference)
+         IS DISTINCT FROM ROW(OLD.status, OLD.description, OLD.expected_on, OLD.amount_minor,
+             OLD.received_on, OLD.received_minor, OLD.reference) THEN
+        RAISE EXCEPTION 'Linking a cash-flow line to its certificate changes nothing else'
+          USING ERRCODE = '23514';
+      END IF;
+      IF OLD.status = 'received' AND NOT EXISTS (
+           SELECT 1 FROM client_payments
+            WHERE tenant_id = NEW.tenant_id AND valuation_id = NEW.valuation_id
+              AND kind = 'receipt' AND idempotency_key = 'cash-flow-item:' || NEW.id
+              AND amount_minor = OLD.received_minor) THEN
+        RAISE EXCEPTION 'A received cash-flow line is linked with the client receipt it becomes'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END IF;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.status <> 'expected' THEN
+    RAISE EXCEPTION 'A % cash-flow line never changes', OLD.status USING ERRCODE = '23514';
+  END IF;
+  IF NEW.status = 'received' AND NEW.received_on > app.business_today() THEN
+    RAISE EXCEPTION 'Money is received on or before today' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
 -- Variation decisions by the client --------------------------------------------------------------
 ALTER TABLE "variation_client_requests" ADD CONSTRAINT "variation_client_requests_check" CHECK (
   snapshot_digest ~ '^[0-9a-f]{64}$' AND client_digest ~ '^[0-9a-f]{64}$'
@@ -392,7 +461,7 @@ ALTER TABLE "variation_client_requests" ADD CONSTRAINT "variation_client_request
 ALTER TABLE "variation_client_decisions" ADD CONSTRAINT "variation_client_decisions_check" CHECK (
   decision IN ('approved', 'rejected') AND client_digest ~ '^[0-9a-f]{64}$'
   AND (comment IS NULL OR char_length(btrim(comment)) BETWEEN 1 AND 1000)
-  AND (decision <> 'rejected' OR char_length(btrim(comment)) >= 3)
+  AND (decision <> 'rejected' OR (comment IS NOT NULL AND char_length(btrim(comment)) >= 3))
 );
 
 -- Whether the signed-in user acts as the project's client: assigned to it with portal.client and
@@ -536,7 +605,9 @@ $$;
 CREATE POLICY client_preferences_own ON "client_preferences" AS RESTRICTIVE
   USING (user_id = app.current_user_id()) WITH CHECK (user_id = app.current_user_id());
 
--- Restrictive policies (added to tenant isolation) for members with the `client` system role:
+-- Restrictive policies (added to tenant isolation) for client members — the `client` system role,
+-- or a custom role made only of projects.view, bq.view and portal.client (packages/types
+-- portalFor, as app.acts_as_client):
 -- they read only rows of the projects they are assigned to (the portal API further requires
 -- portal.client in role ∩ assignment), certified certificates only, general (never incident)
 -- photos only and only variations sent to them; they write only their own variation decisions.
@@ -545,8 +616,10 @@ CREATE POLICY client_preferences_own ON "client_preferences" AS RESTRICTIVE
 DO $$
 DECLARE
   not_client constant text := 'NOT EXISTS (SELECT 1 FROM memberships m '
+    'LEFT JOIN tenant_roles r ON r.tenant_id = m.tenant_id AND r.id = m.custom_role_id '
     'WHERE m.tenant_id = app.current_tenant_id() AND m.user_id = app.current_user_id() '
-    'AND m.role = ''client'')';
+    'AND (m.role = ''client'' OR (m.role = ''custom'' AND ''portal.client'' = ANY (r.permissions) '
+    'AND r.permissions <@ ARRAY[''projects.view'', ''bq.view'', ''portal.client'']::text[])))';
   assigned constant text := 'SELECT pm.project_id FROM project_memberships pm '
     'WHERE pm.tenant_id = app.current_tenant_id() AND pm.user_id = app.current_user_id()';
   rule record;
@@ -582,15 +655,17 @@ BEGIN
 END
 $$;
 
--- The company's working records are never a client's: a `client`-role member reads and writes
+-- The company's working records are never a client's: a client member (as above) reads and writes
 -- none of them (instructions, variation lines and history, rate build-ups, workers, attendance,
 -- payroll, costs, cash flow, safety incidents and supplier payout details); anyone else is
 -- unaffected. Clients see a variation through the view frozen when it was sent to them.
 DO $$
 DECLARE
   not_client constant text := 'NOT EXISTS (SELECT 1 FROM memberships m '
+    'LEFT JOIN tenant_roles r ON r.tenant_id = m.tenant_id AND r.id = m.custom_role_id '
     'WHERE m.tenant_id = app.current_tenant_id() AND m.user_id = app.current_user_id() '
-    'AND m.role = ''client'')';
+    'AND (m.role = ''client'' OR (m.role = ''custom'' AND ''portal.client'' = ANY (r.permissions) '
+    'AND r.permissions <@ ARRAY[''projects.view'', ''bq.view'', ''portal.client'']::text[])))';
   target text;
 BEGIN
   FOREACH target IN ARRAY ARRAY['instructions', 'variation_lines', 'variation_status_changes',

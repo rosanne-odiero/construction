@@ -716,7 +716,10 @@ export class ClientPortalService {
     });
     return clientPreferencesResponseSchema.parse({
       displayCurrency: row?.displayCurrency ?? "KES",
-      rates: await fxRateWire(tx, await latestRates(tx, access.tenantId)),
+      // No staff identities reach the client (who entered a rate, or when).
+      rates: (await fxRateWire(tx, await latestRates(tx, access.tenantId))).map(
+        ({ enteredBy: _by, enteredAt: _at, ...rate }) => rate,
+      ),
     });
   }
 

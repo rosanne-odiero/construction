@@ -12,6 +12,7 @@ import { BQ_ROUNDING, BQ_VAT_RULE, portalFor } from "@pm-buddy/types";
 import {
   clientDiariesResponseSchema,
   clientPayResponseSchema,
+  cashFlowItemResponseSchema,
   clientPaymentsResponseSchema,
   clientPhotosResponseSchema,
   clientPortalOverviewResponseSchema,
@@ -1010,6 +1011,7 @@ describe("Client portal (real runtime role)", () => {
     const text = JSON.stringify([page, next]);
     expect(text).not.toContain(photos.incident);
     expect(text).not.toMatch(/"lat"|"lng"|uploadedBy|sha256|agent/);
+    expect(text).not.toMatch(/latitude|longitude|"gps|"exif/i);
     expect(text).not.toContain(agent.auth.user.id);
 
     const image = await download(client, portal(`/photos/${photos.verified}/image`));
@@ -1368,6 +1370,41 @@ describe("Client portal (real runtime role)", () => {
     ).rejects.toThrow(/row-level security|permission denied/);
     // Staff and other roles are not restricted by the client policies.
     expect(portalFor(["projects.view", "bq.view", "portal.client"])).toBe("client");
+    // A custom role made only of client permissions is a client too (portalFor): the database
+    // gives it exactly what the client role sees — no instructions, variation lines, rate
+    // build-ups or costs, and only the variations sent to the client.
+    await fresh(owner);
+    const role = ok(
+      await owner.call("post", "tenants/current/roles", {
+        name: "Client (custom, synthetic)",
+        permissions: ["projects.view", "bq.view", "portal.client"],
+      }),
+      201,
+    ) as { role: { id: string } };
+    const customClient = new Browser(app);
+    await customClient.register();
+    await join(owner, customClient, role.role.id, [projectId]);
+    const customSeen = await asUser(
+      customClient,
+      (tx) =>
+        tx.$queryRaw<{ table: string; total: bigint }[]>`
+        SELECT 'projects' AS table, count(*) AS total FROM projects
+        UNION ALL SELECT 'valuations', count(*) FROM valuations
+        UNION ALL SELECT 'variation_orders', count(*) FROM variation_orders
+        UNION ALL SELECT 'variation_lines', count(*) FROM variation_lines
+        UNION ALL SELECT 'instructions', count(*) FROM instructions
+        UNION ALL SELECT 'bq_item_rate_links', count(*) FROM bq_item_rate_links
+        UNION ALL SELECT 'cost_entries', count(*) FROM cost_entries`,
+    );
+    expect(Object.fromEntries(customSeen.map((row) => [row.table, Number(row.total)]))).toEqual({
+      projects: 1,
+      valuations: 1,
+      variation_orders: 2,
+      variation_lines: 0,
+      instructions: 0,
+      bq_item_rate_links: 0,
+      cost_entries: 0,
+    });
   });
 
   it("converts amounts for display only, from dated rates finance entered, and keeps every document in KES", async () => {
@@ -1470,6 +1507,116 @@ describe("Client portal (real runtime role)", () => {
         .map((line) => [line.kind, line.amountMinor, line.date, line.document?.label]),
     ).toEqual([["client_receipts", 18_106_000, addCalendarDays(today, 30), "IPC-0001"]]);
     expect(forecast.opening).toMatchObject({ basis: "derived", receivedSinceMinor: 20_000_000 });
+
+    // D5.4's manual "in" lines for a certificate's payment are linked to it, once, and then
+    // counted only through the certificate and its client receipts.
+    const forecastNow = async () =>
+      forecastResponseSchema.parse(
+        ok(await finance.call("get", `spending/forecast?projectId=${projectId}`)),
+      );
+    const evReceived = async () =>
+      earnedValueResponseSchema.parse(
+        ok(await finance.call("get", `projects/${projectId}/earned-value`)),
+      ).values.receivedMinor;
+    const line = async (direction: "in" | "out", description: string, amountMinor: number) =>
+      cashFlowItemResponseSchema.parse(
+        ok(
+          await finance.call("post", "cash-flow-items", {
+            projectId,
+            direction,
+            description,
+            expectedOn: addCalendarDays(today, 10),
+            amountMinor,
+          }),
+          201,
+        ),
+      ).item;
+    const link = (itemId: string, version: number, method?: string) =>
+      finance.call("post", `projects/${projectId}/client-payments/cash-flow-items/${itemId}/link`, {
+        valuationId: ipc1.id,
+        version,
+        ...(method ? { method } : {}),
+      });
+    const expected = await line("in", "Client instalment for IPC-0001 (synthetic)", 18_106_000);
+    expect(
+      (await forecastNow()).lines.filter((row) => row.document?.id === expected.id),
+    ).toHaveLength(1);
+    const linked = clientPaymentsResponseSchema.parse(
+      ok(await link(expected.id, expected.version)),
+    );
+    expect(linked.cashFlowItems.map((row) => row.id)).not.toContain(expected.id);
+    const afterLink = await forecastNow();
+    expect(afterLink.lines.filter((row) => row.document?.id === expected.id)).toEqual([]);
+    expect(
+      afterLink.lines
+        .filter((row) => row.document?.kind === "certificate")
+        .map((row) => row.amountMinor),
+    ).toEqual([18_106_000]);
+    refused(await link(expected.id, expected.version + 1), 409, "cash-flow-item-not-linkable");
+
+    // A line already received becomes a client receipt when linked: counted once.
+    const paid = await line("in", "Client transfer for IPC-0001 (synthetic)", 1_000_000);
+    const received = cashFlowItemResponseSchema.parse(
+      ok(
+        await finance.call("post", `cash-flow-items/${paid.id}/receive`, {
+          version: paid.version,
+          receivedOn: today,
+          receivedMinor: 1_000_000,
+          reference: "FT-CLIENT-0099",
+        }),
+      ),
+    ).item;
+    expect((await forecastNow()).opening.receivedSinceMinor).toBe(21_000_000);
+    expect(await evReceived()).toBe(21_000_000);
+    refused(await link(received.id, received.version), 422, "receipt-method-required");
+    const converted = clientPaymentsResponseSchema.parse(
+      ok(await link(received.id, received.version, "bank")),
+    );
+    expect(converted.totals.receivedMinor).toBe(21_000_000);
+    expect(converted.payments.find((row) => row.reference === "FT-CLIENT-0099")).toMatchObject({
+      amountMinor: 1_000_000,
+      reference: "FT-CLIENT-0099",
+      method: "bank",
+    });
+    const afterConvert = await forecastNow();
+    expect(afterConvert.opening.receivedSinceMinor).toBe(21_000_000);
+    expect(await evReceived()).toBe(21_000_000);
+    expect(
+      afterConvert.lines
+        .filter((row) => row.document?.kind === "certificate")
+        .map((row) => row.amountMinor),
+    ).toEqual([17_106_000]);
+
+    // The database repeats it: a received line is linked only with the client receipt it becomes.
+    const unlinked = await line("in", "Client cheque (synthetic)", 500_000);
+    ok(
+      await finance.call("post", `cash-flow-items/${unlinked.id}/receive`, {
+        version: unlinked.version,
+        receivedOn: today,
+        receivedMinor: 500_000,
+      }),
+    );
+    await expect(
+      asUser(
+        finance,
+        (tx) => tx.$executeRaw`UPDATE cash_flow_items SET valuation_id = ${ipc1.id}::uuid,
+          version = version + 1 WHERE id = ${unlinked.id}::uuid`,
+      ),
+    ).rejects.toThrow(/client receipt it becomes/);
+
+    // A received "out" line is money paid, never money received (the opening position).
+    const deposit = await line("out", "Hoarding deposit (synthetic)", 500_000);
+    ok(
+      await finance.call("post", `cash-flow-items/${deposit.id}/receive`, {
+        version: deposit.version,
+        receivedOn: today,
+        receivedMinor: 500_000,
+      }),
+    );
+    const withOut = await forecastNow();
+    // (The unlinked cheque above still counts as received: 21,000,000 + 500,000.)
+    expect(withOut.opening.receivedSinceMinor).toBe(21_500_000);
+    expect(withOut.opening.paidSinceMinor).toBe(afterConvert.opening.paidSinceMinor! + 500_000);
   });
 
   it("keeps closed and cancelled projects read-only", async () => {

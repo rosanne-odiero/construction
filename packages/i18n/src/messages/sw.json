@@ -1823,7 +1823,10 @@
     "stkPushUnavailable": "Kulipa kwa M-Pesa kutoka hapa bado hakupatikani. Tumia maelekezo ya Paybill.",
     "nothingOutstanding": "Hakuna kinachodaiwa kwenye cheti hicho.",
     "amountExceedsOutstanding": "Hicho ni zaidi ya kinachodaiwa.",
-    "fxRateInvalid": "Weka kiwango zaidi ya sifuri chenye hadi nafasi nne za desimali, cha leo au kabla."
+    "fxRateInvalid": "Weka kiwango zaidi ya sifuri chenye hadi nafasi nne za desimali, cha leo au kabla.",
+    "receiptMethodRequired": "Taja jinsi pesa zilivyopokelewa: mstari unakuwa risiti ya mteja.",
+    "cashFlowItemNotLinkable": "Mstari huu tayari umeunganishwa au ulifutwa. Pakia upya na ukague.",
+    "cashFlowItemLinked": "Mstari huu umeunganishwa na cheti: rekodi pesa kama risiti ya mteja kwenye ukurasa wa Malipo ya mteja."
   },
   "projectStatus": {
     "planning": "Mipango",
@@ -2976,6 +2979,7 @@
         "unpaid": "Haijalipwa",
         "part_paid": "Imelipwa sehemu",
         "paid": "Imelipwa",
+        "nothing_due": "Hakuna kinachodaiwa",
         "credit": "Salio la ziada"
       },
       "overdueDays": "{days, plural, one {Imepitwa kwa siku #} other {Imepitwa kwa siku #}}",
@@ -3189,6 +3193,16 @@
       "daysInvalid": "Weka idadi kamili ya siku kuanzia {min} hadi {max}.",
       "save": "Hifadhi masharti",
       "saving": "Inahifadhi…"
+    },
+    "linkTitle": "Mistari ya mteja katika utabiri wa fedha",
+    "linkDescription": "Mistari iliyoingizwa kwa mkono kwa pesa zinazotarajiwa au zilizopokelewa kutoka kwa mteja. Unganisha kila mstari unaolipa cheti: kisha unahesabiwa kupitia cheti pekee. Mstari uliokwisha pokelewa unakuwa risiti ya mteja.",
+    "lineExpected": "{amount} inatarajiwa {date}",
+    "lineReceived": "{amount} ilipokelewa {date}",
+    "link": {
+      "certificate": "Inalipa cheti",
+      "method": "Ilivyopokelewa",
+      "submit": "Unganisha na cheti",
+      "linking": "Inaunganisha…"
     }
   },
   "clientSettings": {
@@ -11013,6 +11027,7 @@
       "unpaid": "Haijalipwa",
       "part_paid": "Imelipwa sehemu",
       "paid": "Imelipwa",
+      "nothing_due": "Hakuna kinachodaiwa",
       "credit": "Salio la ziada"
     },
     "overdue": "{state}, siku {days} baada ya tarehe ya kulipa",

@@ -520,14 +520,16 @@ stateDiagram-v2
   paid --> part_paid : a receipt reversed (reason)
   owed --> overdue : due date passes (derived, Nairobi dates)
   part_paid --> overdue : due date passes with something outstanding
+  owed --> nothing_due : covered by a correcting certificate's credit (no receipt)
 ```
 
-The states are derived from the entries, never stored (`certificateBalances` in `packages/domain`); a correcting (negative) certificate is a **credit** applied to the oldest certificates still owed.
+The states are derived from the entries, never stored (`certificateBalances` in `packages/domain`); a correcting (negative) certificate is a **credit** applied to the oldest certificates still owed. "Paid" needs recorded receipts that cover the total; a certificate covered by credit, or a zero certificate, is **nothing due**.
 
 | Workflow / transition | Actor, scope and preconditions | Side effects and audit event | Retry |
 |---|---|---|---|
 | Receipt recorded | `finance.manage` on the project; open project; a **certified** certificate (409 `certificate-not-certified`); amount > 0 and ≤ outstanding (409 `receipt-exceeds-outstanding`, checked again under a lock by `app.guard_client_payment`); received today or earlier and not before certification (422 `receipt-date-invalid`); method, reference; ≤ 200 entries per certificate | Append-only `client_payments` row; the client's statement, overview and pay page change at once; the forecast and earned value follow (D-138); `client_payment.recorded` (IDs only) | Client `id` + `Idempotency-Key` + digest: a replay returns the view; another payload is 409 `idempotency-key-reused`; the same ID under another key 409 `payment-id-conflict` |
 | Receipt reversed | `finance.manage`; open project; a receipt not already reversed (409 `receipt-already-reversed`; unique `reverses_id`); reason (≥ 3 characters, shown to the client) | A reversal entry for the full amount; `client_payment.reversed` | As above |
+| Manual cash-flow line linked to a certificate | `finance.manage`; open project; an unlinked expected or received "in" line of the project (409 `cash-flow-item-not-linkable`), a **certified** certificate; a received line also needs the method (422 `receipt-method-required`) and must fit what is outstanding (409 `receipt-exceeds-outstanding`) | The line leaves the forecast, the opening position and earned value; a received line becomes a client receipt of the same amount, date and reference in the same transaction; `cash_flow.item_linked` | Once per line (409 when repeated) |
 | Client terms changed | `projects.manage`; open project; on the version read (409 `version-conflict`) | New `project_client_settings` version; certificates already certified keep their due dates; `client_portal.terms_changed` | Expected version |
 | Paybill instructions changed | `config.manage` + step-up; on the version read | New company version, shown to clients at once; `client_portal.payment_instructions_changed` | Expected version |
 | Pay with M-Pesa (STK Push) | an assigned client; something outstanding (409 `nothing-outstanding`, 422 `amount-exceeds-outstanding`) | **Refused with 503 `stk-push-unavailable`** until D4.2 (the client pays by Paybill; finance records the receipt) | — |

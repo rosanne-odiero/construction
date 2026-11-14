@@ -35,6 +35,8 @@ export type ClientPortalProblem =
   | "receipt-date-invalid"
   | "receipt-already-reversed"
   | "receipt-not-reversible"
+  | "receipt-method-required"
+  | "cash-flow-item-not-linkable"
   | "too-many-client-payments"
   | "payment-id-conflict"
   | "idempotency-key-required"

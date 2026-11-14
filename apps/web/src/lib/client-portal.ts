@@ -84,11 +84,13 @@ export const certificateTone = (state: ClientCertificateState, overdue: boolean)
     ? "danger"
     : state === "paid"
       ? "success"
-      : state === "part_paid"
-        ? "warning"
-        : state === "credit"
-          ? "info"
-          : "neutral";
+      : state === "nothing_due"
+        ? "info"
+        : state === "part_paid"
+          ? "warning"
+          : state === "credit"
+            ? "info"
+            : "neutral";
 
 export const requestTone: Record<ClientRequestState, Tone> = {
   awaiting_decision: "warning",

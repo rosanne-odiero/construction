@@ -10,11 +10,13 @@ import {
 import {
   clientPaymentsResponseSchema,
   type ClientPaymentsResponse,
+  type LinkCashFlowItemRequest,
   type RecordClientPaymentRequest,
   type ReverseClientPaymentRequest,
   type UpdateClientSettingsRequest,
 } from "@pm-buddy/validation";
 import { isUniqueViolation } from "../../../common/database-errors.js";
+import { uuidv7 } from "../../../common/uuid.js";
 import { loadClientLedger } from "../../finance/client-ledger.js";
 import type { Scope } from "../../identity/access-policy.js";
 import { AuthSecurity } from "../../identity/auth-security.service.js";
@@ -243,6 +245,124 @@ export class ClientPaymentsService {
 
   // Helpers -------------------------------------------------------------------------------------
 
+  /**
+   * Links a manual "in" cash-flow line (D5.4) to the certified certificate it pays (D-138), once.
+   * The line then leaves the forecast, the opening position and earned value. A line already
+   * received becomes a client receipt of the same amount, date and reference in the same
+   * transaction (never more than is outstanding), so the money is counted once.
+   */
+  linkCashFlowItem(
+    principal: Principal,
+    projectId: string,
+    itemId: string,
+    input: LinkCashFlowItemRequest,
+    req: Request,
+  ) {
+    return this.scope.run(
+      principal,
+      req,
+      async (scope) => {
+        const { tx, access } = scope;
+        const { readOnly } = await this.recorder(scope, projectId);
+        if (readOnly)
+          throw clientPortalProblem(409, "project-read-only", "Closed projects are read-only");
+        await tx.$queryRaw`SELECT id FROM cash_flow_items WHERE tenant_id = ${access.tenantId}::uuid
+          AND id = ${itemId}::uuid FOR UPDATE`;
+        const item = await tx.cashFlowItem.findFirst({
+          where: { tenantId: access.tenantId, projectId, id: itemId, direction: "in" },
+        });
+        if (!item) throw new NotFoundException("Cash-flow line not found");
+        if (item.valuationId || item.status === "cancelled")
+          throw clientPortalProblem(
+            409,
+            "cash-flow-item-not-linkable",
+            "Only an unlinked expected or received line from the client is linked",
+          );
+        if (item.version !== input.version)
+          throw clientPortalProblem(
+            409,
+            "version-conflict",
+            "This line was changed by someone else. Reload and try again.",
+          );
+        const valuation = await tx.valuation.findFirst({
+          where: { tenantId: access.tenantId, projectId, id: input.valuationId },
+          select: { id: true, status: true },
+        });
+        if (!valuation) throw new NotFoundException("Certificate not found");
+        if (valuation.status !== "certified")
+          throw clientPortalProblem(
+            409,
+            "certificate-not-certified",
+            "Lines are linked to certified certificates",
+          );
+        if (item.status === "received") {
+          if (!input.method)
+            throw clientPortalProblem(
+              422,
+              "receipt-method-required",
+              "Say how the money was received: it becomes a client receipt",
+            );
+          await tx.$queryRaw`SELECT id FROM valuations WHERE tenant_id = ${access.tenantId}::uuid
+            AND id = ${valuation.id}::uuid FOR UPDATE`;
+          const project = await tx.project.findUniqueOrThrow({
+            where: { tenantId_id: { tenantId: access.tenantId, id: projectId } },
+            select: { code: true },
+          });
+          const ledger = await loadClientLedger(tx, access.tenantId, projectId, project.code);
+          const certificate = ledger.certificates.find((row) => row.id === valuation.id)!;
+          const amountMinor = Number(item.receivedMinor);
+          if (!receiptFits(amountMinor, certificate.outstandingMinor))
+            throw clientPortalProblem(
+              409,
+              "receipt-exceeds-outstanding",
+              "The money received on this line is more than is outstanding on the certificate",
+            );
+          const receivedOn = item.receivedOn!;
+          const reference = item.reference?.trim() || `CF-${item.id.slice(0, 8)}`;
+          await tx.clientPayment.create({
+            data: {
+              id: uuidv7(),
+              tenantId: access.tenantId,
+              projectId,
+              valuationId: valuation.id,
+              kind: "receipt",
+              amountMinor: item.receivedMinor!,
+              receivedOn,
+              method: input.method,
+              reference,
+              note: null,
+              idempotencyKey: `cash-flow-item:${item.id}`,
+              requestDigest: requestDigest("client-payment.cash-flow-item", {
+                itemId: item.id,
+                valuationId: valuation.id,
+                amountMinor,
+                receivedOn: receivedOn.toISOString().slice(0, 10),
+              }),
+              recordedBy: access.userId,
+            },
+          });
+        }
+        await tx.cashFlowItem.update({
+          where: { tenantId_id: { tenantId: access.tenantId, id: item.id } },
+          data: {
+            valuationId: valuation.id,
+            version: { increment: 1 },
+            updatedBy: access.userId,
+            updatedAt: new Date(),
+          },
+        });
+        // Identifiers and codes only in the audit log.
+        await this.scope.audit(tx, "cash_flow.item_linked", item.id, {
+          projectId,
+          valuationId: valuation.id,
+          becameReceipt: item.status === "received",
+        });
+        return this.viewOf(scope, projectId);
+      },
+      true,
+    );
+  }
+
   private async recorder(scope: Scope, projectId: string) {
     const found = await staffProject(scope, projectId, CLIENT_PAYMENT_READ_PERMISSIONS);
     if (!CLIENT_PAYMENT_RECORD_PERMISSIONS.some((permission) => found.effective.has(permission)))
@@ -313,10 +433,21 @@ export class ClientPaymentsService {
       CLIENT_PAYMENT_READ_PERMISSIONS,
     );
     const ledger = await loadClientLedger(tx, access.tenantId, projectId, project.code);
-    const [people, clientMembers] = await Promise.all([
+    const [people, clientMembers, cashFlowItems] = await Promise.all([
       peopleOf(tx, [...ledger.payments.map((row) => row.recordedBy), ledger.terms.createdBy]),
       tx.projectMembership.count({
         where: { tenantId: access.tenantId, projectId, permissions: { has: "portal.client" } },
+      }),
+      tx.cashFlowItem.findMany({
+        where: {
+          tenantId: access.tenantId,
+          projectId,
+          direction: "in",
+          valuationId: null,
+          status: { in: ["expected", "received"] },
+        },
+        orderBy: [{ expectedOn: "asc" }, { id: "asc" }],
+        take: 100,
       }),
     ]);
     return clientPaymentsResponseSchema.parse({
@@ -345,6 +476,17 @@ export class ClientPaymentsService {
         updatedAt: ledger.terms.createdAt?.toISOString() ?? null,
       },
       clientMembers,
+      cashFlowItems: cashFlowItems.map((item) => ({
+        id: item.id,
+        description: item.description,
+        expectedOn: item.expectedOn.toISOString().slice(0, 10),
+        amountMinor: Number(item.amountMinor),
+        status: item.status as "expected" | "received",
+        receivedOn: item.receivedOn ? item.receivedOn.toISOString().slice(0, 10) : null,
+        receivedMinor: item.receivedMinor === null ? null : Number(item.receivedMinor),
+        reference: item.reference,
+        version: item.version,
+      })),
       readOnly,
       permissions: {
         canRecord:

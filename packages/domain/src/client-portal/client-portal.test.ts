@@ -227,6 +227,16 @@ describe("client statement (rule D-133)", () => {
     });
     expect(statement.entries.at(-1)).toMatchObject({ kind: "certificate", creditMinor: 5_000_000 });
     expect(statement.entries.at(-1)!.balanceMinor).toBe(32_723_560);
+    // Credit that covers a certificate with no receipt is "nothing due", never "paid".
+    const covered = clientStatement({
+      certificates: [IPC2, { ...IPC3, totalMinor: -50_000_000 }],
+      payments: [],
+      today: "2026-10-20",
+    });
+    expect(covered.certificates.map((row) => [row.number, row.state, row.receivedMinor])).toEqual([
+      ["IPC-0002", "nothing_due", 0],
+      ["IPC-0003", "credit", 0],
+    ]);
     // With nothing left to apply it to, the client is in credit.
     const inCredit = clientStatement({
       certificates: [IPC1, IPC3],

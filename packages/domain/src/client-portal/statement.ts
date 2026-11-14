@@ -154,7 +154,7 @@ export function certificateBalances(input: {
         receivedMinor,
         creditedMinor: 0,
         outstandingMinor: 0,
-        state: certificate.totalMinor < 0 ? "credit" : "paid",
+        state: certificate.totalMinor < 0 ? "credit" : "nothing_due",
         overdue: false,
         overdueDays: 0,
       };
@@ -162,8 +162,15 @@ export function certificateBalances(input: {
     credit -= creditedMinor;
     const outstandingMinor = certificate.totalMinor - receivedMinor - creditedMinor;
     const late = outstandingMinor > 0 ? overdueDays(certificate.dueDate, input.today) : 0;
+    // "Paid" only when recorded receipts cover the total; credit alone is "nothing due".
     const state: ClientCertificateState =
-      outstandingMinor === 0 ? "paid" : receivedMinor === 0 ? "unpaid" : "part_paid";
+      outstandingMinor === 0
+        ? receivedMinor >= certificate.totalMinor
+          ? "paid"
+          : "nothing_due"
+        : receivedMinor === 0
+          ? "unpaid"
+          : "part_paid";
     return {
       ...certificate,
       receivedMinor,

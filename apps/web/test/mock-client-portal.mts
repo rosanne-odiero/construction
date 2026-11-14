@@ -169,6 +169,9 @@ const publicInstructions = (entry: Instructions): PaymentInstructions => ({
   updatedAt: entry.updatedAt,
 });
 
+/** Rates as a client sees them (no staff identities), as the API returns them. */
+const clientRates = () => rates().map(({ enteredBy: _by, enteredAt: _at, ...rate }) => rate);
+
 function rates(): FxRate[] {
   const entry = (id: string, currency: FxCurrency, kesPerUnit: string): FxRate => ({
     id,
@@ -488,13 +491,13 @@ export function handleClientPortal(
   };
   if (method === "GET" && path === "/portal/client/preferences")
     return {
-      body: { displayCurrency: state.currency, rates: rates() },
+      body: { displayCurrency: state.currency, rates: clientRates() },
       schema: clientPreferencesResponseSchema,
     };
   if (method === "PUT" && path === "/portal/client/preferences") {
     state.currency = parse(updateClientPreferencesRequestSchema, body).displayCurrency;
     return {
-      body: { displayCurrency: state.currency, rates: rates() },
+      body: { displayCurrency: state.currency, rates: clientRates() },
       schema: clientPreferencesResponseSchema,
     };
   }
@@ -800,6 +803,7 @@ export function handleClientPortalStaff(
         totals: money.totals,
         settings: state.settings,
         clientMembers: project.id === CLIENT_PROJECT_ID ? 1 : 0,
+        cashFlowItems: [],
         readOnly: readOnly(project.status),
         permissions: {
           canRecord: permissions.includes("finance.manage") && !readOnly(project.status),

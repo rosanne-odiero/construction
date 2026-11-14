@@ -177,6 +177,12 @@ export class CashFlowService {
         await this.access.require(scope, row.projectId, MANAGER, { writable: true });
         if (row.status !== "expected") throw spendingInvalidTransition(row.status);
         if (row.version !== input.version) throw spendingVersionConflict();
+        if (action === "receive" && row.valuationId)
+          throw spendingProblem(
+            409,
+            "cash-flow-item-linked",
+            "This line is linked to a certificate: record the money as a client receipt",
+          );
         if (action === "receive" && input.receivedOn! > nairobiDate())
           throw spendingProblem(
             400,
@@ -416,9 +422,9 @@ export class CashFlowService {
         },
       );
 
-    // Manual lines still expected.
+    // Manual lines still expected (a line linked to a certificate is counted by the certificate).
     const items = await tx.cashFlowItem.findMany({
-      where: { tenantId, projectId, status: "expected" },
+      where: { tenantId, projectId, status: "expected", valuationId: null },
       select: { id: true, direction: true, description: true, expectedOn: true, amountMinor: true },
     });
     for (const item of items)
@@ -451,12 +457,15 @@ export class CashFlowService {
   ) {
     const since = company?.openingCashOn ?? null;
     const sinceDate = since ? date(since) : undefined;
-    const [received, settled, topUps] = await Promise.all([
-      tx.cashFlowItem.aggregate({
+    const [manual, settled, topUps] = await Promise.all([
+      // Received manual lines by direction; a line linked to a certificate became a client receipt.
+      tx.cashFlowItem.groupBy({
+        by: ["direction"],
         where: {
           tenantId,
           projectId: { in: projectIds },
           status: "received",
+          valuationId: null,
           ...(sinceDate ? { receivedOn: { gte: sinceDate } } : {}),
         },
         _sum: { receivedMinor: true },
@@ -485,9 +494,13 @@ export class CashFlowService {
       projectIds,
       since ? { from: since } : {},
     );
-    const receivedSinceMinor = minorOf(received._sum.receivedMinor ?? 0n) + (clientReceipts ?? 0);
+    const manualMinor = (direction: "in" | "out") =>
+      minorOf(manual.find((row) => row.direction === direction)?._sum.receivedMinor ?? 0n);
+    const receivedSinceMinor = manualMinor("in") + (clientReceipts ?? 0);
     const paidSinceMinor =
-      minorOf(settled._sum.amountMinor ?? 0n) + minorOf(topUps._sum.amountMinor ?? 0n);
+      minorOf(settled._sum.amountMinor ?? 0n) +
+      minorOf(topUps._sum.amountMinor ?? 0n) +
+      manualMinor("out");
     if (!company)
       return {
         basis: "derived" as const,

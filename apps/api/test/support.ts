@@ -484,7 +484,11 @@ function documentsContract(method: string, path: string) {
 /** The D7.1 client portal endpoints' success contracts (client and staff sides). */
 function clientPortalContract(full: string) {
   const path = full.split("?")[0]!;
-  if (/^projects\/[^/]+\/(client-payments(\/[^/]+\/reverse)?|client-settings)$/.test(path))
+  if (
+    /^projects\/[^/]+\/(client-payments(\/[^/]+\/reverse|\/cash-flow-items\/[^/]+\/link)?|client-settings)$/.test(
+      path,
+    )
+  )
     return clientPaymentsResponseSchema;
   if (/^projects\/[^/]+\/bq\/variations\/[^/]+\/client$/.test(path))
     return variationClientResponseSchema;

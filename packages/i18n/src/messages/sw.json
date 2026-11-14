@@ -11263,7 +11263,8 @@
       "piece-rate-above-measured": "Imelipwa zaidi ya iliyopimwa",
       "combined-above-measured": "Kipande + mkataba mdogo juu ya iliyopimwa",
       "not-measured": "Imelipwa lakini haijapimwa",
-      "unlinked-outputs": "Kazi bila kazi iliyokubaliwa"
+      "unlinked-outputs": "Kazi bila kazi iliyokubaliwa",
+      "not-comparable": "Kazi kwa kipimo kingine (haijalinganishwa)"
     },
     "problems": {
       "subcontractorNotEligible": "Chagua msambazaji aliye hai aliyewekwa alama kama mkandarasi mdogo.",
@@ -11273,7 +11274,7 @@
       "overBqQuantity": "Hii ingetoa zaidi ya kiasi cha BQ cha kipengele; toa sababu ya kuzidi.",
       "advanceNotRecoverable": "Malipo ya awali hayawezi kurejeshwa kwa asilimia ya urejeshaji ndani ya thamani ya mkataba mdogo.",
       "subcontractStale": "Mkataba mdogo umebadilika tangu uwasilishwe. Pakia upya na uidhinishe tena.",
-      "subcontractHasOpenItems": "Maliza au ghairi cheti au mabadiliko yaliyo wazi kwanza.",
+      "subcontractHasOpenItems": "Maliza au ghairi cheti, mabadiliko au malipo ya awali yaliyo wazi kwanza.",
       "variationOpen": "Mabadiliko tayari yanasubiri uamuzi.",
       "variationStale": "Mabadiliko si yale uliyoyaona. Pakia upya na uamue tena.",
       "lineBelowCertified": "Mstari hauwezi kushuka chini ya kilichokwisha thibitishwa.",

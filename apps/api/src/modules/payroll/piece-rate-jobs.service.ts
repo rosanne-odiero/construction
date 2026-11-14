@@ -10,6 +10,7 @@ import {
   pieceRateJobCode,
   reconcileItem,
   resolveConversion,
+  sameUnit,
   STANDARD_UNITS,
   sumQuantities,
   toBqQuantity,
@@ -618,10 +619,12 @@ export class PieceRateJobsService {
           const own = outputs.filter(
             (output) => lineageOf.get(output.bqItemId!) === item.lineageId,
           );
+          const comparable = (output: (typeof own)[number]) =>
+            output.jobId !== null || sameUnit(output.unit, item.unit);
           const inBqUnit = (output: (typeof own)[number]) =>
             output.jobId
               ? toBqQuantity(output.quantity.toFixed(), factorOf.get(output.jobId) ?? "1")
-              : output.unit === item.unit
+              : comparable(output)
                 ? output.quantity.toFixed()
                 : "0";
           const approved = own.filter((output) => output.status === "approved");
@@ -631,6 +634,7 @@ export class PieceRateJobsService {
             pieceRate,
             subcontracted: subcontracted.get(item.lineageId) ?? "0",
             unlinkedApproved: approved.filter((output) => output.jobId === null).length,
+            notComparable: approved.filter((output) => !comparable(output)).length,
           });
           return {
             bqItem: {

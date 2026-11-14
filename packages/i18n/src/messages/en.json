@@ -11263,7 +11263,8 @@
       "piece-rate-above-measured": "Paid above measured",
       "combined-above-measured": "Piece rate + subcontract above measured",
       "not-measured": "Paid but not measured",
-      "unlinked-outputs": "Output without a job"
+      "unlinked-outputs": "Output without a job",
+      "not-comparable": "Output in another unit (not compared)"
     },
     "problems": {
       "subcontractorNotEligible": "Choose an active supplier flagged as a subcontractor.",
@@ -11273,7 +11274,7 @@
       "overBqQuantity": "This would let more than the BQ quantity of the item; give a reason to go above it.",
       "advanceNotRecoverable": "The advance cannot be recovered by the recovery percentage within the subcontract value.",
       "subcontractStale": "The subcontract changed since it was submitted. Reload and approve again.",
-      "subcontractHasOpenItems": "Finish or cancel the open certificate or variation first.",
+      "subcontractHasOpenItems": "Finish or cancel the open certificate, variation or advance first.",
       "variationOpen": "A variation is already waiting for a decision.",
       "variationStale": "The variation is not the one you saw. Reload and decide again.",
       "lineBelowCertified": "A line cannot go below what was already certified.",

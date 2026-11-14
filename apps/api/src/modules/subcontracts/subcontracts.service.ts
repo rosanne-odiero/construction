@@ -90,6 +90,41 @@ type AdvanceRow = Prisma.SubcontractAdvanceGetPayload<object>;
 type Problem = { code: string; ref: string | null };
 
 const OPEN_FOR_WORK: SubcontractStatus[] = ["approved", "active"];
+
+/** A variation's digest: the same whichever order its lines and changes are listed or read in. */
+function variationDigest(content: {
+  subcontractId: string;
+  number: number;
+  reason: string;
+  additions: {
+    lineage: string;
+    quantity: string;
+    rateMinor: number | null;
+    amountMinor: number;
+    vatTreatment: string;
+  }[];
+  changes: {
+    lineId: string;
+    quantityChange: string;
+    amountChangeMinor: number;
+    overQuantityReason: string | null;
+  }[];
+  valueChangeMinor: number;
+}) {
+  const byKey = (key: string, other: string) => (key < other ? -1 : key > other ? 1 : 0);
+  return requestDigest("subcontract.variation", {
+    ...content,
+    additions: content.additions
+      .map((line) => ({ ...line, quantity: scaled(line.quantity, 4).toString() }))
+      .sort((x, y) => byKey(x.lineage, y.lineage)),
+    changes: content.changes
+      .map((change) => ({
+        ...change,
+        quantityChange: scaled(change.quantityChange, 4).toString(),
+      }))
+      .sort((x, y) => byKey(x.lineId, y.lineId)),
+  });
+}
 const percentText = (value: string | null | undefined) => value ?? null;
 
 /**
@@ -523,11 +558,18 @@ export class SubcontractsService {
             })) +
             (await tx.subcontractVariation.count({
               where: { tenantId: access.tenantId, subcontractId: id, status: "pending" },
+            })) +
+            (await tx.subcontractAdvance.count({
+              where: {
+                tenantId: access.tenantId,
+                subcontractId: id,
+                status: { in: ["requested", "approved"] },
+              },
             }));
           if (open)
             throw subcontractConflict(
               "subcontract-has-open-items",
-              "Finish or cancel the open certificate or variation first",
+              "Finish or cancel the open certificate, variation or advance first",
             );
           await tx.subcontract.update({
             where: { tenantId_id: { tenantId: access.tenantId, id } },
@@ -652,7 +694,7 @@ export class SubcontractsService {
         });
         const number = (highest._max.number ?? 0) + 1;
         const variationId = nextId();
-        const digest = requestDigest("subcontract.variation", {
+        const digest = variationDigest({
           subcontractId: id,
           number,
           reason: input.reason,
@@ -758,7 +800,36 @@ export class SubcontractsService {
             },
           });
         } else {
-          if (input.digest !== variation.digest)
+          // Recomputed from the stored lines and changes, so nothing added after it was raised
+          // is approved unseen.
+          const [added, changed] = await Promise.all([
+            tx.subcontractLine.findMany({
+              where: { tenantId: access.tenantId, variationId },
+            }),
+            tx.subcontractLineChange.findMany({
+              where: { tenantId: access.tenantId, variationId },
+            }),
+          ]);
+          const stored = variationDigest({
+            subcontractId: id,
+            number: variation.number,
+            reason: variation.reason,
+            additions: added.map((line) => ({
+              lineage: line.bqItemLineageId,
+              quantity: line.quantity.toString(),
+              rateMinor: line.rateMinor === null ? null : minorOf(line.rateMinor),
+              amountMinor: minorOf(line.amountMinor),
+              vatTreatment: line.vatTreatment,
+            })),
+            changes: changed.map((change) => ({
+              lineId: change.lineId,
+              quantityChange: change.quantityChange.toString(),
+              amountChangeMinor: minorOf(change.amountChangeMinor),
+              overQuantityReason: change.overQuantityReason,
+            })),
+            valueChangeMinor: minorOf(variation.valueChangeMinor),
+          });
+          if (input.digest !== variation.digest || stored !== variation.digest)
             throw subcontractConflict(
               "subcontract-variation-stale",
               "The variation is not the one you saw; reload and decide again",
@@ -900,6 +971,9 @@ export class SubcontractsService {
           action === "cancel" ? ["requested", "approved"] : ["requested"];
         if (!allowed.includes(advance.status as SubcontractAdvanceStatus))
           throw invalidTransition(advance.status);
+        // A closed subcontract has no certificate left to recover an advance from.
+        if (action === "approve" && !OPEN_FOR_WORK.includes(row.status as SubcontractStatus))
+          throw invalidTransition(row.status);
         if (action !== "cancel" && advance.requestedBy === access.userId)
           throw makerChecker("The person who asked for an advance cannot decide it");
         if (
@@ -943,6 +1017,8 @@ export class SubcontractsService {
           stepUp: true,
         });
         if (advance.status !== "approved") throw invalidTransition(advance.status);
+        if (!OPEN_FOR_WORK.includes(row.status as SubcontractStatus))
+          throw invalidTransition(row.status);
         if (advance.requestedBy === access.userId || advance.decidedBy === access.userId)
           throw makerChecker("Whoever asked for or approved an advance cannot record its payment");
         if (input.paidOn > nairobiDate())
@@ -1028,8 +1104,8 @@ export class SubcontractsService {
           where: { tenantId_id: { tenantId: access.tenantId, id: advanceId } },
         });
         if (!advance) throw new NotFoundException("Advance not found");
+        await lockSubcontract(tx, access.tenantId, advance.subcontractId);
         const row = await this.record(scope, advance.subcontractId);
-        await lockSubcontract(tx, access.tenantId, row.id);
         if (advance.version !== version) throw versionConflict();
         const event = await work(scope, advance, row);
         await this.scope.audit(tx, event, advanceId, {

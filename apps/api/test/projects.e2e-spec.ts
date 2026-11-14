@@ -1566,7 +1566,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       // plastering and SC-0002 supply-and-fix windows (one line each), active; the plasterer's paid
       // advance; SCC-0001 certified with a part payment and the matched invoice, and a draft
       // certificate on SC-0002; the walling piece-rate job with three approved outputs.
-      bqVariations: [{ status: "approved" }],
+      bqVariations: [{ status: "approved" }, { status: "submitted" }],
       subcontracts: [
         { number: 1, kind: "labour_only", status: "active" },
         { number: 2, kind: "supply_and_fix", status: "active" },
@@ -1581,6 +1581,19 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       subcontractInvoices: 1,
       pieceRateJobs: [{ status: "approved" }],
       jobOutputs: [{ status: "approved" }, { status: "approved" }, { status: "approved" }],
+      // D7.1 on RUI-HTS: client terms, the company's Paybill instructions and three indicative
+      // rates, a part payment of IPC-0001 by M-Pesa Paybill, and a submitted variation sent to
+      // the client and awaiting their decision (VO-002: D6.3 part B's VO-001 comes first).
+      variations: [
+        { number: "VO-001", status: "approved" },
+        { number: "VO-002", status: "submitted" },
+      ],
+      clientTerms: 1,
+      paymentInstructions: 1,
+      fxRates: 3,
+      clientPayments: [{ kind: "receipt", method: "mpesa_paybill" }],
+      variationClientRequests: 1,
+      variationClientDecisions: 0,
     });
     expect(afterFirst.subcontractCertificates).toHaveLength(2);
     expect(first.subcontracts).toMatchObject({
@@ -1592,23 +1605,13 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       pieceRateJobs: [{ code: "PRJ-0001", status: "approved" }],
       // Walling: 96 m² of piece-rate output approved against 90 m² measured.
       flaggedItems: 1,
-      // D7.1 on RUI-HTS: client terms, the company's Paybill instructions and three indicative
-      // rates, a part payment of IPC-0001 by M-Pesa Paybill, and a submitted variation sent to
-      // the client and awaiting their decision.
-      variations: [{ number: "VO-001", status: "submitted" }],
-      clientTerms: 1,
-      paymentInstructions: 1,
-      fxRates: 3,
-      clientPayments: [{ kind: "receipt", method: "mpesa_paybill" }],
-      variationClientRequests: 1,
-      variationClientDecisions: 0,
     });
     expect(first.clientPortal).toMatchObject({
       project: "RUI-HTS",
       displayCurrency: "GBP",
       paybill: "174379",
       receipts: 1,
-      variation: { number: "VO-001", state: "awaiting_decision" },
+      variation: { number: "VO-002", state: "awaiting_decision" },
     });
     expect(first.documents).toMatchObject({
       documents: 13,

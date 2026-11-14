@@ -107,6 +107,7 @@ export async function loadProjectFacts(
     materials,
     paidOther,
     subcontracted,
+    subcontractCash,
   ] = await Promise.all([
     budget
       ? tx.budgetLine.findMany({
@@ -143,11 +144,23 @@ export async function loadProjectFacts(
       where: { tenantId, projectId, measure: "accrued", invoiceId: { not: null } },
       _sum: { amountMinor: true },
     }),
+    // A subcontract payment's cost entries hold only its cost share (no VAT, withholding added
+    // back), so the cash comes from the payments themselves.
     tx.costEntry.aggregate({
-      where: { tenantId, projectId, measure: "paid", settlementId: null },
+      where: {
+        tenantId,
+        projectId,
+        measure: "paid",
+        settlementId: null,
+        subcontractPaymentId: null,
+      },
       _sum: { amountMinor: true },
     }),
     subcontractCommitments(tx, tenantId, projectId),
+    tx.subcontractPayment.aggregate({
+      where: { tenantId, projectId },
+      _sum: { amountMinor: true },
+    }),
   ]);
   const issued = new Map<string, { versionId: string; value: number }>();
   for (const row of issueRows) {
@@ -200,7 +213,8 @@ export async function loadProjectFacts(
     transferredInMinor: transfer("in"),
     transferredOutMinor: transfer("out"),
     settledCashMinor: minorOf(settled._sum.amountMinor ?? 0n),
-    paidNotFromSettlementsMinor: minorOf(paidOther._sum.amountMinor ?? 0n),
+    paidNotFromSettlementsMinor:
+      minorOf(paidOther._sum.amountMinor ?? 0n) + minorOf(subcontractCash._sum.amountMinor ?? 0n),
   };
 }
 

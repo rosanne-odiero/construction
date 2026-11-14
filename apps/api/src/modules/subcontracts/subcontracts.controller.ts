@@ -312,7 +312,7 @@ export class SubcontractsController {
   @HttpCode(200)
   @ApiOperation({
     operationId: "completeSubcontract",
-    summary: "Complete an active subcontract (no open certificate or variation)",
+    summary: "Complete an active subcontract (no open certificate, variation or advance)",
     description:
       "Requires bq.edit or procurement.approve on the project (409 subcontract-has-open-items).",
   })

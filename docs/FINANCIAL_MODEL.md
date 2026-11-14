@@ -48,7 +48,7 @@ These are proposed accounting policies, not approved defaults for production.
 | Amount due D | W − R − V − Σ amounts due already certified (may be negative: it corrects the last certificate) |
 | VAT | round(D × VAT % × VATable work ÷ W), VATable = standard-rated lines (CR-SCN-02) |
 | Withholding tax | round(D × WHT %), shown separately, default 0 until configured (CR-SCN-01) |
-| Payable | D + VAT − WHT |
+| Payable | D + VAT − WHT (negative on a correcting certificate: nothing is paid against it, and it nets off what is left to pay on the subcontract — payments are capped per certificate **and** at Σ certified payable − Σ paid for the subcontract) |
 
 Golden figures (synthetic; seed, e2e and domain tests): plastering 450 m² @ 280 = 126,000.00, retention 5 % limited to 5 % (6,300.00), advance 20,000.00 paid and recovered at 20 %, WHT 3 %, no VAT; at 200 m²: W 56,000.00, R 2,800.00, V 11,200.00, D 42,000.00, WHT 1,260.00, payable 40,740.00; the practical release then pays 1,400.00 (WHT 42.00, payable 1,358.00). Windows 36 m² @ 8,200, standard-rated at 16 %, retention 10 % limited to 5 %: at 12 m² W 98,400.00, R 9,840.00, D 88,560.00, VAT 14,169.60, payable 102,729.60.
 
@@ -62,7 +62,7 @@ Golden figures (synthetic; seed, e2e and domain tests): plastering 450 m² @ 280
 | Subcontractor's tax invoice matched | **Nothing** (the certificate is the accrual) | Its number can never also be a D5.2 supplier invoice of the same supplier |
 | Correction | A D5.4 reversal journal of the entry, approved by another person | The original entry is never changed |
 
-Committed (D-146) = approved and active subcontracts' value in force − certified work, per line and BQ item; it is reported apart from actual (accrued) and paid, so no shilling is counted twice. An accounting reviewer must still approve these policies and the withholding-tax and VAT treatment before live use (COMPLIANCE_TODO CR-SCN-01–05).
+Committed (D-146) = approved and active subcontracts' value in force − certified work, per line and BQ item; it is reported apart from actual (accrued) and paid, so no shilling is counted twice. The spending page's *cash paid* counts a subcontract payment's cash (VAT included, before withholding), not the cost part the ledger holds. An accounting reviewer must still approve these policies and the withholding-tax and VAT treatment before live use (COMPLIANCE_TODO CR-SCN-01–05).
 
 ## Allocations, corrections and period closure
 

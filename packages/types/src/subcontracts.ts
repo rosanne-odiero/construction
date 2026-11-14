@@ -268,12 +268,16 @@ export const PIECE_RATE_RECONCILIATION_PERMISSIONS = [
  *   measured quantity (D6.3) — paying for work that was not measured;
  * - `combined-above-measured`: piece-rate plus subcontract-certified quantity above it;
  * - `not-measured`: piece-rate output approved on an item with no approved measurement;
- * - `unlinked-outputs`: approved outputs on the item recorded without a job (free rate).
+ * - `unlinked-outputs`: approved outputs on the item recorded without a job (free rate);
+ * - `not-comparable`: some of those are in a unit that cannot be compared with the item's, so
+ *   their quantity is missing from the comparison (counted as flagged: it may hide pay above
+ *   measured work).
  */
 export const RECONCILIATION_FLAGS = [
   "piece-rate-above-measured",
   "combined-above-measured",
   "not-measured",
   "unlinked-outputs",
+  "not-comparable",
 ] as const;
 export type ReconciliationFlag = (typeof RECONCILIATION_FLAGS)[number];

@@ -168,7 +168,7 @@ const RULES: [RegExp, 403 | 409 | 422, SubcontractProblem, string][] = [
     "This is more than the advance agreed",
   ],
   [
-    /never exceed what the certificate made payable/,
+    /never exceed what the (certificate|subcontract's certified certificates) made payable/,
     409,
     "payment-exceeds-payable",
     "This is more than is still payable",
@@ -236,10 +236,10 @@ const RULES: [RegExp, 403 | 409 | 422, SubcontractProblem, string][] = [
     "A payment date cannot be in the future",
   ],
   [
-    /no certificate or variation open/,
+    /no certificate, variation or advance open/,
     409,
     "subcontract-has-open-items",
-    "Finish or cancel the open certificate or variation first",
+    "Finish or cancel the open certificate, variation or advance first",
   ],
   [
     /terms and version in force|nets off every certificate|advances paid by its date|lines add up|terms in force|exactly as submitted|retention left/,
@@ -248,7 +248,7 @@ const RULES: [RegExp, 403 | 409 | 422, SubcontractProblem, string][] = [
     "Something changed since it was submitted; return it and submit again",
   ],
   [
-    /never change|never deleted|never rewritten|cannot change from|only with their submission|only ever added|keeps its|only on an interim draft|while it is pending|starts as|on an approved|for an active subcontract|at least one line/,
+    /never change|never deleted|never rewritten|cannot change from|only with their submission|only ever added|keeps its|only on an interim draft|while it is pending|starts as|on an approved|for an active subcontract|while its subcontract is live|at least one line/,
     409,
     "invalid-transition",
     "Not possible in this state",

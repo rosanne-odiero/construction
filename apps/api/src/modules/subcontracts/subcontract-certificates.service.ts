@@ -523,6 +523,7 @@ export class SubcontractCertificatesService {
           writable: true,
           stepUp: true,
         });
+        await lockSubcontract(tx, access.tenantId, row.subcontractId);
         await tx.$queryRaw`SELECT id FROM subcontract_certificates WHERE tenant_id = ${access.tenantId}::uuid AND id = ${id}::uuid FOR UPDATE`;
         if (row.status !== "certified") throw invalidTransition(row.status);
         if (row.certifiedBy === access.userId)
@@ -536,6 +537,31 @@ export class SubcontractCertificatesService {
           throw subcontractConflict(
             "payment-exceeds-payable",
             "This is more than is still payable on the certificate",
+          );
+        // A correcting certificate's negative payable nets off what is left to pay on the
+        // subcontract, so earlier certificates are never paid in full past it.
+        const [payable, paidOnSubcontract] = await Promise.all([
+          tx.subcontractCertificate.aggregate({
+            where: {
+              tenantId: access.tenantId,
+              subcontractId: row.subcontractId,
+              status: "certified",
+            },
+            _sum: { payableMinor: true },
+          }),
+          tx.subcontractPayment.aggregate({
+            where: { tenantId: access.tenantId, subcontractId: row.subcontractId },
+            _sum: { amountMinor: true },
+          }),
+        ]);
+        if (
+          input.amountMinor >
+          minorOf(payable._sum.payableMinor ?? 0n) -
+            minorOf(paidOnSubcontract._sum.amountMinor ?? 0n)
+        )
+          throw subcontractConflict(
+            "payment-exceeds-payable",
+            "This is more than is still payable on the subcontract after its correcting certificates",
           );
         if (input.paidOn > nairobiDate() || input.paidOn < toCalendarDate(row.valuationDate))
           throw subcontractConflict(

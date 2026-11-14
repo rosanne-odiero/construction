@@ -14,6 +14,7 @@ import {
   checkLineAgainstBq,
   jobQuantityInForce,
   reconcileItem,
+  sameUnit,
   suggestedClaim,
   sumQuantities,
   toBqQuantity,
@@ -381,6 +382,25 @@ describe("quantity caps", () => {
       reconcileItem({ measured: null, pieceRate: "5", subcontracted: "0", unlinkedApproved: 0 })
         .flags,
     ).toEqual(["not-measured", "piece-rate-above-measured"]);
+    // Output in a unit that cannot be compared is left out of the quantity but flagged.
+    expect(
+      reconcileItem({
+        measured: "100",
+        pieceRate: "0",
+        subcontracted: "0",
+        unlinkedApproved: 1,
+        notComparable: 1,
+      }).flags,
+    ).toEqual(["unlinked-outputs", "not-comparable"]);
+  });
+
+  it("compares units by their normalised form", () => {
+    expect(sameUnit("M2", "m2")).toBe(true);
+    expect(sameUnit("m²", "sq m")).toBe(true);
+    expect(sameUnit("Bags", "bags")).toBe(true);
+    expect(sameUnit("m2", "m3")).toBe(false);
+    expect(sameUnit("Bags", "Trips")).toBe(false);
+    expect(sameUnit(null, null)).toBe(false);
   });
 });
 

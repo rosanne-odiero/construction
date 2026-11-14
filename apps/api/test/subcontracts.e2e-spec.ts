@@ -5,7 +5,7 @@ import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
-import { addCalendarDays, nairobiDate } from "@pm-buddy/domain";
+import { addCalendarDays, invoiceNumberKey, nairobiDate } from "@pm-buddy/domain";
 import { BQ_ROUNDING, BQ_VAT_RULE, CURRENT_CONSENT_NOTICE } from "@pm-buddy/types";
 import {
   budgetDetailResponseSchema,
@@ -38,10 +38,12 @@ import {
 } from "@pm-buddy/validation";
 import { uuidv7 } from "../src/common/uuid.js";
 import { AppModule } from "../src/app.module.js";
+import type { Prisma } from "../src/generated/prisma/client.js";
 import { configureApp } from "../src/app.setup.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
+import { invoiceNumberTaken } from "../src/modules/procurement/p2p/invoices.service.js";
 import { plainJpeg } from "./photo-fixtures.js";
 import { Browser, notifications, origin } from "./support.js";
 
@@ -141,6 +143,7 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
   type Raw = {
     $executeRaw: (s: TemplateStringsArray, ...v: unknown[]) => Promise<number>;
     $queryRaw: <T>(s: TemplateStringsArray, ...v: unknown[]) => Promise<T>;
+    $queryRawUnsafe: <T>(query: string) => Promise<T>;
   };
   const raw = <T>(browser: Browser, work: (tx: Raw) => Promise<T>) =>
     db.run(context(browser), (tx) => work(tx as unknown as Raw));
@@ -249,6 +252,10 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
       ),
     );
   };
+  const spendingView = async () =>
+    projectSpendingResponseSchema.parse(
+      ok(await finance.call("get", `spending/projects/${projectId}`)),
+    );
   const ledger = async (query = "") =>
     costLedgerResponseSchema.parse(
       ok(
@@ -730,6 +737,8 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
         kind: "labour_only",
         title: "Plaster patching",
         vatPercent: "0",
+        advanceLimitMinor: 100_000,
+        advanceRecoveryPercent: "50",
       }),
       201,
     );
@@ -933,6 +942,42 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
     refused(await sccAct(pm, other, "/submit"), 409, "claim-exceeds-measured");
     other = parseScc(await sccAct(pm, other, "/cancel", { reason: "Nothing measured left" }));
     expect(other.status).toBe("cancelled");
+    // An advance still requested or approved keeps the subcontract open: once closed, no
+    // certificate is left to recover it from.
+    sc3 = parseSc(
+      await pm.call("post", `subcontracts/${sc3.id}/advances`, {
+        amountMinor: 100_000,
+        reason: "Patching materials (synthetic)",
+      }),
+      201,
+    );
+    const terminate = async () =>
+      scAct(owner, await getSc(owner, sc3), "/terminate", { reason: "Closing early (synthetic)" });
+    await fresh(owner);
+    refused(await terminate(), 409, "subcontract-has-open-items");
+    await fresh(finance);
+    sc3 = parseSc(
+      await finance.call("post", `subcontracts/advances/${sc3.advances[0]!.id}/approve`, {
+        version: sc3.advances[0]!.version,
+      }),
+    );
+    refused(await terminate(), 409, "subcontract-has-open-items");
+    await expect(
+      raw(
+        owner,
+        (tx) => tx.$executeRaw`
+          UPDATE subcontracts SET status = 'terminated', closed_by = ${owner.auth.user.id}::uuid,
+                 close_reason = 'Closed directly (test)', version = version + 1
+           WHERE tenant_id = ${tenantA}::uuid AND id = ${sc3.id}::uuid`,
+      ),
+    ).rejects.toThrow(/no certificate, variation or advance open/);
+    sc3 = parseSc(
+      await finance.call("post", `subcontracts/advances/${sc3.advances[0]!.id}/cancel`, {
+        version: sc3.advances[0]!.version,
+        reason: "Patching needs no materials",
+      }),
+    );
+    expect(sc3.advances[0]!.status).toBe("cancelled");
     await fresh(owner);
     sc3 = parseSc(
       await scAct(owner, await getSc(owner, sc3), "/terminate", {
@@ -983,6 +1028,7 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
       409,
       "payment-exceeds-payable",
     );
+    const cashBefore = (await spendingView()).cashPaidMinor;
     const key = randomUUID();
     const first = await pay(owner, scc1, { amountMinor: 2_000_000, reference: "EFT-0001" }, key);
     scc1 = parseScc(first);
@@ -1005,6 +1051,8 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
     expect(paid.map((entry) => entry.amountMinor).sort((x, y) => x - y)).toEqual([
       2_061_856, 2_138_144,
     ]);
+    // Cash paid is the cash (4,074,000), not the cost share the ledger holds (4,200,000).
+    expect((await spendingView()).cashPaidMinor - cashBefore).toBe(4_074_000);
 
     // The subcontractor's tax invoice is matched to the certificate; it posts nothing, so the
     // work is never accrued twice. Its number is never also a procure-to-pay invoice.
@@ -1047,6 +1095,19 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
             ${finance.auth.user.id}::uuid)`,
       ),
     ).rejects.toThrow(/matched to a subcontract certificate/);
+    // The procure-to-pay check refuses the number first (409 invoice-number-taken, not a 500).
+    const taken = (supplierId: string, number: string) =>
+      raw(finance, (tx) =>
+        invoiceNumberTaken(
+          tx as unknown as Prisma.TransactionClient,
+          tenantA,
+          supplierId,
+          invoiceNumberKey(number),
+          null,
+        ),
+      );
+    expect(await taken(supplier.plaster, "PM-INV-001")).toBe(true);
+    expect(await taken(supplier.windows, "PM-INV-001")).toBe(false);
 
     // The statement: certified, paid, retention held and advances outstanding.
     sc1 = await getSc(finance, sc1);
@@ -1448,6 +1509,19 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
         (tx) => tx.$executeRaw`DELETE FROM subcontracts WHERE id = ${sc1.id}::uuid`,
         /never deleted|permission denied/,
       ],
+      // Who submitted, approved and started it never changes, whatever else is updated.
+      [
+        pm,
+        (tx) =>
+          tx.$executeRaw`UPDATE subcontracts SET activated_by = ${finance.auth.user.id}::uuid WHERE id = ${sc1.id}::uuid`,
+        /keeps its submission and approval/,
+      ],
+      [
+        pm,
+        (tx) =>
+          tx.$executeRaw`UPDATE subcontracts SET submitted_by = ${finance.auth.user.id}::uuid WHERE id = ${sc1.id}::uuid`,
+        /keeps its submission and approval/,
+      ],
       [
         pm,
         (tx) =>
@@ -1603,11 +1677,17 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
       expect(values, String(figure)).toContain(figure);
     const statementPdf = await pm.download(`subcontracts/${sc1.id}/statement/pdf`);
     expect((statementPdf.body as Buffer).subarray(0, 4).toString()).toBe("%PDF");
-    for (const outsider of [client, agent]) {
+    // A client member does not even see the rows (restrictive RLS), so they are not found.
+    for (const [outsider, status] of [
+      [client, 404],
+      [agent, 403],
+    ] as const) {
       expect(
         (await outsider.download(`subcontract-certificates/${scc1.id}/export/pdf`)).status,
-      ).toBe(403);
-      expect((await outsider.download(`subcontracts/${sc1.id}/statement/xlsx`)).status).toBe(403);
+      ).toBe(status);
+      expect((await outsider.download(`subcontracts/${sc1.id}/statement/xlsx`)).status).toBe(
+        status,
+      );
     }
   });
 
@@ -1632,14 +1712,139 @@ describe("Subcontracts and piece-rate jobs (real runtime role)", () => {
     // Quantity surveyors prepare and read but neither approve nor certify.
     refused(await sccAct(qs, scc2, "/return", { reason: "Not certified by a QS" }), 403);
     for (const outsider of [client, consultant]) {
-      refused(await outsider.call("get", `subcontracts/${sc1.id}`), 403);
+      refused(
+        await outsider.call("get", `subcontracts/${sc1.id}`),
+        outsider === client ? 404 : 403,
+      );
       refused(await outsider.call("get", `payroll/projects/${projectId}/piece-rate-jobs`), 403);
     }
-    // A supplier-role member (D7.2 portal) does not even see that subcontract rows exist (a
-    // restrictive RLS policy), so the record is simply not found.
+    // Client members (D7.1) and supplier-role members (D7.2 portal) do not even see that
+    // subcontract rows exist (restrictive RLS policies), so the record is simply not found.
     refused(await supplierUser.call("get", `subcontracts/${sc1.id}`), 404);
     refused(await supplierUser.call("get", `subcontract-certificates/${scc1.id}`), 404);
     refused(await supplierUser.call("get", `payroll/projects/${projectId}/piece-rate-jobs`), 403);
+
+    // In the database, supplier-role members read no piece-rate job, and client members (D7.1)
+    // read none of the subcontract and piece-rate tables.
+    const tables = [
+      "subcontracts",
+      "subcontract_lines",
+      "subcontract_variations",
+      "subcontract_line_changes",
+      "subcontract_advances",
+      "subcontract_certificates",
+      "subcontract_certificate_claims",
+      "subcontract_certificate_lines",
+      "subcontract_payments",
+      "subcontract_invoices",
+      "piece_rate_jobs",
+      "piece_rate_job_extensions",
+    ];
+    const count = (browser: Browser, table: string) =>
+      raw(browser, async (tx) =>
+        Number(
+          (
+            await tx.$queryRawUnsafe<{ n: bigint }[]>(`SELECT count(*)::bigint AS n FROM ${table}`)
+          )[0]!.n,
+        ),
+      );
+    for (const table of tables) {
+      const seen = await count(owner, table);
+      if (table !== "piece_rate_job_extensions") expect(seen, table).toBeGreaterThan(0);
+      expect(await count(client, table), table).toBe(0);
+      if (table.startsWith("piece_rate")) expect(await count(supplierUser, table), table).toBe(0);
+    }
+  });
+
+  it("nets a correcting certificate off what is left to pay on the subcontract", async () => {
+    // L is re-measured down from 25 % to 15 %, so SC-0002's next certificate is negative.
+    const photo = await uploadPhoto();
+    const lower = measurementResponseSchema.parse(
+      ok(
+        await agent.call("post", `projects/${projectId}/measurements`, {
+          bqItemLineageId: item.L,
+          measuredOn: daysAgo(3),
+          quantityToDate: "15",
+          photoIds: [photo],
+        }),
+        201,
+      ),
+    ).measurement;
+    ok(await qs.call("post", `projects/${projectId}/measurements/${lower.id}/approve`, {}));
+    let credit = parseScc(await sccOpen(pm, sc2, daysAgo(2)), 201);
+    credit = parseScc(
+      await claim(pm, credit, [
+        { lineId: lineOf(sc2, item.B).id, quantityToDate: "12" },
+        { lineId: lineOf(sc2, item.L).id, quantityToDate: "15" },
+      ]),
+    );
+    credit = parseScc(await sccAct(pm, credit, "/submit"));
+    await fresh(finance);
+    credit = parseScc(await sccAct(finance, credit, "/certify", { digest: credit.digest }));
+    const negative = credit.payableMinor!;
+    expect(negative).toBeLessThan(0);
+    refused(await pay(owner, credit, { amountMinor: 1, reference: "EFT-CR-1" }), 409);
+
+    // SCC-0002 alone made 11,316,960 payable, but the credit nets off what is left to pay.
+    await fresh(owner);
+    const left = 11_316_960 + negative;
+    refused(
+      await pay(owner, scc2, { amountMinor: 11_316_960, reference: "EFT-SC2-1" }),
+      409,
+      "payment-exceeds-payable",
+    );
+    scc2 = parseScc(await pay(owner, scc2, { amountMinor: left, reference: "EFT-SC2-2" }));
+    refused(
+      await pay(owner, scc2, { amountMinor: 1, reference: "EFT-SC2-3" }),
+      409,
+      "payment-exceeds-payable",
+    );
+    // The database holds the same limit for the runtime role.
+    await expect(
+      raw(
+        owner,
+        (tx) => tx.$executeRaw`
+          INSERT INTO subcontract_payments (id, tenant_id, project_id, subcontract_id,
+            certificate_id, amount_minor, paid_on, method, reference, reference_key,
+            idempotency_key, request_digest, recorded_by)
+          VALUES (${uuidv7()}::uuid, ${tenantA}::uuid, ${projectId}::uuid, ${sc2.id}::uuid,
+            ${scc2.id}::uuid, 1, ${today}::date, 'cheque', 'CHQ-NET-1', 'CHQNET1',
+            ${randomUUID()}, ${"0".repeat(64)}, ${owner.auth.user.id}::uuid)`,
+      ),
+    ).rejects.toThrow(/subcontract's certified certificates made payable/);
+    sc2 = await getSc(finance, sc2);
+    expect(sc2.position).toMatchObject({ paidMinor: left, outstandingMinor: 0 });
+  });
+
+  it("approves a variation only as it was raised, recomputing its digest", async () => {
+    sc2 = parseSc(
+      await pm.call("post", `subcontracts/${sc2.id}/variations`, {
+        reason: "One window fewer (synthetic)",
+        changes: [{ lineId: lineOf(sc2, item.B).id, quantityChange: "-1" }],
+      }),
+      201,
+    );
+    const variation = sc2.variations.find((row) => row.status === "pending")!;
+    // A change slipped into the pending variation after it was raised (here by its maker, as the
+    // runtime role) is not what the approver saw.
+    await raw(
+      pm,
+      (tx) => tx.$executeRaw`
+        INSERT INTO subcontract_line_changes (tenant_id, subcontract_id, variation_id, line_id,
+          quantity_change, amount_change_minor)
+        VALUES (${tenantA}::uuid, ${sc2.id}::uuid, ${variation.id}::uuid,
+          ${lineOf(sc2, item.L).id}::uuid, -1, -40000)`,
+    );
+    await fresh(owner);
+    refused(
+      await owner.call("post", `subcontracts/${sc2.id}/variations/${variation.id}/approve`, {
+        version: variation.version,
+        digest: variation.digest,
+      }),
+      409,
+      "subcontract-variation-stale",
+    );
+    // Its value change no longer adds up either, so the database refuses to decide it at all.
   });
 
   /** Opens a draft interim certificate on a subcontract. */

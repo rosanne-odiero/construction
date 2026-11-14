@@ -16,6 +16,7 @@ export {
   checkLineAgainstBq,
   jobQuantityInForce,
   reconcileItem,
+  sameUnit,
   suggestedClaim,
   sumQuantities,
   toBqQuantity,

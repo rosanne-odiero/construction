@@ -24,8 +24,8 @@
 --   against a job takes its rate, unit, worker and BQ item, falls within its dates, and the
 --   approved output on a job never exceeds its agreed quantity plus approved extensions (the job
 --   row is locked, so two outputs cannot race past it).
--- Every new table has tenant_id, forced RLS with WITH CHECK, a restrictive policy that keeps
--- supplier-role members out, and composite (tenant_id, …) foreign keys; pmb_app holds no DELETE
+-- Every new table has tenant_id, forced RLS with WITH CHECK, restrictive policies that keep
+-- supplier-role members (D7.2) and client members (D7.1) out, and composite (tenant_id, …) foreign keys; pmb_app holds no DELETE
 -- (except draft lines and claims) and no UPDATE on append-only tables. No permission was added.
 BEGIN;
 
@@ -815,6 +815,20 @@ BEGIN
   IF NOT (NEW.contributors @> OLD.contributors) THEN
     RAISE EXCEPTION 'A subcontract''s contributors are only ever added' USING ERRCODE = '23514';
   END IF;
+  -- Who submitted, approved and started it, when, and on which digest never change afterwards (in
+  -- every branch below, including a value change by an approved variation); only a return to
+  -- draft clears the submission.
+  IF ((OLD.status IN ('approved', 'active') OR (OLD.status = 'submitted' AND NEW.status <> 'draft'))
+      AND (NEW.digest IS DISTINCT FROM OLD.digest OR NEW.submitted_by IS DISTINCT FROM OLD.submitted_by
+           OR NEW.submitted_at IS DISTINCT FROM OLD.submitted_at))
+     OR (OLD.status IN ('approved', 'active')
+         AND (NEW.approved_by IS DISTINCT FROM OLD.approved_by
+              OR NEW.approved_at IS DISTINCT FROM OLD.approved_at))
+     OR (OLD.status = 'active'
+         AND (NEW.activated_by IS DISTINCT FROM OLD.activated_by
+              OR NEW.activated_at IS DISTINCT FROM OLD.activated_at)) THEN
+    RAISE EXCEPTION 'A subcontract keeps its submission and approval' USING ERRCODE = '23514';
+  END IF;
   IF OLD.status <> 'draft' AND app.subcontract_terms(NEW) IS DISTINCT FROM app.subcontract_terms(OLD)
   THEN
     RAISE EXCEPTION 'A subcontract''s terms never change after submission; vary it instead'
@@ -911,8 +925,10 @@ BEGIN
     IF EXISTS (SELECT 1 FROM subcontract_certificates WHERE tenant_id = NEW.tenant_id
                 AND subcontract_id = NEW.id AND status IN ('draft', 'submitted'))
        OR EXISTS (SELECT 1 FROM subcontract_variations WHERE tenant_id = NEW.tenant_id
-                   AND subcontract_id = NEW.id AND status = 'pending') THEN
-      RAISE EXCEPTION 'A subcontract closes with no certificate or variation open'
+                   AND subcontract_id = NEW.id AND status = 'pending')
+       OR EXISTS (SELECT 1 FROM subcontract_advances WHERE tenant_id = NEW.tenant_id
+                   AND subcontract_id = NEW.id AND status IN ('requested', 'approved')) THEN
+      RAISE EXCEPTION 'A subcontract closes with no certificate, variation or advance open'
         USING ERRCODE = '23514';
     END IF;
     NEW.closed_at := clock_timestamp();
@@ -1246,6 +1262,15 @@ BEGIN
      IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'decided_by' - 'decided_at' - 'decision_note'
       - 'paid_by' - 'paid_at' - 'paid_on' - 'method' - 'reference' - 'version') THEN
     RAISE EXCEPTION 'An advance keeps its amount and request' USING ERRCODE = '23514';
+  END IF;
+  -- A closed subcontract has no certificate left to recover an advance from.
+  IF NEW.status IN ('approved', 'paid') AND NEW.status <> OLD.status THEN
+    SELECT status INTO parent FROM subcontracts
+     WHERE tenant_id = NEW.tenant_id AND id = NEW.subcontract_id FOR UPDATE;
+    IF parent.status NOT IN ('approved', 'active') THEN
+      RAISE EXCEPTION 'An advance is approved and paid only while its subcontract is live'
+        USING ERRCODE = '23514';
+    END IF;
   END IF;
   IF OLD.status = 'requested' AND NEW.status IN ('approved', 'rejected') THEN
     IF NEW.decided_by IS DISTINCT FROM app.current_user_id() OR NEW.decided_by = NEW.requested_by
@@ -1727,19 +1752,24 @@ ALTER TABLE "subcontract_payments" ADD CONSTRAINT "subcontract_payments_check" C
   AND paid_on BETWEEN DATE '2000-01-01' AND DATE '2099-12-31'
 );
 -- Recorded by the signed-in user who did not certify the certificate, against a certified
--- certificate with something payable, never above what is still payable (the certificate row is
--- locked, so two payments cannot both pass), not in the future. Stamped with the clock (the cost
+-- certificate with something payable, never above what is still payable on the certificate nor
+-- on the subcontract as a whole (a correcting certificate's negative payable nets off what is
+-- left to pay; the subcontract and certificate rows are locked, so two payments cannot both
+-- pass), not in the future. Stamped with the clock (the cost
 -- apportionment orders payments by it). Never changed or deleted.
 CREATE FUNCTION app.guard_subcontract_payment() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   target record;
   paid bigint;
+  balance bigint;
 BEGIN
   IF TG_OP <> 'INSERT' THEN
     RAISE EXCEPTION 'A recorded payment never changes; record a correction with the bank'
       USING ERRCODE = '23514';
   END IF;
   PERFORM app.assert_quality_writable(NEW.tenant_id, NEW.project_id);
+  PERFORM 1 FROM subcontracts
+   WHERE tenant_id = NEW.tenant_id AND id = NEW.subcontract_id FOR UPDATE;
   SELECT status, certified_by, payable_minor, subcontract_id, project_id INTO target
     FROM subcontract_certificates
    WHERE tenant_id = NEW.tenant_id AND id = NEW.certificate_id FOR UPDATE;
@@ -1760,6 +1790,16 @@ BEGIN
    WHERE tenant_id = NEW.tenant_id AND certificate_id = NEW.certificate_id;
   IF paid + NEW.amount_minor > target.payable_minor THEN
     RAISE EXCEPTION 'Payments never exceed what the certificate made payable'
+      USING ERRCODE = '23514';
+  END IF;
+  SELECT COALESCE((SELECT sum(payable_minor) FROM subcontract_certificates
+                    WHERE tenant_id = NEW.tenant_id AND subcontract_id = NEW.subcontract_id
+                      AND status = 'certified'), 0)
+       - COALESCE((SELECT sum(amount_minor) FROM subcontract_payments
+                    WHERE tenant_id = NEW.tenant_id AND subcontract_id = NEW.subcontract_id), 0)
+    INTO balance;
+  IF NEW.amount_minor > balance THEN
+    RAISE EXCEPTION 'Payments never exceed what the subcontract''s certified certificates made payable'
       USING ERRCODE = '23514';
   END IF;
   NEW.recorded_at := clock_timestamp();
@@ -2389,7 +2429,8 @@ DECLARE
 BEGIN
   FOREACH target IN ARRAY ARRAY['subcontracts', 'subcontract_lines', 'subcontract_variations',
     'subcontract_line_changes', 'subcontract_advances', 'subcontract_certificates',
-    'subcontract_certificate_claims', 'subcontract_certificate_lines', 'subcontract_payments']
+    'subcontract_certificate_claims', 'subcontract_certificate_lines', 'subcontract_payments',
+    'piece_rate_jobs', 'piece_rate_job_extensions']
   LOOP
     EXECUTE format('CREATE POLICY %I ON %I AS RESTRICTIVE USING (%s) WITH CHECK (%s)',
       target || '_supplier_portal', target, not_supplier, not_supplier);
@@ -2397,6 +2438,30 @@ BEGIN
   EXECUTE format('CREATE POLICY %I ON %I AS RESTRICTIVE USING (%s OR supplier_id IN (%s)) '
     'WITH CHECK (%s)', 'subcontract_invoices_supplier_portal', 'subcontract_invoices',
     not_supplier, own, not_supplier);
+END
+$$;
+
+-- Subcontracts and piece-rate jobs are the company's working records, never a client's (as D7.1's
+-- client policies): a client member — the `client` role, or a custom role made only of
+-- projects.view, bq.view and portal.client (packages/types portalFor) — reads and writes none of
+-- them; anyone else is unaffected.
+DO $$
+DECLARE
+  not_client constant text := 'NOT EXISTS (SELECT 1 FROM memberships m '
+    'LEFT JOIN tenant_roles r ON r.tenant_id = m.tenant_id AND r.id = m.custom_role_id '
+    'WHERE m.tenant_id = app.current_tenant_id() AND m.user_id = app.current_user_id() '
+    'AND (m.role = ''client'' OR (m.role = ''custom'' AND ''portal.client'' = ANY (r.permissions) '
+    'AND r.permissions <@ ARRAY[''projects.view'', ''bq.view'', ''portal.client'']::text[])))';
+  target text;
+BEGIN
+  FOREACH target IN ARRAY ARRAY['subcontracts', 'subcontract_lines', 'subcontract_variations',
+    'subcontract_line_changes', 'subcontract_advances', 'subcontract_certificates',
+    'subcontract_certificate_claims', 'subcontract_certificate_lines', 'subcontract_payments',
+    'subcontract_invoices', 'piece_rate_jobs', 'piece_rate_job_extensions']
+  LOOP
+    EXECUTE format('CREATE POLICY %I ON %I AS RESTRICTIVE USING (%s) WITH CHECK (%s)',
+      target || '_client_portal', target, not_client, not_client);
+  END LOOP;
 END
 $$;
 

@@ -1,4 +1,5 @@
 import type { ReconciliationFlag } from "@pm-buddy/types";
+import { normaliseUnit } from "../bq/units.js";
 import { divideHalfUp, scaled, unscaled } from "../valuations/arithmetic.js";
 
 /**
@@ -156,11 +157,29 @@ export type ItemReconciliation = {
  * not measured is the classic leak: it is flagged, never silently netted (brief §15 G: a review
  * signal, not proof).
  */
+/**
+ * Whether output recorded in one unit can be compared with a BQ item's quantity in another: the
+ * same normalised unit ("M2", "m2" and "m²" are one), or the same unrecognised label.
+ */
+export function sameUnit(a: string | null, b: string | null): boolean {
+  const key = (unit: string | null) => {
+    const normalised = normaliseUnit(unit);
+    if (!normalised) return null;
+    return normalised.code === "other"
+      ? `other:${normalised.label.toLowerCase()}`
+      : normalised.code;
+  };
+  const left = key(a);
+  return left !== null && left === key(b);
+}
+
 export function reconcileItem(input: {
   measured: string | null;
   pieceRate: string;
   subcontracted: string;
   unlinkedApproved: number;
+  /** Approved outputs without a job in a unit that cannot be compared with the item's. */
+  notComparable?: number;
 }): ItemReconciliation {
   const measured = input.measured === null ? 0n : four(input.measured);
   const pieceRate = four(input.pieceRate);
@@ -170,6 +189,7 @@ export function reconcileItem(input: {
   if (pieceRate > measured) flags.push("piece-rate-above-measured");
   if (combined > measured && combined > pieceRate) flags.push("combined-above-measured");
   if (input.unlinkedApproved > 0) flags.push("unlinked-outputs");
+  if ((input.notComparable ?? 0) > 0) flags.push("not-comparable");
   return {
     measured: input.measured,
     pieceRate: input.pieceRate,

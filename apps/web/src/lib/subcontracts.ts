@@ -58,6 +58,7 @@ export const flagTone: Record<ReconciliationFlag, Tone> = {
   "combined-above-measured": "danger",
   "not-measured": "warning",
   "unlinked-outputs": "warning",
+  "not-comparable": "danger",
 };
 
 /** D6.3 part B problem codes worded for subcontracts and piece-rate jobs (EN/SW). */

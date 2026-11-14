@@ -3,6 +3,7 @@ import type { Request } from "express";
 import { addCalendarDays, nairobiDate } from "@pm-buddy/domain";
 import {
   addSubcontractLineRequestSchema,
+  clientDecisionRequestSchema,
   createInstructionRequestSchema,
   createMeasurementRequestSchema,
   createPieceRateJobRequestSchema,
@@ -16,6 +17,7 @@ import {
   recordJobOutputRequestSchema,
   recordSubcontractPaymentRequestSchema,
   saveVariationLinesRequestSchema,
+  sendVariationToClientRequestSchema,
   setSubcontractClaimsRequestSchema,
   type CreateSubcontractRequest,
   type SubcontractDetail,
@@ -29,7 +31,10 @@ import { PieceRateJobsService } from "../modules/payroll/piece-rate-jobs.service
 import { SuppliersService } from "../modules/procurement/suppliers.service.js";
 import { MeasurementsService } from "../modules/progress/measurements/measurements.service.js";
 import { SubcontractCertificatesService } from "../modules/subcontracts/subcontract-certificates.service.js";
+import { ClientPortalService } from "../modules/portals/client/client-portal.service.js";
+import { ClientVariationsService } from "../modules/portals/client/client-variations.service.js";
 import { SubcontractsService } from "../modules/subcontracts/subcontracts.service.js";
+import { DEMO_CLIENT_USER } from "./demo-client-portal.js";
 import { seedPrincipal } from "./demo-procure-to-pay.js";
 
 /**
@@ -460,7 +465,9 @@ export async function seedSubcontracts(
         )
       ).variation;
     }
-    if (current.status === "submitted")
+    if (current.status === "submitted") {
+      await clientApproves(current);
+      current = (await variations.get(owner, projectId, current.id, seedRequest)).variation;
       current = (
         await variations.approve(
           owner,
@@ -470,7 +477,53 @@ export async function seedSubcontracts(
           seedRequest,
         )
       ).variation;
+    }
     return current.number;
+  }
+
+  /**
+   * A database seeded with the client portal (D7.1) before this seed already has RUI-HTS's client
+   * terms, so internal approval waits for the client (rule D-134): the variation is sent to the
+   * demo client, who approves it on the view they were sent. A fresh seed runs this before the
+   * client terms exist, and nothing is sent.
+   */
+  async function clientApproves(variation: {
+    id: string;
+    version: number;
+    snapshot: { digest: string } | null;
+  }) {
+    const sending = app.get(ClientVariationsService);
+    let view = await sending.view(pm, projectId, variation.id, seedRequest);
+    if (!view.approvalRequired) return;
+    let request = view.requests.find((row) => row.state === "awaiting_decision");
+    if (!request) {
+      view = await sending.send(
+        pm,
+        projectId,
+        variation.id,
+        sendVariationToClientRequestSchema.parse({
+          version: variation.version,
+          snapshotDigest: variation.snapshot!.digest,
+          message: "Please approve the plaster and windows instructed under AI-002 (synthetic).",
+        }),
+        seedRequest,
+      );
+      request = view.requests.find((row) => row.state === "awaiting_decision")!;
+    }
+    const clientUser = await prisma.user.findUniqueOrThrow({
+      where: { identifier: DEMO_CLIENT_USER.identifier },
+      select: { id: true },
+    });
+    await app.get(ClientPortalService).decide(
+      await seedPrincipal(prisma, clientUser.id, tenantId),
+      projectId,
+      request.id,
+      clientDecisionRequestSchema.parse({
+        decision: "approved",
+        clientDigest: request.clientDigest,
+      }),
+      seedRequest,
+    );
   }
 
   async function subcontract(

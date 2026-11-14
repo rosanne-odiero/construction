@@ -630,6 +630,36 @@ async function seedBuildup(
   };
 }
 
+/** Assigns the demo team to a project: each member without an assignment gets their role's. */
+async function assignTeam(
+  tx: Tx,
+  tenantId: string,
+  projectId: string,
+  demo: DemoProject,
+  userOf: (key: DemoAccount["key"]) => { id: string; role: TenantSystemRole },
+  audit: Audit,
+) {
+  for (const key of demo.team) {
+    const member = userOf(key);
+    const assigned = await tx.projectMembership.findFirst({
+      where: { tenantId, projectId, userId: member.id },
+      select: { userId: true },
+    });
+    if (assigned) continue;
+    const permissions = PROJECT_ASSIGNABLE_PERMISSIONS.filter((permission) =>
+      SYSTEM_ROLE_PERMISSIONS[member.role].includes(permission),
+    );
+    await tx.projectMembership.create({
+      data: { tenantId, projectId, userId: member.id, permissions },
+    });
+    await audit(tx, "project.permissions.changed", projectId, {
+      ...SOURCE,
+      userId: member.id,
+      permissions,
+    });
+  }
+}
+
 async function seedProject(
   tx: Tx,
   tenantId: string,
@@ -641,8 +671,12 @@ async function seedProject(
   const existing = await tx.project.findUnique({
     where: { tenantId_code: { tenantId, code: demo.code } },
   });
-  if (existing)
+  if (existing) {
+    // A database seeded before a team member was added (the storekeeper in D5.3) gets the new
+    // assignment; existing assignments are left as they are.
+    await assignTeam(tx, tenantId, existing.id, demo, userOf, audit);
     return { code: demo.code, name: existing.name, status: existing.status, created: false };
+  }
 
   const project = await tx.project.create({
     data: {
@@ -748,20 +782,7 @@ async function seedProject(
       });
   }
 
-  for (const key of demo.team) {
-    const member = userOf(key);
-    const permissions = PROJECT_ASSIGNABLE_PERMISSIONS.filter((permission) =>
-      SYSTEM_ROLE_PERMISSIONS[member.role].includes(permission),
-    );
-    await tx.projectMembership.create({
-      data: { tenantId, projectId: project.id, userId: member.id, permissions },
-    });
-    await audit(tx, "project.permissions.changed", project.id, {
-      ...SOURCE,
-      userId: member.id,
-      permissions,
-    });
-  }
+  await assignTeam(tx, tenantId, project.id, demo, userOf, audit);
 
   if (!demo.activate)
     return { code: demo.code, name: demo.name, status: project.status, created: true };

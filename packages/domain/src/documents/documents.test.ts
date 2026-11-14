@@ -359,6 +359,16 @@ describe("revisions", () => {
 });
 
 describe("file names", () => {
+  it("trims long runs of separators in linear time", () => {
+    const started = Date.now();
+    expect(documentFileStem(`${"\t".repeat(200_000)}x${" .".repeat(200_000)}.pdf`)).toBe("x");
+    // A long run of separators followed by another character (where a trailing regex backtracks).
+    const middle = `x${" .".repeat(50_000)}y`;
+    expect(documentFileStem(`${middle}.pdf`)).toBe(middle.slice(0, 100).trim());
+    expect(documentFileStem(`${"-".repeat(200_000)}`)).toBe("document");
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
   it("keeps a safe stem and the detected extension", () => {
     expect(documentFileName("A-101 Ground floor (rev B).PDF", "pdf")).toBe(
       "A-101 Ground floor (rev B).pdf",

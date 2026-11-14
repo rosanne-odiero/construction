@@ -87,6 +87,13 @@ const nextLetters = (text: string): string => {
   return `A${chars.join("")}`;
 };
 
+/** The longest run of characters at the end of `label` that pass `test` (a linear scan). */
+function trailingRun(label: string, test: (char: string) => boolean): string {
+  let start = label.length;
+  while (start > 0 && test(label[start - 1]!)) start -= 1;
+  return label.slice(start);
+}
+
 /**
  * A suggestion for the next revision: the last number plus one (keeping zero padding: "P09" →
  * "P10", "02" → "03"), or the next letter sequence ("A" → "B", "Z" → "AA"); "A" for a first
@@ -95,16 +102,14 @@ const nextLetters = (text: string): string => {
 export function suggestNextRevision(current: string | null): string {
   if (current === null || !REVISION_PATTERN.test(current.trim())) return "A";
   const label = normaliseRevision(current);
-  const number = /([0-9]+)$/.exec(label);
-  if (number) {
-    const digits = number[1]!;
+  const digits = trailingRun(label, (char) => char >= "0" && char <= "9");
+  if (digits) {
     const incremented = (BigInt(digits) + 1n).toString().padStart(digits.length, "0");
     const candidate = `${label.slice(0, label.length - digits.length)}${incremented}`;
     return candidate.length <= 10 ? candidate : "A";
   }
-  const letters = /([A-Z]+)$/.exec(label);
-  if (letters) {
-    const run = letters[1]!;
+  const run = trailingRun(label, (char) => char >= "A" && char <= "Z");
+  if (run) {
     const candidate = `${label.slice(0, label.length - run.length)}${nextLetters(run)}`;
     return candidate.length <= 10 ? candidate : "A";
   }

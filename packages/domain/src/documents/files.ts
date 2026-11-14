@@ -8,17 +8,29 @@
 
 const MAX_STEM = 100;
 
+const TRIMMED = new Set([" ", "\t", "\n", "\r", "\f", "\v", ".", "_", "-"]);
+
+/** Drops leading and trailing whitespace, dots, underscores and hyphens (a linear scan). */
+function trimEdges(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && TRIMMED.has(value[start]!)) start += 1;
+  while (end > start && TRIMMED.has(value[end - 1]!)) end -= 1;
+  return value.slice(start, end);
+}
+
 /** The stem of a name: no folders, no extension, a safe character set, at most 100 characters. */
 export function documentFileStem(original: string): string {
   const base = original.split(/[\\/]/).pop() ?? "";
   const withoutExtension = base.replace(/\.[A-Za-z0-9]{1,8}$/, "");
-  const safe = withoutExtension
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9 ._()-]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/\s+/g, " ")
-    .replace(/^[\s._-]+|[\s._-]+$/g, "");
+  const safe = trimEdges(
+    withoutExtension
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9 ._()-]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/\s+/g, " "),
+  );
   return Array.from(safe).slice(0, MAX_STEM).join("").trim() || "document";
 }
 

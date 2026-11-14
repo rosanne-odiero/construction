@@ -65,7 +65,8 @@ test("lists live projects, filters them and opens every detail tab", async ({ pa
   const team = page.getByRole("table", { name: "Project members" });
   await expect(team.getByRole("row")).toHaveCount(4);
   await expect(team.getByRole("row", { name: /Wanjiru Kamau/ })).toContainText("Company-wide");
-  await expect(team.getByRole("row", { name: /Kevin Kiprono/ })).toContainText("3 permissions");
+  // D6.1: the site agent also takes site photos (inspection and snag evidence).
+  await expect(team.getByRole("row", { name: /Kevin Kiprono/ })).toContainText("4 permissions");
   expect(await axeViolations(page)).toEqual([]);
 
   await page.getByRole("link", { name: "WBS & milestones", exact: true }).click();

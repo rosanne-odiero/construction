@@ -30,6 +30,7 @@ import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
 import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
 import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
 import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
+import { seedQuality, type QualitySeedSummary } from "./quality-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 
 /**
@@ -129,6 +130,8 @@ type DemoProject = {
   latitude: number | null;
   longitude: number | null;
   activate: boolean;
+  /** D6.1: practically complete (active → completed); quality-seed.ts certifies completion. */
+  complete?: boolean;
   sites: DemoSite[];
   wbs: DemoWbs[];
   milestones: DemoMilestone[];
@@ -275,6 +278,49 @@ export const DEMO_PROJECTS: readonly DemoProject[] = [
     milestones: [],
     team: [],
   },
+  {
+    // D6.1: handed over; practical completion certified and the defects liability period running
+    // (quality-seed.ts, dates relative to the seed day).
+    code: "JUJ-DPX",
+    name: "Juja Road Duplex",
+    description: "Two-storey 4-bedroom duplex, handed over; defects liability period running",
+    clientName: "Wairimu Family Trust (synthetic)",
+    clientEmail: "wairimu.trust@example.test",
+    clientPhone: null,
+    contractSumMinor: 2_150_000_000,
+    contractType: "lump_sum",
+    startDate: "2025-10-06",
+    endDate: "2026-08-31",
+    county: "kiambu",
+    town: "Juja",
+    latitude: -1.1012,
+    longitude: 37.0144,
+    activate: true,
+    complete: true,
+    sites: [
+      {
+        name: "Duplex plot",
+        address: "Off Juja Farm Road",
+        geofence: { kind: "radius", center: { lat: -1.1012, lng: 37.0144 }, radiusM: 45 },
+      },
+    ],
+    wbs: [
+      { code: "1", name: "Substructure", weight: 2_000 },
+      { code: "2", name: "Superstructure and roof", weight: 4_500 },
+      { code: "3", name: "Finishes and services", weight: 3_500 },
+    ],
+    milestones: [
+      {
+        name: "Roof covered",
+        dueDate: "2026-04-30",
+        wbs: "2",
+        status: "achieved",
+        actualDate: "2026-05-08",
+      },
+      { name: "Handover", dueDate: "2026-08-31", status: "achieved", actualDate: "2026-08-28" },
+    ],
+    team: ["projectManager", "siteAgent"],
+  },
 ];
 
 /**
@@ -353,6 +399,7 @@ export type SeedSummary = {
   procureToPay: ProcureToPaySeedSummary;
   stores: StoresSeedSummary;
   schedule: ScheduleSeedSummary;
+  quality: QualitySeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -542,6 +589,12 @@ export async function seedDemo(
   });
   // After the attendance seed, so the company's public holidays shape the working calendar.
   const schedule = await seedSchedule(app, tenantId, owner.id);
+  // After attendance (diary snapshots) and the schedule.
+  const quality = await seedQuality(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+  });
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
@@ -555,6 +608,7 @@ export async function seedDemo(
     procureToPay,
     stores,
     schedule,
+    quality,
   };
 }
 
@@ -786,5 +840,27 @@ async function seedProject(
     action: "activate",
     reasonGiven: true,
   });
-  return { code: demo.code, name: demo.name, status: "active", created: true };
+  if (!demo.complete) return { code: demo.code, name: demo.name, status: "active", created: true };
+  await tx.project.update({
+    where: { tenantId_id: { tenantId, id: project.id } },
+    data: { status: "completed", version: { increment: 1 } },
+  });
+  await tx.projectStatusChange.create({
+    data: {
+      tenantId,
+      projectId: project.id,
+      fromStatus: "active",
+      toStatus: "completed",
+      reason: null,
+      changedBy: ownerId,
+    },
+  });
+  await audit(tx, "project.status_changed", project.id, {
+    ...SOURCE,
+    from: "active",
+    to: "completed",
+    action: "complete",
+    reasonGiven: false,
+  });
+  return { code: demo.code, name: demo.name, status: "completed", created: true };
 }

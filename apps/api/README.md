@@ -306,6 +306,48 @@ in addition to `projects.view`, so clients (who hold `projects.view`) see diarie
 their portal, approved ones only. Production SMS delivery still waits for D7.3 (Africa's
 Talking); in development, invitation and PIN-reset SMS go to Mailpit.
 
+## Quality (D6.1)
+
+Project paths are relative to `/api/v1/projects/:projectId/quality`; company paths start with
+`/api/v1/quality`. Authentication, the selected company and the CSRF guard apply; permissions
+are the project's (role ∩ assignment). Reads need `projects.view` plus one of `quality.manage`,
+`site.diary`, `site.photos`, `projects.manage`, `reports.view` or `safety.manage` (clients and
+suppliers get 403). Every change sends the `version` it read (409 `version-conflict`); closed and
+cancelled projects are read-only (409 `project-read-only`). Lists take `cursor`, `limit` (1–100,
+default 30) and `search` (a number such as `12` or `SNG-0012`, or text).
+
+| Method / path                                                      | Input                                                                                                                                                                                        | Result / permission                                                                                                           |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| GET `/summary`                                                     | —                                                                                                                                                                                            | Counts: inspections, overdue and failed cube sets, failed slump tests, snags, completion state and DLP end                    |
+| GET / POST `/inspections`                                          | `status?`, `result?` / `{siteId, templateId, location, inspectorType, inspectorName?, inspectedOn, notes?, wbsNodeId?, scheduleActivityId?, bqItemLineageId?}`                               | `{inspections, nextCursor, permissions}` / 201 `{inspection, items, snags}`; create: `site.diary` or `quality.manage`         |
+| GET / PATCH `/inspections/:id`                                     | — / `{version, location?, inspectorType?, inspectorName?, inspectedOn?, notes?, wbsNodeId?, scheduleActivityId?, bqItemLineageId?, items?: [{id, result, note, photoIds}]}`                  | `{inspection, items, snags}`; PATCH by the author, draft only                                                                 |
+| POST `/inspections/:id/actions`                                    | `{action: submit / sign_off / return, version, reason?}`                                                                                                                                     | Submit: the author; sign-off and return (reason): `quality.manage`, not the creator or submitter                              |
+| GET / POST `/snags`                                                | `status?` (`open`, `fixed`, `closed`, `active`), `severity?`, `phase?` / `{siteId, location, description, severity, responsibleKind, responsibleName, dueOn?, inspectionItemId?, photoIds?}` | `{snags, nextCursor, counts, permissions}` / 201 `{snag}`; create: `site.diary` or `quality.manage`                           |
+| GET / PATCH `/snags/:id`                                           | — / `{version, location?, description?, severity?, responsibleKind?, responsibleName?, dueOn?}`                                                                                              | `{snag}`; PATCH: `quality.manage`, open snags only                                                                            |
+| POST `/snags/:id/actions`                                          | `{action: fix / close / reopen, version, note?, photoIds?, reason?}`                                                                                                                         | `{snag}`; fix (note and photos): `site.diary` or `quality.manage`; close and reopen (reason): `quality.manage`, not the fixer |
+| GET / POST `/cubes`                                                | `filter?` (`all`, `overdue`, `failed`) / `{siteId, element, concreteClass, castOn, cubesPerAge?, batchReference?, notes?}`                                                                   | `{cubeSets, nextCursor, counts, permissions}` / 201 `{cubeSet, history}`                                                      |
+| GET `/cubes/:id`; POST `/cubes/:id/results`                        | — / `{ageDays: 7 or 28, testedOn, strengths: ["25.5", …], laboratory?, reportReference?}`                                                                                                    | `{cubeSet, history}`; one original result per age                                                                             |
+| POST `/cubes/:id/results/:resultId/corrections`                    | `{testedOn, strengths, laboratory?, reportReference?, reason}`                                                                                                                               | `{cubeSet, history}`; `quality.manage`; supersedes the original once                                                          |
+| POST `/cubes/:id/void`                                             | `{version, reason}`                                                                                                                                                                          | `{cubeSet, history}`; `quality.manage`                                                                                        |
+| GET / POST `/slump-tests`; GET `/slump-tests/:id`                  | `outcome?` / `{siteId, testedOn, element, concreteClass?, cubeSetId?, targetMm, toleranceMm, measuredMm, notes?}`                                                                            | `{slumpTests, nextCursor, permissions}` / 201 `{slumpTest, history}`                                                          |
+| POST `/slump-tests/:id/corrections`                                | the test fields plus `reason`                                                                                                                                                                | `{slumpTest, history}`; `quality.manage`                                                                                      |
+| GET / POST `/completion`                                           | — / `{kind: practical / final, completionDate, dlpMonths? (practical), exceptionReason?, notes?}`                                                                                            | `{practical, final, history, dlp, readiness, defaultDlpMonths, permissions}`; propose: `projects.manage`                      |
+| POST `/completion/:id/actions`                                     | `{action: certify / withdraw, version, reason?}`                                                                                                                                             | Certify: `quality.manage`, not the proposer; withdraw (reason): `projects.manage`                                             |
+| GET / POST `/api/v1/quality/templates`                             | `includeRetired?` / `{name, category, description?, items: [{text}]}`                                                                                                                        | `{templates, permissions}` / 201 `{template, history}`; read: any quality reader; create: `quality.manage` on some project    |
+| POST `/api/v1/quality/templates/starter`                           | `{language: en / sw}`                                                                                                                                                                        | `{created}`: the seven starter templates (existing names skipped)                                                             |
+| GET `/api/v1/quality/templates/:id`; POST `…/versions`, `…/retire` | — / template content plus `expectedVersion` / `{expectedVersion}`                                                                                                                            | `{template, history}`; a revision or retirement appends the next version                                                      |
+| GET / PUT `/api/v1/quality/settings`                               | — / `{dlpMonths, cubeOverdueGraceDays, version}`                                                                                                                                             | `{settings}`; read: any quality reader; change: `config.manage`                                                               |
+
+Diary workforce: `GET /api/v1/projects/:projectId/diaries/attendance?siteId=&date=` previews the
+attendance snapshot (by trade, total, muster state); diaries created or edited with
+`workforceSource: "attendance"` store it, and submitting refreshes it (the version advances by
+two). The database recomputes the snapshot and refuses a forged one.
+
+Rules: cube results follow `KE-CUBE-1` and slump tests `KE-SLUMP-1` (COMPLIANCE-REVIEW
+CR-QA-01/02, ARCHITECTURE §4.7); the defects liability period defaults to 6 months (1–24,
+CR-QA-03). Results, template versions and certified, signed-off or closed records are immutable
+in the database. Problem codes are listed in ARCHITECTURE §4.7.
+
 ## Schedule (D6.2)
 
 All paths are relative to `/api/v1/projects/:projectId/schedule`; authentication, the selected company and the CSRF guard apply. Reads need `projects.view` and every change `projects.manage` on the project (role ∩ assignment); closed and cancelled projects are read-only (409 `project-read-only`). Design: [ARCHITECTURE §4.6](../../docs/ARCHITECTURE.md#46-schedule-d62).
@@ -377,8 +419,10 @@ through `AccessPolicy` (role ∩ project assignment), not role names.
 Dates are valid `YYYY-MM-DD` Nairobi calendar days and may not be future-dated.
 `workPerformed` is required (1–6,000 trimmed characters); weather/delays are nullable
 strings (250/2,000 characters); workforce is a nullable integer from 0 to 100,000.
-Null means unknown, not zero. `workforceSource` is always `manual`: there is no
-attendance integration yet. `reason` is required only for rejection (3–500 characters).
+Null means unknown, not zero. Since D6.1 (quality) `workforceSource` is `manual` (the
+count as sent) or `attendance` (the count is not sent: the server stores a snapshot of attendance
+on the diary's site and date by trade, with the muster state and time; see "Quality" below).
+`reason` is required only for rejection (3–500 characters).
 Create/update/action schemas are strict and exported from `@pm-buddy/validation`.
 
 The lifecycle is `draft → submitted → approved` or `submitted → rejected → draft`.
@@ -397,8 +441,8 @@ Problem codes: 409 `diary-date-taken`, `diary-future-date`, `diary-not-draft`,
 
 Web entry points: `/diary` (accessible project picker) and
 `/projects/:projectId?tab=diary`; legacy `/soon/diary` redirects to `/diary`.
-Offline/site-app capture, photo verification, inspections, tests, snags, practical
-completion, schedules and valuations are not implemented by this increment.
+Photo verification (increment 2), the schedule (D6.2) and quality with the attendance
+workforce (D6.1 quality) were added later; offline/site-app capture and valuations remain.
 
 ## BQ import, viewer and exports (D2.2)
 
@@ -653,7 +697,16 @@ has a timesheet period. Since D6.2 it also adds the Ruiru Heights schedule: 22 a
 the WBS with 30 dependencies (including a lead and start-to-start links), the milestones linked
 into the network, the contract programme frozen as baseline 1 (as planned on 02/03/2026), actual
 dates and progress that slipped, and three delays (weather, late reinforcement, a client
-instruction); skipped when the project already has schedule activities. It prints each account's identifier and, when it
+instruction); skipped when the project already has schedule activities. Since D6.1 (quality) it
+also adds a fourth project, **Juja Road Duplex (JUJ-DPX)**, status completed, and quality data
+written through the real services: the seven starter checklist templates; on Ruiru Heights a
+signed-off slab inspection, a failed walling inspection (county inspector) with snags from its
+failed items, a roofing inspection awaiting sign-off, four cube sets (one failing at 28 days, one
+with an overdue 7-day result), three slump tests (one outside tolerance) and two diaries whose
+workforce is an attendance snapshot (one approved, one draft); on Juja Road a pre-handover
+inspection, closed construction snags, practical completion certified 75 days before the seed
+day with a six-month defects liability period, and two DLP defects; skipped when Ruiru Heights
+already has an inspection. It prints each account's identifier and, when it
 creates the account, a generated password; for the owner also the TOTP secret and
 `otpauth://` URI. It is idempotent: a second run reports "already present" and leaves
 passwords unchanged. `npx pnpm@12.17.0 --filter @pm-buddy/api db:seed --reset-credentials`

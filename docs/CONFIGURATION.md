@@ -159,6 +159,19 @@ Code constants (`PHOTO_VERIFICATION_DEFAULTS`, `PHOTO_LIMITS` in `packages/domai
 | `photos.future_skew_minutes` | platform | 10 | Phone clocks running ahead | PRODUCT | D6.1 |
 | `photos.max_file_mb` / `photos.max_pixels` | platform | 15 / 50,000,000 | Upload and decompression-bomb limits (JPEG only) | SECURITY | D6.1 |
 
+### Quality (D6.1)
+
+One row of `quality_settings` per company (no row means the defaults), read with `GET quality/settings` (any quality reader) and changed with `PUT quality/settings` (`config.manage`, optimistic `version`; the web form is on `/quality/templates`). Defaults are `DEFAULT_QUALITY_SETTINGS` in `packages/types`.
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `quality.dlp_months` | company (per certificate) | **6 months**, 1–24. The practical-completion proposal may set its own value (the contract's period); the certificate stores the months and the end date | Usual JBC building-contract default; 12 months is common for civil works. COMPLIANCE-REVIEW CR-QA-03 | COMPLIANCE-REVIEW | D6.1 |
+| `quality.cube_overdue_grace_days` | company | 2 days, 0–14: a 7- or 28-day result is overdue after cast date + age + grace (Nairobi dates) | Site practice (laboratory turnaround) | PRODUCT | D6.1 |
+| `quality.cube_rule` | platform | `KE-CUBE-1`: at 28 days mean ≥ f_cu and every cube ≥ f_cu − 3 N/mm²; 7 days indicative (< 65 % of f_cu flagged low). Code constant `CUBE_RULE`; the version is stored on each result | BS 5328-4 / BS 8110 practice. COMPLIANCE-REVIEW CR-QA-01 | COMPLIANCE-REVIEW | D6.1 |
+| `quality.slump_rule` | platform | `KE-SLUMP-1`: pass when the measured slump is within the tolerance of the target; suggested tolerance ±10 mm (< 50 mm), ±20 mm (50–99 mm), ±30 mm (≥ 100 mm). Code constant `SLUMP_RULE` | BS EN 206 slump tolerances. COMPLIANCE-REVIEW CR-QA-02 | COMPLIANCE-REVIEW | D6.1 |
+| `quality.limits` | platform | 60 items per template (300 characters each); 6 cubes per age; strengths 0–150 N/mm² (one decimal); slump ≤ 300 mm (target ≤ 250, tolerance ≤ 60); 6 photos per checklist item or snag stage; 100 rows per page. Code constant `QUALITY_LIMITS` | ARCHITECTURE §4.7 | PRODUCT | D6.1 |
+| `diary.workforce_source` | diary | `manual` for diaries recorded before D6.1; the web form selects *From attendance* for a new diary (the author can switch to *Typed in*) | ARCHITECTURE §4.7 (D-61) | PRODUCT | D6.1 |
+
 ### Schedule (D6.2)
 
 The working calendar is a per-project setting (`schedule_settings`, one row per project; no row means the defaults). It is read with `GET projects/:id/schedule` (`calendar`) and changed with `PUT projects/:id/schedule/calendar` (`projects.manage`, optimistic `version`; version 0 saves the defaults the first time; audited `schedule.calendar_updated`). In the web app it is the **Working calendar** card on the project's Schedule tab. The limits are code and database constants (`SCHEDULE_LIMITS` in `packages/types`, CHECKs in migration `20261119090000_schedule`).

@@ -1,322 +1,474 @@
 import Link from "next/link";
 import { getLocale, getTranslations } from "next-intl/server";
-import {
-  ArrowDownLeft,
-  ArrowRight,
-  ArrowUpRight,
-  HardHat,
-  Hourglass,
-  Landmark,
-  Receipt,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { CashFlowChart } from "@/components/charts/cash-flow-chart";
-import { SpendByCategoryChart } from "@/components/charts/spend-by-category-chart";
+import { AlertTriangle, ChartColumn, FileCheck2, HardHat, Landmark, Wallet } from "lucide-react";
+import { dashboardResponseSchema, type DashboardResponse } from "@pm-buddy/validation";
 import { KpiCard } from "@/components/kpi-card";
-import { SitesMap } from "@/components/maps/sites-map";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge, severityTone, type Tone } from "@/components/status-badge";
-import {
-  formatDate,
-  formatKES,
-  formatKESCompact,
-  formatPercent,
-  formatWeekdayDate,
-} from "@/lib/format";
-import { NOW, currentUser } from "@/mocks/company";
-import {
-  alerts,
-  cashFlowForecast,
-  kpis,
-  spendByCategory,
-  upcomingPayments,
-} from "@/mocks/dashboard";
-import { projects, type ProjectHealth } from "@/mocks/projects";
+import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
+import { ForecastChart } from "@/components/spending/forecast-chart";
+import { StatusBadge, type Tone } from "@/components/status-badge";
+import { ScrollTable } from "@/components/stores/stores-subnav";
+import { Button } from "@/components/ui/button";
+import { formatCalendarDate, formatKES, formatWeekdayDate } from "@/lib/format";
+import { loadOrRedirect } from "@/lib/p2p-server";
+import { requireSession } from "@/lib/server-api";
 
 export async function generateMetadata() {
   const t = await getTranslations("nav.items");
   return { title: t("dashboard") };
 }
 
-const healthTone: Record<ProjectHealth, Tone> = {
-  on_track: "success",
-  at_risk: "warning",
-  behind: "danger",
+type Level = NonNullable<DashboardResponse["spending"]>["projects"][number]["level"];
+const levelTone: Record<Level, Tone> = {
+  unavailable: "neutral",
+  within: "success",
+  threshold: "warning",
+  over: "danger",
 };
-const paymentTone: Record<(typeof upcomingPayments)[number]["state"], Tone> = {
-  awaitingApproval: "warning",
-  prepared: "neutral",
-  matched: "success",
-  blocked: "danger",
-  due: "info",
+const barClass: Record<Level, string> = {
+  unavailable: "bg-muted-foreground/40",
+  within: "bg-primary",
+  threshold: "bg-warning",
+  over: "bg-destructive",
 };
 
+type Attention = { key: string; href: string; text: string; tone: Tone };
+
+/**
+ * The owner dashboard (D8.1): live, curated figures from one API call. Each section is built from
+ * its source screen's read with the same permission rule; a section the caller may not see is not
+ * shown at all (never as zero) and undefined ratios show as unavailable.
+ */
 export default async function DashboardPage() {
+  const path = "/dashboard";
+  const session = await requireSession(path);
+  if (!session) return <LiveUnavailable retryHref={path} />;
+  const result = await loadOrRedirect("/dashboard", dashboardResponseSchema, path);
+  if (!result.ok)
+    return result.status === 403 ? <LiveForbidden /> : <LiveUnavailable retryHref={path} />;
+  const data = result.data;
   const locale = await getLocale();
   const t = await getTranslations("dashboard");
-  const tAlerts = await getTranslations("alerts");
-  const tSeverity = await getTranslations("severity");
-  const tHealth = await getTranslations("health");
-  const tCat = await getTranslations("categories");
+  const tStatus = await getTranslations("projectStatus");
+
+  const certifiedRows = (data.projects ?? []).filter((row) => row.certified);
+  const attention: Attention[] = [];
+  const add = (condition: unknown, item: Attention) => {
+    if (condition) attention.push(item);
+  };
+  add(data.invoices?.overdue.count, {
+    key: "overdue",
+    href: "/procurement/invoices",
+    tone: "danger",
+    text: t("attention.invoicesOverdue", {
+      count: data.invoices?.overdue.count ?? 0,
+      amount: formatKES(data.invoices?.overdue.outstandingMinor ?? 0),
+    }),
+  });
+  add(data.invoices?.dueSoon.count, {
+    key: "due",
+    href: "/procurement/invoices",
+    tone: "warning",
+    text: t("attention.invoicesDue", {
+      count: data.invoices?.dueSoon.count ?? 0,
+      days: data.invoices?.windowDays ?? 0,
+      amount: formatKES(data.invoices?.dueSoon.outstandingMinor ?? 0),
+    }),
+  });
+  add(data.spendAlerts?.total, {
+    key: "spend",
+    href: "/spending/alerts",
+    tone: "warning",
+    text: t("attention.spendAlerts", { count: data.spendAlerts?.total ?? 0 }),
+  });
+  add(data.stock?.lowStock, {
+    key: "stock",
+    href: "/stores",
+    tone: "warning",
+    text: t("attention.lowStock", { count: data.stock?.lowStock ?? 0 }),
+  });
+  add(data.plant?.total, {
+    key: "plant",
+    href: "/plant",
+    tone: "warning",
+    text: t("attention.plant", { count: data.plant?.total ?? 0 }),
+  });
+  add(data.safety?.openIncidents, {
+    key: "incidents",
+    href: "/safety",
+    tone: "danger",
+    text: t("attention.openIncidents", { count: data.safety?.openIncidents ?? 0 }),
+  });
+  add(data.safety?.overdueActions, {
+    key: "actions",
+    href: "/safety",
+    tone: "danger",
+    text: t("attention.overdueActions", { count: data.safety?.overdueActions ?? 0 }),
+  });
+  add(data.quality?.openSnags, {
+    key: "snags",
+    href: "/quality",
+    tone: "info",
+    text: t("attention.openSnags", { count: data.quality?.openSnags ?? 0 }),
+  });
+  add(data.quality?.inspectionsAwaitingSignOff, {
+    key: "inspections",
+    href: "/quality",
+    tone: "info",
+    text: t("attention.inspections", { count: data.quality?.inspectionsAwaitingSignOff ?? 0 }),
+  });
+  const showsAttention = Boolean(
+    data.invoices ?? data.spendAlerts ?? data.stock ?? data.plant ?? data.safety ?? data.quality,
+  );
+  const nothing = Object.keys(data).every((key) => key === "today" || key === "generatedAt");
+  const th = "px-3 py-2 font-medium";
+  const num = "px-3 py-2 text-right whitespace-nowrap tabular-nums";
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={formatWeekdayDate(NOW, locale)}
-        title={t("greeting", { name: currentUser.name.split(" ")[0] })}
+        eyebrow={formatWeekdayDate(`${data.today}T09:00:00+03:00`, locale)}
+        title={t("greeting", { name: session.user.displayName.split(" ")[0] ?? "" })}
         description={t("subtitle")}
         actions={
-          <Button asChild>
-            <Link href="/prototype/payroll">
-              {t("reviewApprovals", { count: kpis.awaitingApproval })} <ArrowRight aria-hidden />
+          <Button asChild variant="outline">
+            <Link href="/reports">
+              <ChartColumn aria-hidden /> {t("reports")}
             </Link>
           </Button>
         }
       />
+      {nothing ? (
+        <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+          {t("nothing")}
+        </p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          label={t("kpi.cash")}
-          value={formatKESCompact(kpis.cashMinor)}
-          hint={t("kpi.cashHint", {
-            change: formatPercent(kpis.cashChange),
-            float: formatKESCompact(kpis.mpesaFloatMinor),
-          })}
-          icon={<Landmark />}
-          tone="success"
-        />
-        <KpiCard
-          label={t("kpi.spend")}
-          value={formatKESCompact(kpis.spendMonthMinor)}
-          hint={t("kpi.spendHint", {
-            pct: formatPercent(kpis.spendMonthMinor / kpis.spendPlanMinor),
-            plan: formatKESCompact(kpis.spendPlanMinor),
-          })}
-          icon={<Receipt />}
-        />
-        <KpiCard
-          label={t("kpi.workers")}
-          value={`${kpis.workersToday}/${kpis.workersRostered}`}
-          hint={t("kpi.workersHint", { sites: projects.length })}
-          icon={<HardHat />}
-        />
-        <KpiCard
-          label={t("kpi.approvals")}
-          value={kpis.awaitingApproval}
-          hint={t("kpi.approvalsHint", { amount: formatKES(kpis.awaitingApprovalMinor) })}
-          icon={<Hourglass />}
-          tone="warning"
-        />
+        {data.forecast ? (
+          <KpiCard
+            label={t("kpi.cash")}
+            value={
+              data.forecast.openingMinor === null ? "—" : formatKES(data.forecast.openingMinor)
+            }
+            hint={data.forecast.openingMinor === null ? t("kpi.noOpening") : t("kpi.cashHint")}
+            icon={<Landmark />}
+          />
+        ) : null}
+        {certifiedRows.length ? (
+          <KpiCard
+            label={t("kpi.certified")}
+            value={formatKES(
+              certifiedRows.reduce((sum, row) => sum + row.certified!.certifiedMinor, 0),
+            )}
+            hint={t("kpi.certifiedHint", {
+              count: certifiedRows.filter((row) => row.certified!.latest).length,
+            })}
+            icon={<FileCheck2 />}
+          />
+        ) : null}
+        {data.spending ? (
+          <KpiCard
+            label={t("kpi.actual")}
+            value={formatKES(data.spending.totals.actualMinor)}
+            hint={t("kpi.actualHint", {
+              committed: formatKES(data.spending.totals.committedMinor),
+              paid: formatKES(data.spending.totals.paidMinor),
+            })}
+            icon={<Wallet />}
+          />
+        ) : null}
+        {data.attendance ? (
+          <KpiCard
+            label={t("kpi.workers")}
+            value={String(data.attendance.present)}
+            hint={t("kpi.workersHint", {
+              halfDay: data.attendance.halfDay,
+              absent: data.attendance.absent,
+            })}
+            icon={<HardHat />}
+          />
+        ) : null}
+        {data.invoices ? (
+          <KpiCard
+            label={t("kpi.overdue")}
+            value={formatKES(data.invoices.overdue.outstandingMinor)}
+            hint={t("kpi.overdueHint", {
+              count: data.invoices.overdue.count,
+              dueSoon: data.invoices.dueSoon.count,
+              days: data.invoices.windowDays,
+            })}
+            icon={<AlertTriangle />}
+            tone={data.invoices.overdue.count ? "danger" : "default"}
+          />
+        ) : null}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>{t("projectsTitle")}</CardTitle>
-            <CardDescription>{t("projectsDescription")}</CardDescription>
-            <CardAction>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/prototype/projects">{t("viewAll")}</Link>
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="px-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-6">{t("table.project")}</TableHead>
-                  <TableHead className="w-40">{t("table.progress")}</TableHead>
-                  <TableHead className="text-right">{t("table.burn")}</TableHead>
-                  <TableHead className="text-right">CPI</TableHead>
-                  <TableHead className="text-right">SPI</TableHead>
-                  <TableHead className="text-right">{t("table.workers")}</TableHead>
-                  <TableHead className="pr-6">{t("table.health")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {projects.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="pl-6">
-                      <Link
-                        href={`/prototype/projects/${p.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {p.name}
-                      </Link>
-                      <div className="text-xs text-muted-foreground">
-                        {p.town}, {p.county}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Progress
-                          value={p.progress * 100}
-                          className="h-2"
-                          aria-label={t("table.progress")}
-                        />
-                        <span className="w-9 text-right text-xs tabular-nums">
-                          {formatPercent(p.progress)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatPercent(p.budgetBurn)}
-                    </TableCell>
-                    <TableCell
-                      className={`text-right tabular-nums ${p.cpi < 1 ? "text-destructive" : ""}`}
-                    >
-                      {p.cpi.toFixed(2)}
-                    </TableCell>
-                    <TableCell
-                      className={`text-right tabular-nums ${p.spi < 0.95 ? "text-destructive" : ""}`}
-                    >
-                      {p.spi.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {p.workersToday}/{p.workersRostered}
-                    </TableCell>
-                    <TableCell className="pr-6">
-                      <StatusBadge tone={healthTone[p.health]}>{tHealth(p.health)}</StatusBadge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("alertsTitle")}</CardTitle>
-            <CardDescription>{t("alertsDescription", { count: alerts.length })}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3">
-              {alerts.slice(0, 5).map((alert) => (
-                <li key={alert.key}>
+      {showsAttention ? (
+        <section aria-labelledby="attention" className="space-y-3 rounded-xl border p-4">
+          <h2 id="attention" className="text-lg font-semibold">
+            {t("attention.title")}
+          </h2>
+          {attention.length ? (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {attention.map((item) => (
+                <li key={item.key}>
                   <Link
-                    href={alert.href}
-                    className="block rounded-lg border p-3 text-sm transition-colors hover:bg-muted"
+                    href={item.href}
+                    className="flex min-h-11 items-center gap-2 rounded-lg border p-3 text-sm hover:bg-muted/50"
                   >
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <StatusBadge tone={severityTone[alert.severity]}>
-                        {tSeverity(alert.severity)}
-                      </StatusBadge>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {alert.project}
-                      </span>
-                    </div>
-                    <p className="leading-snug">{tAlerts(alert.key, alert.params)}</p>
+                    <StatusBadge tone={item.tone}>{t(`attention.tones.${item.tone}`)}</StatusBadge>
+                    <span>{item.text}</span>
                   </Link>
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
-      </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("attention.nothing")}</p>
+          )}
+        </section>
+      ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("spendTitle")}</CardTitle>
-            <CardDescription>{t("spendDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SpendByCategoryChart
-              data={spendByCategory.map((c) => ({
-                key: c.key,
-                label: tCat(c.key),
-                amount: c.amount,
-              }))}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("cashFlowTitle")}</CardTitle>
-            <CardDescription>{t("cashFlowDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CashFlowChart
-              data={cashFlowForecast}
-              labels={{ inflow: t("inflow"), outflow: t("outflow"), weekOf: t("weekOf") }}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      {data.projects ? (
+        <section aria-labelledby="dash-projects" className="space-y-3">
+          <h2 id="dash-projects" className="text-lg font-semibold">
+            {t("projects.title")}
+          </h2>
+          {data.projects.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("projects.empty")}</p>
+          ) : (
+            <ScrollTable label={t("projects.title")} minWidth={certifiedRows.length ? 760 : 480}>
+              <thead className="bg-muted/50 text-left text-xs">
+                <tr>
+                  <th scope="col" className={th}>
+                    {t("projects.project")}
+                  </th>
+                  <th scope="col" className={th}>
+                    {t("projects.status")}
+                  </th>
+                  <th scope="col" className={`${th} text-right`}>
+                    {t("projects.contract")}
+                  </th>
+                  {certifiedRows.length ? (
+                    <>
+                      <th scope="col" className={`${th} text-right`}>
+                        {t("projects.certified")}
+                      </th>
+                      <th scope="col" className={`${th} text-right`}>
+                        {t("projects.percent")}
+                      </th>
+                      <th scope="col" className={th}>
+                        {t("projects.latest")}
+                      </th>
+                    </>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody>
+                {data.projects.map((row) => (
+                  <tr key={row.project.id} className="border-t">
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/projects/${row.project.id}`}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {row.project.code} · {row.project.name}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">{tStatus(row.status)}</td>
+                    <td className={num}>
+                      {row.contractSumMinor === null ? "—" : formatKES(row.contractSumMinor)}
+                    </td>
+                    {certifiedRows.length ? (
+                      <>
+                        <td className={num}>
+                          {row.certified ? formatKES(row.certified.certifiedMinor) : "—"}
+                        </td>
+                        <td className={num}>
+                          {row.certified?.percentOfContract
+                            ? `${row.certified.percentOfContract} %`
+                            : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          {row.certified?.latest
+                            ? `${row.certified.latest.number} · ${formatCalendarDate(row.certified.latest.date)}`
+                            : "—"}
+                        </td>
+                      </>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </ScrollTable>
+          )}
+          {certifiedRows.length ? (
+            <p className="text-xs text-muted-foreground">{t("projects.note")}</p>
+          ) : null}
+        </section>
+      ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>{t("mapTitle")}</CardTitle>
-            <CardDescription>{t("mapDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SitesMap
-              label={t("mapTitle")}
-              className="h-80"
-              sites={projects.map((p) => ({
-                id: p.id,
-                name: p.name,
-                center: p.center,
-                radiusM: p.radiusM,
-              }))}
-            />
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>{t("upcomingTitle")}</CardTitle>
-            <CardDescription>{t("upcomingDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="divide-y">
-              {upcomingPayments.map((p) => (
-                <li key={p.key}>
-                  <Link href={p.href} className="flex items-center gap-3 py-3 hover:bg-muted/50">
-                    <span
-                      className={`flex size-8 shrink-0 items-center justify-center rounded-full ${p.direction === "in" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+      {data.spending ? (
+        <section aria-labelledby="dash-spending" className="space-y-3">
+          <h2 id="dash-spending" className="text-lg font-semibold">
+            {t("spending.title")}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {t("spending.hint", { percent: data.spending.thresholdPercent })}
+          </p>
+          <ScrollTable label={t("spending.title")} minWidth={760}>
+            <thead className="bg-muted/50 text-left text-xs">
+              <tr>
+                <th scope="col" className={th}>
+                  {t("projects.project")}
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  {t("spending.budget")}
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  {t("spending.committed")}
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  {t("spending.actual")}
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  {t("spending.paid")}
+                </th>
+                <th scope="col" className={th}>
+                  {t("spending.used")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.spending.projects.map((row) => (
+                <tr key={row.project.id} className="border-t">
+                  <td className="px-3 py-2">
+                    <Link
+                      href={`/spending/projects/${row.project.id}`}
+                      className="underline-offset-4 hover:underline"
                     >
-                      {p.direction === "in" ? (
-                        <ArrowDownLeft className="size-4" aria-hidden />
-                      ) : (
-                        <ArrowUpRight className="size-4" aria-hidden />
-                      )}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{t(`payments.${p.key}`)}</p>
-                      <p className="text-xs text-muted-foreground">{formatDate(p.date)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium tabular-nums">{formatKES(p.amountMinor)}</p>
-                      <StatusBadge tone={paymentTone[p.state]} className="mt-1">
-                        {t(`paymentStates.${p.state}`)}
+                      {row.project.code}
+                    </Link>
+                  </td>
+                  <td className={num}>
+                    {row.budgetMinor === null ? t("spending.noBudget") : formatKES(row.budgetMinor)}
+                  </td>
+                  <td className={num}>{formatKES(row.committedMinor)}</td>
+                  <td className={num}>{formatKES(row.actualMinor)}</td>
+                  <td className={num}>{formatKES(row.paidMinor)}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-24 overflow-hidden rounded-full bg-muted" aria-hidden>
+                        <div
+                          className={`h-full ${barClass[row.level]}`}
+                          style={{
+                            width: `${Math.min(100, Math.max(0, Number(row.usedPercent ?? 0)))}%`,
+                          }}
+                        />
+                      </div>
+                      <StatusBadge tone={levelTone[row.level]}>
+                        {row.usedPercent === null
+                          ? t("spending.unavailable")
+                          : `${row.usedPercent} %`}
                       </StatusBadge>
                     </div>
-                  </Link>
-                </li>
+                  </td>
+                </tr>
               ))}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
+            </tbody>
+          </ScrollTable>
+        </section>
+      ) : null}
+
+      {data.forecast ? (
+        <section aria-labelledby="dash-forecast" className="space-y-3">
+          <h2 id="dash-forecast" className="text-lg font-semibold">
+            {t("forecast.title")}
+          </h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ForecastChart weeks={data.forecast.weeks} label={t("forecast.chart")} />
+            <ScrollTable label={t("forecast.table")} minWidth={420}>
+              <thead className="bg-muted/50 text-left text-xs">
+                <tr>
+                  <th scope="col" className={th}>
+                    {t("forecast.week")}
+                  </th>
+                  <th scope="col" className={`${th} text-right`}>
+                    {t("forecast.in")}
+                  </th>
+                  <th scope="col" className={`${th} text-right`}>
+                    {t("forecast.out")}
+                  </th>
+                  <th scope="col" className={`${th} text-right`}>
+                    {t("forecast.closing")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.forecast.weeks.map((week) => (
+                  <tr key={week.start} className="border-t">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {formatCalendarDate(week.start)}
+                    </td>
+                    <td className={num}>{formatKES(week.inMinor)}</td>
+                    <td className={num}>{formatKES(week.outMinor)}</td>
+                    <td className={num}>
+                      {week.closingMinor === null ? "—" : formatKES(week.closingMinor)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </ScrollTable>
+          </div>
+          <Link href="/spending/forecast" className="text-sm underline underline-offset-4">
+            {t("forecast.open")}
+          </Link>
+        </section>
+      ) : null}
+
+      {data.attendance ? (
+        <section aria-labelledby="dash-attendance" className="space-y-3">
+          <h2 id="dash-attendance" className="text-lg font-semibold">
+            {t("attendance.title")}
+          </h2>
+          <ScrollTable label={t("attendance.title")} minWidth={520}>
+            <thead className="bg-muted/50 text-left text-xs">
+              <tr>
+                <th scope="col" className={th}>
+                  {t("projects.project")}
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  {t("attendance.present")}
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  {t("attendance.halfDay")}
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  {t("attendance.absent")}
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  {t("attendance.sites")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.attendance.projects.map((row) => (
+                <tr key={row.project.id} className="border-t">
+                  <td className="px-3 py-2">
+                    {row.project.code} · {row.project.name}
+                  </td>
+                  <td className={num}>{row.present}</td>
+                  <td className={num}>{row.halfDay}</td>
+                  <td className={num}>{row.absent}</td>
+                  <td className={num}>
+                    {t("attendance.sitesValue", { recorded: row.sitesRecorded, sites: row.sites })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </ScrollTable>
+          <p className="text-xs text-muted-foreground">{t("attendance.note")}</p>
+        </section>
+      ) : null}
     </div>
   );
 }

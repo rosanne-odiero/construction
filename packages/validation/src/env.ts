@@ -97,6 +97,11 @@ export const apiEnvSchema = z.object({
     )
     .default("16"),
 
+  // The in-process report scheduler (D8.1, ARCHITECTURE §4.14): `on` checks for due report
+  // subscriptions every minute (one instance at a time, under a Postgres advisory lock); `off`
+  // leaves them for an administrator's "run due now". Unset: on, except under NODE_ENV=test.
+  REPORT_SCHEDULER: z.enum(["on", "off"]).optional(),
+
   API_DOCS_ENABLED: z.stringbool().default(true),
   HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
 });

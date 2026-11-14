@@ -27,6 +27,7 @@ export default async function ComingSoonPage({ params }: { params: Promise<{ sec
   if (section === "diary") redirect("/diary");
   if (section === "safety") redirect("/safety");
   if (section === "plant") redirect("/plant");
+  if (section === "reports") redirect("/reports");
   if (section === "documents") redirect("/documents");
   if (!isSection(section)) notFound();
   const t = await getTranslations("soon");

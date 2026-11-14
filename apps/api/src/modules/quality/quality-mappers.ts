@@ -77,7 +77,13 @@ export function toSnag(row: SnagRow, people: People, context: QualityContext): S
       raised: row.photos
         .filter((link) => link.stage === "raised")
         .map((link) => toPhoto(link.photo)),
-      fixed: row.photos.filter((link) => link.stage === "fixed").map((link) => toPhoto(link.photo)),
+      // The current fix only; photos of fixes rejected by a reopen are listed apart.
+      fixed: row.photos
+        .filter((link) => link.stage === "fixed" && link.fixRound === row.reopenCount)
+        .map((link) => toPhoto(link.photo)),
+      earlierFixes: row.photos
+        .filter((link) => link.stage === "fixed" && link.fixRound < row.reopenCount)
+        .map((link) => toPhoto(link.photo)),
     },
     raisedBy: personOf(people, row.raisedBy),
     raisedAt: row.raisedAt.toISOString(),

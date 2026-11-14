@@ -6451,6 +6451,7 @@
       "fromInspection": "Kutoka ukaguzi",
       "photosRaised": "Picha za {code} ilipofunguliwa",
       "photosFixed": "Picha za marekebisho ya {code}",
+      "photosEarlierFixes": "Picha za marekebisho ya awali ya {code} (yalikataliwa ilipofunguliwa tena)",
       "fixedBy": "Imerekebishwa: imerekodiwa na {name} tarehe {at}",
       "closedBy": "Imethibitishwa na kufungwa na {name} tarehe {at}",
       "reopened": "{count, plural, one {Imefunguliwa tena mara moja} other {Imefunguliwa tena mara #}}. Sababu ya mwisho: {reason}",

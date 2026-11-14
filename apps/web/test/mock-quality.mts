@@ -286,7 +286,7 @@ export function initialQuality(
     fixNote: null,
     reopenCount: 0,
     lastReopenReason: null,
-    photos: { raised: [], fixed: [] },
+    photos: { raised: [], fixed: [], earlierFixes: [] },
     raisedBy: people.agent,
     raisedAt: at(-3),
     fixedBy: null,
@@ -1162,7 +1162,7 @@ export function handleQuality(
       fixNote: null,
       reopenCount: 0,
       lastReopenReason: null,
-      photos: { raised: photos(input.photoIds), fixed: [] },
+      photos: { raised: photos(input.photoIds), fixed: [], earlierFixes: [] },
       raisedBy: actor,
       raisedAt: now(),
       fixedBy: null,
@@ -1225,6 +1225,11 @@ export function handleQuality(
           fixNote: null,
           reopenCount: row.reopenCount + 1,
           lastReopenReason: input.reason,
+          photos: {
+            ...row.photos,
+            fixed: [],
+            earlierFixes: [...row.photos.earlierFixes, ...row.photos.fixed],
+          },
         });
       row.version += 1;
       return { body: { snag: toSnag(row) }, schema: snagResponseSchema };

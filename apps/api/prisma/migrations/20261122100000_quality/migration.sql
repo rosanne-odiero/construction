@@ -165,10 +165,11 @@ CREATE TABLE "snag_photos" (
     "snag_id" UUID NOT NULL,
     "photo_id" UUID NOT NULL,
     "stage" VARCHAR(8) NOT NULL,
+    "fix_round" INTEGER NOT NULL DEFAULT 0,
     "added_by" UUID NOT NULL,
     "added_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "snag_photos_pkey" PRIMARY KEY ("tenant_id","snag_id","photo_id")
+    CONSTRAINT "snag_photos_pkey" PRIMARY KEY ("tenant_id","snag_id","photo_id","stage","fix_round")
 );
 
 -- CreateTable
@@ -776,7 +777,12 @@ DECLARE
   parent inspections%ROWTYPE;
 BEGIN
   IF TG_OP = 'DELETE' THEN
-    IF pg_trigger_depth() > 1 THEN
+    -- Only a cascade from an item that is already gone (a company being erased) skips the checks;
+    -- a delete issued from any other trigger is checked like a direct one.
+    IF pg_trigger_depth() > 1 AND NOT EXISTS (
+        SELECT 1 FROM inspection_items t
+         WHERE t.tenant_id = OLD.tenant_id AND t.project_id = OLD.project_id AND t.id = OLD.item_id)
+    THEN
       RETURN OLD;
     END IF;
     target := OLD;
@@ -831,7 +837,9 @@ ALTER TABLE "snags" ADD CONSTRAINT "snags_check" CHECK (
       AND closed_at IS NOT NULL AND closed_by <> fixed_by
     ELSE false END, false)
 );
-ALTER TABLE "snag_photos" ADD CONSTRAINT "snag_photos_check" CHECK (stage IN ('raised', 'fixed'));
+ALTER TABLE "snag_photos" ADD CONSTRAINT "snag_photos_check" CHECK (
+  stage IN ('raised', 'fixed') AND fix_round >= 0 AND (stage = 'fixed' OR fix_round = 0)
+);
 
 CREATE FUNCTION app.guard_snag() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -948,9 +956,12 @@ BEGIN
   END IF;
   SELECT * INTO parent FROM snags
     WHERE tenant_id = NEW.tenant_id AND project_id = NEW.project_id AND id = NEW.snag_id;
+  -- A fix's photos belong to its round (the snag's reopen count), so a rejected fix's photos are
+  -- never shown as evidence for the next one.
   IF NOT (CASE NEW.stage
       WHEN 'raised' THEN parent.raised_at = now()
-      ELSE parent.status = 'fixed' AND parent.fixed_at = now() END) THEN
+      ELSE parent.status = 'fixed' AND parent.fixed_at = now()
+        AND NEW.fix_round = parent.reopen_count END) THEN
     RAISE EXCEPTION 'Snag photos are added when it is raised or a fix is recorded'
       USING ERRCODE = '23514';
   END IF;

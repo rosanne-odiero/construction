@@ -3699,12 +3699,14 @@ model SnagPhoto {
   snagId    String    @map("snag_id") @db.Uuid
   photoId   String    @map("photo_id") @db.Uuid
   stage     String    @db.VarChar(8)
+  /// The snag's reopen count when a fix photo was added (0 for photos taken when it was raised).
+  fixRound  Int       @default(0) @map("fix_round")
   addedBy   String    @map("added_by") @db.Uuid
   addedAt   DateTime  @default(now()) @map("added_at") @db.Timestamptz
   snag      Snag      @relation(fields: [tenantId, projectId, snagId], references: [tenantId, projectId, id], onDelete: Cascade)
   photo     SitePhoto @relation(fields: [tenantId, projectId, photoId], references: [tenantId, projectId, id], onDelete: Restrict)
 
-  @@id([tenantId, snagId, photoId])
+  @@id([tenantId, snagId, photoId, stage, fixRound])
   @@index([tenantId, projectId, photoId])
   @@map("snag_photos")
 }

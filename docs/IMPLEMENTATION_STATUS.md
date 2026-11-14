@@ -1151,7 +1151,15 @@ Screenshots from the real-API smoke are kept outside the repository, in the sess
 
 ## D6.1 quality (branch `phase-6/d6.1-quality`)
 
-Status: **built and verified locally; not yet committed or independently reviewed.** Work ran in the `construction-pin` worktree on `phase-6/d6.1-quality` (from `origin/main` at `1d0896e`, which already had the diary foundation, verified photos, the portals, D6.2, D5.1–D5.3, D3.1 and D3.3) with its own Docker stack (`pmb-pin`: PostgreSQL 55732, Valkey 56679, RustFS 9300, Mailpit 8325; API 4500, web 3500; Playwright 3510/3599). Roadmap: D6.1 🔎. This completes the D6.1 "remaining" lists in the two Phase 6 increments above, except offline/site-app capture (Phase 3 site app).
+Status: **built, independently verified and reviewed** (findings below, all fixed). Work ran in the `construction-pin` worktree on `phase-6/d6.1-quality` (from `origin/main` at `1d0896e`, which already had the diary foundation, verified photos, the portals, D6.2, D5.1–D5.3, D3.1 and D3.3) with its own Docker stack (`pmb-pin`: PostgreSQL 55732, Valkey 56679, RustFS 9300, Mailpit 8325; API 4500, web 3500; Playwright 3510/3599). Roadmap: D6.1 🔎. This completes the D6.1 "remaining" lists in the two Phase 6 increments above, except offline/site-app capture (Phase 3 site app).
+
+**Findings fixed after independent code review**
+
+| # | Severity | Finding | Fix and regression test |
+|---|---|---|---|
+| 1 | Medium | A reopened snag kept the rejected fix's photos as "photos of the fix", so a later fix recorded without photos looked evidenced and could be closed on the old pictures; re-attaching an already linked photo was silently dropped | Fix photos carry their fix round (`snag_photos.fix_round`, part of the key with the stage; the trigger requires the snag's current reopen count); the snag shows the current fix's photos and lists `earlierFixes` apart; duplicates are no longer skipped silently. `quality.e2e-spec.ts` reopens a fixed snag and expects no current fix photos and the old one under `earlierFixes`; showing every round fails it |
+| 2 | Medium | `app.guard_inspection_item_photo` skipped every check whenever it ran inside another trigger, so `pmb_app` could delete photos of a signed-off inspection from a temporary trigger of its own | Only a cascade from an inspection item that is already gone skips the checks. The e2e test tries the delete from a `pg_temp` trigger and expects the guard's refusal; the old bypass fails it |
+| 3 | Medium (tests) | The docs claimed self sign-off and self-certification are refused in SQL as `pmb_app`, but only the snag verifier had a direct-SQL test | The e2e tests now try, as `pmb_app`, the author signing off and returning their own inspection and the proposer certifying their own completion, and expect the triggers' refusals; dropping the author check from the sign-off trigger fails them |
 
 **What changed**
 

@@ -348,7 +348,10 @@ export const snagSchema = z.strictObject({
   lastReopenReason: z.string().nullable(),
   photos: z.strictObject({
     raised: z.array(qualityPhotoSchema),
+    /** Photos of the current fix (none until it is fixed again after a reopen). */
     fixed: z.array(qualityPhotoSchema),
+    /** Photos of earlier fixes that a reopen rejected (history, not evidence of the current fix). */
+    earlierFixes: z.array(qualityPhotoSchema),
   }),
   raisedBy: person,
   raisedAt: timestamp,

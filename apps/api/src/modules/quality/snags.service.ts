@@ -285,17 +285,18 @@ export class SnagsService {
           data: { ...data, updatedBy: userId, version: { increment: 1 } },
         });
         if (changed.count !== 1) throw versionConflict();
+        // A fix's photos belong to its round, so a reopened snag's next fix starts with none.
         if (photoIds.length)
           await scope.tx.snagPhoto.createMany({
-            data: photoIds.map((photoId) => ({
+            data: [...new Set(photoIds)].map((photoId) => ({
               tenantId,
               projectId,
               snagId,
               photoId,
               stage: "fixed",
+              fixRound: row.reopenCount,
               addedBy: userId,
             })),
-            skipDuplicates: true,
           });
         await this.scope.audit(
           scope.tx,

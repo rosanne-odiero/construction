@@ -449,6 +449,24 @@ describe("Quality and the diary workforce (real runtime role)", () => {
     // Maker-checker: the author (or a foreman without quality.manage) cannot sign it off.
     problem(await act(detail, "sign_off", agent), 403, "inspection-independent-review");
     problem(await act(detail, "sign_off", foreman), 403);
+    // …nor in SQL as pmb_app: the author can neither sign off nor return their own inspection.
+    const selfDecision = (data: Record<string, unknown>) =>
+      db.run(context(agent), (tx) =>
+        tx.inspection.update({
+          where: { id: detail.inspection.id },
+          data: { ...data, version: { increment: 1 }, updatedBy: agent.auth.user.id },
+        }),
+      );
+    await expect(
+      selfDecision({ status: "signed_off", signedOffBy: agent.auth.user.id }),
+    ).rejects.toThrow(/independent reviewer signs off/);
+    await expect(
+      selfDecision({
+        status: "draft",
+        returnedBy: agent.auth.user.id,
+        returnReason: "Returning my own work",
+      }),
+    ).rejects.toThrow(/independent reviewer returns/);
     const managerView = inspection(
       await manager.call("get", `${base()}/inspections/${detail.inspection.id}`),
     );
@@ -485,6 +503,23 @@ describe("Quality and the diary workforce (real runtime role)", () => {
       db.run(context(agent), (tx) =>
         tx.inspectionItemPhoto.deleteMany({ where: { itemId: detail.items[1]!.id } }),
       ),
+    ).rejects.toThrow(/draft inspection/);
+    // Nor from inside another trigger: only a cascade from a deleted item skips the guard.
+    await expect(
+      db.run(context(agent), async (tx) => {
+        await tx.$executeRawUnsafe("CREATE TEMP TABLE photo_probe (id int) ON COMMIT DROP");
+        await tx.$executeRawUnsafe(
+          `CREATE FUNCTION pg_temp.photo_probe_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+           BEGIN
+             DELETE FROM inspection_item_photos WHERE item_id = '${detail.items[1]!.id}'::uuid;
+             RETURN NEW;
+           END $$`,
+        );
+        await tx.$executeRawUnsafe(
+          "CREATE TRIGGER photo_probe AFTER INSERT ON photo_probe FOR EACH ROW EXECUTE FUNCTION pg_temp.photo_probe_delete()",
+        );
+        await tx.$executeRawUnsafe("INSERT INTO photo_probe VALUES (1)");
+      }),
     ).rejects.toThrow(/draft inspection/);
 
     // Snags come from failed items only.
@@ -594,10 +629,14 @@ describe("Quality and the diary workforce (real runtime role)", () => {
       fixedBy: null,
       fixNote: null,
     });
+    // The rejected fix's photo is history, never evidence for the next fix.
+    expect(reopened.photos).toMatchObject({ fixed: [], earlierFixes: [{ id: fixPhoto }] });
     const refixed = ok(
       await snagAction(reopened, "fix", foreman),
       (body) => snagResponseSchema.parse(body).snag,
     );
+    expect(refixed.photos.fixed).toEqual([]);
+    expect(refixed.photos.earlierFixes.map((entry) => entry.id)).toEqual([fixPhoto]);
     const closed = ok(
       await snagAction(refixed, "close", agent),
       (body) => snagResponseSchema.parse(body).snag,
@@ -976,6 +1015,19 @@ describe("Quality and the diary workforce (real runtime role)", () => {
       (body) => snagResponseSchema.parse(body).snag,
     );
     expect((await snagAction(lateFixed, "close", agent)).status).toBe(200);
+    // The proposer cannot certify their own completion, in SQL as pmb_app either.
+    await expect(
+      db.run(context(manager), (tx) =>
+        tx.projectCompletion.update({
+          where: { id: practical.id },
+          data: {
+            status: "certified",
+            certifiedBy: manager.auth.user.id,
+            version: { increment: 1 },
+          },
+        }),
+      ),
+    ).rejects.toThrow(/other than the proposer certifies/);
     view = ok(
       await agent.call("post", `${base()}/completion/${practical.id}/actions`, {
         version: practical.version,

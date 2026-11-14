@@ -199,6 +199,13 @@ export function SnagCard({
         photos={snag.photos.fixed}
         label={t("snags.photosFixed", { code: snag.code })}
       />
+      {snag.photos.earlierFixes.length ? (
+        <PhotoThumbs
+          projectId={projectId}
+          photos={snag.photos.earlierFixes}
+          label={t("snags.photosEarlierFixes", { code: snag.code })}
+        />
+      ) : null}
       {snag.closedBy && snag.closedAt ? (
         <p className="text-sm">
           {t("snags.closedBy", {

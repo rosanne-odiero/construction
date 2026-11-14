@@ -6451,6 +6451,7 @@
       "fromInspection": "From inspection",
       "photosRaised": "Photos of {code} when raised",
       "photosFixed": "Photos of the fix for {code}",
+      "photosEarlierFixes": "Photos of earlier fixes of {code} (rejected when it was reopened)",
       "fixedBy": "Fixed: recorded by {name} on {at}",
       "closedBy": "Verified and closed by {name} on {at}",
       "reopened": "{count, plural, one {Reopened once} other {Reopened # times}}. Last reason: {reason}",

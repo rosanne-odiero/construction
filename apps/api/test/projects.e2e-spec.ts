@@ -1421,6 +1421,16 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         { kind: "interim", status: "certified", certificateNumber: 2 },
         { kind: "retention_release", status: "certified", certificateNumber: 3 },
       ]),
+      // D8.2: on RUI-HTS a closed near miss and an investigated injury; three corrective actions
+      // (two verified, one overdue); two confirmed toolbox talks and a draft; two kits; a treatment.
+      incidents: [
+        { kind: "near_miss", status: "closed" },
+        { kind: "injury", status: "investigated" },
+      ],
+      correctiveActions: [{ status: "verified" }, { status: "verified" }, { status: "open" }],
+      toolboxTalks: [{ status: "confirmed" }, { status: "confirmed" }, { status: "draft" }],
+      firstAidKits: 2,
+      treatments: 1,
     });
     expect(afterFirst.valuations).toHaveLength(5);
     expect(first.valuations).toMatchObject({
@@ -1432,16 +1442,6 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         "JUJ-DPX IPC-0002 (interim)",
         "JUJ-DPX IPC-0003 (practical retention release)",
       ],
-      // D8.2: on RUI-HTS a closed near miss and an investigated injury; three corrective actions
-      // (two verified, one overdue); two confirmed toolbox talks and a draft; two kits; a treatment.
-      incidents: [
-        { kind: "near_miss", status: "closed" },
-        { kind: "injury", status: "investigated" },
-      ],
-      correctiveActions: [{ status: "verified" }, { status: "verified" }, { status: "open" }],
-      toolboxTalks: [{ status: "confirmed" }, { status: "confirmed" }, { status: "draft" }],
-      firstAidKits: 2,
-      treatments: 1,
     });
     expect(first.safety).toMatchObject({
       flaggedLabourers: 2,

@@ -23,7 +23,9 @@ import type { Scope } from "../identity/access-policy.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import {
   SpendingAccess,
+  costCodeInUse,
   spendingConflict,
+  spendingDatabaseProblem,
   spendingSettings,
   spendingVersionConflict,
 } from "./spending-common.js";
@@ -146,37 +148,51 @@ export class CostCodesService {
     input: { version: number; name?: string; category?: CostCategory; active?: boolean },
     req: Request,
   ) {
-    return this.scope.run(
-      principal,
-      req,
-      async (scope) => {
-        this.access.requireCompany(scope, MANAGERS);
-        const { tx, access } = scope;
-        const row = await tx.costCode.findUnique({
-          where: { tenantId_id: { tenantId: access.tenantId, id } },
-        });
-        if (!row) throw new NotFoundException("Cost code not found");
-        if (row.version !== input.version) throw spendingVersionConflict();
-        const updated = await tx.costCode.update({
-          where: { tenantId_id: { tenantId: access.tenantId, id } },
-          data: {
-            ...(input.name !== undefined ? { name: input.name } : {}),
-            ...(input.category !== undefined ? { category: input.category } : {}),
-            ...(input.active !== undefined ? { active: input.active } : {}),
-            version: { increment: 1 },
-            updatedBy: access.userId,
-            updatedAt: new Date(),
-          },
-        });
-        await this.scope.audit(tx, "cost_code.updated", id, {
-          fields: Object.keys(input)
-            .filter((key) => key !== "version")
-            .sort(),
-        });
-        return costCodeResponseSchema.parse({ costCode: toCostCode(updated) });
-      },
-      true,
-    );
+    return this.scope
+      .run(
+        principal,
+        req,
+        async (scope) => {
+          this.access.requireCompany(scope, MANAGERS);
+          const { tx, access } = scope;
+          const row = await tx.costCode.findUnique({
+            where: { tenantId_id: { tenantId: access.tenantId, id } },
+          });
+          if (!row) throw new NotFoundException("Cost code not found");
+          if (row.version !== input.version) throw spendingVersionConflict();
+          if (input.category !== undefined && input.category !== row.category) {
+            const where = { tenantId: access.tenantId, costCodeId: id };
+            const used = await Promise.all([
+              tx.budgetLine.findFirst({ where, select: { id: true } }),
+              tx.costEntry.findFirst({ where, select: { id: true } }),
+              tx.costJournalLine.findFirst({ where, select: { id: true } }),
+              tx.pettyCashExpense.findFirst({ where, select: { id: true } }),
+            ]);
+            if (used.some(Boolean)) throw costCodeInUse();
+          }
+          const updated = await tx.costCode.update({
+            where: { tenantId_id: { tenantId: access.tenantId, id } },
+            data: {
+              ...(input.name !== undefined ? { name: input.name } : {}),
+              ...(input.category !== undefined ? { category: input.category } : {}),
+              ...(input.active !== undefined ? { active: input.active } : {}),
+              version: { increment: 1 },
+              updatedBy: access.userId,
+              updatedAt: new Date(),
+            },
+          });
+          await this.scope.audit(tx, "cost_code.updated", id, {
+            fields: Object.keys(input)
+              .filter((key) => key !== "version")
+              .sort(),
+          });
+          return costCodeResponseSchema.parse({ costCode: toCostCode(updated) });
+        },
+        true,
+      )
+      .catch((error: unknown) => {
+        throw spendingDatabaseProblem(error) ?? error;
+      });
   }
 
   /** Adds the default codes the company does not have yet (by code). */

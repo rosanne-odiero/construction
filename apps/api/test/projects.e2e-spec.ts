@@ -1532,5 +1532,6 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     });
     expect(second.quality).toEqual({ ...first.quality, created: false });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
-  });
+    // Seeds a whole company twice (about 7 s alone); parallel e2e files can triple that.
+  }, 90_000);
 });

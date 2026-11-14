@@ -37,6 +37,7 @@ import {
   projectRef,
   SpendingAccess,
   spendingConflict,
+  spendingDatabaseProblem,
   spendingInvalidTransition,
   spendingProblem,
   spendingVersionConflict,
@@ -165,7 +166,7 @@ export class BudgetsService {
       .catch((error: unknown) => {
         if (isUniqueViolation(error))
           throw spendingConflict("budget-open", "A budget version is already being prepared");
-        throw error;
+        throw spendingDatabaseProblem(error) ?? error;
       });
   }
 
@@ -608,7 +609,7 @@ export class BudgetsService {
             "budget-line-exists",
             "This item or cost code is already budgeted",
           );
-        throw error;
+        throw spendingDatabaseProblem(error) ?? error;
       });
   }
 

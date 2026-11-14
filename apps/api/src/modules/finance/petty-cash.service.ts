@@ -460,6 +460,8 @@ export class PettyCashService {
           throw spendingInvalidTransition(row.status);
         if (action !== "cancel" && row.requestedBy === access.userId)
           throw makerChecker("The requester of a top-up cannot decide it");
+        if (action !== "cancel" && (await this.custodianOf(scope, row.floatId)) === access.userId)
+          throw makerChecker("The float's custodian cannot decide its top-ups");
         if (
           action === "cancel" &&
           row.requestedBy !== access.userId &&
@@ -515,6 +517,11 @@ export class PettyCashService {
           if (row.version !== input.version) throw spendingVersionConflict();
           if (row.decidedBy === access.userId)
             throw makerChecker("The approver of a top-up cannot record its payment");
+          // Three people: requester, approver and payer; the custodian is none of the last two.
+          if (row.requestedBy === access.userId)
+            throw makerChecker("The requester of a top-up cannot record its payment");
+          if ((await this.custodianOf(scope, row.floatId)) === access.userId)
+            throw makerChecker("The float's custodian cannot record its top-ups as paid");
           const requestedOn = nairobiDate(row.requestedAt);
           if (input.paidOn > nairobiDate() || input.paidOn < requestedOn)
             throw spendingProblem(
@@ -833,6 +840,15 @@ export class PettyCashService {
     return row;
   }
 
+  /** The custodian of a float (who never decides or pays its top-ups). */
+  private async custodianOf(scope: Scope, floatId: string): Promise<string | undefined> {
+    const row = await scope.tx.pettyCashFloat.findUnique({
+      where: { tenantId_id: { tenantId: scope.access.tenantId, id: floatId } },
+      select: { custodianUserId: true },
+    });
+    return row?.custodianUserId;
+  }
+
   private async topUpRow(scope: Scope, id: string): Promise<TopUpRow> {
     const row = await scope.tx.pettyCashTopUp.findUnique({
       where: { tenantId_id: { tenantId: scope.access.tenantId, id } },
@@ -954,7 +970,7 @@ export class PettyCashService {
     const [floats, projects, people] = await Promise.all([
       tx.pettyCashFloat.findMany({
         where: { tenantId: access.tenantId, id: { in: rows.map((row) => row.floatId) } },
-        select: { id: true, name: true },
+        select: { id: true, name: true, custodianUserId: true },
       }),
       tx.project.findMany({
         where: { tenantId: access.tenantId, id: { in: rows.map((row) => row.projectId) } },
@@ -971,10 +987,12 @@ export class PettyCashService {
       const project = await accessOf(row.projectId);
       const me = access.userId;
       const status = row.status as TopUpStatus;
+      const { custodianUserId, ...float } = floats.find((entry) => entry.id === row.floatId)!;
+      const custodian = custodianUserId === me;
       wired.push({
         id: row.id,
         number: row.number,
-        float: floats.find((float) => float.id === row.floatId)!,
+        float,
         project: projectRef(projects.find((entry) => entry.id === row.projectId)!),
         amountMinor: minorOf(row.amountMinor),
         reason: row.reason,
@@ -996,15 +1014,19 @@ export class PettyCashService {
           canApprove:
             this.access.can(project, ["payments.approve"]) &&
             status === "requested" &&
-            row.requestedBy !== me,
+            row.requestedBy !== me &&
+            !custodian,
           canReject:
             this.access.can(project, ["payments.approve"]) &&
             status === "requested" &&
-            row.requestedBy !== me,
+            row.requestedBy !== me &&
+            !custodian,
           canPay:
             this.access.can(project, ["payments.disburse"]) &&
             status === "approved" &&
-            row.decidedBy !== me,
+            row.decidedBy !== me &&
+            row.requestedBy !== me &&
+            !custodian,
           canCancel:
             this.access.isWritable(project) &&
             (status === "requested" || status === "approved") &&

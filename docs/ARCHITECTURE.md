@@ -473,7 +473,7 @@ Stable error codes: `activity-code-taken`, `activity-started`, `activity-in-use`
 | `GET spending/summary`, `GET spending/projects/:id`, `…/bills/:billLineageId/items` (search, pages), `GET spending/ledger` (filters, cursor pages), `GET spending/alerts` (kind, pages), `GET spending/forecast?projectId=`, `GET cost-journals[/:id]`, `GET cash-flow-items`, `GET budgets?projectId=` and `GET budgets/:id[/lines]` | `SPENDING_READ_PERMISSIONS`: `finance.view` or `finance.manage` (budgets also `BUDGET_PREPARE_PERMISSIONS`); lists show only projects where the caller holds one |
 | `GET spending/forecast` (no project: the company) | company-wide `finance.view`/`finance.manage` |
 | `GET spending/settings` | a spending reader company-wide or on some project; the opening cash only for company-wide roles |
-| `PUT spending/settings`; `POST cost-codes`, `POST cost-codes/defaults`, `PATCH cost-codes/:id` | company-wide `finance.manage` |
+| `PUT spending/settings`; `POST cost-codes`, `POST cost-codes/defaults`, `PATCH cost-codes/:id` | company-wide `finance.manage`; a code used by a budget line, cost entry, journal line or expense keeps its category (409 `cost-code-in-use`; API and `app.guard_cost_code`) |
 | `GET cost-codes` (search, pages), `GET spending/projects/:id/bq-items` | a spending, petty-cash or budget-preparing permission (company-wide or on some project / on the project) |
 | `POST budgets`, `PATCH budgets/:id`, `POST/PATCH/DELETE budgets/:id/lines[/:lineId]`, `…/submit`, `…/cancel` | `BUDGET_PREPARE_PERMISSIONS`: `finance.manage` or `bq.edit` |
 | `POST budgets/:id/approve` (version + digest), `…/return` (reason) | `finance.manage` + step-up; approval never by a contributor (anyone who created, edited or submitted the version) |
@@ -484,8 +484,8 @@ Stable error codes: `activity-code-taken`, `activity-started`, `activity-in-use`
 | `POST petty-cash/expenses` (`Idempotency-Key`), `POST …/:id/receipts` | the float's custodian holding `finance.petty_cash` (receipts also `finance.manage`) |
 | `POST petty-cash/expenses/:id/approve`, `…/reject` (reason) | `PETTY_CASH_APPROVE_PERMISSIONS` (`finance.manage`, `procurement.approve`); never the recorder or the custodian; approval needs a receipt |
 | `POST petty-cash/top-ups`; `…/cancel` (reason) | the custodian (`finance.petty_cash`) or `finance.manage`; the requester or `finance.manage` |
-| `POST petty-cash/top-ups/:id/approve` (+ step-up), `…/reject` (reason) | `payments.approve`; never the requester |
-| `POST petty-cash/top-ups/:id/pay` (method, reference, date; + step-up) | `payments.disburse`; never the approver |
+| `POST petty-cash/top-ups/:id/approve` (+ step-up), `…/reject` (reason) | `payments.approve`; never the requester nor the float's custodian |
+| `POST petty-cash/top-ups/:id/pay` (method, reference, date; + step-up) | `payments.disburse`; never the requester, the approver nor the float's custodian |
 | `POST petty-cash/counts`; `…/:id/approve`, `…/return` (reason) | the custodian or `finance.manage`; `PETTY_CASH_APPROVE_PERMISSIONS`, never the counter or the custodian |
 | `POST cash-flow-items`, `PATCH …/:id`, `…/receive`, `…/cancel` | `finance.manage` |
 
@@ -493,7 +493,7 @@ Stable error codes: `activity-code-taken`, `activity-started`, `activity-in-use`
 
 **The cost ledger (`cost_entries`, append-only).** Every entry carries the project, site, a BQ item (lineage, on the BQ version it was tagged in) or a cost code, the category (`materials`, `labour`, `plant`, `subcontract`, `preliminaries`, `fees`, `permits`, `transport`, `petty_cash`), the counterparty (supplier, worker, other or none, with a name) and the payment reference, a measure (`accrued` or `paid`), a signed amount in KES minor units, the business date it happened and the date it was recorded (`app.business_today()`). Sources, each posted **once per purpose** (partial unique indexes) and checked against its source row by `app.check_cost_entry`:
 - **approved supplier invoice** → `accrual`, the subtotal **net of VAT**, category materials, no BQ item ("held in stores"), posted by the database trigger `supplier_invoice_cost` when the invoice moves from `matched` to `approved` (a re-approval after a payee change posts nothing);
-- **invoice settlement** → `payment`, the cost part of the cash: cumulative half-up `round(settled after × subtotal ÷ total) − round(settled before × subtotal ÷ total)` (`app.settlement_cost_minor`, domain `settlementCostMinor`), so the parts of a fully settled invoice add up to its subtotal exactly; posted by `invoice_settlement_cost` on insert;
+- **invoice settlement** → `payment`, the cost part of the cash: cumulative half-up `round(settled after × subtotal ÷ total) − round(settled before × subtotal ÷ total)` (`app.settlement_cost_minor`, domain `settlementCostMinor`), so the parts of a fully settled invoice add up to its subtotal exactly; posted by `invoice_settlement_cost` on insert; "settled before" counts the invoice's settlements recorded earlier, each stamped with the clock time of its insert (`app.stamp_invoice_settlement`, after the invoice row is locked) rather than its transaction's start, so overlapping payments apportion in the order they were recorded;
 - **approved petty-cash expense** → `accrual` + `payment` of the amount with its tags, and `charge_accrual` + `charge_payment` (category fees) for an M-Pesa charge;
 - **approved petty-cash count** → `variance_accrual` + `variance_payment` of the shortage (positive) or overage (negative), category petty cash;
 - **approved journal** → one entry per line (`journal`), or `reversal` of an earlier entry (the same tags, the opposite amount; an entry is reversed at most once and a reversal is never reversed).

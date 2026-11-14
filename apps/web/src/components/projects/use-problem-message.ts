@@ -251,6 +251,7 @@ const codes: Record<string, ProblemKey> = {
   "cost-code-taken": "costCodeTaken",
   "cost-code-not-found": "costCodeNotFound",
   "cost-code-inactive": "costCodeInactive",
+  "cost-code-in-use": "costCodeInUse",
   "budget-line-exists": "budgetLineExists",
   "supplier-not-found": "supplierNotFound",
   "entry-not-found": "entryNotFound",

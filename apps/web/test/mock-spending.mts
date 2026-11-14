@@ -2023,6 +2023,7 @@ class Spending {
     const float = this.state.floats.find((entry) => entry.id === topUp.floatId)!;
     const perms = this.perms(topUp.projectId);
     const actor = this.deps.actor.id;
+    const custodian = float.custodian.id === actor;
     const rest = omit(topUp, ["floatId", "projectId"]);
     return {
       ...rest,
@@ -2032,15 +2033,19 @@ class Spending {
         canApprove:
           topUp.status === "requested" &&
           perms.includes("payments.approve") &&
-          topUp.requestedBy.id !== actor,
+          topUp.requestedBy.id !== actor &&
+          !custodian,
         canReject:
           topUp.status === "requested" &&
           perms.includes("payments.approve") &&
-          topUp.requestedBy.id !== actor,
+          topUp.requestedBy.id !== actor &&
+          !custodian,
         canPay:
           topUp.status === "approved" &&
           perms.includes("payments.disburse") &&
-          topUp.decidedBy?.id !== actor,
+          topUp.decidedBy?.id !== actor &&
+          topUp.requestedBy.id !== actor &&
+          !custodian,
         canCancel:
           (topUp.status === "requested" || topUp.status === "approved") &&
           (topUp.requestedBy.id === actor || perms.includes("finance.manage")),
@@ -2100,7 +2105,8 @@ class Spending {
           ? this.deps.parse(versionBodySchema, body)
           : this.deps.parse(reasonBodySchema, body);
       if (!perms.includes("payments.approve")) throw this.deps.fail(403, "forbidden");
-      if (topUp.requestedBy.id === this.deps.actor.id) throw this.deps.fail(403, "maker-checker");
+      if (topUp.requestedBy.id === this.deps.actor.id || float.custodian.id === this.deps.actor.id)
+        throw this.deps.fail(403, "maker-checker");
       if (topUp.status !== "requested") throw this.deps.fail(409, "invalid-transition");
       if (topUp.version !== input.version) throw this.deps.fail(409, "version-conflict");
       if (action === "approve") this.deps.requireStepUp();
@@ -2113,7 +2119,12 @@ class Spending {
     } else if (action === "pay") {
       const input = this.deps.parse(payTopUpRequestSchema, body);
       if (!perms.includes("payments.disburse")) throw this.deps.fail(403, "forbidden");
-      if (topUp.decidedBy?.id === this.deps.actor.id) throw this.deps.fail(403, "maker-checker");
+      if (
+        topUp.decidedBy?.id === this.deps.actor.id ||
+        topUp.requestedBy.id === this.deps.actor.id ||
+        float.custodian.id === this.deps.actor.id
+      )
+        throw this.deps.fail(403, "maker-checker");
       if (topUp.status !== "approved") throw this.deps.fail(409, "invalid-transition");
       if (topUp.version !== input.version) throw this.deps.fail(409, "version-conflict");
       this.deps.requireStepUp();

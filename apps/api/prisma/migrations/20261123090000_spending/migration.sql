@@ -701,6 +701,18 @@ BEGIN
      OR NEW.created_at IS DISTINCT FROM OLD.created_at) THEN
     RAISE EXCEPTION 'A cost code keeps its code' USING ERRCODE = '23514';
   END IF;
+  -- Budget lines take their code's category, and costs already tagged were reported under it:
+  -- once used, a code keeps its category (a new code replaces it). Budget-line writes hold the
+  -- code's row FOR SHARE, so a line and a category change never pass each other.
+  IF NEW.category IS DISTINCT FROM OLD.category AND (
+       EXISTS (SELECT 1 FROM budget_lines WHERE tenant_id = OLD.tenant_id AND cost_code_id = OLD.id)
+    OR EXISTS (SELECT 1 FROM cost_entries WHERE tenant_id = OLD.tenant_id AND cost_code_id = OLD.id)
+    OR EXISTS (SELECT 1 FROM cost_journal_lines
+                WHERE tenant_id = OLD.tenant_id AND cost_code_id = OLD.id)
+    OR EXISTS (SELECT 1 FROM petty_cash_expenses
+                WHERE tenant_id = OLD.tenant_id AND cost_code_id = OLD.id)) THEN
+    RAISE EXCEPTION 'A cost code in use keeps its category' USING ERRCODE = '23514';
+  END IF;
   RETURN NEW;
 END
 $$;
@@ -819,6 +831,7 @@ ALTER TABLE "budget_lines" ADD CONSTRAINT "budget_lines_check" CHECK (
 CREATE FUNCTION app.guard_budget_line() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   b record;
+  code_category text;
 BEGIN
   SELECT status, bq_version_id INTO b FROM budgets
    WHERE tenant_id = COALESCE(NEW.tenant_id, OLD.tenant_id)
@@ -836,10 +849,12 @@ BEGIN
   IF NEW.bq_version_id IS NOT NULL AND NEW.bq_version_id IS DISTINCT FROM b.bq_version_id THEN
     RAISE EXCEPTION 'A budget line names an item of the budget''s BQ version' USING ERRCODE = '23514';
   END IF;
-  IF NEW.cost_code_id IS NOT NULL AND NEW.category IS DISTINCT FROM (
-    SELECT category FROM cost_codes WHERE tenant_id = NEW.tenant_id AND id = NEW.cost_code_id
-  ) THEN
-    RAISE EXCEPTION 'A cost-code line takes its code''s category' USING ERRCODE = '23514';
+  IF NEW.cost_code_id IS NOT NULL THEN
+    SELECT category INTO code_category FROM cost_codes
+     WHERE tenant_id = NEW.tenant_id AND id = NEW.cost_code_id FOR SHARE;
+    IF NEW.category IS DISTINCT FROM code_category THEN
+      RAISE EXCEPTION 'A cost-code line takes its code''s category' USING ERRCODE = '23514';
+    END IF;
   END IF;
   RETURN NEW;
 END
@@ -1255,6 +1270,20 @@ $$;
 CREATE TRIGGER invoice_settlement_cost AFTER INSERT ON "invoice_settlements"
   FOR EACH ROW EXECUTE FUNCTION app.post_settlement_cost();
 
+-- A settlement's recorded_at is stamped when it is inserted, after invoice_settlement_guard (which
+-- fires first: triggers run in name order) has locked the invoice. Ordering settlements by
+-- (recorded_at, id) is then their insertion order, so each one's settled_before (the cost
+-- apportionment above and check_cost_entry) counts every earlier settlement even when two
+-- transactions overlap; the transaction start time (the column default) would not.
+CREATE FUNCTION app.stamp_invoice_settlement() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.recorded_at := clock_timestamp();
+  RETURN NEW;
+END
+$$;
+CREATE TRIGGER invoice_settlement_stamp BEFORE INSERT ON "invoice_settlements"
+  FOR EACH ROW EXECUTE FUNCTION app.stamp_invoice_settlement();
+
 -- Petty-cash floats -------------------------------------------------------------------------------
 ALTER TABLE "petty_cash_floats" ADD CONSTRAINT "petty_cash_floats_check" CHECK (
   char_length(btrim(name)) >= 2 AND limit_minor > 0 AND balance_minor >= 0 AND last_seq >= 0
@@ -1420,12 +1449,12 @@ ALTER TABLE "petty_cash_top_ups" ADD CONSTRAINT "petty_cash_top_ups_check" CHECK
   AND (method IS NULL OR method IN ('mpesa', 'bank_transfer', 'cash', 'cheque'))
   AND (reference IS NULL OR char_length(btrim(reference)) >= 3)
   AND (decided_by IS NULL OR decided_by <> requested_by)
-  AND (paid_by IS NULL OR paid_by <> decided_by)
+  AND (paid_by IS NULL OR (paid_by <> decided_by AND paid_by <> requested_by))
 );
 
 -- packages/domain TOP_UP_TRANSITIONS. Requested by the signed-in user on an active float; each
 -- step by the signed-in user; approved by someone other than the requester, paid by someone
--- other than the approver.
+-- other than the requester and the approver; the float's custodian neither decides nor pays.
 CREATE FUNCTION app.guard_petty_cash_top_up() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
@@ -1461,6 +1490,13 @@ BEGIN
   IF NEW.status = 'paid' AND (NEW.paid_on > app.business_today()
      OR NEW.paid_on < (OLD.requested_at AT TIME ZONE 'Africa/Nairobi')::date) THEN
     RAISE EXCEPTION 'A top-up is paid between its request and today' USING ERRCODE = '23514';
+  END IF;
+  -- The float's custodian never approves or pays cash into their own float.
+  IF NEW.status IN ('approved', 'rejected', 'paid') AND app.current_user_id() = (
+       SELECT custodian_user_id FROM petty_cash_floats
+        WHERE tenant_id = NEW.tenant_id AND id = NEW.float_id) THEN
+    RAISE EXCEPTION 'The float''s custodian does not decide or pay its top-ups'
+      USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END
@@ -1856,6 +1892,7 @@ REVOKE EXECUTE ON FUNCTION app.check_cost_entry() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.refuse_cost_entry_change() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.post_invoice_accrual() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.post_settlement_cost() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION app.stamp_invoice_settlement() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.guard_petty_cash_float() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.post_float_entry() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION app.apply_float_entry() FROM PUBLIC;

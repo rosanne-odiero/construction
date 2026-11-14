@@ -40,6 +40,7 @@ export type SpendingProblem =
   | "cost-code-taken"
   | "cost-code-not-found"
   | "cost-code-inactive"
+  | "cost-code-in-use"
   | "budget-line-exists"
   | "site-not-in-project"
   | "supplier-not-found"
@@ -83,6 +84,11 @@ export const spendingVersionConflict = () =>
 export const spendingInvalidTransition = (status: string) =>
   spendingConflict("invalid-transition", `Not possible while the record is ${status}`);
 export const makerChecker = (message: string) => spendingProblem(403, "maker-checker", message);
+export const costCodeInUse = () =>
+  spendingConflict(
+    "cost-code-in-use",
+    "This cost code is already used, so its category stays. Add a new code and deactivate this one.",
+  );
 
 /** The full text of a database error (trigger refusals carry their sentence). */
 export const databaseMessage = (error: unknown) =>
@@ -105,6 +111,9 @@ export function spendingDatabaseProblem(error: unknown): Error | null {
     return spendingConflict("receipt-required", "Add a receipt photo before approving");
   if (/within the last 90 days/.test(text))
     return spendingProblem(400, "expense-date-invalid", "The expense date is out of range");
+  if (/custodian does not decide or pay/.test(text))
+    return makerChecker("The float's custodian cannot decide or pay its top-ups");
+  if (/in use keeps its category|takes its code's category/.test(text)) return costCodeInUse();
   return null;
 }
 

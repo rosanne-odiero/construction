@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ClipboardPaste } from "lucide-react";
@@ -23,8 +24,8 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatKES } from "@/lib/format";
-import { LiveApiError, liveRequest, liveUpload } from "@/lib/live-api";
-import { minorToInput, newClientId, parseKesInput } from "@/lib/spending";
+import { liveRequest, liveUpload } from "@/lib/live-api";
+import { expenseRetryPlan, minorToInput, newClientId, parseKesInput } from "@/lib/spending";
 import { spendingSelectClass } from "./spending-action";
 import { SentenceBadge } from "./sentence-badge";
 import { TagPicker, type CostTag } from "./tag-picker";
@@ -95,6 +96,7 @@ export function ExpenseForm({
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [recordedId, setRecordedId] = useState<string | null>(null);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
     // Editing a filled-in field keeps the SMS link only while the code is unchanged.
@@ -182,6 +184,7 @@ export function ExpenseForm({
     }
     setBusy(true);
     setFailure(null);
+    setRecordedId(null);
     try {
       const result = await liveRequest("/petty-cash/expenses", expenseResponseSchema, {
         method: "POST",
@@ -202,11 +205,15 @@ export function ExpenseForm({
       setIds({ id: newClientId(), key: newClientId(), capturedAt: new Date().toISOString() });
       router.push(`/spending/petty-cash/expenses/${result.expense.id}`);
     } catch (error) {
-      // A refusal recorded nothing: the corrected form is a new request. After a dropped
-      // connection or a server error the same ID and key are kept, so a retry cannot spend twice.
-      if (error instanceof LiveApiError && error.status >= 400 && error.status < 500)
+      const plan = expenseRetryPlan(error);
+      if (plan === "renew")
         setIds({ id: newClientId(), key: newClientId(), capturedAt: new Date().toISOString() });
-      setFailure(problem(error));
+      if (plan === "recorded") {
+        // An earlier attempt from this form was recorded (its reply was lost): never record
+        // it again under a new ID; point at the recorded expense instead.
+        setRecordedId(ids.id);
+        setFailure(t("alreadyRecorded"));
+      } else setFailure(problem(error));
       setBusy(false);
     }
   }
@@ -421,6 +428,17 @@ export function ExpenseForm({
       {failure ? (
         <p role="alert" className="text-sm text-destructive">
           {failure}
+          {recordedId ? (
+            <>
+              {" "}
+              <Link
+                href={`/spending/petty-cash/expenses/${recordedId}`}
+                className="font-medium underline underline-offset-4"
+              >
+                {t("openRecorded")}
+              </Link>
+            </>
+          ) : null}
         </p>
       ) : null}
       <Button type="submit" disabled={busy} className="w-full sm:w-auto">

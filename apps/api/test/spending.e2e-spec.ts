@@ -13,6 +13,7 @@ import {
   bqVersionsResponseSchema,
   budgetDetailResponseSchema,
   budgetsResponseSchema,
+  costCodeResponseSchema,
   costCodesResponseSchema,
   costLedgerResponseSchema,
   countResponseSchema,
@@ -607,6 +608,38 @@ describe("Spending and cash flow (real runtime role)", () => {
     expect(
       entries.map((entry) => [entry.purpose, entry.amountMinor, entry.paymentReference]),
     ).toEqual([["payment", 2_586_207, "D54-FT-0001"]]);
+    // A settlement is stamped when inserted under the invoice lock, not at its transaction's start,
+    // so overlapping payments apportion cost in the order they were recorded (rolled back).
+    class Rollback extends Error {
+      constructor(readonly lagSeconds: number) {
+        super("rollback");
+      }
+    }
+    type Raw = {
+      $executeRaw: (s: TemplateStringsArray, ...v: unknown[]) => Promise<number>;
+      $queryRaw: <T>(s: TemplateStringsArray, ...v: unknown[]) => Promise<T>;
+    };
+    const stamped = await db
+      .run(context(financeTwo), async (tx) => {
+        const raw = tx as unknown as Raw;
+        await raw.$executeRaw`SELECT pg_sleep(0.4)`;
+        const id = randomUUID();
+        await raw.$executeRaw`
+          INSERT INTO invoice_settlements (id, tenant_id, invoice_id, payable_id, method,
+            external_reference, reference_key, amount_minor, paid_on, idempotency_key,
+            request_digest, recorded_by)
+          SELECT ${id}::uuid, tenant_id, invoice_id, payable_id, method, 'D54-STAMP-1',
+                 'D54STAMP1', 1, paid_on, ${randomUUID()}, repeat('a', 64), recorded_by
+            FROM invoice_settlements
+           WHERE invoice_id = ${invoice.invoice.id}::uuid AND external_reference = 'D54-FT-0001'`;
+        const [row] = await raw.$queryRaw<{ lag: number }[]>`
+          SELECT extract(epoch FROM recorded_at - now())::float8 AS lag
+            FROM invoice_settlements WHERE id = ${id}::uuid`;
+        throw new Rollback(row!.lag);
+      })
+      .catch((error: unknown) => error);
+    expect(stamped).toBeInstanceOf(Rollback);
+    expect((stamped as Rollback).lagSeconds).toBeGreaterThan(0.3);
 
     const view = await spending();
     expect(view.totals).toMatchObject({
@@ -874,6 +907,44 @@ describe("Spending and cash flow (real runtime role)", () => {
       409,
       "budget-line-exists",
     );
+    // A cost-code line takes its code's category, so a code in use keeps it (API and database);
+    // an unused code can still be recategorised.
+    const allCodes = costCodesResponseSchema.parse(
+      ok(await finance.call("get", "cost-codes?limit=50")),
+    ).costCodes;
+    const used = allCodes.find((code) => code.id === codes[0]!.id)!;
+    refused(
+      await finance.call("patch", `cost-codes/${used.id}`, {
+        version: used.version,
+        category: "materials",
+      }),
+      409,
+      "cost-code-in-use",
+    );
+    const unused = allCodes.find((code) => code.code === "PRE-02")!;
+    const moved = costCodeResponseSchema.parse(
+      ok(
+        await finance.call("patch", `cost-codes/${unused.id}`, {
+          version: unused.version,
+          category: "labour",
+        }),
+      ),
+    ).costCode;
+    ok(
+      await finance.call("patch", `cost-codes/${unused.id}`, {
+        version: moved.version,
+        category: "preliminaries",
+      }),
+    );
+    type RawCode = { $executeRaw: (s: TemplateStringsArray, ...v: unknown[]) => Promise<number> };
+    await expect(
+      db.run(
+        context(finance),
+        (tx) =>
+          (tx as unknown as RawCode)
+            .$executeRaw`UPDATE cost_codes SET category = 'materials' WHERE id = ${used.id}::uuid`,
+      ),
+    ).rejects.toThrow(/in use keeps its category/);
     expect(budget.totals.byCategory).toContainEqual({
       category: "petty_cash",
       amountMinor: 200_000,
@@ -1223,6 +1294,150 @@ describe("Spending and cash flow (real runtime role)", () => {
       }),
     );
     expect((await floatOf()).balanceMinor).toBe(2_788_700);
+  });
+
+  it("keeps a top-up's requester, approver, payer and the float's custodian apart", async () => {
+    type Raw = { $executeRaw: (s: TemplateStringsArray, ...v: unknown[]) => Promise<number> };
+    const topUpOf = (res: request.Response, status = 200) =>
+      topUpResponseSchema.parse(ok(res, status)).topUp;
+    // Finance asks for cash for the site agent's float; a second finance user approves it.
+    await fresh(finance);
+    let asked = topUpOf(
+      await finance.call("post", "petty-cash/top-ups", {
+        floatId,
+        amountMinor: 100_000,
+        reason: "Asked for by finance (test)",
+      }),
+      201,
+    );
+    await fresh(financeTwo);
+    asked = topUpOf(
+      await financeTwo.call("post", `petty-cash/top-ups/${asked.id}/approve`, {
+        version: asked.version,
+      }),
+    );
+    // The requester never records the payment, even holding payments.disburse.
+    const [mine] = (
+      ok(await finance.call("get", `petty-cash/top-ups?floatId=${floatId}`)) as {
+        topUps: { id: string; permissions: { canPay: boolean } }[];
+      }
+    ).topUps.filter((entry) => entry.id === asked.id);
+    expect(mine?.permissions.canPay).toBe(false);
+    refused(
+      await finance.call("post", `petty-cash/top-ups/${asked.id}/pay`, {
+        version: asked.version,
+        method: "mpesa",
+        reference: "SKP1Q2R3S4",
+        paidOn: today,
+      }),
+      403,
+      "maker-checker",
+    );
+    await expect(
+      db.run(
+        context(finance),
+        (tx) =>
+          (tx as unknown as Raw).$executeRaw`
+            UPDATE petty_cash_top_ups SET status = 'paid', paid_by = ${finance.auth.user.id}::uuid,
+              paid_at = now(), paid_on = ${today}::date, method = 'mpesa',
+              reference = 'SKP1Q2R3S4', reference_key = 'SKP1Q2R3S4', version = version + 1
+             WHERE id = ${asked.id}::uuid`,
+      ),
+    ).rejects.toThrow(/petty_cash_top_ups_check/);
+    ok(
+      await finance.call("post", `petty-cash/top-ups/${asked.id}/cancel`, {
+        version: asked.version,
+        reason: "Test over",
+      }),
+    );
+
+    // The owner holds every permission; as a float's custodian they neither decide nor pay its top-ups.
+    await fresh(owner);
+    const yard = siteResponseSchema.parse(
+      ok(
+        await owner.call("post", `projects/${projectId}/sites`, {
+          name: "Owner's yard",
+          geofence: { kind: "radius", center: SITE, radiusM: 100 },
+        }),
+        201,
+      ),
+    ).site.id;
+    await fresh(finance);
+    const ownFloat = floatResponseSchema.parse(
+      ok(
+        await finance.call("post", "petty-cash/floats", {
+          siteId: yard,
+          name: "Owner's float",
+          custodianUserId: owner.auth.user.id,
+          limitMinor: 1_000_000,
+        }),
+        201,
+      ),
+    ).float.id;
+    let own = topUpOf(
+      await finance.call("post", "petty-cash/top-ups", {
+        floatId: ownFloat,
+        amountMinor: 200_000,
+        reason: "Owner's float (test)",
+      }),
+      201,
+    );
+    await fresh(owner);
+    const flags = (
+      ok(await owner.call("get", `petty-cash/top-ups?floatId=${ownFloat}`)) as {
+        topUps: { permissions: { canApprove: boolean; canReject: boolean } }[];
+      }
+    ).topUps[0]!.permissions;
+    expect(flags).toMatchObject({ canApprove: false, canReject: false });
+    refused(
+      await owner.call("post", `petty-cash/top-ups/${own.id}/approve`, { version: own.version }),
+      403,
+      "maker-checker",
+    );
+    await expect(
+      db.run(
+        context(owner),
+        (tx) =>
+          (tx as unknown as Raw).$executeRaw`
+            UPDATE petty_cash_top_ups SET status = 'approved', decided_by = ${owner.auth.user.id}::uuid,
+              decided_at = now(), version = version + 1
+             WHERE id = ${own.id}::uuid`,
+      ),
+    ).rejects.toThrow(/custodian does not decide or pay/);
+    await fresh(financeTwo);
+    own = topUpOf(
+      await financeTwo.call("post", `petty-cash/top-ups/${own.id}/approve`, {
+        version: own.version,
+      }),
+    );
+    await fresh(owner);
+    refused(
+      await owner.call("post", `petty-cash/top-ups/${own.id}/pay`, {
+        version: own.version,
+        method: "mpesa",
+        reference: "SKO1W2N3E4",
+        paidOn: today,
+      }),
+      403,
+      "maker-checker",
+    );
+    await expect(
+      db.run(
+        context(owner),
+        (tx) =>
+          (tx as unknown as Raw).$executeRaw`
+            UPDATE petty_cash_top_ups SET status = 'paid', paid_by = ${owner.auth.user.id}::uuid,
+              paid_at = now(), paid_on = ${today}::date, method = 'mpesa',
+              reference = 'SKO1W2N3E4', reference_key = 'SKO1W2N3E4', version = version + 1
+             WHERE id = ${own.id}::uuid`,
+      ),
+    ).rejects.toThrow(/custodian does not decide or pay/);
+    ok(
+      await finance.call("post", `petty-cash/top-ups/${own.id}/cancel`, {
+        version: own.version,
+        reason: "Test over",
+      }),
+    );
   });
 
   it("reconciles a count against the book balance and posts the variance after an independent approval", async () => {

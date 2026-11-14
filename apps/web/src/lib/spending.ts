@@ -8,6 +8,7 @@ import type {
   TopUpStatus,
 } from "@pm-buddy/types";
 import type { Tone } from "@/components/status-badge";
+import { FoundationApiError } from "./foundation-api";
 
 /**
  * Display and input helpers for the spending screens (D5.4). Money arrives and leaves as integer
@@ -193,3 +194,17 @@ export function forecastGeometry(
 
 /** A client-generated identifier (record IDs and idempotency keys), created once per form. */
 export const newClientId = () => crypto.randomUUID();
+
+/**
+ * What the expense form does with its record ID and Idempotency-Key after a failed submit
+ * (offline-ready contract). A collision with the form's own ID or key means an earlier attempt
+ * was recorded, so the form keeps both and points at that expense; any other refusal recorded
+ * nothing, so the corrected form is a new request; a dropped connection or server error keeps
+ * both, so a retry cannot spend twice.
+ */
+export function expenseRetryPlan(error: unknown): "recorded" | "renew" | "keep" {
+  if (!(error instanceof FoundationApiError)) return "keep";
+  if (error.code === "idempotency-key-reused" || error.code === "expense-id-conflict")
+    return "recorded";
+  return error.status >= 400 && error.status < 500 ? "renew" : "keep";
+}

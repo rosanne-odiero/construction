@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { FoundationApiError } from "./foundation-api";
 import {
+  expenseRetryPlan,
   forecastGeometry,
   minorToInput,
   parseKesInput,
@@ -55,5 +57,18 @@ describe("spending input helpers", () => {
     expect(chart.bars[1]!.outHeight).toBeGreaterThan(chart.bars[0]!.outHeight);
     expect(chart.points[1]!.y).toBeGreaterThan(chart.zeroY);
     expect(chart.line).toMatch(/^[\d.]+,[\d.]+ [\d.]+,[\d.]+$/);
+  });
+});
+
+describe("expenseRetryPlan", () => {
+  it("never renews the ID and key when they collide with an earlier recorded attempt", () => {
+    expect(expenseRetryPlan(new FoundationApiError(409, "idempotency-key-reused"))).toBe(
+      "recorded",
+    );
+    expect(expenseRetryPlan(new FoundationApiError(409, "expense-id-conflict"))).toBe("recorded");
+    expect(expenseRetryPlan(new FoundationApiError(409, "float-insufficient"))).toBe("renew");
+    expect(expenseRetryPlan(new FoundationApiError(422, "validation-failed"))).toBe("renew");
+    expect(expenseRetryPlan(new FoundationApiError(503, "unavailable"))).toBe("keep");
+    expect(expenseRetryPlan(new TypeError("Failed to fetch"))).toBe("keep");
   });
 });

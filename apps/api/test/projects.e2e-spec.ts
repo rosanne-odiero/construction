@@ -1346,7 +1346,21 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     );
     expect(states.adjustment.status).toBe("approved");
     expect(states.adjustment.decidedBy).not.toBe(states.adjustment.requestedBy);
+    // A database seeded before the storekeeper joined the team: the next seed assigns them.
+    const keeperId = (
+      await prisma.user.findUniqueOrThrow({
+        where: {
+          identifier: DEMO_ACCOUNTS.find((account) => account.key === "storekeeper")!.identifier,
+        },
+      })
+    ).id;
+    const unassigned = await db.run(
+      { tenantId: first.company.id, userId: ownerId, requestId: "seed-older-db" },
+      (tx) => tx.projectMembership.deleteMany({ where: { userId: keeperId } }),
+    );
+    expect(unassigned.count).toBe(2);
     const second = await seedDemo(app);
+    expect((await counts(first.company.id, ownerId)).assignments).toBe(afterFirst.assignments);
     expect(second.company).toEqual({ ...first.company, created: false });
     expect(second.accounts.every((account) => !account.created && account.password === null)).toBe(
       true,

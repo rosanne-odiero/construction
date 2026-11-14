@@ -50,7 +50,7 @@ export type LedgerRefs = Partial<
  * weighted-average rules of packages/domain and inserts the entry; the database trigger
  * `app.post_stock_entry` takes the same lock, checks the source document, the valuation and that
  * stock never goes below zero, numbers the entry and moves the balance. A refused outflow is
- * 409 insufficient-stock (negative stock is never allowed, D-45).
+ * 409 insufficient-stock (negative stock is never allowed, D-50).
  */
 @Injectable()
 export class StockLedger {

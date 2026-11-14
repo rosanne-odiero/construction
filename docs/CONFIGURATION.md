@@ -133,8 +133,8 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `stores.consumption_variance_percent` (planned as `stores.variance_alert_threshold_pct`) | tenant | 10% (0–1,000 with up to 4 decimals). Stored in `procurement_settings.consumption_variance_percent` (no row = default) and changed with `config.manage` on Stores → Settings (`PUT stores/settings`, optimistic `version`, audited `stores.settings_updated`). A consumption-variance alert fires when actual use of a material on a BQ item is **strictly above** theoretical × (1 + t/100) (ARCHITECTURE §4.6). Read when the report is generated, so a change applies to every item at once. Per-material thresholds are not implemented | Brief §5.3 (example) | PRODUCT | D5.3 |
 | `stores.reorder_level` | store × material | None (no level: never low). `stock_reorder_levels.reorder_level` in the material's base unit, set with `stores.manage` on the store's Reorder levels page (`PUT stores/:id/reorder-levels`). Low when on hand ≤ level; a level of 0 never triggers | Brief §5.3 | PRODUCT | D5.3 |
 | `stores.low_stock_days_cover` | site | 7. **Not implemented in D5.3**: low stock uses the explicit reorder levels above; days of cover needs a consumption forecast | Proposal | PRODUCT | later |
-| `stores.negative_stock` | platform | **Never allowed** (D-45): an issue, wastage, transfer or negative adjustment beyond what is on hand is refused (409 `insufficient-stock`), in the API and the database. Not configurable; there is no override | INVARIANTS "Stock" | PRODUCT | D5.3 |
-| `stores.valuation_method` | platform | Weighted average cost per store and material, net of VAT (D-44); not configurable | Proposal | COMPLIANCE-REVIEW (CR-STK-01) | D5.3 |
+| `stores.negative_stock` | platform | **Never allowed** (D-50): an issue, wastage, transfer or negative adjustment beyond what is on hand is refused (409 `insufficient-stock`), in the API and the database. Not configurable; there is no override | INVARIANTS "Stock" | PRODUCT | D5.3 |
+| `stores.valuation_method` | platform | Weighted average cost per store and material, net of VAT (D-49); not configurable | Proposal | COMPLIANCE-REVIEW (CR-STK-01) | D5.3 |
 | `stores.limits` (D5.3) | platform | 50 lines per issue, return, wastage or transfer; 300 lines per stock take and 300 counts per batch; quantities ≤ 10¹² with ≤ 6 decimals (base units, six places); lists 50 per page (≤ 200). Code constant `STORES_LIMITS` | ARCHITECTURE §4.6 | PRODUCT | D5.3 |
 | `materials.price_change_alert_pct` | tenant | 10% (strictly greater than; up to 4 decimals, 0 < value ≤ 1,000). Stored in `procurement_settings.price_change_alert_percent` (no row = default) and changed with `config.manage` on the Price alerts page; the threshold used is stored on each price, so changing it never re-flags history | Proposal | PRODUCT | D5.1 |
 | Unit conversions (`unit_conversions`, for example sand or ballast tonnes per lorry trip) | tenant material / material + supplier | None seeded for trips (a lorry trip has **no** universal size); the starter catalogue adds material factors marked ASSUMPTION for review (loose bulk density of river sand 1.6 t/m³ and ballast 1.5 t/m³, 12.5 stones or blocks per m² of wall face, a 100 m cable roll, a 25 kg binding-wire roll). The demo seed's quarry trip factors (7 t sand, 10 t ballast) are synthetic. Effective-dated, never edited; resolution supplier → material → attribute formula → standard | Brief §5.3 ("configurable") | PRODUCT | D5.1 |
@@ -158,6 +158,18 @@ Code constants (`PHOTO_VERIFICATION_DEFAULTS`, `PHOTO_LIMITS` in `packages/domai
 | `photos.max_age_hours` | platform | 72 | Allows upload after a day or two offline | PRODUCT | D6.1 |
 | `photos.future_skew_minutes` | platform | 10 | Phone clocks running ahead | PRODUCT | D6.1 |
 | `photos.max_file_mb` / `photos.max_pixels` | platform | 15 / 50,000,000 | Upload and decompression-bomb limits (JPEG only) | SECURITY | D6.1 |
+
+### Schedule (D6.2)
+
+The working calendar is a per-project setting (`schedule_settings`, one row per project; no row means the defaults). It is read with `GET projects/:id/schedule` (`calendar`) and changed with `PUT projects/:id/schedule/calendar` (`projects.manage`, optimistic `version`; version 0 saves the defaults the first time; audited `schedule.calendar_updated`). In the web app it is the **Working calendar** card on the project's Schedule tab. The limits are code and database constants (`SCHEDULE_LIMITS` in `packages/types`, CHECKs in migration `20261119090000_schedule`).
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `schedule.working_weekdays` | project | Monday–Saturday (ISO 1–6). Any non-empty set of weekdays | Common Kenyan site practice (six-day week); ARCHITECTURE §4.6 | PRODUCT | D6.2 |
+| `schedule.include_public_holidays` | project | On: the company's `public_holidays` (attendance settings, seeded from the Public Holidays Act and Gazette notices, COMPLIANCE-REVIEW CR-PAY-14) are non-working days | Brief §5.9; attendance holidays (D3.3) | PRODUCT | D6.2 |
+| `schedule.data_date` | platform | Today in Africa/Nairobi (`nairobiDate()`): remaining work is never scheduled before it. Not configurable | ARCHITECTURE §4.6 | PRODUCT | D6.2 |
+| `schedule.limits` | platform | 500 activities and 2,000 dependencies per project; durations 1–1,000 working days; lags −60…365 working days; 50 baselines per project; 50 activities per delay; working days lost 0–1,000 in half days. Code constant `SCHEDULE_LIMITS` | ARCHITECTURE §4.6 | PRODUCT | D6.2 |
+| `schedule.progress_basis` | activity | `physical` (whole-percent estimate) or `quantity` (done ÷ total in a unit, rounded down to 0.01 %); project progress is weighted by planned duration | Brief §15 G | PRODUCT | D6.2 |
 
 ## 6. Security, auth and operations
 

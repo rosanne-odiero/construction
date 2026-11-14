@@ -30,6 +30,7 @@ import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
 import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
 import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
 import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
+import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -38,7 +39,8 @@ import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
  * synthetic labourers with consent, gangs and NCA cards (labour-seed.ts), (D3.3) nine weeks of
  * synthetic attendance with timesheet periods, anomalies and an adjustment (attendance-seed.ts),
  * and (D5.1) the starter catalogue with synthetic suppliers, prices and payout details
- * (demo-procurement.ts). Idempotent: existing records are kept as they are. Never runs in
+ * (demo-procurement.ts), and (D6.2) the RUI-HTS schedule with a baseline, slipped actuals and
+ * delays (schedule-seed.ts). Idempotent: existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
  */
@@ -350,6 +352,7 @@ export type SeedSummary = {
   payroll: PayrollSeedSummary;
   procureToPay: ProcureToPaySeedSummary;
   stores: StoresSeedSummary;
+  schedule: ScheduleSeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -537,6 +540,8 @@ export async function seedDemo(
     siteAgentId: userOf("siteAgent").id,
     storekeeperId: userOf("storekeeper").id,
   });
+  // After the attendance seed, so the company's public holidays shape the working calendar.
+  const schedule = await seedSchedule(app, tenantId, owner.id);
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
@@ -549,6 +554,7 @@ export async function seedDemo(
     payroll,
     procureToPay,
     stores,
+    schedule,
   };
 }
 

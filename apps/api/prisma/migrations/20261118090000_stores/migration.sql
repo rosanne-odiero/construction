@@ -8,7 +8,7 @@
 -- * SERIALISED, CONSISTENT BALANCES: app.post_stock_entry locks the (store, material) balance row
 --   (SELECT … FOR UPDATE) before every entry, numbers it, checks the source document, the
 --   weighted-average valuation and that stock never goes below zero (negative stock is never
---   allowed, D-45); app.apply_stock_entry moves the balance to the entry's running balance, and
+--   allowed, D-50); app.apply_stock_entry moves the balance to the entry's running balance, and
 --   app.guard_stock_balance refuses any other balance change. Two simultaneous issues of the last
 --   stock therefore cannot both succeed.
 -- * Every posted source has its entries at commit: recorded GRNs (receipts at the LPO's net price

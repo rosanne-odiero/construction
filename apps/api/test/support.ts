@@ -136,6 +136,14 @@ import {
   projectPayrollResponseSchema,
   statutoryRuleResponseSchema,
   workerPortalResponseSchema,
+  scheduleActivityResponseSchema,
+  scheduleBaselineResponseSchema,
+  scheduleBaselinesResponseSchema,
+  scheduleCalendarResponseSchema,
+  scheduleDelayResponseSchema,
+  scheduleDelaysResponseSchema,
+  scheduleDependencyResponseSchema,
+  scheduleResponseSchema,
   sitePhotosResponseSchema,
   buildupMaterialsResponseSchema,
   issueOptionsResponseSchema,
@@ -280,7 +288,28 @@ export function responseContract(method: string, target: string) {
   if (payroll) return payroll;
   const p2p = procureToPayContract(method, path);
   if (p2p) return p2p;
+  const schedule = scheduleContract(method, path);
+  if (schedule) return schedule;
   return messageResponseSchema;
+}
+
+/** The D6.2 schedule endpoints' success contracts. */
+function scheduleContract(method: string, path: string) {
+  const match = /^projects\/[^/]+\/schedule(\/.*)?$/.exec(path);
+  if (!match) return null;
+  const rest = match[1] ?? "";
+  if (rest === "") return scheduleResponseSchema;
+  if (rest === "/calendar") return scheduleCalendarResponseSchema;
+  if (method === "delete") return messageResponseSchema;
+  if (/^\/activities(\/[^/]+(\/progress)?)?$/.test(rest)) return scheduleActivityResponseSchema;
+  if (/^\/dependencies(\/[^/]+)?$/.test(rest)) return scheduleDependencyResponseSchema;
+  if (rest === "/baselines")
+    return method === "get" ? scheduleBaselinesResponseSchema : scheduleBaselineResponseSchema;
+  if (/^\/baselines\/[^/]+$/.test(rest)) return scheduleBaselineResponseSchema;
+  if (rest === "/delays")
+    return method === "get" ? scheduleDelaysResponseSchema : scheduleDelayResponseSchema;
+  if (/^\/delays\/[^/]+(\/(amend|withdraw))?$/.test(rest)) return scheduleDelayResponseSchema;
+  return null;
 }
 
 /** The D5.2 procure-to-pay endpoints' success contracts. */

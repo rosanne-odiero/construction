@@ -746,7 +746,9 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       if (status === 200) current = milestoneResponseSchema.parse(res.body).milestone;
     };
     await move({ to: "achieved" }, 400, "actual-date-required");
-    await move({ to: "achieved", actualDate: "2999-01-01" }, 400, "actual-date-future");
+    // A future date within the planning range (2000–2099; later years are a validation error).
+    await move({ to: "achieved", actualDate: "2098-01-01" }, 400, "actual-date-future");
+    await move({ to: "achieved", actualDate: "2999-01-01" }, 400, "validation-error");
     await move({ to: "achieved", actualDate: "2026-06-26" });
     expect(current).toMatchObject({ status: "achieved", actualDate: "2026-06-26" });
     await move({ to: "cancelled", reason: "Not allowed" }, 409, "invalid-transition");

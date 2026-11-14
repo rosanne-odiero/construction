@@ -616,7 +616,7 @@ export const storesSettingsResponseSchema = z.strictObject({
   settings: z.strictObject({
     /** `stores.consumption_variance_percent` (default 10). */
     varianceThresholdPercent: z.string(),
-    /** Negative stock is never allowed (D-45); shown for clarity, not configurable. */
+    /** Negative stock is never allowed (D-50); shown for clarity, not configurable. */
     negativeStockAllowed: z.literal(false),
     version: z.number().int().min(1).nullable(),
     updatedAt: timestamp.nullable(),

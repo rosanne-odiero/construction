@@ -265,6 +265,10 @@ model Project {
   lpos             Lpo[]
   grns             Grn[]
   supplierInvoices SupplierInvoice[]
+  scheduleSettings ScheduleSettings?
+  scheduleItems    ScheduleActivity[]
+  baselines        ScheduleBaseline[]
+  scheduleDelays   ScheduleDelay[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -319,29 +323,31 @@ model Site {
 }
 
 model SiteDiary {
-  id             String      @id @default(uuid(7)) @db.Uuid
-  tenantId       String      @map("tenant_id") @db.Uuid
-  projectId      String      @map("project_id") @db.Uuid
-  siteId         String      @map("site_id") @db.Uuid
-  date           DateTime    @db.Date
-  workPerformed  String      @map("work_performed") @db.VarChar(6000)
-  weather        String?     @db.VarChar(250)
-  delays         String?     @db.VarChar(2000)
-  workforceCount Int?        @map("workforce_count")
-  status         String      @default("draft") @db.VarChar(20)
-  version        Int         @default(1)
-  createdBy      String      @map("created_by") @db.Uuid
-  submittedBy    String?     @map("submitted_by") @db.Uuid
-  submittedAt    DateTime?   @map("submitted_at") @db.Timestamptz
-  reviewedBy     String?     @map("reviewed_by") @db.Uuid
-  reviewedAt     DateTime?   @map("reviewed_at") @db.Timestamptz
-  reviewReason   String?     @map("review_reason") @db.VarChar(500)
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  site           Site        @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_diaries_site_fkey")
+  id             String          @id @default(uuid(7)) @db.Uuid
+  tenantId       String          @map("tenant_id") @db.Uuid
+  projectId      String          @map("project_id") @db.Uuid
+  siteId         String          @map("site_id") @db.Uuid
+  date           DateTime        @db.Date
+  workPerformed  String          @map("work_performed") @db.VarChar(6000)
+  weather        String?         @db.VarChar(250)
+  delays         String?         @db.VarChar(2000)
+  workforceCount Int?            @map("workforce_count")
+  status         String          @default("draft") @db.VarChar(20)
+  version        Int             @default(1)
+  createdBy      String          @map("created_by") @db.Uuid
+  submittedBy    String?         @map("submitted_by") @db.Uuid
+  submittedAt    DateTime?       @map("submitted_at") @db.Timestamptz
+  reviewedBy     String?         @map("reviewed_by") @db.Uuid
+  reviewedAt     DateTime?       @map("reviewed_at") @db.Timestamptz
+  reviewReason   String?         @map("review_reason") @db.VarChar(500)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  site           Site            @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_diaries_site_fkey")
   photos         SitePhoto[]
+  scheduleDelays ScheduleDelay[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
   @@unique([tenantId, siteId, id])
   @@unique([tenantId, siteId, date])
   @@index([tenantId, projectId, id])
@@ -374,22 +380,23 @@ model SiteGeofence {
 
 // A WBS node. Siblings' weights (basis points) must sum to 10,000 before progress is computable.
 model WbsNode {
-  id                String      @id @default(uuid(7)) @db.Uuid
-  tenantId          String      @map("tenant_id") @db.Uuid
-  projectId         String      @map("project_id") @db.Uuid
-  parentId          String?     @map("parent_id") @db.Uuid
-  code              String      @db.VarChar(30)
-  name              String      @db.VarChar(150)
-  sortOrder         Int         @default(0) @map("sort_order")
-  weightBasisPoints Int         @default(0) @map("weight_basis_points")
-  version           Int         @default(1)
-  createdBy         String      @map("created_by") @db.Uuid
-  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  project           Project     @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  parent            WbsNode?    @relation("WbsTree", fields: [tenantId, projectId, parentId], references: [tenantId, projectId, id], onDelete: NoAction)
-  children          WbsNode[]   @relation("WbsTree")
+  id                String             @id @default(uuid(7)) @db.Uuid
+  tenantId          String             @map("tenant_id") @db.Uuid
+  projectId         String             @map("project_id") @db.Uuid
+  parentId          String?            @map("parent_id") @db.Uuid
+  code              String             @db.VarChar(30)
+  name              String             @db.VarChar(150)
+  sortOrder         Int                @default(0) @map("sort_order")
+  weightBasisPoints Int                @default(0) @map("weight_basis_points")
+  version           Int                @default(1)
+  createdBy         String             @map("created_by") @db.Uuid
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project           Project            @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  parent            WbsNode?           @relation("WbsTree", fields: [tenantId, projectId, parentId], references: [tenantId, projectId, id], onDelete: NoAction)
+  children          WbsNode[]          @relation("WbsTree")
   milestones        Milestone[]
+  scheduleItems     ScheduleActivity[]
 
   @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, code])
@@ -399,23 +406,26 @@ model WbsNode {
 
 // A milestone. Status follows packages/domain MILESTONE_TRANSITIONS (app.guard_milestone()).
 model Milestone {
-  id           String    @id @default(uuid(7)) @db.Uuid
-  tenantId     String    @map("tenant_id") @db.Uuid
-  projectId    String    @map("project_id") @db.Uuid
-  wbsNodeId    String?   @map("wbs_node_id") @db.Uuid
-  name         String    @db.VarChar(150)
-  dueDate      DateTime  @map("due_date") @db.Date
-  status       String    @default("planned") @db.VarChar(20)
-  actualDate   DateTime? @map("actual_date") @db.Date
-  statusReason String?   @map("status_reason") @db.VarChar(500)
-  version      Int       @default(1)
-  createdBy    String    @map("created_by") @db.Uuid
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  project      Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  wbsNode      WbsNode?  @relation(fields: [tenantId, projectId, wbsNodeId], references: [tenantId, projectId, id], onDelete: NoAction)
+  id           String            @id @default(uuid(7)) @db.Uuid
+  tenantId     String            @map("tenant_id") @db.Uuid
+  projectId    String            @map("project_id") @db.Uuid
+  wbsNodeId    String?           @map("wbs_node_id") @db.Uuid
+  name         String            @db.VarChar(150)
+  dueDate      DateTime          @map("due_date") @db.Date
+  status       String            @default("planned") @db.VarChar(20)
+  actualDate   DateTime?         @map("actual_date") @db.Date
+  statusReason String?           @map("status_reason") @db.VarChar(500)
+  version      Int               @default(1)
+  createdBy    String            @map("created_by") @db.Uuid
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project      Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  wbsNode      WbsNode?          @relation(fields: [tenantId, projectId, wbsNodeId], references: [tenantId, projectId, id], onDelete: NoAction)
+  // The milestone's place in the schedule network, created when it first gets a dependency (D6.2).
+  scheduleLink ScheduleActivity?
 
   @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, name])
   @@index([tenantId, projectId, dueDate])
   @@index([tenantId, projectId, wbsNodeId])
@@ -654,6 +664,7 @@ model BqItem {
   stockMovements   StockMovement[]
   stockEntries     StockLedgerEntry[]
   measurements     ProgressMeasurement[]
+  scheduleItems    ScheduleActivity[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, versionId, lineageId])
@@ -3300,4 +3311,186 @@ model BuildupLineMaterial {
   @@index([tenantId, lineId])
   @@index([tenantId, materialId])
   @@map("rate_buildup_line_materials")
+}
+
+// ---------------------------------------------------------------------------------------------
+// D6.2 Schedule (ARCHITECTURE §4.6, migration 20261119090000_schedule). Planned dates are computed
+// (packages/domain computeSchedule), never stored on activities; baselines freeze them.
+// ---------------------------------------------------------------------------------------------
+
+// A project's working calendar. No row means the defaults (Monday–Saturday, public holidays off).
+model ScheduleSettings {
+  tenantId              String   @map("tenant_id") @db.Uuid
+  projectId             String   @map("project_id") @db.Uuid
+  workingWeekdays       Int[]    @map("working_weekdays")
+  includePublicHolidays Boolean  @default(true) @map("include_public_holidays")
+  version               Int      @default(1)
+  updatedBy             String   @map("updated_by") @db.Uuid
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project               Project  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, projectId])
+  @@map("schedule_settings")
+}
+
+// A schedule item: a task (duration, links, actuals, progress with a basis) or a milestone's link
+// into the network (kind = milestone: zero duration; name and dates stay on the milestone).
+model ScheduleActivity {
+  id                 String                  @id @default(uuid(7)) @db.Uuid
+  tenantId           String                  @map("tenant_id") @db.Uuid
+  projectId          String                  @map("project_id") @db.Uuid
+  kind               String                  @db.VarChar(10)
+  milestoneId        String?                 @map("milestone_id") @db.Uuid
+  wbsNodeId          String?                 @map("wbs_node_id") @db.Uuid
+  bqVersionId        String?                 @map("bq_version_id") @db.Uuid
+  bqItemLineageId    String?                 @map("bq_item_lineage_id") @db.Uuid
+  code               String?                 @db.VarChar(20)
+  name               String?                 @db.VarChar(150)
+  durationDays       Int                     @map("duration_days")
+  startNoEarlierThan DateTime?               @map("start_no_earlier_than") @db.Date
+  actualStart        DateTime?               @map("actual_start") @db.Date
+  actualFinish       DateTime?               @map("actual_finish") @db.Date
+  progressBasis      String?                 @map("progress_basis") @db.VarChar(10)
+  percentComplete    Decimal?                @map("percent_complete") @db.Decimal(5, 2)
+  quantityDone       Decimal?                @map("quantity_done") @db.Decimal(20, 4)
+  quantityTotal      Decimal?                @map("quantity_total") @db.Decimal(20, 4)
+  quantityUnit       String?                 @map("quantity_unit") @db.VarChar(20)
+  version            Int                     @default(1)
+  createdBy          String                  @map("created_by") @db.Uuid
+  createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy          String                  @map("updated_by") @db.Uuid
+  updatedAt          DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project            Project                 @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  milestone          Milestone?              @relation(fields: [tenantId, projectId, milestoneId], references: [tenantId, projectId, id], onDelete: Cascade)
+  wbsNode            WbsNode?                @relation(fields: [tenantId, projectId, wbsNodeId], references: [tenantId, projectId, id], onDelete: NoAction)
+  bqItem             BqItem?                 @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  predecessors       ScheduleDependency[]    @relation("DependencySuccessor")
+  successors         ScheduleDependency[]    @relation("DependencyPredecessor")
+  delayLinks         ScheduleDelayActivity[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, code])
+  @@unique([tenantId, projectId, milestoneId])
+  @@map("schedule_activities")
+}
+
+// predecessor → successor (FS, SS, FF, SF) with a lag in working days. No cycles (trigger).
+model ScheduleDependency {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  projectId     String           @map("project_id") @db.Uuid
+  predecessorId String           @map("predecessor_id") @db.Uuid
+  successorId   String           @map("successor_id") @db.Uuid
+  type          String           @db.VarChar(2)
+  lagDays       Int              @default(0) @map("lag_days")
+  version       Int              @default(1)
+  createdBy     String           @map("created_by") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy     String           @map("updated_by") @db.Uuid
+  updatedAt     DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  predecessor   ScheduleActivity @relation("DependencyPredecessor", fields: [tenantId, projectId, predecessorId], references: [tenantId, projectId, id], onDelete: Cascade)
+  successor     ScheduleActivity @relation("DependencySuccessor", fields: [tenantId, projectId, successorId], references: [tenantId, projectId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, predecessorId, successorId])
+  @@index([tenantId, projectId, successorId])
+  @@map("schedule_dependencies")
+}
+
+// A frozen snapshot of the schedule. Append-only (no UPDATE/DELETE, trigger); the newest is current.
+model ScheduleBaseline {
+  id                    String                 @id @default(uuid(7)) @db.Uuid
+  tenantId              String                 @map("tenant_id") @db.Uuid
+  projectId             String                 @map("project_id") @db.Uuid
+  baselineNo            Int                    @map("baseline_no")
+  name                  String                 @db.VarChar(120)
+  reason                String                 @db.VarChar(500)
+  dataDate              DateTime               @map("data_date") @db.Date
+  startDate             DateTime               @map("start_date") @db.Date
+  projectFinish         DateTime?              @map("project_finish") @db.Date
+  workingWeekdays       Int[]                  @map("working_weekdays")
+  includePublicHolidays Boolean                @map("include_public_holidays")
+  itemCount             Int                    @map("item_count")
+  createdBy             String                 @map("created_by") @db.Uuid
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  project               Project                @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  items                 ScheduleBaselineItem[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, baselineNo])
+  @@map("schedule_baselines")
+}
+
+// One task or milestone as it was planned when the baseline was frozen (append-only).
+model ScheduleBaselineItem {
+  tenantId       String           @map("tenant_id") @db.Uuid
+  baselineId     String           @map("baseline_id") @db.Uuid
+  kind           String           @db.VarChar(10)
+  // The task's activity ID or the milestone's ID (a snapshot reference, no foreign key).
+  refId          String           @map("ref_id") @db.Uuid
+  code           String?          @db.VarChar(20)
+  name           String           @db.VarChar(150)
+  wbsNodeId      String?          @map("wbs_node_id") @db.Uuid
+  startDate      DateTime         @map("start_date") @db.Date
+  finishDate     DateTime         @map("finish_date") @db.Date
+  durationDays   Int              @map("duration_days")
+  totalFloatDays Int?             @map("total_float_days")
+  critical       Boolean
+  baseline       ScheduleBaseline @relation(fields: [tenantId, baselineId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, baselineId, kind, refId])
+  @@map("schedule_baseline_items")
+}
+
+// One version of a delay record. Append-only: a change or a withdrawal appends the next version
+// (supersedes the previous, at most once); `delay_id` is the first version's ID.
+model ScheduleDelay {
+  id              String                  @id @default(uuid(7)) @db.Uuid
+  tenantId        String                  @map("tenant_id") @db.Uuid
+  projectId       String                  @map("project_id") @db.Uuid
+  delayId         String                  @map("delay_id") @db.Uuid
+  delayNo         Int                     @map("delay_no")
+  versionNo       Int                     @map("version_no")
+  supersedesId    String?                 @map("supersedes_id") @db.Uuid
+  status          String                  @db.VarChar(10)
+  cause           String                  @db.VarChar(30)
+  startDate       DateTime                @map("start_date") @db.Date
+  endDate         DateTime?               @map("end_date") @db.Date
+  workingDaysLost Decimal                 @map("working_days_lost") @db.Decimal(5, 1)
+  description     String                  @db.VarChar(2000)
+  siteDiaryId     String?                 @map("site_diary_id") @db.Uuid
+  claimFlag       String                  @map("claim_flag") @db.VarChar(20)
+  changeReason    String?                 @map("change_reason") @db.VarChar(500)
+  recordedBy      String                  @map("recorded_by") @db.Uuid
+  recordedAt      DateTime                @default(now()) @map("recorded_at") @db.Timestamptz
+  project         Project                 @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  root            ScheduleDelay           @relation("DelayRoot", fields: [tenantId, projectId, delayId], references: [tenantId, projectId, id], onDelete: NoAction)
+  versions        ScheduleDelay[]         @relation("DelayRoot")
+  supersedes      ScheduleDelay?          @relation("DelaySupersedes", fields: [tenantId, projectId, supersedesId], references: [tenantId, projectId, id], onDelete: NoAction)
+  supersededBy    ScheduleDelay?          @relation("DelaySupersedes")
+  siteDiary       SiteDiary?              @relation(fields: [tenantId, projectId, siteDiaryId], references: [tenantId, projectId, id], onDelete: Restrict)
+  activities      ScheduleDelayActivity[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, supersedesId])
+  @@unique([tenantId, delayId, versionNo])
+  @@index([tenantId, projectId, delayNo])
+  @@map("schedule_delays")
+}
+
+// The activities a delay version affects (append-only, written with the version).
+model ScheduleDelayActivity {
+  tenantId       String           @map("tenant_id") @db.Uuid
+  projectId      String           @map("project_id") @db.Uuid
+  delayVersionId String           @map("delay_version_id") @db.Uuid
+  activityId     String           @map("activity_id") @db.Uuid
+  delayVersion   ScheduleDelay    @relation(fields: [tenantId, projectId, delayVersionId], references: [tenantId, projectId, id], onDelete: Cascade)
+  activity       ScheduleActivity @relation(fields: [tenantId, projectId, activityId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@id([tenantId, delayVersionId, activityId])
+  @@index([tenantId, projectId, activityId])
+  @@map("schedule_delay_activities")
 }

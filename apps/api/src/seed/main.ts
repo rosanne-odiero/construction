@@ -78,6 +78,11 @@ function print(summary: SeedSummary) {
     `  ${stores.movements.join(", ")}; transfers ${stores.transfers.join(", ")}; stock take ${stores.stockTake}`,
     `  consumption variance alerts: ${stores.varianceAlerts}; low-stock items: ${stores.lowStock}`,
   );
+  const { schedule } = summary;
+  lines.push(
+    "",
+    `Schedule for RUI-HTS (synthetic, ${schedule.created ? "created" : "already present"}): ${schedule.activities} activities, ${schedule.dependencies} dependencies, ${schedule.baselines} baseline(s), ${schedule.delays} delays`,
+  );
   console.log(lines.join("\n"));
 }
 

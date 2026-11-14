@@ -2,9 +2,9 @@ import { divideRound, fromMicro, microDivide, microTimes, toMicro } from "./deci
 
 /**
  * Weighted average (moving average) stock valuation per store and material (D5.3, ARCHITECTURE
- * D-44, COMPLIANCE-REVIEW CR-STK-01). A position is the on-hand quantity in the material's base
+ * D-49, COMPLIANCE-REVIEW CR-STK-01). A position is the on-hand quantity in the material's base
  * unit and its total value in KES minor units, both with six decimals and never negative
- * (negative stock is never allowed, D-45).
+ * (negative stock is never allowed, D-50).
  *
  * - Inflows carry their own unit cost: a receipt the LPO's net price per base unit (VAT
  *   excluded), a transfer in the dispatching store's average, a return the issue's unit cost, a

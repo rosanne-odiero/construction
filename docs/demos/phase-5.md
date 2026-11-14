@@ -187,7 +187,7 @@ The cement alert, worked by hand: 12.5 m³ × 6.5 bags per m³ × 1.05 (5 % wast
 
 ### 6. What is not here yet
 
-Stores in the offline site app (the API contract is offline-ready: client IDs and `Idempotency-Key`, ARCHITECTURE §12.2); per-material variance thresholds; days-of-cover low-stock alerts; notifications for alerts; earned value and certificates (D6.3 extends the measurement); an authorised negative-stock override (deliberately not offered, D-45). Stock valuation (weighted average cost) is waiting for accountant review (COMPLIANCE_TODO CR-STK-01).
+Stores in the offline site app (the API contract is offline-ready: client IDs and `Idempotency-Key`, ARCHITECTURE §12.2); per-material variance thresholds; days-of-cover low-stock alerts; notifications for alerts; earned value and certificates (D6.3 extends the measurement); an authorised negative-stock override (deliberately not offered, D-50). Stock valuation (weighted average cost) is waiting for accountant review (COMPLIANCE_TODO CR-STK-01).
 
 ### 7. Automated checks
 

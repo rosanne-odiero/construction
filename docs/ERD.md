@@ -403,6 +403,17 @@ erDiagram
 | Milestone | `milestones` | `due_date` (for `planned_date`), `status` (`planned, in_progress, achieved, cancelled`), `actual_date`, `status_reason`, `version`; names are unique per project. `payment_linked` waits for valuations (D6.x). |
 | ProjectMembership | `project_memberships` | `project_permissions_check` widened to the project-scoped catalogue (`PROJECT_ASSIGNABLE_PERMISSIONS`). |
 
+**Implemented in D6.2** (migration `20261119090000_schedule`; [ARCHITECTURE §4.6](./ARCHITECTURE.md#46-schedule-d62)). Differences from the target model above:
+
+| Entity | Implemented as | Difference from the target model |
+|---|---|---|
+| ScheduleActivity | `schedule_activities` | Per project (`project_id`) with an optional `wbs_node_id` (composite FK to the project's WBS) and an optional BQ link by **lineage** (`bq_version_id` + `bq_item_lineage_id`, composite FK to `bq_items`; the version must be an approved version of the same project). `kind` is `task` or `milestone`: a milestone row only puts an existing `milestones` row into the network (`milestone_id`, unique per project, zero duration, no name or dates of its own, created on its first dependency). Tasks have `code` (unique per project), `name`, `duration_days` (working days, 1–1,000), `start_no_earlier_than`, `actual_start`/`actual_finish`, and progress with a declared basis: `progress_basis` `physical` (whole `percent_complete`) or `quantity` (`quantity_done`/`quantity_total`/`quantity_unit`, percent stored as done ÷ total rounded down). **Planned start and finish are not stored**: they are computed (CPM) on every read. `version`, `created_by`, `updated_by`. |
+| ActivityDependency | `schedule_dependencies` | Own `id` and `version`; `type` FS/SS/FF/SF; `lag_days` −60…365; one dependency per ordered pair; no cycles (trigger); ends fixed for life. |
+| ScheduleBaseline | `schedule_baselines` | Adds `baseline_no` (per project, in order), `reason`, `data_date`, `start_date`, `project_finish`, the calendar used (`working_weekdays`, `include_public_holidays`), `item_count`, `created_by`; `created_at` stamped by the database. Append-only; the newest is current (no stored "current" flag). |
+| BaselineActivity | `schedule_baseline_items` | Snapshot of tasks **and milestones** (`kind`, `ref_id` = activity or milestone ID, no foreign key so later deletions never touch a baseline), with `code`, `name`, `wbs_node_id`, `start_date`, `finish_date`, `duration_days`, `total_float_days`, `critical`. Append-only; written only in the baseline's transaction. |
+| DelayEvent | `schedule_delays` + `schedule_delay_activities` | Per project rather than per activity: a delay names any number of tasks (join table). Versioned append-only rows (`delay_id` = the first version, `delay_no`, `version_no`, `supersedes_id` unique, `status` `recorded`/`withdrawn`, `change_reason`). `cause` is `weather, client_instruction, design_information, supplier_material, labour, plant, statutory_permits, site_conditions, late_payment, other`; `working_days_lost` in half days; `end_date` null while ongoing; optional `site_diary_id` (same project); `claim_flag` `not_assessed, non_excusable, excusable, compensable` (the company's position, not a legal determination). |
+| — | `schedule_settings` | New: the project's working calendar (`working_weekdays`, `include_public_holidays`; the company's `public_holidays` from D3.3), `version`. |
+
 ## 4. BQ, variations, valuations and subcontracts
 
 ```mermaid

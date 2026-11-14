@@ -222,6 +222,27 @@ const codes: Record<string, ProblemKey> = {
   "buildup-line-not-material": "buildupLineNotMaterial",
   "measurement-future": "measurementFuture",
   "measurement-not-found": "measurementNotFound",
+  // Schedule (D6.2)
+  "activity-code-taken": "activityCodeTaken",
+  "activity-started": "activityStarted",
+  "activity-in-use": "activityInUse",
+  "too-many-activities": "tooManyActivities",
+  "too-many-dependencies": "tooManyDependencies",
+  "dependency-exists": "dependencyExists",
+  "schedule-cycle": "scheduleCycle",
+  "milestone-cancelled": "milestoneCancelled",
+  "schedule-out-of-range": "scheduleOutOfRange",
+  "schedule-empty": "scheduleEmpty",
+  "too-many-baselines": "tooManyBaselines",
+  "finish-without-start": "finishWithoutStart",
+  "finish-before-start": "finishBeforeStart",
+  "progress-without-start": "progressWithoutStart",
+  "progress-inconsistent": "progressInconsistent",
+  "quantity-invalid": "quantityInvalid",
+  "delay-withdrawn": "delayWithdrawn",
+  "delay-date-future": "delayDateFuture",
+  "delay-dates-invalid": "delayDatesInvalid",
+  "delay-days-exceed-range": "delayDaysExceedRange",
 };
 
 /** EN/SW text for an API problem code; anything unknown is "unexpected" (never a success). */

@@ -490,7 +490,7 @@ CREATE TRIGGER contract_settings_guard BEFORE INSERT OR UPDATE OR DELETE ON "con
 
 -- Valuations and certificates ----------------------------------------------------------------------
 ALTER TABLE "valuations" ADD CONSTRAINT "valuations_check" CHECK (
-  number >= 1 AND version >= 1 AND revision >= 0 AND line_count BETWEEN 0 AND 6000
+  number >= 1 AND version >= 1 AND revision >= 0 AND line_count BETWEEN 0 AND 20000
   AND kind IN ('interim', 'retention_release')
   AND (kind = 'retention_release') = (release_stage IS NOT NULL)
   AND (release_stage IS NULL OR release_stage IN ('practical', 'final'))

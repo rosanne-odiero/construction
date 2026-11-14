@@ -66,9 +66,13 @@ describe("measurement requests", () => {
 
 describe("valuation requests", () => {
   it("ties a release stage to retention releases only", () => {
-    expect(
-      createValuationRequestSchema.parse({ kind: "interim", valuationDate: "2026-11-13" }),
-    ).toMatchObject({ releaseStage: null, materialsFromStores: false });
+    // Omitted, the stores choice is left to the API (the last certified interim's choice).
+    const parsed = createValuationRequestSchema.parse({
+      kind: "interim",
+      valuationDate: "2026-11-13",
+    });
+    expect(parsed).toMatchObject({ releaseStage: null });
+    expect(parsed.materialsFromStores).toBeUndefined();
     expect(
       issues(
         createValuationRequestSchema.safeParse({

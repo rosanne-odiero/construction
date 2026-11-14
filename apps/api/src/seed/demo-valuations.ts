@@ -17,6 +17,7 @@ import { TenantDatabase } from "../modules/identity/tenant-database.service.js";
 import { MeasurementsService } from "../modules/progress/measurements/measurements.service.js";
 import { PhotosService } from "../modules/progress/photos.service.js";
 import { EarnedValueService } from "../modules/progress/valuations/earned-value.service.js";
+import { settingsInForce } from "../modules/progress/valuations/valuation-common.js";
 import { ValuationsService } from "../modules/progress/valuations/valuations.service.js";
 import { seedPrincipal } from "./demo-procure-to-pay.js";
 
@@ -152,10 +153,13 @@ export async function seedValuations(
       ruiruSite: ruiru.sites.find((site) => site.name === "Main plot")!.id,
       juja: juja.id,
       jujaSite: juja.sites[0]!.id,
-      existing: await tx.valuation.count({ where: { tenantId, projectId: ruiru.id } }),
+      // Each project resumes on its own: a seed that stopped after RUI-HTS still seeds JUJ-DPX.
+      ruiruDone: (await tx.valuation.count({ where: { tenantId, projectId: ruiru.id } })) > 0,
+      jujaDone: (await tx.valuation.count({ where: { tenantId, projectId: juja.id } })) > 0,
+      settingsVersion: (await settingsInForce(tx, tenantId, ruiru.id)).version,
     };
   });
-  if (facts.existing) return summarise(app, read, owner, facts, false);
+  if (facts.ruiruDone && facts.jujaDone) return summarise(app, read, owner, facts, false);
 
   const today = nairobiDate();
   const day = (offset: number) => addCalendarDays(today, offset);
@@ -229,162 +233,178 @@ export async function seedValuations(
     ).valuation;
   };
 
+  if (!facts.ruiruDone) await seedRuiru();
+  if (!facts.jujaDone) await seedJuja();
+  return summarise(app, read, owner, facts, true);
+
   // RUI-HTS ----------------------------------------------------------------------------------------
-  await valuations.updateSettings(
-    finance,
-    facts.ruiru,
-    updateContractSettingsRequestSchema.parse({
-      version: 0,
-      retentionPercent: "10",
-      retentionCapPercent: "5",
-      vatPercent: "16",
-      materialsPercent: "100",
-      practicalReleasePercent: "50",
-    }),
-    seedRequest,
-  );
-  const ruiruItems = await read(async (tx) => {
-    const version = await tx.bqVersion.findFirstOrThrow({
-      where: { tenantId, projectId: facts.ruiru, status: "approved" },
-      orderBy: { versionNo: "desc" },
-    });
-    const items = await tx.bqItem.findMany({ where: { tenantId, versionId: version.id } });
-    return Object.fromEntries(items.map((item) => [item.ref!, item.lineageId]));
-  });
-  const ruiruAt: [number, number] = [-1.14888, 36.9612];
-  const columns = await upload(facts.ruiru, facts.ruiruSite, ruiruAt, "Column bases cast");
-  const slab = await upload(facts.ruiru, facts.ruiruSite, ruiruAt, "Ground floor slab");
-  const walling = await upload(facts.ruiru, facts.ruiruSite, ruiruAt, "Substructure walling");
-  for (const [ref, quantity, photo] of [
-    ["A", "8", columns],
-    ["B", "10", slab],
-    ["C", "40", walling],
-  ] as const) {
-    const measurement = await measure(facts.ruiru, ruiruItems[ref]!, day(-50), quantity, [photo]);
-    await approve(facts.ruiru, measurement.id);
-  }
-  await certificate(
-    facts.ruiru,
-    { kind: "interim", valuationDate: day(-45) },
-    { kind: "advance", description: "Mobilisation advance (synthetic)", amountMinor: 5_000_000 },
-  );
-
-  // The D5.3 measurement (by the project manager, today): evidence added, approved by the owner.
-  const earlier = await read((tx) =>
-    tx.progressMeasurement.findFirst({
-      where: { tenantId, projectId: facts.ruiru, review: { is: null }, correctedBy: { is: null } },
-    }),
-  );
-  if (earlier) {
-    await measurements.addPhotos(pm, facts.ruiru, earlier.id, [columns], seedRequest);
-    await approve(facts.ruiru, earlier.id, owner);
-  }
-  for (const [ref, quantity, photo] of [
-    ["B", "24", slab],
-    ["C", "90", walling],
-  ] as const) {
-    const measurement = await measure(facts.ruiru, ruiruItems[ref]!, day(-3), quantity, [photo]);
-    await approve(facts.ruiru, measurement.id);
-  }
-  // Waiting in the approval queue.
-  await measure(facts.ruiru, ruiruItems["C"]!, today, "100", [walling], {
-    note: "Walling to DPC level complete on grid lines A–D (synthetic)",
-  });
-  await certificate(
-    facts.ruiru,
-    { kind: "interim", valuationDate: today, materialsFromStores: true },
-    {
-      kind: "advance_recovery",
-      description: "Advance recovery (synthetic)",
-      amountMinor: -2_000_000,
-    },
-  );
-
-  // Earned value: the substructure tasks name the BQ items they build; labour cost reaches the
-  // ledger by a maker-checked journal (payroll costs are not posted yet, D5.4).
-  await db.run({ userId: users.ownerId, tenantId, requestId: "seed" }, async (tx) => {
-    for (const [code, ref] of [
-      ["S02", "A"],
-      ["S04", "B"],
-      ["S03", "C"],
-    ] as const) {
-      const activity = await tx.scheduleActivity.findUnique({
-        where: { tenantId_projectId_code: { tenantId, projectId: facts.ruiru, code } },
-      });
-      if (!activity) continue;
+  async function seedRuiru() {
+    // Settings once (a seed that stopped after them goes on with what is stored).
+    if (facts.settingsVersion === 0)
+      await valuations.updateSettings(
+        finance,
+        facts.ruiru,
+        updateContractSettingsRequestSchema.parse({
+          version: 0,
+          retentionPercent: "10",
+          retentionCapPercent: "5",
+          vatPercent: "16",
+          materialsPercent: "100",
+          practicalReleasePercent: "50",
+        }),
+        seedRequest,
+      );
+    const ruiruItems = await read(async (tx) => {
       const version = await tx.bqVersion.findFirstOrThrow({
         where: { tenantId, projectId: facts.ruiru, status: "approved" },
         orderBy: { versionNo: "desc" },
       });
-      await tx.scheduleActivity.update({
-        where: { tenantId_id: { tenantId, id: activity.id } },
-        data: {
-          bqVersionId: version.id,
-          bqItemLineageId: ruiruItems[ref]!,
-          updatedBy: users.ownerId,
-          version: { increment: 1 },
-        },
-      });
+      const items = await tx.bqItem.findMany({ where: { tenantId, versionId: version.id } });
+      return Object.fromEntries(items.map((item) => [item.ref!, item.lineageId]));
+    });
+    const ruiruAt: [number, number] = [-1.14888, 36.9612];
+    const columns = await upload(facts.ruiru, facts.ruiruSite, ruiruAt, "Column bases cast");
+    const slab = await upload(facts.ruiru, facts.ruiruSite, ruiruAt, "Ground floor slab");
+    const walling = await upload(facts.ruiru, facts.ruiruSite, ruiruAt, "Substructure walling");
+    for (const [ref, quantity, photo] of [
+      ["A", "8", columns],
+      ["B", "10", slab],
+      ["C", "40", walling],
+    ] as const) {
+      const measurement = await measure(facts.ruiru, ruiruItems[ref]!, day(-50), quantity, [photo]);
+      await approve(facts.ruiru, measurement.id);
     }
-  });
-  const ledger = app.get(CostLedgerService);
-  const journal = await ledger.createJournal(
-    finance,
-    createJournalRequestSchema.parse({
-      projectId: facts.ruiru,
-      reason: "Substructure labour (payroll costs are not in the ledger yet; synthetic)",
-      lines: (
-        [
-          ["A", 15_000_000],
-          ["B", 21_000_000],
-          ["C", 6_000_000],
-        ] as const
-      ).map(([ref, amountMinor]) => ({
-        measure: "accrued",
-        category: "labour",
-        bqItemLineageId: ruiruItems[ref]!,
-        siteId: facts.ruiruSite,
-        counterpartyKind: "other",
-        counterpartyName: "Substructure gangs (synthetic)",
-        occurredOn: day(-20),
-        amountMinor,
-      })),
-    }),
-    seedRequest,
-  );
-  await ledger.approveJournal(owner, journal.journal.id, journal.journal.version, seedRequest);
+    await certificate(
+      facts.ruiru,
+      { kind: "interim", valuationDate: day(-45) },
+      { kind: "advance", description: "Mobilisation advance (synthetic)", amountMinor: 5_000_000 },
+    );
+
+    // The D5.3 measurement (by the project manager, today): evidence added, approved by the owner.
+    const earlier = await read((tx) =>
+      tx.progressMeasurement.findFirst({
+        where: {
+          tenantId,
+          projectId: facts.ruiru,
+          review: { is: null },
+          correctedBy: { is: null },
+        },
+      }),
+    );
+    if (earlier) {
+      await measurements.addPhotos(pm, facts.ruiru, earlier.id, [columns], seedRequest);
+      await approve(facts.ruiru, earlier.id, owner);
+    }
+    for (const [ref, quantity, photo] of [
+      ["B", "24", slab],
+      ["C", "90", walling],
+    ] as const) {
+      const measurement = await measure(facts.ruiru, ruiruItems[ref]!, day(-3), quantity, [photo]);
+      await approve(facts.ruiru, measurement.id);
+    }
+    // Waiting in the approval queue.
+    await measure(facts.ruiru, ruiruItems["C"]!, today, "100", [walling], {
+      note: "Walling to DPC level complete on grid lines A–D (synthetic)",
+    });
+    await certificate(
+      facts.ruiru,
+      { kind: "interim", valuationDate: today, materialsFromStores: true },
+      {
+        kind: "advance_recovery",
+        description: "Advance recovery (synthetic)",
+        amountMinor: -2_000_000,
+      },
+    );
+
+    // Earned value: the substructure tasks name the BQ items they build; labour cost reaches the
+    // ledger by a maker-checked journal (payroll costs are not posted yet, D5.4).
+    await db.run({ userId: users.ownerId, tenantId, requestId: "seed" }, async (tx) => {
+      for (const [code, ref] of [
+        ["S02", "A"],
+        ["S04", "B"],
+        ["S03", "C"],
+      ] as const) {
+        const activity = await tx.scheduleActivity.findUnique({
+          where: { tenantId_projectId_code: { tenantId, projectId: facts.ruiru, code } },
+        });
+        if (!activity) continue;
+        const version = await tx.bqVersion.findFirstOrThrow({
+          where: { tenantId, projectId: facts.ruiru, status: "approved" },
+          orderBy: { versionNo: "desc" },
+        });
+        await tx.scheduleActivity.update({
+          where: { tenantId_id: { tenantId, id: activity.id } },
+          data: {
+            bqVersionId: version.id,
+            bqItemLineageId: ruiruItems[ref]!,
+            updatedBy: users.ownerId,
+            version: { increment: 1 },
+          },
+        });
+      }
+    });
+    const ledger = app.get(CostLedgerService);
+    const journal = await ledger.createJournal(
+      finance,
+      createJournalRequestSchema.parse({
+        projectId: facts.ruiru,
+        reason: "Substructure labour (payroll costs are not in the ledger yet; synthetic)",
+        lines: (
+          [
+            ["A", 15_000_000],
+            ["B", 21_000_000],
+            ["C", 6_000_000],
+          ] as const
+        ).map(([ref, amountMinor]) => ({
+          measure: "accrued",
+          category: "labour",
+          bqItemLineageId: ruiruItems[ref]!,
+          siteId: facts.ruiruSite,
+          counterpartyKind: "other",
+          counterpartyName: "Substructure gangs (synthetic)",
+          occurredOn: day(-20),
+          amountMinor,
+        })),
+      }),
+      seedRequest,
+    );
+    await ledger.approveJournal(owner, journal.journal.id, journal.journal.version, seedRequest);
+  }
 
   // JUJ-DPX: a BQ, two interim certificates and the practical-completion release -----------------
-  const jujaItems = await seedJujaBq(db, tenantId, facts.juja, users);
-  const jujaAt: [number, number] = [-1.1012, 37.0144];
-  const shell = await upload(facts.juja, facts.jujaSite, jujaAt, "Shell and roof");
-  const handover = await upload(facts.juja, facts.jujaSite, jujaAt, "Handover finishes");
-  for (const [ref, quantity] of [
-    ["P1", "50"],
-    ["W1", "900"],
-    ["C1", "120"],
-  ] as const) {
-    const measurement = await measure(facts.juja, jujaItems[ref]!, day(-240), quantity, [shell]);
-    await approve(facts.juja, measurement.id);
+  async function seedJuja() {
+    const jujaItems = await seedJujaBq(db, tenantId, facts.juja, users);
+    const jujaAt: [number, number] = [-1.1012, 37.0144];
+    const shell = await upload(facts.juja, facts.jujaSite, jujaAt, "Shell and roof");
+    const handover = await upload(facts.juja, facts.jujaSite, jujaAt, "Handover finishes");
+    for (const [ref, quantity] of [
+      ["P1", "50"],
+      ["W1", "900"],
+      ["C1", "120"],
+    ] as const) {
+      const measurement = await measure(facts.juja, jujaItems[ref]!, day(-240), quantity, [shell]);
+      await approve(facts.juja, measurement.id);
+    }
+    await certificate(facts.juja, { kind: "interim", valuationDate: day(-235) });
+    for (const [ref, quantity] of [
+      ["P1", "100"],
+      ["W1", "1600"],
+      ["C1", "180"],
+      ["R1", "320"],
+      ["F1", "2400"],
+    ] as const) {
+      const measurement = await measure(facts.juja, jujaItems[ref]!, day(-90), quantity, [
+        handover,
+      ]);
+      await approve(facts.juja, measurement.id);
+    }
+    await certificate(facts.juja, { kind: "interim", valuationDate: day(-85) });
+    await certificate(facts.juja, {
+      kind: "retention_release",
+      releaseStage: "practical",
+      valuationDate: day(-70),
+    });
   }
-  await certificate(facts.juja, { kind: "interim", valuationDate: day(-235) });
-  for (const [ref, quantity] of [
-    ["P1", "100"],
-    ["W1", "1600"],
-    ["C1", "180"],
-    ["R1", "320"],
-    ["F1", "2400"],
-  ] as const) {
-    const measurement = await measure(facts.juja, jujaItems[ref]!, day(-90), quantity, [handover]);
-    await approve(facts.juja, measurement.id);
-  }
-  await certificate(facts.juja, { kind: "interim", valuationDate: day(-85) });
-  await certificate(facts.juja, {
-    kind: "retention_release",
-    releaseStage: "practical",
-    valuationDate: day(-70),
-  });
-  return summarise(app, read, owner, facts, true);
 }
 
 /** JUJ-DPX's BQ written by the owner and approved by the project manager (as the stores seed). */
@@ -394,6 +414,22 @@ async function seedJujaBq(
   projectId: string,
   users: SeedUsers,
 ): Promise<Record<string, string>> {
+  // A seed that stopped after the BQ reuses it.
+  const approved = await db.run(
+    { userId: users.ownerId, tenantId, requestId: "seed" },
+    async (tx) => {
+      const version = await tx.bqVersion.findFirst({
+        where: { tenantId, projectId, status: "approved" },
+      });
+      return version
+        ? tx.bqItem.findMany({
+            where: { tenantId, versionId: version.id },
+            select: { ref: true, lineageId: true },
+          })
+        : null;
+    },
+  );
+  if (approved) return Object.fromEntries(approved.map((item) => [item.ref!, item.lineageId]));
   const lineages: Record<string, string> = {};
   const versionId = uuidv7();
   const subtotal = JUJA_BQ.reduce((total, row) => total + row[7], 0n);

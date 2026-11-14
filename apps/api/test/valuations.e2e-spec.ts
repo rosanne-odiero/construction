@@ -142,14 +142,15 @@ describe("Measurement and valuations (real runtime role)", () => {
     );
   const approved = async (browser: Browser, measurement: Measurement) =>
     measurementResponseSchema.parse(ok(await decide(browser, measurement))).measurement;
-  const uploadPhoto = async () => {
-    const res = await request(app.getHttpServer())
+  const uploadPhoto = async (purpose?: "safety_incident") => {
+    const upload = request(app.getHttpServer())
       .post(`/api/v1/projects/${projectId}/photos`)
       .set("Cookie", [...agent.cookies].map(([key, value]) => `${key}=${value}`).join("; "))
       .set("Origin", origin)
       .set("X-CSRF-Token", agent.csrf)
-      .field("siteId", siteId)
-      .attach("file", await plainJpeg(), "IMG_0001.jpg");
+      .field("siteId", siteId);
+    if (purpose) upload.field("purpose", purpose);
+    const res = await upload.attach("file", await plainJpeg(), "IMG_0001.jpg");
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     return sitePhotoResponseSchema.parse(res.body).photo.id;
   };
@@ -496,6 +497,28 @@ describe("Measurement and valuations (real runtime role)", () => {
       409,
       "idempotency-key-reused",
     );
+    // An incident photo (D8.2, restricted to safety readers) is never measurement evidence.
+    const incidentPhoto = await uploadPhoto("safety_incident");
+    refused(
+      await measure(agent, {
+        bqItemLineageId: item.A,
+        measuredOn: on,
+        quantityToDate: "1",
+        photoIds: [incidentPhoto],
+      }),
+      422,
+      "photo-not-in-project",
+    );
+    await expect(
+      raw(
+        agent,
+        (tx) => tx.$executeRaw`
+          INSERT INTO progress_measurement_photos (tenant_id, project_id, measurement_id, photo_id,
+            added_by)
+          VALUES (${tenantA}::uuid, ${projectId}::uuid, ${p1.measurement.id}::uuid,
+            ${incidentPhoto}::uuid, ${agent.auth.user.id}::uuid)`,
+      ),
+    ).rejects.toThrow(/general site photo/);
 
     // A wrong figure corrected before review: the original is withdrawn, the correction counts.
     const wrong = await record(agent, {
@@ -888,6 +911,10 @@ describe("Measurement and valuations (real runtime role)", () => {
       ),
     ).valuation;
     expect(draft.number).toBe("VAL-0002");
+    // IPC-0001 had entered materials and no stock: the next draft keeps stores off, and warns that
+    // valuing fewer materials than last time takes the difference back.
+    expect(draft.materialsFromStores).toBe(false);
+    expect(draft.warnings.map((warning) => warning.code)).toContain("materials-reduced");
     // The blocks are now built in: keeping them as materials on site would bill them twice.
     refused(
       await act(qs, draft, "/materials", {

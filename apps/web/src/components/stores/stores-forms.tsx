@@ -28,6 +28,7 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FoundationApiError } from "@/lib/foundation-api";
 import { liveRequest } from "@/lib/live-api";
 import { unitLabel } from "@/lib/procurement";
 import { formatStock, nonNegativeQuantity } from "@/lib/stores";
@@ -220,9 +221,11 @@ export function MeasurementDialog({ projectId, item }: { projectId: string; item
   const [quantity, setQuantity] = useState("");
   const [measuredOn, setMeasuredOn] = useState(nairobiDate);
   const [note, setNote] = useState("");
+  const [overMeasure, setOverMeasure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const trimmed = quantity.trim();
+  const percent = item.basis === "percent";
   const valid =
     MEASURED.test(trimmed) && /^\d{4}-\d{2}-\d{2}$/.test(measuredOn) && measuredOn <= nairobiDate();
   const id = `measure-${item.lineageId}`;
@@ -238,12 +241,17 @@ export function MeasurementDialog({ projectId, item }: { projectId: string; item
           measuredOn,
           quantityToDate: trimmed,
           note: note.trim() || null,
+          ...(overMeasure?.trim() ? { overMeasureReason: overMeasure.trim() } : {}),
         },
       });
       setOpen(false);
       setQuantity("");
+      setOverMeasure(null);
       router.refresh();
     } catch (error) {
+      // Above the BQ quantity: ask for the reason the approver will see, then save again.
+      if (error instanceof FoundationApiError && error.code === "over-measure-reason-required")
+        setOverMeasure((current) => current ?? "");
       setFailure(problem(error));
     } finally {
       setBusy(false);
@@ -266,7 +274,7 @@ export function MeasurementDialog({ projectId, item }: { projectId: string; item
           </DialogHeader>
           <Field>
             <FieldLabel htmlFor={`${id}-quantity`}>
-              {t("quantity", { unit: item.unit ?? "" })}
+              {percent ? t("percent") : t("quantity", { unit: item.unit ?? "" })}
             </FieldLabel>
             <Input
               id={`${id}-quantity`}
@@ -275,8 +283,20 @@ export function MeasurementDialog({ projectId, item }: { projectId: string; item
               value={quantity}
               onChange={(event) => setQuantity(event.target.value)}
             />
-            <FieldDescription>{t("quantityHint")}</FieldDescription>
+            <FieldDescription>{percent ? t("percentHint") : t("quantityHint")}</FieldDescription>
           </Field>
+          {overMeasure !== null ? (
+            <Field>
+              <FieldLabel htmlFor={`${id}-over`}>{t("overMeasure")}</FieldLabel>
+              <Textarea
+                id={`${id}-over`}
+                rows={2}
+                maxLength={500}
+                value={overMeasure}
+                onChange={(event) => setOverMeasure(event.target.value)}
+              />
+            </Field>
+          ) : null}
           <Field>
             <FieldLabel htmlFor={`${id}-date`}>{t("date")}</FieldLabel>
             <Input

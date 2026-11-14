@@ -6166,6 +6166,9 @@
       "title": "Record a measurement",
       "quantity": "Quantity completed to date ({unit})",
       "quantityHint": "The whole quantity done so far, not just this week.",
+      "percent": "Percent complete to date (lump sum)",
+      "percentHint": "0 to 100: how much of the whole item is done so far.",
+      "overMeasure": "Why is this above the BQ quantity? (shown to the approver)",
       "date": "Measured on",
       "save": "Save measurement"
     },
@@ -8228,7 +8231,8 @@
       "basis-changed": "{count, plural, one {# item changed} other {# items changed}} between quantity and lump sum since measured. Measure again.",
       "omitted-item": "{count, plural, one {# measured item is} other {# measured items are}} no longer in the BQ in force and not valued.",
       "no-measurements": "No approved measurements up to the valuation date.",
-      "negative-amount": "The amount due is negative: the client is owed the difference (for example after a correction or a recovery)."
+      "negative-amount": "The amount due is negative: the client is owed the difference (for example after a correction or a recovery).",
+      "materials-reduced": "Materials on site are lower than on the last certificate, which takes the difference back. Right if they were built in and measured; if they are still on site, include them (stores or entered) before submitting."
     },
     "problems": {
       "tooManyPhotos": "A measurement can have at most 6 photos.",

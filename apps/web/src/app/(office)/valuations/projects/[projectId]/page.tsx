@@ -350,6 +350,9 @@ async function Certificates({ projectId, data }: { projectId: string; data: Proj
   const tStatus = await getTranslations("valuations.status");
   const tKinds = await getTranslations("valuations.kinds");
   const lastDate = data.valuations.find((row) => row.status === "certified")?.valuationDate ?? null;
+  const previousFromStores =
+    data.valuations.find((row) => row.status === "certified" && row.kind === "interim")
+      ?.materialsFromStores ?? false;
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -446,6 +449,7 @@ async function Certificates({ projectId, data }: { projectId: string; data: Proj
           projectId={projectId}
           release={data.permissions.canRelease}
           minDate={lastDate}
+          previousFromStores={previousFromStores}
         />
       ) : null}
       {data.permissions.canEditSettings ? (

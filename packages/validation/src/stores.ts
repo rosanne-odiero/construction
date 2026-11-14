@@ -1,4 +1,5 @@
 import {
+  MEASUREMENT_BASES,
   STOCK_ENTRY_KINDS,
   STOCK_MOVEMENT_KINDS,
   STOCK_MOVEMENT_STATUSES,
@@ -84,6 +85,8 @@ export const storesBqItemSchema = z.strictObject({
   ref: z.string().nullable(),
   description: z.string(),
   unit: z.string().nullable(),
+  /** How the item is measured (D6.3): a quantity in its unit or percent complete; null: not measured. */
+  basis: z.enum(MEASUREMENT_BASES).nullable().optional(),
 });
 export type StoresBqItem = z.infer<typeof storesBqItemSchema>;
 const gangRef = z.strictObject({ id: uuid, name: z.string() });

@@ -36,9 +36,12 @@ export function CreateValuationForm({
   projectId,
   release,
   minDate,
+  previousFromStores,
 }: {
   projectId: string;
   release: { practical: boolean; final: boolean };
+  /** The last certified interim's choice: valuations are cumulative, so it is carried forward. */
+  previousFromStores: boolean;
   minDate: string | null;
 }) {
   const t = useTranslations("valuations.certificates.create");
@@ -52,7 +55,7 @@ export function CreateValuationForm({
   ];
   const [kind, setKind] = useState<string>("interim");
   const [date, setDate] = useState(today);
-  const [stores, setStores] = useState(false);
+  const [stores, setStores] = useState(previousFromStores);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 

@@ -8,6 +8,7 @@ import {
   type ContractTerms,
 } from "@pm-buddy/domain";
 import {
+  VALUATION_LIMITS,
   VALUATION_RULE_VERSION,
   type AdjustmentKind,
   type BqItemKind,
@@ -100,8 +101,6 @@ export type ComputedValuation = {
     | { code: "valuation-too-large" }
     | null;
 };
-
-const MAX_LINES = 20_000;
 
 /** Lines of a stored revision, as written at submission. */
 export async function storedLines(tx: Tx, tenantId: string, valuationId: string, revision: number) {
@@ -513,7 +512,16 @@ export async function computeValuation(
     });
   }
   if (figures.amountDueMinor < 0) warnings.push({ code: "negative-amount", count: 0 });
-  if (items.length + materials.length + adjustments.length > MAX_LINES)
+  // Cumulative figures: fewer materials on site than last time takes the difference back. Right
+  // once they are built in and measured, wrong if they are still on site (check before submitting).
+  const lastInterim = certified.filter((row) => row.kind === "interim").at(-1);
+  if (
+    kind === "interim" &&
+    lastInterim &&
+    figures.materialsGrossMinor < minorOf(lastInterim.materialsGrossMinor ?? 0n)
+  )
+    warnings.push({ code: "materials-reduced", count: 0 });
+  if (items.length + materials.length + adjustments.length > VALUATION_LIMITS.linesPerValuation)
     problem ??= { code: "valuation-too-large" };
 
   const bqVersion = current ? { id: current.id, versionNo: current.versionNo } : null;

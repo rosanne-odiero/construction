@@ -115,8 +115,11 @@ export const VALUATION_LIMITS = {
   photosPerMeasurement: 6,
   materialsPerValuation: 100,
   adjustmentsPerValuation: 50,
-  /** Items valued on one certificate (the BQ in force). */
-  itemsPerValuation: 5_000,
+  /**
+   * Lines on one certificate (items valued on the BQ in force, materials and adjustments); the
+   * API refuses more (`valuation-too-large`) and `valuations_check` holds the same bound.
+   */
+  linesPerValuation: 20_000,
   /** Weeks drawn by the S-curve (the most recent ones when the project is longer). */
   sCurveMaxWeeks: 260,
   /** Pending measurements listed in the approval queue. */

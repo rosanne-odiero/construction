@@ -336,6 +336,8 @@ export const valuationSummarySchema = z.strictObject({
   certificateNumber: z.string().nullable(),
   kind: z.enum(VALUATION_KINDS),
   releaseStage: z.enum(RELEASE_STAGES).nullable(),
+  /** Materials on hand in the project's stores are included at cost (interim only). */
+  materialsFromStores: z.boolean(),
   status: z.enum(VALUATION_STATUSES),
   valuationDate: calendarDate,
   /** Frozen at submission; null while a draft (its preview is on the detail). */
@@ -416,6 +418,7 @@ export const valuationWarningSchema = z.strictObject({
     "omitted-item",
     "no-measurements",
     "negative-amount",
+    "materials-reduced",
   ]),
   count: z.number().int().min(0),
 });
@@ -423,7 +426,6 @@ export type ValuationWarning = z.infer<typeof valuationWarningSchema>;
 
 export const valuationDetailSchema = valuationSummarySchema.extend({
   notes: z.string().nullable(),
-  materialsFromStores: z.boolean(),
   returnReason: z.string().nullable(),
   cancelReason: z.string().nullable(),
   cancelledBy: person.nullable(),
@@ -539,8 +541,11 @@ export const createValuationRequestSchema = z
     releaseStage: z.enum(RELEASE_STAGES).nullable().default(null),
     valuationDate: calendarDate,
     notes: optionalText(1000, true).optional(),
-    /** Include materials on hand in the project's stores at cost (interim only). */
-    materialsFromStores: z.boolean().default(false),
+    /**
+     * Include materials on hand in the project's stores at cost (interim only). Omitted: the
+     * last certified interim's choice, so a routine next valuation does not take them back.
+     */
+    materialsFromStores: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if ((value.kind === "retention_release") !== (value.releaseStage !== null))

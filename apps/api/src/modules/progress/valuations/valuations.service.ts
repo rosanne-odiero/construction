@@ -430,7 +430,11 @@ export class ValuationsService {
               releaseStage: stage,
               valuationDate: fromCalendarDate(input.valuationDate),
               notes: input.notes ?? null,
-              materialsFromStores: kind === "interim" && (input.materialsFromStores ?? false),
+              materialsFromStores:
+                kind === "interim" &&
+                (input.materialsFromStores ??
+                  certified.filter((row) => row.kind === "interim").at(-1)?.materialsFromStores ??
+                  false),
               contributors: [access.userId],
               createdBy: access.userId,
               updatedBy: access.userId,
@@ -1056,6 +1060,7 @@ function summary(row: ValuationRow, project: ProjectAccess, people: People): Val
       row.certificateNumber === null ? null : valuationCode("IPC", row.certificateNumber),
     kind: row.kind as ValuationKind,
     releaseStage: row.releaseStage as ReleaseStage | null,
+    materialsFromStores: row.materialsFromStores,
     status: row.status as ValuationStatus,
     valuationDate: toCalendarDate(row.valuationDate),
     amountDueMinor: row.amountDueMinor === null ? null : minorOf(row.amountDueMinor),

@@ -6166,6 +6166,9 @@
       "title": "Rekodi kipimo cha kazi",
       "quantity": "Kiasi kilichokamilika hadi sasa ({unit})",
       "quantityHint": "Kiasi chote kilichofanyika hadi sasa, si cha wiki hii tu.",
+      "percent": "Asilimia iliyokamilika hadi sasa (jumla moja)",
+      "percentHint": "0 hadi 100: kiasi gani cha kipengele kizima kimekamilika hadi sasa.",
+      "overMeasure": "Kwa nini kiasi hiki kinazidi kiasi cha BQ? (kinaonyeshwa kwa anayeidhinisha)",
       "date": "Kimepimwa tarehe",
       "save": "Hifadhi kipimo"
     },
@@ -8228,7 +8231,8 @@
       "basis-changed": "{count, plural, one {Kipengele # kimebadilika} other {Vipengele # vimebadilika}} kati ya kiasi na jumla moja tangu kupimwa. Pima tena.",
       "omitted-item": "{count, plural, one {Kipengele # kilichopimwa hakipo} other {Vipengele # vilivyopimwa havipo}} tena kwenye BQ inayotumika na havijathaminiwa.",
       "no-measurements": "Hakuna vipimo vilivyoidhinishwa hadi tarehe ya tathmini.",
-      "negative-amount": "Kiasi kinachodaiwa ni hasi: mteja anadai tofauti hiyo (kwa mfano baada ya marekebisho au urejeshaji)."
+      "negative-amount": "Kiasi kinachodaiwa ni hasi: mteja anadai tofauti hiyo (kwa mfano baada ya marekebisho au urejeshaji).",
+      "materials-reduced": "Vifaa vilivyoko eneo la kazi ni vichache kuliko kwenye cheti kilichopita, hivyo tofauti inarudishwa. Ni sawa kama vimejengwa na kupimwa; kama bado viko eneo la kazi, viongeze (stoo au vilivyowekwa) kabla ya kuwasilisha."
     },
     "problems": {
       "tooManyPhotos": "Kipimo kinaweza kuwa na picha 6 tu.",

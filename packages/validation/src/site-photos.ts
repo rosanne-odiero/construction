@@ -1,4 +1,9 @@
-import { PHOTO_LOCATION_CHECKS, PHOTO_TIME_CHECKS, PHOTO_TIME_SOURCES } from "@pm-buddy/domain";
+import {
+  PHOTO_LOCATION_CHECKS,
+  PHOTO_PURPOSES,
+  PHOTO_TIME_CHECKS,
+  PHOTO_TIME_SOURCES,
+} from "@pm-buddy/domain";
 import { z } from "zod";
 
 /** Geotagged site photos (D6.1): upload fields, the stored record and list queries. */
@@ -16,8 +21,14 @@ export const photoUploadFieldsSchema = z
       .max(500)
       .optional()
       .transform((value) => (value ? value : undefined)),
+    /** `safety_incident`: restricted to health and safety readers; never on a diary. */
+    purpose: z.enum(PHOTO_PURPOSES).optional(),
   })
-  .strict();
+  .strict()
+  .refine((fields) => fields.purpose !== "safety_incident" || !fields.diaryId, {
+    message: "An incident photo is not attached to a diary",
+    path: ["diaryId"],
+  });
 
 export const sitePhotoSchema = z
   .object({

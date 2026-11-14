@@ -46,6 +46,9 @@ export const initialPhotos = (projectId: string, siteId: string): SitePhoto[] =>
   }),
 ];
 
+/** Incident photos (purpose `safety_incident`) stay out of the project's photo list. */
+const restricted = new Set<string>();
+
 const field = (raw: string, name: string) =>
   new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)\\r\\n`).exec(raw)?.[1];
 
@@ -59,7 +62,12 @@ export function handlePhotos(
 ) {
   if (method === "GET")
     return {
-      body: { photos: photos.filter((value) => value.projectId === projectId), nextCursor: null },
+      body: {
+        photos: photos.filter(
+          (value) => value.projectId === projectId && !restricted.has(value.id),
+        ),
+        nextCursor: null,
+      },
       schema: sitePhotosResponseSchema,
     };
   const text = raw.toString("latin1");
@@ -78,5 +86,6 @@ export function handlePhotos(
       : {}),
   });
   photos.unshift(created);
+  if (field(text, "purpose") === "safety_incident") restricted.add(created.id);
   return { status: 201, body: { photo: created }, schema: sitePhotoResponseSchema };
 }

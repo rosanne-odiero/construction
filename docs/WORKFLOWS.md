@@ -81,6 +81,71 @@ Certification does not change the project's status. D6.3 retention release reads
 
 **Concrete tests and templates** (append-only records, not state machines). A cube set (`CUBE-NNNN`) is recorded, then one result per age (7, 28 days) by `site.diary` or `quality.manage`; the outcome follows rule KE-CUBE-1 and is re-checked by the database. A slump test (`SLP-NNNN`) is recorded once with its KE-SLUMP-1 outcome. **Corrections** (`quality.manage`, reason) append a row that supersedes the original once; **voiding** a cube set (`quality.manage`, reason) stops it falling due but keeps its results. Template **revisions** and **retirements** (`quality.manage` somewhere) append the next version of the lineage; inspections keep the version they used.
 
+## Health and safety (D8.2)
+
+Implemented for the web app ([ARCHITECTURE §4.9](./ARCHITECTURE.md#49-health-and-safety-d82)). Every command runs in the tenant transaction with the project's permissions (role ∩ assignment), sends the version it read (409 `version-conflict`) and writes a `safety.*` audit event (IDs, codes, kinds, severities, counts and statuses only; never names, injuries, descriptions, notes or reasons) in the same transaction. Closed and cancelled projects are read-only in the API and in every trigger. "Recorder" = `site.diary` or `safety.manage`; "manager" = `safety.manage`; "independent" means a different user from the one named, checked again by the database. "Reason" is 3–500 characters. Dates are Nairobi business dates and never in the future unless stated.
+
+**Incident** (`safety_incidents`, people and photos)
+
+```mermaid
+stateDiagram-v2
+  [*] --> reported: report (recorder)
+  reported --> investigated: root cause (manager)
+  investigated --> investigated: revise investigation (manager)
+  investigated --> closed: close (manager, no blockers)
+  reported --> voided: void (manager, reason, no open actions)
+  investigated --> voided: void (manager, reason, no open actions)
+  closed --> [*]
+  voided --> [*]
+```
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → reported | Recorder; site of the project; kind, severity, when (≤ now + 5 min), location, description; people (labourer of the project, staff member, or name; injured people with injury type and body part); an injury needs an injured person, a near miss none; up to 6 of the site's photos; optional closed incident it follows up | `INC-NNNN`; `safety.incident_reported` (kind, severity, people counts by role, photo count) |
+| reported/investigated → same | Manager; correct details, people or photos (recorders may add photos) | `safety.incident_updated` (field names, counts), `safety.incident_photos_added` |
+| reported → investigated | Manager; root-cause category and root cause (10–2,000 characters), contributing factors | Investigator and time stored; `safety.incident_investigated` |
+| reported/investigated → same | Manager; regulator decision `notified` (date, reference) or `not_notifiable` (reason); replaceable until closed | `safety.incident_regulator_decision` (decision only) |
+| investigated → closed | Manager; every corrective action verified or cancelled; ≥ 1 verified action or a no-action reason; a regulator decision when the incident is a serious or fatal injury or a dangerous occurrence (COMPLIANCE-REVIEW CR-HS-01); optional closing note | **Locked** for every role: the incident, its people and photos, its corrective actions and its linked treatments; `safety.incident_closed` |
+| reported/investigated → voided | Manager; reason; no open or done corrective action | **Locked**; `safety.incident_voided` |
+
+There is no delete and no reopening: anything found after closing is reported as a follow-up incident (`follow_up_of_id`).
+
+**Corrective action** (`corrective_actions`)
+
+```mermaid
+stateDiagram-v2
+  [*] --> open: raise (manager)
+  open --> done: mark done (owner only)
+  done --> verified: verify (manager, not owner, not who marked done)
+  done --> open: send back (same verifier rule, reason)
+  open --> cancelled: cancel (manager, reason)
+  done --> cancelled: cancel (manager, reason)
+  verified --> [*]
+  cancelled --> [*]
+```
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → open | Manager; description (5–1,000 characters), owner (staff who can read the project's safety records), due date; source an open incident, a confirmed toolbox talk, an inspection of the project, or none | `CA-NNNN`; `safety.action_raised` (source, IDs) |
+| open → open | Manager; change description, owner or due date | `safety.action_updated` (field names) |
+| open → done | The **owner**; optional note | Done by/at stored; `safety.action_done` |
+| done → verified | Manager; independent of the owner and of whoever marked it done | **Final**; `safety.action_verified` |
+| done → open | Manager; same independence; reason | `reject_count` + 1, last reason kept, done cleared; `safety.action_rejected` |
+| open/done → cancelled | Manager; reason | **Final**; `safety.action_cancelled` |
+
+Overdue = open after its due date (a done action awaiting verification is not overdue). Lists put overdue first. An action of a closed or voided incident cannot change.
+
+**Toolbox talk** (`toolbox_talks`, `toolbox_talk_attendees`)
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → draft | Recorder; site, date, topic, presenter (a recorder), optional minutes, notes, a site photo; attendees as gangs (members on the day) and/or labourers of the project, plus a count of others | `TBT-NNNN`; `safety.talk_recorded` (attendee counts) |
+| draft → draft | Recorder; any content or attendee change | `safety.talk_updated` |
+| draft → confirmed | Recorder; at least one attendee or counted other (may happen on creation) | **Locked**: the talk and attendance cannot change; `safety.talk_confirmed` |
+| draft → cancelled | Recorder; reason | **Final**; `safety.talk_cancelled` |
+
+**Records without a lifecycle.** An **induction** (`IND-NNNN`) is recorded once by a recorder and can only be **voided** by a manager with a reason. A **PPE issue** is `issued` → `returned` (recorder; date, condition) or → `replaced` (only by recording the newer issue that names it) or → `voided` (manager, reason); voiding a replacement puts the item it replaced back to `issued`. A **first-aid kit** is active → retired (manager, reason) and its **checks** are append-only (recorder). A **first-aider** is active → removed (manager, reason). A **treatment** (`FA-NNNN`) is recorded (recorder), linked to an open incident once (manager) or voided (manager, reason); a treatment linked to a closed incident cannot change.
+
 ## Schedule baseline and delay log (D6.2)
 
 Implemented for the web app ([ARCHITECTURE §4.6](./ARCHITECTURE.md#46-schedule-d62)). Every command needs `projects.manage` on an open project (role ∩ assignment, checked by `ProjectAccess.editable`; closed and cancelled projects are read-only in the API and in every schedule trigger), runs in the tenant transaction under the company lock, checks the expected version and writes its audit event in the same transaction. There is no external effect, outbox event or offline capture; a retry after a lost response is refused as a version conflict (or `dependency-exists`) rather than applied twice.

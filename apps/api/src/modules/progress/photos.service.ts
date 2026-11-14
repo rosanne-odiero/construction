@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   HttpException,
   Injectable,
   Logger,
@@ -9,7 +10,12 @@ import {
   UnprocessableEntityException,
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
-import { PHOTO_LIMITS, verifyPhotoEvidence } from "@pm-buddy/domain";
+import { PHOTO_LIMITS, verifyPhotoEvidence, type PhotoPurpose } from "@pm-buddy/domain";
+import {
+  SAFETY_READ_PERMISSIONS,
+  SAFETY_RECORD_PERMISSIONS,
+  type Permission,
+} from "@pm-buddy/types";
 import {
   sitePhotoResponseSchema,
   sitePhotoSchema,
@@ -107,7 +113,8 @@ export class PhotosService {
   ) {
     if (!file?.buffer?.length)
       throw problem(BadRequestException, "file-required", "Attach a JPEG photo as `file`");
-    await this.scope.run(principal, req, (scope) => this.writable(scope, projectId));
+    const purpose: PhotoPurpose = fields.purpose ?? "general";
+    await this.scope.run(principal, req, (scope) => this.writable(scope, projectId, purpose));
     const { buffer } = file;
     if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8 || buffer[2] !== 0xff)
       throw problem(
@@ -169,7 +176,7 @@ export class PhotosService {
         principal,
         req,
         async (scope) => {
-          await this.writable(scope, projectId);
+          await this.writable(scope, projectId, purpose);
           const { tenantId, userId } = scope.access;
           const site = await scope.tx.site.findFirst({
             where: { tenantId, projectId, id: fields.siteId },
@@ -225,6 +232,7 @@ export class PhotosService {
               siteId: site.id,
               diaryId: fields.diaryId ?? null,
               caption: fields.caption ?? null,
+              purpose,
               objectKey: keys.original,
               thumbnailKey: keys.thumbnail,
               fileSha256: sha256,
@@ -289,6 +297,8 @@ export class PhotosService {
         where: {
           tenantId: scope.access.tenantId,
           projectId,
+          // Incident photos are shown with their incident only.
+          purpose: "general",
           ...(query.siteId ? { siteId: query.siteId } : {}),
           ...(query.diaryId ? { diaryId: query.diaryId } : {}),
           ...(query.cursor ? { id: { lt: query.cursor } } : {}),
@@ -308,7 +318,10 @@ export class PhotosService {
     });
   }
 
-  /** The original upload or its thumbnail, after the same access check as the list. */
+  /**
+   * The original upload or its thumbnail, after the same access check as the list; an incident
+   * photo needs health and safety read access instead (D-74).
+   */
   async content(
     principal: Principal,
     projectId: string,
@@ -317,19 +330,30 @@ export class PhotosService {
     req: Request,
   ): Promise<Buffer> {
     const key = await this.scope.run(principal, req, async (scope) => {
-      await this.readable(scope, projectId);
+      const { effective } = await this.access.load(scope, projectId, "projects.view");
       const row = await scope.tx.sitePhoto.findFirst({
         where: { tenantId: scope.access.tenantId, projectId, id: photoId },
-        select: { objectKey: true, thumbnailKey: true },
+        select: { objectKey: true, thumbnailKey: true, purpose: true },
       });
+      const readers: readonly Permission[] =
+        row?.purpose === "safety_incident" ? SAFETY_READ_PERMISSIONS : PHOTO_READERS;
+      if (!readers.some((permission) => effective.has(permission)))
+        throw new ForbiddenException(`One of these permissions is required: ${readers.join(", ")}`);
       if (!row) throw new NotFoundException("Photo not found");
       return variant === "original" ? row.objectKey : row.thumbnailKey;
     });
     return this.storage.get(key, PHOTO_LIMITS.maxFileBytes);
   }
 
-  private async writable(scope: Scope, projectId: string) {
-    const { project } = await this.access.load(scope, projectId, "site.photos");
+  private async writable(scope: Scope, projectId: string, purpose: PhotoPurpose) {
+    const { project, effective } = await this.access.load(scope, projectId, "site.photos");
+    if (
+      purpose === "safety_incident" &&
+      !SAFETY_RECORD_PERMISSIONS.some((permission) => effective.has(permission))
+    )
+      throw new ForbiddenException(
+        `Incident photos need one of: ${SAFETY_RECORD_PERMISSIONS.join(", ")}`,
+      );
     if (project.status === "closed" || project.status === "cancelled")
       throw problem(
         ConflictException,

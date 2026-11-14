@@ -31,6 +31,7 @@ import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
 import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
 import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
 import { seedQuality, type QualitySeedSummary } from "./quality-seed.js";
+import { seedSafety, type SafetySeedSummary } from "./safety-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 
@@ -403,6 +404,7 @@ export type SeedSummary = {
   schedule: ScheduleSeedSummary;
   spending: SpendingSeedSummary;
   quality: QualitySeedSummary;
+  safety: SafetySeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -606,6 +608,12 @@ export async function seedDemo(
     projectManagerId: userOf("projectManager").id,
     siteAgentId: userOf("siteAgent").id,
   });
+  // After attendance (induction flags read it) and the labour gangs.
+  const safety = await seedSafety(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+  });
 
   return {
     company: { id: tenantId, name: DEMO_COMPANY, created: !found },
@@ -621,6 +629,7 @@ export async function seedDemo(
     schedule,
     spending,
     quality,
+    safety,
   };
 }
 

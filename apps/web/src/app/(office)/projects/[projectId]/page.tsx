@@ -11,6 +11,7 @@ import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state
 import { StatusChangeButton } from "@/components/projects/status-change";
 import { StatusBadge } from "@/components/status-badge";
 import { QUALITY_VIEWS, qualityAccess, qualityHref } from "@/lib/quality";
+import { SAFETY_VIEWS, safetyAccess, safetyHref } from "@/lib/safety";
 import { scheduleAccess } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { serverApi, requireSession } from "@/lib/server-api";
@@ -22,6 +23,7 @@ import { WbsTab } from "./wbs-tab";
 import { DiaryTab } from "./diary-tab";
 import { PhotosTab } from "./photos-tab";
 import { QualityTab } from "./quality-tab";
+import { SafetyTab } from "./safety-tab";
 import { SCHEDULE_VIEWS, ScheduleTab } from "./schedule-tab";
 
 const TABS = [
@@ -32,6 +34,7 @@ const TABS = [
   "schedule",
   "diary",
   "quality",
+  "safety",
   "photos",
 ] as const;
 type Tab = (typeof TABS)[number];
@@ -62,12 +65,15 @@ export default async function ProjectPage({
   const tab: Tab = TABS.find((candidate) => candidate === rawTab) ?? "overview";
   const view = SCHEDULE_VIEWS.find((candidate) => candidate === rawView) ?? "gantt";
   const qualityView = QUALITY_VIEWS.find((candidate) => candidate === rawView) ?? "inspections";
+  const safetyView = SAFETY_VIEWS.find((candidate) => candidate === rawView) ?? "incidents";
   const path =
     tab === "quality"
       ? qualityHref(projectId, qualityView)
-      : `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}${
-          tab === "schedule" && view !== "gantt" ? `&view=${view}` : ""
-        }`;
+      : tab === "safety"
+        ? safetyHref(projectId, safetyView)
+        : `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}${
+            tab === "schedule" && view !== "gantt" ? `&view=${view}` : ""
+          }`;
 
   const session = await requireSession(path);
   if (!session) return <LiveUnavailable retryHref={path} />;
@@ -87,6 +93,8 @@ export default async function ProjectPage({
   const { schedule: canReadSchedule, delays: canReadDelays } = scheduleAccess(detail.permissions);
   // Internal quality records: never for portal-only roles (decision D-60).
   const canReadQuality = qualityAccess(detail.permissions).read;
+  // Health and safety records: site and project staff only (decision D-70).
+  const canReadSafety = safetyAccess(detail.permissions).read;
   const readOnly = isProjectReadOnly(project.status);
   // Original vs revised contract sum on the overview, for people who can see the BQ.
   const sums =
@@ -126,7 +134,9 @@ export default async function ProjectPage({
         <ul className="flex min-w-max gap-1 border-b px-1">
           {TABS.filter(
             (key) =>
-              (key !== "schedule" || canReadSchedule) && (key !== "quality" || canReadQuality),
+              (key !== "schedule" || canReadSchedule) &&
+              (key !== "quality" || canReadQuality) &&
+              (key !== "safety" || canReadSafety),
           ).map((key) => (
             <li key={key}>
               <Link
@@ -203,6 +213,16 @@ export default async function ProjectPage({
           view={qualityView}
           params={query}
           canReadSchedule={canReadSchedule}
+          returnTo={path}
+        />
+      ) : null}
+      {tab === "safety" && !canReadSafety ? <LiveForbidden /> : null}
+      {tab === "safety" && canReadSafety ? (
+        <SafetyTab
+          project={project}
+          view={safetyView}
+          params={query}
+          userId={session.user.id}
           returnTo={path}
         />
       ) : null}

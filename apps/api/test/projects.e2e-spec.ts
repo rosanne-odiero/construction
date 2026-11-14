@@ -1271,6 +1271,23 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
           where: { tenantId },
           select: { kind: true, status: true, dlpMonths: true },
         }),
+        incidents: await tx.safetyIncident.findMany({
+          where: { tenantId },
+          select: { kind: true, status: true },
+          orderBy: { number: "asc" },
+        }),
+        correctiveActions: await tx.correctiveAction.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        toolboxTalks: await tx.toolboxTalk.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        firstAidKits: await tx.firstAidKit.count({ where: { tenantId } }),
+        treatments: await tx.firstAidTreatment.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1383,7 +1400,22 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       cubeResults: 5,
       slumpTests: 3,
       completions: [{ kind: "practical", status: "certified", dlpMonths: 6 }],
+      // D8.2: on RUI-HTS a closed near miss and an investigated injury; three corrective actions
+      // (two verified, one overdue); two confirmed toolbox talks and a draft; two kits; a treatment.
+      incidents: [
+        { kind: "near_miss", status: "closed" },
+        { kind: "injury", status: "investigated" },
+      ],
+      correctiveActions: [{ status: "verified" }, { status: "verified" }, { status: "open" }],
+      toolboxTalks: [{ status: "confirmed" }, { status: "confirmed" }, { status: "draft" }],
+      firstAidKits: 2,
+      treatments: 1,
     });
+    expect(first.safety).toMatchObject({
+      flaggedLabourers: 2,
+      actions: { total: 3, verified: 2, overdue: 1 },
+    });
+    expect(first.safety.ppeDue).toBeGreaterThan(0);
     expect(first.quality).toMatchObject({
       failedCubeSets: 1,
       overdueCubeSets: 1,
@@ -1531,6 +1563,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       ],
     });
     expect(second.quality).toEqual({ ...first.quality, created: false });
+    expect(second.safety).toEqual({ ...first.safety, created: false });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
     // Seeds a whole company twice (about 7 s alone); parallel e2e files can triple that.
   }, 90_000);

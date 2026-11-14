@@ -480,3 +480,27 @@ Review this DPIA at least every `dp.dpia_review_interval_months` (*proposed*, `C
 - the tenant adds many new sites or counties, or new categories of workers;
 - the ODPC issues new guidance or the law changes;
 - a threat model refresh changes the biometric threats (T-41 to T-47, A-20).
+
+---
+
+## 14. Annex: injury and health data (D8.2 health and safety)
+
+The health and safety module (ARCHITECTURE §4.9, decisions D-70 and D-74) processes data about workers and visitors who are injured, involved in or witness an incident, or treated with first aid. Data about health is **sensitive personal data** under the Data Protection Act 2019. This annex records the design so the tenant can include it in its DPIA; it does not replace that assessment (`COMPLIANCE-REVIEW`, CR-HS-02 and CR-DP-06).
+
+| Category | Data items | Source | Where it is held | Who can see it |
+|---|---|---|---|---|
+| **People in an incident** | Role (injured, involved, witness); a labourer **reference** (registry number and name shown, never ID number, phone or payment details), a staff member, or a **name only** (≤ 120 characters) for anyone else | The reporter (site team) | `safety_incident_people` | Names: `safety.manage` holders on the project only. Other safety readers see counts by role and "restricted" |
+| **Injury** | Coded injury type (cut, bruise, fracture, sprain, burn, eye injury, crush, electric shock, other) and body part; **no diagnosis, no free-text medical notes, no medical documents** | The reporter | `safety_incident_people` | `safety.manage` only |
+| **First-aid treatment** | When, who was treated (labourer reference or name), coded injury, coded treatment, referral (none, clinic, hospital), the first-aider | The first-aider or site team | `first_aid_treatments` | Who was treated, injury and treatment: `safety.manage` only; others see the code number, time, site and referral |
+| **Inductions and PPE** | That a labourer, staff member or visitor (name, optional organisation) was inducted, by whom and on which topics; PPE items issued to a labourer | Site team | `safety_inductions`, `ppe_issues` | Safety readers on the project (owner, project manager, site agent, foreman) |
+| **First-aiders** | A labourer or staff member named as a first-aider, certificate expiry and reference | Site team | `first_aiders` | Safety readers on the project |
+
+- **Purposes.** Managing the response to an incident and preventing a recurrence (investigation, corrective actions), evidence of what was done for the employer's duties under OSHA 2007 and WIBA 2007, and keeping site induction, PPE and first-aid provision in order. **Not used** for discipline, performance, pay deductions or "do not rehire" decisions.
+- **Lawful basis.** Expected to be the employer's legal obligations under OSHA 2007 and WIBA 2007 and, for health data, the employment and social-protection exception: `COMPLIANCE-REVIEW` (to confirm with the adviser, with CR-HS-01/02).
+- **Minimisation (D-74).** References instead of copies of registry data; coded injuries only; the description field is labelled "no names or medical details" in both languages; witnesses are a name only; a near miss cannot list an injured person.
+- **Access.** Reading any safety record needs `projects.view` plus a site or project permission; clients, suppliers, labourers and office roles (QS, finance, consultants, storekeepers) are refused. Incident photos (which can show an injured person) are uploaded as restricted `safety_incident` photos: they never appear in the project's photo list and only the same safety readers can open them. Within the site team only `safety.manage` holders see names and injuries. Forced RLS isolates companies.
+- **Audit and logs.** Audit metadata carries IDs, codes, counts and statuses only; names, injury codes, descriptions, notes and reasons are never written to the audit log (tested in `safety.e2e-spec.ts`).
+- **Integrity.** Closed incidents and their people cannot be changed or deleted by anyone (THREAT_MODEL A-50); corrections before closing are audited.
+- **Retention.** Not yet applied: incidents, treatments and inductions are kept for the life of the tenant's data. The period must balance WIBA claim and OSHA register requirements against storage limitation (`COMPLIANCE-REVIEW` CR-HS-02, CR-DP-06). Deletion or anonymisation of names after the period is a later deliverable.
+- **Rights.** An injured worker's access request covers incident people rows and treatments that reference them (by labourer ID or by name); correction before closing is a `safety.manage` change; after closing, a correction is a follow-up incident. The process is part of the D9 data-subject-request work (CR-DP-07).
+- **Risks.** Exposure of injury details to people who do not need them (THREAT_MODEL A-52), covering up an incident (A-50) and closing it on paper (A-51); controls as listed there.

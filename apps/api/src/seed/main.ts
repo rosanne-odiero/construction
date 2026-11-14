@@ -83,6 +83,16 @@ function print(summary: SeedSummary) {
     "",
     `Schedule for RUI-HTS (synthetic, ${schedule.created ? "created" : "already present"}): ${schedule.activities} activities, ${schedule.dependencies} dependencies, ${schedule.baselines} baseline(s), ${schedule.delays} delays`,
   );
+  const { spending } = summary;
+  lines.push(
+    "",
+    `Spending for RUI-HTS (synthetic, ${spending.created ? "created" : "already present"}): budget ${spending.budget}; journal ${spending.journal}`,
+    `  ${spending.float}: expenses ${spending.expenses.join(", ")}`,
+    `  top-ups ${spending.topUps.join(", ")}; count ${spending.count}`,
+    `  spend alerts: ${Object.entries(spending.alerts)
+      .map(([kind, total]) => `${kind} ${total}`)
+      .join(", ")}`,
+  );
   console.log(lines.join("\n"));
 }
 

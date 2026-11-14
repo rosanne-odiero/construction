@@ -592,3 +592,4 @@ export * from "./payroll.js";
 export * from "./procure-to-pay.js";
 export * from "./stores.js";
 export * from "./schedule.js";
+export * from "./spending.js";

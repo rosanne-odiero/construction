@@ -1233,6 +1233,26 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         stockTakes: await tx.stockTake.findMany({ where: { tenantId }, select: { status: true } }),
         measurements: await tx.progressMeasurement.count({ where: { tenantId } }),
         mappings: await tx.buildupLineMaterial.count({ where: { tenantId } }),
+        costCodes: await tx.costCode.count({ where: { tenantId } }),
+        budgets: await tx.budget.findMany({ where: { tenantId }, select: { status: true } }),
+        budgetLines: await tx.budgetLine.count({ where: { tenantId } }),
+        costEntries: await tx.costEntry.count({ where: { tenantId } }),
+        floats: await tx.pettyCashFloat.count({ where: { tenantId } }),
+        floatEntries: await tx.pettyCashEntry.count({ where: { tenantId } }),
+        expenses: await tx.pettyCashExpense.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        receipts: await tx.pettyCashReceipt.count({ where: { tenantId } }),
+        topUps: await tx.pettyCashTopUp.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        counts: await tx.pettyCashCount.findMany({ where: { tenantId }, select: { status: true } }),
+        journals: await tx.costJournal.findMany({ where: { tenantId }, select: { status: true } }),
+        cashFlowItems: await tx.cashFlowItem.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1299,7 +1319,35 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       stockTakes: [{ status: "submitted" }],
       measurements: 1,
       mappings: 3,
+      // D5.4: the default cost codes; an approved budget (3 BQ items + 4 cost-code lines); a float
+      // with a paid and a requested top-up, five approved expenses (one with an M-Pesa charge)
+      // and two waiting, an approved count and journal, three forecast lines. Cost entries: the
+      // invoice accrual and settlement payment, 5 × 2 expense entries + 2 for the charge, 2 for
+      // the count shortage and 2 journal lines.
+      costCodes: 11,
+      budgets: [{ status: "approved" }],
+      budgetLines: 7,
+      costEntries: 18,
+      floats: 1,
+      floatEntries: 9,
+      expenses: [
+        ...Array.from({ length: 5 }, () => ({ status: "approved" })),
+        { status: "submitted" },
+        { status: "submitted" },
+      ],
+      receipts: 6,
+      topUps: [{ status: "paid" }, { status: "requested" }],
+      counts: [{ status: "approved" }],
+      journals: [{ status: "approved" }],
+      cashFlowItems: 3,
     });
+    // Every spend-alert kind shows on the demo.
+    expect(
+      Object.entries(first.spending.alerts)
+        .filter(([, total]) => total > 0)
+        .map(([kind]) => kind)
+        .sort(),
+    ).toEqual(["budget_threshold", "duplicate_payment", "missing_documents", "unusual_spend"]);
     expect(first.stores).toMatchObject({ varianceAlerts: 1, lowStock: 2 });
     // Nine weeks of muster rolls on two projects: past periods approved (with their snapshot
     // lines), the last complete one awaiting approval and the current one open.
@@ -1407,6 +1455,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         expect(stored.digest).toBe(submitted.digest);
       },
     );
+    expect(second.spending).toEqual({ ...first.spending, created: false });
     expect(second.procureToPay).toEqual({
       created: false,
       requisition: "REQ-0001",

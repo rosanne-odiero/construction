@@ -8,6 +8,7 @@ import { AttendanceModule } from "./modules/attendance/attendance.module.js";
 import { BqModule } from "./modules/bq/bq.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
+import { FinanceModule } from "./modules/finance/finance.module.js";
 import { ProcurementModule } from "./modules/procurement/procurement.module.js";
 import { LabourModule } from "./modules/labour/labour.module.js";
 import { PayrollModule } from "./modules/payroll/payroll.module.js";
@@ -31,6 +32,7 @@ import { ScheduleModule } from "./modules/schedule/schedule.module.js";
     ProjectsModule,
     BqModule,
     ProcurementModule,
+    FinanceModule,
     LabourModule,
     AttendanceModule,
     PayrollModule,

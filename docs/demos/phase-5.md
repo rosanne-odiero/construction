@@ -196,3 +196,95 @@ npx pnpm@12.17.0 --filter @pm-buddy/domain test      # valuation, consumption an
 cd apps/api && npx vitest run --config ./vitest.config.e2e.ts test/stores.e2e-spec.ts
 cd apps/web && npx playwright test test/stores.spec.ts
 ```
+
+---
+
+## D5.4: Spending and cash flow
+
+This walkthrough takes about 25 minutes. **Spending** in the sidebar is live: budget against committed, actual and paid with drill-down, the append-only cost ledger, petty cash (floats, expenses with receipt photos and the M-Pesa SMS draft, top-ups, counts), the weekly cash-flow forecast, spend alerts, budgets, cost journals and settings. Every figure below is synthetic.
+
+### 1. Run it
+
+Same prerequisites and commands as D5.1 (§1 above), on branch `phase-5/d5.4-spending`. `db:migrate` now includes `20261121090000_spending` (it also posts the cost of supplier invoices already approved and settled), and `db:seed` prints:
+
+```text
+Spending for RUI-HTS (synthetic, created): budget v1 (approved); journal JNL-0001 (approved)
+  Ruiru Heights main yard float (demo): expenses EXP-0001 (approved), …, EXP-0006 (submitted), EXP-0007 (submitted)
+  top-ups TOP-0001 (paid), TOP-0002 (requested); count CNT-0001 (approved)
+  spend alerts: budget_threshold 1, unusual_spend 1, duplicate_payment 1, missing_documents 2
+```
+
+| Record | What the seed did, and who |
+|---|---|
+| Settings and cost codes | **Finance** entered the opening cash (KES 2,400,000, a week ago) and loaded the 11 standard cost codes (MAT-01 … PC-01) |
+| Budget v1 | Prepared by the **project manager** from the approved BQ (3 items, KES 1,138,800) plus MAT-01 materials KES 250,000, PRE-02 site security KES 60,000, TRN-01 transport KES 20,000 and PC-01 petty cash KES 5,000 (total KES 1,473,800); **approved by finance** on the digest |
+| Cost ledger | MQ-INV-1001 (D5.2): KES 78,000 accrued net of VAT when approved, and the cost part of its KES 90,480 payment, posted by the database; JNL-0001 site security KES 18,000 accrued and paid, proposed by finance and approved by the **owner** |
+| Float | Ruiru Heights main yard float (limit KES 50,000), custodian the **site agent**; TOP-0001 KES 30,000 asked by the agent, approved by finance, paid by the owner |
+| Expenses | EXP-0001 KES 850 binding wire to item A, **filled from a pasted M-Pesa till SMS**; EXP-0002–0005 water, boda boda, padlocks, a water bowser by M-Pesa with a KES 34 charge (fees) — each with a receipt and approved by the project manager; EXP-0006 KES 850 to the same hardware shop the next day, **no receipt**; EXP-0007 KES 9,500 generator repair with a receipt, waiting |
+| CNT-0001 | The agent counted KES 150 less than the book; the project manager approved it: KES 150 petty-cash cost |
+| Forecast lines | Client instalment 3 (KES 1,500,000 in 17 days), instalment 4 (KES 1,200,000 in 52 days), a scaffold hire deposit (KES 85,000 out); TOP-0002 KES 10,000 asked for |
+
+Alerts, worked by hand: petty cash 600 + 900 + 2,400 + 150 = KES 4,050 against KES 5,000 = **81.0 %** (threshold 80 %); EXP-0007 KES 9,500 > 3 × the median KES 850 of the six earlier expenses (**unusual**); EXP-0001 and EXP-0006 pay "Mwangi Hardware" KES 850 a day apart (**possible duplicate**); EXP-0006 and the MQ-INV-1001 payment have **no supporting document**.
+
+The owner and finance accounts have TOTP (printed by the seed); steps marked step-up ask for an authenticator code.
+
+### 2. Budget against actual and committed (project manager or finance)
+
+1. **Spending**: committed, actual (accrued) and cash paid across projects, the alert count, and each project's budget figures. The note under the table says how each measure is defined.
+2. Open **RUI-HTS**: the whole project, then **by category**. Petty cash shows **81.0 % — at threshold**; plant, labour, fees and permits have **No budget** and their percentage is **Unavailable** (never 0 %). Percentages are cut to one decimal, so 79.96 % would show as 79.9 %, never as the threshold.
+3. **By bill**: Bill 2 carries the cost of the stock issued to its items (D5.3), and *Not on a BQ item* holds the rest. *Materials: bought and issued* shows the rule: invoices put materials into stores, issues move that cost to BQ items, the two are never added together. Here more cement was issued than has been invoiced (GRN-0002 is received but not yet invoiced, so it is still **committed**): the page says so, and the stores line is negative until the invoice arrives — the project total is unaffected.
+4. Open **Bill 2**: each BQ item's budget (its BQ amount), committed, actual and paid; search finds an item in a large BQ.
+
+### 3. Petty cash on a phone (site agent, 360 px)
+
+1. **Spending → Petty cash → Ruiru Heights main yard float**: book balance (never below zero), limit, the last approved count, expenses waiting, top-ups and the float ledger. The agent sees no budgets or cost ledger.
+2. **Record an expense**: paste an M-Pesa confirmation (a synthetic one is fine, for example `SKX1Y2Z3A4 Confirmed. Ksh1,250.00 paid to MAMA MBOGA KIOSK (SYNTHETIC). on 14/11/26 at 9:05 AM.New M-PESA balance is Ksh3,210.00. Transaction cost, Ksh0.00.` with today's date) and **Fill from SMS**: the form fills the amount, code, payee and date, labelled **"Draft from an SMS: it does not confirm the payment."** Tag it with a cost code (server-side search), say what it was for, take or attach a receipt photo, **Record expense**. Paste the same SMS again: "Already recorded: EXP-…".
+3. **Ask for a top-up**: within the limit; finance approves it and someone else pays it.
+4. **Count the cash**: enter what is in the tin; the variance against the book is shown and waits for someone independent.
+
+### 4. Approvals by someone else (project manager, finance, owner)
+
+1. As the **project manager**, open EXP-0007 → **Approve** (it has a receipt; the custodian cannot approve their own spending). EXP-0006 cannot be approved until a receipt is added.
+2. As **finance**, open the float → TOP-0002 → **Approve** (step-up). Finance cannot also pay it; as the **owner**, **Record payment** with the method, reference and date: the float balance rises.
+3. As **finance**, **Cost ledger** → filter by source or category → **Reverse** an entry with a reason: a reversal journal is proposed; only another finance manager (the owner) can **Approve and post** it.
+4. **Budgets → New version** (start from the budget in force), add a cost-code line, **Submit for approval**; the preparer cannot approve; finance approves it on the digest it saw.
+
+### 5. Forecast and alerts (finance)
+
+1. **Cash flow**: the company forecast for 13 weeks — opening KES 2,400,000 entered, moved by what was received and paid since; payroll from the batches and pay calendar (estimates labelled), LPOs not yet invoiced at delivery + credit days (estimates), the client instalments, the scaffold deposit and the top-up. A plain SVG chart (money in above, out below, the closing balance as a line) sits above the table with the exact amounts. Choose RUI-HTS for the project view (opening derived from its receipts and payments).
+2. **Alerts**: one of each kind, with the records involved; in-app only (notifications are Phase 8).
+3. **Settings**: the rules (threshold, unusual-spend multiplier and samples, duplicate window, forecast weeks), the opening cash and the cost codes (add, deactivate). Only company-wide finance managers change them; a project manager sees the rules without the company's cash position.
+
+### 6. What is not here yet
+
+Payroll costs in the ledger (no approved/paid payroll state exists yet: D4.3), client certificates as receipts (D6.3/D7.1), alert notifications (Phase 8), petty cash in the offline site app (the API contract is offline-ready), tagging a petty-cash expense to a registered supplier from the form (API only), and checking the reconstructed Kiswahili SMS wording against real messages (COMPLIANCE_TODO CR-SPD-03). Net-of-VAT costing and count variances wait for accountant review (CR-SPD-01, CR-SPD-02).
+
+### 7. Automated checks
+
+```bash
+npx pnpm@12.17.0 --filter @pm-buddy/domain test      # SMS parser, budget maths, forecast buckets, alert rules
+cd apps/api && npx vitest run --config ./vitest.config.e2e.ts test/spending.e2e-spec.ts
+cd apps/web && npx playwright test test/spending.spec.ts
+```
+
+---
+
+## Phase 5 acceptance walkthrough
+
+Phase 5 is accepted when D5.1–D5.4 work together on one freshly seeded company, each step done by the person whose job it is, with the controls holding. Start from a fresh database: `db:migrate`, `db:seed`, then sign in as each person below. About 45 minutes.
+
+| # | Step (who) | What to see | Deliverable |
+|---|---|---|---|
+| 1 | **Materials** (owner): open cement and river sand; **Convert** 3 lorry trips of sand to tonnes for Mlolongo Quarry | Kenyan units and the supplier's own trip factor; the price alert on cement (+12.5 %) | D5.1 |
+| 2 | **Suppliers** (finance): Athi River Steel's pending payout details → verify (not the proposer) | Masked identifiers; maker-checker on payee details | D5.1 |
+| 3 | **Procurement** (owner): the inbox shows MQ-INV-1002 blocked by the three-way match; MQ-INV-1001 matched, approved and settled | Bad payments blocked; settlements recorded outside PM-Buddy | D5.2 |
+| 4 | **Procurement** (site agent at 360 px, then project manager): a new requisition → approval | Offline-ready forms; the approver did not prepare it | D5.2 |
+| 5 | **Stores** (storekeeper, then project manager): the variance alert on cement for item A; STK-0001 approved by the project manager | Append-only stock ledger; negative stock never allowed; independent count approval | D5.3 |
+| 6 | **Spending → RUI-HTS** (project manager): budget v1 against committed (GRN-0002's LPO), actual (MQ-INV-1001 net of VAT, petty cash, JNL-0001) and paid; drill into Bill 2 | Committed, accrued and paid kept apart; issued stock re-allocated, never added; unavailable, not zero | D5.4 |
+| 7 | **Cost ledger** (finance): MQ-INV-1001's accrual (KES 78,000) and the cost part of its KES 90,480 payment, each once; reverse an entry → the owner approves the reversal | Ledger append-only; corrections are maker-checked reversals | D5.4 |
+| 8 | **Petty cash** (site agent at 360 px): record an expense from a pasted SMS with a receipt; paste it again | Draft only; duplicate named; float never negative | D5.4 |
+| 9 | **Petty cash** (project manager, finance, owner): approve the agent's expense; approve and pay TOP-0002; the count CNT-0001 | Three different people on a top-up; nobody approves their own spending | D5.4 |
+| 10 | **Cash flow** and **Alerts** (finance): the 13-week company forecast with its assumptions; one alert of each kind | Forecast table + chart; alerts with their records | D5.4 |
+| 11 | Invite a **client** to RUI-HTS (the seed has none), sign in as them and open `/api/v1/spending/projects/<id>` or `/spending` | 403 / no figures: outside parties never read internal financial records (also the API e2e "keeps clients, suppliers … out") | D5.4 |
+
+Automated evidence for the same chain: API e2e `procure-to-pay`, `stores`, `spending` and `projects` (demo seed counts and one alert of each kind) on the real runtime role; browser `procure-to-pay.spec.ts`, `stores.spec.ts` and `spending.spec.ts` against the mock API. Owner review of D5.2 (web), D5.3 and D5.4 is still pending: Phase 5 is accepted when those are approved and merged.

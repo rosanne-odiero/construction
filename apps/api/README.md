@@ -200,8 +200,8 @@ serialized tenant transactions.
 Assignable project permissions are the shared catalogue's project-scoped permissions
 (`PROJECT_ASSIGNABLE_PERMISSIONS` in `packages/types`: `projects.*`, `bq.*`, `labour.*`,
 `attendance.*`, `payroll.prepare`/`review`, `procurement.requisition`/`approve`,
-`stores.manage`, `finance.view`, `site.diary`/`photos`, `quality`/`safety`/`plant`/
-`documents.manage`, `reports.view`).
+`stores.manage`, `finance.view`, `finance.petty_cash` (D5.4), `site.diary`/`photos`,
+`quality`/`safety`/`plant`/`documents.manage`, `reports.view`).
 Company-wide roles (`owner`, `finance`, custom roles marked company-wide) act on every
 project; other roles act only on assigned projects with role ∩ assignment. Self-membership
 discovery (including the custom role the user holds) and verified-recipient invitation

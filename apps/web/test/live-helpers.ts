@@ -59,5 +59,7 @@ export async function axeViolations(page: Page) {
   await page.waitForFunction(() =>
     document.getAnimations().every((animation) => animation.playState !== "running"),
   );
+  // A refresh after an action streams the page's metadata again: wait for the title to settle.
+  await page.waitForFunction(() => document.title.trim().length > 0);
   return (await new AxeBuilder({ page }).withTags(axeTags).analyze()).violations;
 }

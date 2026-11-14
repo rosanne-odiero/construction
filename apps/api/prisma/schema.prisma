@@ -176,6 +176,7 @@ model Tenant {
   checklistTemplates  ChecklistTemplate[]
   safetySettings      SafetySettings?
   plantSettings       PlantSettings?
+  complianceTypes     ComplianceType[]
 
   @@map("tenants")
 }
@@ -286,6 +287,10 @@ model Project {
 
   contractSettings ContractSettings[]
   valuations       Valuation[]
+
+  documents         Document[]
+  complianceRecords ComplianceRecord[]
+  approvalRequests  ApprovalRequest[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -769,31 +774,49 @@ model BqImport {
   @@map("bq_imports")
 }
 
-// An Architect's/Engineer's Instruction (D2.3): the register entry a variation is raised against.
-// Number unique per project; attachments are metadata only (name and reference).
+// An Architect's/Engineer's/Site Instruction: the register a variation is raised against (D2.3),
+// extended into the consultant instructions log in D8.4 (decision D-115). Number unique per
+// project. The status moves only through append-only instruction_responses (received →
+// acknowledged → actioned → closed; reopen), checked at commit by app.check_instruction_status;
+// `attachments` keeps D2.3's name/reference metadata, new attachments are instruction_attachments.
 model Instruction {
-  id          String           @id @default(uuid(7)) @db.Uuid
-  tenantId    String           @map("tenant_id") @db.Uuid
-  projectId   String           @map("project_id") @db.Uuid
-  number      String           @db.VarChar(30)
-  issuedOn    DateTime         @map("issued_on") @db.Date
-  issuerName  String           @map("issuer_name") @db.VarChar(150)
-  issuerRole  String           @map("issuer_role") @db.VarChar(30)
-  subject     String           @db.VarChar(200)
-  description String?          @db.VarChar(4000)
-  attachments Json             @default("[]")
-  status      String           @default("open") @db.VarChar(10)
-  version     Int              @default(1)
-  createdBy   String           @map("created_by") @db.Uuid
-  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy   String           @map("updated_by") @db.Uuid
-  updatedAt   DateTime         @default(now()) @map("updated_at") @db.Timestamptz
-  project     Project          @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  variations  VariationOrder[]
+  id              String                  @id @default(uuid(7)) @db.Uuid
+  tenantId        String                  @map("tenant_id") @db.Uuid
+  projectId       String                  @map("project_id") @db.Uuid
+  number          String                  @db.VarChar(30)
+  issuedOn        DateTime                @map("issued_on") @db.Date
+  issuerName      String                  @map("issuer_name") @db.VarChar(150)
+  issuerRole      String                  @map("issuer_role") @db.VarChar(30)
+  subject         String                  @db.VarChar(200)
+  description     String?                 @db.VarChar(4000)
+  attachments     Json                    @default("[]")
+  status          String                  @default("received") @db.VarChar(20)
+  kind            String                  @default("other") @db.VarChar(30)
+  issuerFirm      String?                 @map("issuer_firm") @db.VarChar(150)
+  receivedOn      DateTime?               @map("received_on") @db.Date
+  costImplication Boolean                 @default(false) @map("cost_implication")
+  timeImplication Boolean                 @default(false) @map("time_implication")
+  delayId         String?                 @map("delay_id") @db.Uuid
+  issuedByUserId  String?                 @map("issued_by_user_id") @db.Uuid
+  idempotencyKey  String?                 @map("idempotency_key") @db.VarChar(100)
+  requestDigest   String?                 @map("request_digest") @db.Char(64)
+  capturedAt      DateTime?               @map("captured_at") @db.Timestamptz
+  version         Int                     @default(1)
+  createdBy       String                  @map("created_by") @db.Uuid
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy       String                  @map("updated_by") @db.Uuid
+  updatedAt       DateTime                @default(now()) @map("updated_at") @db.Timestamptz
+  project         Project                 @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  delay           ScheduleDelay?          @relation(fields: [tenantId, projectId, delayId], references: [tenantId, projectId, id], onDelete: Restrict)
+  variations      VariationOrder[]
+  responses       InstructionResponse[]
+  attachmentLinks InstructionAttachment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, number])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, projectId, delayId])
   @@map("instructions")
 }
 
@@ -2427,6 +2450,7 @@ model SitePhoto {
   measurements         ProgressMeasurementPhoto[]
   toolboxTalks         ToolboxTalk[]
   safetyIncidentPhotos SafetyIncidentPhoto[]
+  instructionLinks     InstructionAttachment[]
 
   @@unique([tenantId, projectId, id])
   @@unique([tenantId, projectId, fileSha256])
@@ -3779,6 +3803,7 @@ model ScheduleDelay {
   supersededBy    ScheduleDelay?          @relation("DelaySupersedes")
   siteDiary       SiteDiary?              @relation(fields: [tenantId, projectId, siteDiaryId], references: [tenantId, projectId, id], onDelete: Restrict)
   activities      ScheduleDelayActivity[]
+  instructions    Instruction[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -5350,4 +5375,246 @@ model PlantService {
   @@unique([tenantId, id])
   @@index([tenantId, plantId, servicedAt])
   @@map("plant_services")
+}
+
+// D8.4 Documents and compliance register (ARCHITECTURE §4.13, migration 20261128090000_documents).
+
+// A project document: drawings (number, title, discipline), contracts, BQs, specifications,
+// permits, certificates, insurance policies, submittals, correspondence and others. Category,
+// project and creator never change; withdrawn (with a reason) is final; nothing is deleted.
+// Drawing numbers are unique per project (expression index outside this schema).
+model Document {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  projectId      String            @map("project_id") @db.Uuid
+  category       String            @db.VarChar(20)
+  title          String            @db.VarChar(200)
+  drawingNumber  String?           @map("drawing_number") @db.VarChar(40)
+  discipline     String?           @db.VarChar(20)
+  reference      String?           @db.VarChar(80)
+  status         String            @default("active") @db.VarChar(10)
+  withdrawnBy    String?           @map("withdrawn_by") @db.Uuid
+  withdrawnAt    DateTime?         @map("withdrawn_at") @db.Timestamptz
+  withdrawReason String?           @map("withdraw_reason") @db.VarChar(500)
+  version        Int               @default(1)
+  createdBy      String            @map("created_by") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy      String            @map("updated_by") @db.Uuid
+  updatedAt      DateTime          @default(now()) @map("updated_at") @db.Timestamptz
+  project        Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  versions       DocumentVersion[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@index([tenantId, projectId, category, status])
+  @@map("documents")
+}
+
+// An append-only version of a document: a private object under an API-generated key, its
+// SHA-256, size, sanitised name and detected type, the revision label and change note. Exactly
+// one version per document is current (partial unique index + app.check_document_versions at
+// commit); a new version supersedes the previous one (is_current, superseded_at and
+// superseded_by_id are the only columns that ever change, once).
+model DocumentVersion {
+  id               String                  @id @default(uuid(7)) @db.Uuid
+  tenantId         String                  @map("tenant_id") @db.Uuid
+  projectId        String                  @map("project_id") @db.Uuid
+  documentId       String                  @map("document_id") @db.Uuid
+  versionNo        Int                     @map("version_no")
+  revision         String                  @db.VarChar(10)
+  issuePurpose     String?                 @map("issue_purpose") @db.VarChar(20)
+  changeNote       String?                 @map("change_note") @db.VarChar(1000)
+  fileName         String                  @map("file_name") @db.VarChar(120)
+  contentType      String                  @map("content_type") @db.VarChar(100)
+  sizeBytes        Int                     @map("size_bytes")
+  sha256           String                  @db.Char(64)
+  objectKey        String                  @map("object_key") @db.VarChar(300)
+  scanStatus       String                  @map("scan_status") @db.VarChar(20)
+  scanEngine       String                  @map("scan_engine") @db.VarChar(60)
+  scannedAt        DateTime                @map("scanned_at") @db.Timestamptz
+  isCurrent        Boolean                 @default(true) @map("is_current")
+  supersededAt     DateTime?               @map("superseded_at") @db.Timestamptz
+  supersededById   String?                 @map("superseded_by_id") @db.Uuid
+  uploadedBy       String                  @map("uploaded_by") @db.Uuid
+  uploadedAt       DateTime                @default(now()) @map("uploaded_at") @db.Timestamptz
+  document         Document                @relation(fields: [tenantId, projectId, documentId], references: [tenantId, projectId, id], onDelete: Restrict)
+  complianceProof  ComplianceRecord[]
+  instructionLinks InstructionAttachment[]
+  approvalRequests ApprovalRequest[]
+  approvalEvidence ApprovalResponse[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, documentId, versionNo])
+  @@unique([tenantId, documentId, sha256])
+  @@index([tenantId, projectId, uploadedAt])
+  @@map("document_versions")
+}
+
+// A company's compliance item types: the starter set (key, translated, flagged COMPLIANCE-REVIEW)
+// and its own (label). Project items are tracked per project, company items once for the company
+// and shown on every project. Retired (inactive) types keep their history.
+model ComplianceType {
+  id           String             @id @default(uuid(7)) @db.Uuid
+  tenantId     String             @map("tenant_id") @db.Uuid
+  key          String             @db.VarChar(40)
+  label        String?            @db.VarChar(120)
+  starter      Boolean            @default(false)
+  scope        String             @db.VarChar(10)
+  expires      Boolean
+  reminderDays Int                @default(30) @map("reminder_days")
+  active       Boolean            @default(true)
+  sortOrder    Int                @default(0) @map("sort_order")
+  version      Int                @default(1)
+  createdBy    String             @map("created_by") @db.Uuid
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy    String             @map("updated_by") @db.Uuid
+  updatedAt    DateTime           @default(now()) @map("updated_at") @db.Timestamptz
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  records      ComplianceRecord[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, key])
+  @@map("compliance_types")
+}
+
+// One compliance record (append-only): evidence of an item (reference, issuer, dates, a document
+// version) or a statement that it does not apply (with a reason). A renewal is a new record that
+// supersedes the current one (unique supersedes_id; one current record per item, by partial
+// unique indexes). Status is derived on read (packages/domain complianceStatus).
+model ComplianceRecord {
+  id                String            @id @default(uuid(7)) @db.Uuid
+  tenantId          String            @map("tenant_id") @db.Uuid
+  typeId            String            @map("type_id") @db.Uuid
+  projectId         String?           @map("project_id") @db.Uuid
+  kind              String            @db.VarChar(16)
+  referenceNo       String?           @map("reference_no") @db.VarChar(80)
+  issuer            String?           @db.VarChar(150)
+  issuedOn          DateTime?         @map("issued_on") @db.Date
+  expiresOn         DateTime?         @map("expires_on") @db.Date
+  evidenceVersionId String?           @map("evidence_version_id") @db.Uuid
+  notes             String?           @db.VarChar(1000)
+  reason            String?           @db.VarChar(500)
+  supersedesId      String?           @map("supersedes_id") @db.Uuid
+  isCurrent         Boolean           @default(true) @map("is_current")
+  supersededAt      DateTime?         @map("superseded_at") @db.Timestamptz
+  recordedBy        String            @map("recorded_by") @db.Uuid
+  recordedAt        DateTime          @default(now()) @map("recorded_at") @db.Timestamptz
+  type              ComplianceType    @relation(fields: [tenantId, typeId], references: [tenantId, id], onDelete: Restrict)
+  project           Project?          @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  evidence          DocumentVersion?  @relation(fields: [tenantId, evidenceVersionId], references: [tenantId, id], onDelete: Restrict)
+  supersedes        ComplianceRecord? @relation("ComplianceRenewals", fields: [tenantId, supersedesId], references: [tenantId, id], onDelete: Restrict)
+  supersededBy      ComplianceRecord? @relation("ComplianceRenewals")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, supersedesId])
+  @@index([tenantId, projectId, typeId])
+  @@index([tenantId, typeId])
+  @@map("compliance_records")
+}
+
+// An append-only entry on an instruction: a note, or a move of its status (from → to).
+model InstructionResponse {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  tenantId      String      @map("tenant_id") @db.Uuid
+  instructionId String      @map("instruction_id") @db.Uuid
+  kind          String      @db.VarChar(12)
+  body          String?     @db.VarChar(2000)
+  fromStatus    String      @map("from_status") @db.VarChar(20)
+  toStatus      String      @map("to_status") @db.VarChar(20)
+  recordedBy    String      @map("recorded_by") @db.Uuid
+  recordedAt    DateTime    @default(now()) @map("recorded_at") @db.Timestamptz
+  instruction   Instruction @relation(fields: [tenantId, instructionId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, instructionId, recordedAt])
+  @@map("instruction_responses")
+}
+
+// An instruction's attachment: a document version or a site photo of the same project (append-only).
+model InstructionAttachment {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  projectId         String           @map("project_id") @db.Uuid
+  instructionId     String           @map("instruction_id") @db.Uuid
+  kind              String           @db.VarChar(20)
+  documentVersionId String?          @map("document_version_id") @db.Uuid
+  photoId           String?          @map("photo_id") @db.Uuid
+  addedBy           String           @map("added_by") @db.Uuid
+  addedAt           DateTime         @default(now()) @map("added_at") @db.Timestamptz
+  instruction       Instruction      @relation(fields: [tenantId, projectId, instructionId], references: [tenantId, projectId, id], onDelete: Restrict)
+  documentVersion   DocumentVersion? @relation(fields: [tenantId, projectId, documentVersionId], references: [tenantId, projectId, id], onDelete: Restrict)
+  photo             SitePhoto?       @relation(fields: [tenantId, projectId, photoId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, instructionId, documentVersionId])
+  @@unique([tenantId, instructionId, photoId])
+  @@map("instruction_attachments")
+}
+
+// A request for a consultant's approval (APR-NNNN per project): a material sample, shop drawing
+// or method statement as a document version, sent on a date and due by another. Its status is
+// pending until its one response decides it (set by the response trigger) or cancelled with a
+// reason; a rejected or "resubmit" request is answered by one resubmission.
+model ApprovalRequest {
+  id                String            @id @default(uuid(7)) @db.Uuid
+  tenantId          String            @map("tenant_id") @db.Uuid
+  projectId         String            @map("project_id") @db.Uuid
+  number            Int
+  kind              String            @db.VarChar(20)
+  title             String            @db.VarChar(200)
+  description       String?           @db.VarChar(2000)
+  documentVersionId String            @map("document_version_id") @db.Uuid
+  addressedTo       String            @map("addressed_to") @db.VarChar(150)
+  sentOn            DateTime          @map("sent_on") @db.Date
+  dueOn             DateTime          @map("due_on") @db.Date
+  status            String            @default("pending") @db.VarChar(30)
+  resubmissionOfId  String?           @map("resubmission_of_id") @db.Uuid
+  raisedBy          String            @map("raised_by") @db.Uuid
+  raisedAt          DateTime          @default(now()) @map("raised_at") @db.Timestamptz
+  cancelledBy       String?           @map("cancelled_by") @db.Uuid
+  cancelledAt       DateTime?         @map("cancelled_at") @db.Timestamptz
+  cancelReason      String?           @map("cancel_reason") @db.VarChar(500)
+  version           Int               @default(1)
+  project           Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  documentVersion   DocumentVersion   @relation(fields: [tenantId, projectId, documentVersionId], references: [tenantId, projectId, id], onDelete: Restrict)
+  resubmissionOf    ApprovalRequest?  @relation("ApprovalResubmissions", fields: [tenantId, projectId, resubmissionOfId], references: [tenantId, projectId, id], onDelete: Restrict)
+  resubmittedAs     ApprovalRequest?  @relation("ApprovalResubmissions")
+  response          ApprovalResponse?
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@unique([tenantId, projectId, resubmissionOfId])
+  @@index([tenantId, projectId, status])
+  @@index([tenantId, documentVersionId])
+  @@map("approval_requests")
+}
+
+// The one response to an approval request (append-only): the decision, comments, the date, and
+// who answered — in the app (the responder is the signed-in user, never the raiser nor the
+// uploader) or on paper (the external consultant's name and the scan as evidence) — with the
+// SHA-256 of the version reviewed.
+model ApprovalResponse {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  projectId         String           @map("project_id") @db.Uuid
+  requestId         String           @map("request_id") @db.Uuid
+  decision          String           @db.VarChar(30)
+  comments          String?          @db.VarChar(2000)
+  respondedOn       DateTime         @map("responded_on") @db.Date
+  channel           String           @db.VarChar(10)
+  responderUserId   String?          @map("responder_user_id") @db.Uuid
+  responderName     String           @map("responder_name") @db.VarChar(150)
+  responderFirm     String?          @map("responder_firm") @db.VarChar(150)
+  evidenceVersionId String?          @map("evidence_version_id") @db.Uuid
+  reviewedSha256    String           @map("reviewed_sha256") @db.Char(64)
+  recordedBy        String           @map("recorded_by") @db.Uuid
+  recordedAt        DateTime         @default(now()) @map("recorded_at") @db.Timestamptz
+  request           ApprovalRequest  @relation(fields: [tenantId, projectId, requestId], references: [tenantId, projectId, id], onDelete: Restrict)
+  evidence          DocumentVersion? @relation(fields: [tenantId, projectId, evidenceVersionId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, requestId])
+  @@map("approval_responses")
 }

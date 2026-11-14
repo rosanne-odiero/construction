@@ -204,6 +204,91 @@ There is no edit and no delete; corrections and voids keep the original visible 
 
 **Alerts** (computed on read; never stored): unsafe breakdown and service overdue, operator certificate missing or expired, and hire overrun (critical); fuel above the standard and fuel on a static meter (estimates, never proof of theft), open breakdown, idle on hire, service due and hire ending (warning). Off-hired and disposed items raise none.
 
+## Documents, compliance and instructions (D8.4)
+
+Implemented for the web app ([ARCHITECTURE §4.13](./ARCHITECTURE.md#413-documents-compliance-register-and-instructions-d84)). Every command runs in the tenant transaction with the caller's project permissions (role ∩ assignment), locks the document, instruction or request row, sends the version it read where the record is versioned (409 `version-conflict`) and writes an audit event (IDs, codes, dates, statuses and field names only). "Manager" = `documents.manage` on the project (contracts, BQs and insurance also need `finance.view`/`finance.manage`); "recorder" = `documents.manage`, `bq.edit` or `site.diary`; "instruction manager" = `documents.manage` or `bq.edit`. Writes on a closed or cancelled project are refused (409 `project-read-only`).
+
+**Document and its versions** (`documents`, `document_versions`; exactly one current version, checked at commit)
+
+```mermaid
+stateDiagram-v2
+  [*] --> active: upload with the first version (manager)
+  active --> active: new version (manager) — the previous version becomes superseded
+  active --> active: change title, drawing number, discipline or reference (manager)
+  active --> withdrawn: withdraw with a reason (manager)
+  withdrawn --> [*]
+```
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → active | Manager; a file accepted by content (PDF, JPEG, PNG, WebP, DOCX, XLSX; ≤ 25 MB; scanned); category; title; drawings: number (unique per project) and discipline; a revision label | Version 1 is current; `document.created` |
+| new version | Manager; the current version the user saw (409 `version-stale`); a new revision after the current one or starting a new series; a change note; not the same file again; ≤ 50 versions | The new version is current; the previous one is **superseded** (time and successor recorded once); `document.version_added` |
+| withdraw | Manager; reason | **Final**; versions stay downloadable and labelled; no new versions or approval requests; `document.withdrawn` |
+| download | Any document reader (confidential categories: finance readers) | Streamed after the SHA-256 check; superseded versions named `_SUPERSEDED`; `document.downloaded` |
+
+**Compliance item** (`compliance_records`; status derived on read in Nairobi dates)
+
+| Status | When |
+|---|---|
+| `missing` | No record for the item (project items per project; company items once for the company) |
+| `valid` | Current record without expiry, or expiring more than the type's reminder days from today |
+| `expiring` | Today is within the reminder window: expiry − reminder days ≤ today ≤ expiry |
+| `expired` | Today is after the expiry date |
+| `not_applicable` | The current record says the item does not apply, with a reason |
+
+| Command | Actor / preconditions | Effect / audit |
+|---|---|---|
+| record / renew / not applicable | Manager (company items: `config.manage`); the current record the user saw (409 `compliance-stale`); an active type; dates: issue not in the future, expiry required when the type expires and not before issue; evidence a version of the project the user can see; not applicable: a reason only | New current record; the previous one superseded (kept as history); `compliance.recorded` |
+| add / change / retire / reactivate a type | `config.manage`; custom label (starter names are fixed), scope fixed after creation, expires flag, reminder days 1–365; at most 60 types | `compliance.type_created` / `compliance.type_updated`; a retired type leaves the registers and takes no records |
+| export | Any document reader; EN or SW; 30 per 10 minutes | PDF or Excel generated on demand; `compliance.exported` |
+
+**Consultant instruction** (`instructions` + append-only `instruction_responses`; status checked at commit against the latest response)
+
+```mermaid
+stateDiagram-v2
+  [*] --> received: record (recorder; offline-ready)
+  received --> acknowledged: acknowledge (recorder, not the issuer)
+  acknowledged --> actioned: action with a note (recorder, not the issuer)
+  received --> actioned: action with a note (recorder, not the issuer)
+  received --> closed: close with a note (instruction manager)
+  acknowledged --> closed: close with a note (instruction manager)
+  actioned --> closed: close (instruction manager)
+  closed --> received: reopen with a note (instruction manager)
+```
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → received | Recorder; number unique per project; dates issued and received not in the future, received on or after issued; a delay of the project if linked; a consultant may mark it issued by themselves; client ID + `Idempotency-Key` | `instruction.recorded` (a replay returns the original) |
+| note | Recorder; not closed; a note | Response row, status unchanged; `instruction.responded` |
+| acknowledge / action | Recorder who did not issue it (409 `instruction-issuer-cannot-respond`); action needs a note | Response row with from → to; `instruction.responded` |
+| close / reopen | Instruction manager; a note unless closing an actioned instruction | Closed instructions are **locked**: no changes, notes, attachments or new variations; `instruction.responded` |
+| change details | Instruction manager; not closed | `instruction.updated` (field names) |
+| attach | Recorder; not closed; a version of a project document or a **verified** general site photo; ≤ 10 | Append-only attachment; `instruction.attachment_added` |
+
+**Approval request** (`approval_requests` + one `approval_responses` row)
+
+```mermaid
+stateDiagram-v2
+  [*] --> pending: raise on the current version of an active document (manager)
+  pending --> approved: response (in the app: not the raiser or uploader; or a recorded paper response)
+  pending --> approved_with_comments: response with comments
+  pending --> rejected: response with comments
+  pending --> resubmit: response with comments
+  pending --> cancelled: cancel with a reason (the raiser)
+  rejected --> [*]
+  resubmit --> [*]
+  approved --> [*]
+  approved_with_comments --> [*]
+  cancelled --> [*]
+```
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → pending | Manager; the current version of an active document; sent on (not in the future), due on or after; a resubmission names a rejected or *resubmit* request that has none yet | `APR-NNNN`; `approval.raised` |
+| pending → decision | Manager; **in the app**: answers as themselves and is neither the raiser nor the uploader (403); **paper**: the consultant's name and the scan (another document of the project, uploaded after the request was raised, used for no other response: 422 `approval-evidence-invalid`) — the raiser may record it; the SHA-256 shown must match the version's (409 `approval-digest-mismatch`); responded on or after sent, not in the future; comments unless approved | **Final**; `approval.responded` |
+| pending → cancelled | The raiser; reason | **Final**; `approval.cancelled` |
+| overdue | Pending and due before today (Nairobi) | Computed on read: an `approval_overdue` reminder on the project and company lists |
+
 ## Schedule baseline and delay log (D6.2)
 
 Implemented for the web app ([ARCHITECTURE §4.6](./ARCHITECTURE.md#46-schedule-d62)). Every command needs `projects.manage` on an open project (role ∩ assignment, checked by `ProjectAccess.editable`; closed and cancelled projects are read-only in the API and in every schedule trigger), runs in the tenant transaction under the company lock, checks the expected version and writes its audit event in the same transaction. There is no external effect, outbox event or offline capture; a retry after a lost response is refused as a version conflict (or `dependency-exists`) rather than applied twice.

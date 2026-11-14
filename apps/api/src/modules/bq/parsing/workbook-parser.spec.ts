@@ -192,7 +192,8 @@ describe("parseWorkbook (sandboxed worker)", () => {
         failure: "unsafe-archive",
       });
     }
-  });
+    // Two 50 MB inflations in a worker: slow on a busy CI runner, so not the default 5 s.
+  }, 30_000);
 
   it("caps the total cell text, so one shared string repeated in many cells can't flood memory", async () => {
     const text = "x".repeat(8_000);

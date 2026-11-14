@@ -468,7 +468,7 @@ export class VariationsService {
               "Approve the original BQ as the contract baseline before raising variations",
             );
           const instruction = await InstructionsService.row(scope, projectId, input.instructionId);
-          if (instruction.status !== "open")
+          if (instruction.status === "closed")
             throw bqConflict("instruction-closed", "This instruction is closed");
           const id = uuidv7();
           const number = await this.nextNumber(tx, access.tenantId, projectId);
@@ -543,7 +543,7 @@ export class VariationsService {
         let instructionId = row.instructionId;
         if (input.instructionId !== undefined && input.instructionId !== row.instructionId) {
           const instruction = await InstructionsService.row(scope, projectId, input.instructionId);
-          if (instruction.status !== "open")
+          if (instruction.status === "closed")
             throw bqConflict("instruction-closed", "This instruction is closed");
           instructionId = instruction.id;
           fields.push("instructionId");

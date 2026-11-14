@@ -137,6 +137,22 @@ function print(summary: SeedSummary) {
         `  ${item.code} ${item.status}${item.alerts.length ? `: ${item.alerts.join(", ")}` : ""}`,
     ),
   );
+  const { documents } = summary;
+  lines.push(
+    "",
+    `Documents and compliance for RUI-HTS (synthetic, ${documents.created ? "created" : "already present"}): ${documents.documents} documents`,
+    ...documents.drawings.map(
+      (drawing) =>
+        `  ${drawing.number} rev ${drawing.current} current${drawing.superseded.length ? `; superseded: ${drawing.superseded.join(", ")}` : ""}`,
+    ),
+    `  compliance: ${Object.entries(documents.compliance)
+      .map(([status, total]) => `${status} ${total}`)
+      .join(", ")}; ${documents.reminders} reminder(s) company-wide`,
+    `  instructions: ${documents.instructions.map((entry) => `${entry.number} ${entry.status}`).join(", ")}`,
+    `  approval requests: ${documents.approvals
+      .map((entry) => `${entry.code} ${entry.status}${entry.overdue ? " (overdue)" : ""}`)
+      .join(", ")}`,
+  );
   console.log(lines.join("\n"));
 }
 

@@ -1,7 +1,7 @@
 import type { Permission } from "./permissions.js";
 
 /**
- * Health and safety vocabulary (D8.2, brief §5.12 and §15 C/F; ARCHITECTURE §4.8; WORKFLOWS
+ * Health and safety vocabulary (D8.2, brief §5.12 and §15 C/F; ARCHITECTURE §4.9; WORKFLOWS
  * "Health and safety"). The database CHECK constraints and triggers in migration
  * `20261124090000_health_safety` list the same values, so adding one needs a migration as well as
  * a change here. Regulator (DOSH) notification and the registers the Occupational Safety and

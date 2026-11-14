@@ -485,7 +485,7 @@ Review this DPIA at least every `dp.dpia_review_interval_months` (*proposed*, `C
 
 ## 14. Annex: injury and health data (D8.2 health and safety)
 
-The health and safety module (ARCHITECTURE §4.8, decisions D-70 and D-74) processes data about workers and visitors who are injured, involved in or witness an incident, or treated with first aid. Data about health is **sensitive personal data** under the Data Protection Act 2019. This annex records the design so the tenant can include it in its DPIA; it does not replace that assessment (`COMPLIANCE-REVIEW`, CR-HS-02 and CR-DP-06).
+The health and safety module (ARCHITECTURE §4.9, decisions D-70 and D-74) processes data about workers and visitors who are injured, involved in or witness an incident, or treated with first aid. Data about health is **sensitive personal data** under the Data Protection Act 2019. This annex records the design so the tenant can include it in its DPIA; it does not replace that assessment (`COMPLIANCE-REVIEW`, CR-HS-02 and CR-DP-06).
 
 | Category | Data items | Source | Where it is held | Who can see it |
 |---|---|---|---|---|

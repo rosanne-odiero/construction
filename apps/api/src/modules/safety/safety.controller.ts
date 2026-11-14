@@ -94,7 +94,7 @@ const limit = { name: "limit", required: false, description: "1–100 rows; defa
 const search = { name: "search", required: false, description: "Number or text" };
 
 /**
- * A project's health and safety records (D8.2, ARCHITECTURE §4.8): inductions and their status
+ * A project's health and safety records (D8.2, ARCHITECTURE §4.9): inductions and their status
  * against attendance, toolbox talks, the PPE register, incidents with investigation, the regulator
  * decision and closing, corrective actions, and first aid.
  */

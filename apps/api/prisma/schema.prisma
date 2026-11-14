@@ -170,6 +170,8 @@ model Tenant {
   payrollSettings     PayrollSettings?
   statutoryRules      StatutoryRuleVersion[]
   minimumWages        MinimumWageRate[]
+  spendingSettings    SpendingSettings?
+  costCodes           CostCode[]
   qualitySettings     QualitySettings?
   checklistTemplates  ChecklistTemplate[]
   safetySettings      SafetySettings?
@@ -272,6 +274,10 @@ model Project {
   scheduleItems    ScheduleActivity[]
   baselines        ScheduleBaseline[]
   scheduleDelays   ScheduleDelay[]
+  budgets          Budget[]
+  costJournals     CostJournal[]
+  costEntries      CostEntry[]
+  cashFlowItems    CashFlowItem[]
 
   completions       ProjectCompletion[]
   correctiveActions CorrectiveAction[]
@@ -321,6 +327,10 @@ model Site {
   lpos               Lpo[]
   grns               Grn[]
   stores             Store[]
+  pettyCashFloats    PettyCashFloat[]
+  pettyCashExpenses  PettyCashExpense[]
+  costEntries        CostEntry[]
+  costJournalLines   CostJournalLine[]
   inspections        Inspection[]
   snags              Snag[]
   cubeSets           CubeSet[]
@@ -595,6 +605,7 @@ model BqVersion {
   imports         BqImport[]
   rateLinks       BqItemRateLink[]
   measurements    ProgressMeasurement[]
+  budgets         Budget[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, bqId, versionNo])
@@ -655,40 +666,44 @@ model BqSection {
 // A BQ item. Quantity and rate are exact decimals; amounts are KES minor units. amountSource says
 // how the amount was obtained (CHECK bq_items_amount_rule_check); the sheet's amount is kept apart.
 model BqItem {
-  id               String                @id @default(uuid(7)) @db.Uuid
-  tenantId         String                @map("tenant_id") @db.Uuid
-  versionId        String                @map("version_id") @db.Uuid
-  billId           String                @map("bill_id") @db.Uuid
-  sectionId        String?               @map("section_id") @db.Uuid
-  lineageId        String                @map("lineage_id") @db.Uuid
-  ref              String?               @db.VarChar(30)
-  description      String                @db.VarChar(4000)
-  unit             String?               @db.VarChar(10)
-  unitRaw          String?               @map("unit_raw") @db.VarChar(30)
-  quantity         Decimal?              @db.Decimal(20, 4)
-  rate             Decimal?              @db.Decimal(20, 4)
-  amountMinor      BigInt                @map("amount_minor")
-  sheetAmountMinor BigInt?               @map("sheet_amount_minor")
-  amountSource     String                @map("amount_source") @db.VarChar(20)
-  overrideReason   String?               @map("override_reason") @db.VarChar(500)
-  kind             String                @db.VarChar(20)
-  notes            String?               @db.VarChar(1000)
+  id                String                @id @default(uuid(7)) @db.Uuid
+  tenantId          String                @map("tenant_id") @db.Uuid
+  versionId         String                @map("version_id") @db.Uuid
+  billId            String                @map("bill_id") @db.Uuid
+  sectionId         String?               @map("section_id") @db.Uuid
+  lineageId         String                @map("lineage_id") @db.Uuid
+  ref               String?               @db.VarChar(30)
+  description       String                @db.VarChar(4000)
+  unit              String?               @db.VarChar(10)
+  unitRaw           String?               @map("unit_raw") @db.VarChar(30)
+  quantity          Decimal?              @db.Decimal(20, 4)
+  rate              Decimal?              @db.Decimal(20, 4)
+  amountMinor       BigInt                @map("amount_minor")
+  sheetAmountMinor  BigInt?               @map("sheet_amount_minor")
+  amountSource      String                @map("amount_source") @db.VarChar(20)
+  overrideReason    String?               @map("override_reason") @db.VarChar(500)
+  kind              String                @db.VarChar(20)
+  notes             String?               @db.VarChar(1000)
   // Null for items added by a variation (no spreadsheet row).
-  sourceSheet      String?               @map("source_sheet") @db.VarChar(100)
-  sourceRow        Int?                  @map("source_row")
-  hasFormula       Boolean               @default(false) @map("has_formula")
-  sortOrder        Int                   @map("sort_order")
-  bill             BqBill                @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
-  section          BqSection?            @relation(fields: [tenantId, versionId, sectionId], references: [tenantId, versionId, id], onDelete: Cascade)
-  variationLines   VariationLine[]
-  rateLinks        BqItemRateLink[]
-  pieceRateOutputs PieceRateOutput[]
-  requisitionLines RequisitionLine[]
-  stockMovements   StockMovement[]
-  stockEntries     StockLedgerEntry[]
-  measurements     ProgressMeasurement[]
-  scheduleItems    ScheduleActivity[]
-  inspections      Inspection[]
+  sourceSheet       String?               @map("source_sheet") @db.VarChar(100)
+  sourceRow         Int?                  @map("source_row")
+  hasFormula        Boolean               @default(false) @map("has_formula")
+  sortOrder         Int                   @map("sort_order")
+  bill              BqBill                @relation(fields: [tenantId, versionId, billId], references: [tenantId, versionId, id], onDelete: Cascade)
+  section           BqSection?            @relation(fields: [tenantId, versionId, sectionId], references: [tenantId, versionId, id], onDelete: Cascade)
+  variationLines    VariationLine[]
+  rateLinks         BqItemRateLink[]
+  pieceRateOutputs  PieceRateOutput[]
+  requisitionLines  RequisitionLine[]
+  stockMovements    StockMovement[]
+  stockEntries      StockLedgerEntry[]
+  measurements      ProgressMeasurement[]
+  scheduleItems     ScheduleActivity[]
+  budgetLines       BudgetLine[]
+  costEntries       CostEntry[]
+  costJournalLines  CostJournalLine[]
+  pettyCashExpenses PettyCashExpense[]
+  inspections       Inspection[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, versionId, lineageId])
@@ -1056,35 +1071,38 @@ model UnitConversion {
 
 // A supplier: the KRA PIN is stored encrypted with a blind index (unique per company) and a mask.
 model Supplier {
-  id               String                  @id @default(uuid(7)) @db.Uuid
-  tenantId         String                  @map("tenant_id") @db.Uuid
-  code             String                  @db.VarChar(20)
-  legalName        String                  @map("legal_name") @db.VarChar(200)
-  tradingName      String?                 @map("trading_name") @db.VarChar(200)
-  kraPinEnc        Bytes?                  @map("kra_pin_enc")
-  kraPinBidx       String?                 @map("kra_pin_bidx") @db.Char(64)
-  kraPinMasked     String?                 @map("kra_pin_masked") @db.VarChar(16)
-  etimsStatus      String                  @default("unknown") @map("etims_status") @db.VarChar(20)
-  etimsCheckedOn   DateTime?               @map("etims_checked_on") @db.Date
-  status           String                  @default("active") @db.VarChar(10)
-  statusReason     String?                 @map("status_reason") @db.VarChar(500)
-  creditDays       Int                     @default(0) @map("credit_days")
-  creditLimitMinor BigInt?                 @map("credit_limit_minor")
-  notes            String?                 @db.VarChar(2000)
-  version          Int                     @default(1)
-  createdBy        String                  @map("created_by") @db.Uuid
-  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy        String                  @map("updated_by") @db.Uuid
-  updatedAt        DateTime                @default(now()) @map("updated_at") @db.Timestamptz
-  tenant           Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contacts         SupplierContact[]
-  phoneChanges     SupplierPhoneChange[]
-  payoutVersions   SupplierPayoutVersion[]
-  conversions      UnitConversion[]
-  prices           MaterialPrice[]
-  rfqs             RfqSupplier[]
-  lpos             Lpo[]
-  invoices         SupplierInvoice[]
+  id                String                  @id @default(uuid(7)) @db.Uuid
+  tenantId          String                  @map("tenant_id") @db.Uuid
+  code              String                  @db.VarChar(20)
+  legalName         String                  @map("legal_name") @db.VarChar(200)
+  tradingName       String?                 @map("trading_name") @db.VarChar(200)
+  kraPinEnc         Bytes?                  @map("kra_pin_enc")
+  kraPinBidx        String?                 @map("kra_pin_bidx") @db.Char(64)
+  kraPinMasked      String?                 @map("kra_pin_masked") @db.VarChar(16)
+  etimsStatus       String                  @default("unknown") @map("etims_status") @db.VarChar(20)
+  etimsCheckedOn    DateTime?               @map("etims_checked_on") @db.Date
+  status            String                  @default("active") @db.VarChar(10)
+  statusReason      String?                 @map("status_reason") @db.VarChar(500)
+  creditDays        Int                     @default(0) @map("credit_days")
+  creditLimitMinor  BigInt?                 @map("credit_limit_minor")
+  notes             String?                 @db.VarChar(2000)
+  version           Int                     @default(1)
+  createdBy         String                  @map("created_by") @db.Uuid
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy         String                  @map("updated_by") @db.Uuid
+  updatedAt         DateTime                @default(now()) @map("updated_at") @db.Timestamptz
+  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contacts          SupplierContact[]
+  phoneChanges      SupplierPhoneChange[]
+  payoutVersions    SupplierPayoutVersion[]
+  conversions       UnitConversion[]
+  prices            MaterialPrice[]
+  rfqs              RfqSupplier[]
+  lpos              Lpo[]
+  invoices          SupplierInvoice[]
+  costEntries       CostEntry[]
+  costJournalLines  CostJournalLine[]
+  pettyCashExpenses PettyCashExpense[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -2788,9 +2806,11 @@ model SupplierInvoice {
   matches               ThreeWayMatch[]
   payables              InvoicePayable[]
   documents             ProcurementDocument[]
+  costEntries           CostEntry[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, lpoId, id])
+  @@unique([tenantId, projectId, id])
   @@index([tenantId, projectId, status])
   @@index([tenantId, supplierId])
   @@map("supplier_invoices")
@@ -2896,8 +2916,10 @@ model InvoiceSettlement {
   recordedBy        String         @map("recorded_by") @db.Uuid
   recordedAt        DateTime       @default(now()) @map("recorded_at") @db.Timestamptz
   payable           InvoicePayable @relation(fields: [tenantId, invoiceId, payableId], references: [tenantId, invoiceId, id], onDelete: Restrict)
+  costEntries       CostEntry[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, invoiceId, id])
   @@unique([tenantId, method, referenceKey])
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, invoiceId])
@@ -3530,6 +3552,462 @@ model ScheduleDelayActivity {
   @@id([tenantId, delayVersionId, activityId])
   @@index([tenantId, projectId, activityId])
   @@map("schedule_delay_activities")
+}
+
+// D5.4 spending and cash flow (ARCHITECTURE §4.8, ERD §8). Company settings: budget alert
+// threshold, unusual-spend rule, duplicate window, forecast horizon and the entered opening cash.
+model SpendingSettings {
+  tenantId               String    @id @map("tenant_id") @db.Uuid
+  budgetAlertPercent     Int       @map("budget_alert_percent")
+  unusualSpendMultiplier Decimal   @map("unusual_spend_multiplier") @db.Decimal(7, 2)
+  unusualSpendMinSamples Int       @map("unusual_spend_min_samples")
+  duplicateWindowDays    Int       @map("duplicate_window_days")
+  forecastWeeks          Int       @map("forecast_weeks")
+  openingCashMinor       BigInt?   @map("opening_cash_minor")
+  openingCashOn          DateTime? @map("opening_cash_on") @db.Date
+  version                Int       @default(1)
+  updatedBy              String    @map("updated_by") @db.Uuid
+  updatedAt              DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+  tenant                 Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("spending_settings")
+}
+
+// A company cost code (configurable): a code, a name and the category it belongs to. Codes in use
+// are deactivated, never deleted.
+model CostCode {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  tenantId          String             @map("tenant_id") @db.Uuid
+  code              String             @db.VarChar(20)
+  name              String             @db.VarChar(120)
+  category          String             @db.VarChar(20)
+  active            Boolean            @default(true)
+  version           Int                @default(1)
+  createdBy         String             @map("created_by") @db.Uuid
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy         String             @map("updated_by") @db.Uuid
+  updatedAt         DateTime           @default(now()) @map("updated_at") @db.Timestamptz
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  budgetLines       BudgetLine[]
+  costEntries       CostEntry[]
+  journalLines      CostJournalLine[]
+  pettyCashExpenses PettyCashExpense[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, active, code])
+  @@map("cost_codes")
+}
+
+// A versioned project budget: draft → submitted → approved by someone who did not prepare it. The
+// newest approved version is the budget in force; approved versions never change.
+model Budget {
+  id           String       @id @default(uuid(7)) @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  projectId    String       @map("project_id") @db.Uuid
+  versionNo    Int          @map("version_no")
+  name         String       @db.VarChar(120)
+  notes        String?      @db.VarChar(1000)
+  status       String       @default("draft") @db.VarChar(12)
+  bqVersionId  String?      @map("bq_version_id") @db.Uuid
+  totalMinor   BigInt       @default(0) @map("total_minor")
+  lineCount    Int          @default(0) @map("line_count")
+  digest       String?      @db.Char(64)
+  contributors String[]     @default([]) @db.Uuid
+  version      Int          @default(1)
+  createdBy    String       @map("created_by") @db.Uuid
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy    String       @map("updated_by") @db.Uuid
+  updatedAt    DateTime     @default(now()) @map("updated_at") @db.Timestamptz
+  submittedBy  String?      @map("submitted_by") @db.Uuid
+  submittedAt  DateTime?    @map("submitted_at") @db.Timestamptz
+  approvedBy   String?      @map("approved_by") @db.Uuid
+  approvedAt   DateTime?    @map("approved_at") @db.Timestamptz
+  returnReason String?      @map("return_reason") @db.VarChar(500)
+  cancelledBy  String?      @map("cancelled_by") @db.Uuid
+  cancelledAt  DateTime?    @map("cancelled_at") @db.Timestamptz
+  cancelReason String?      @map("cancel_reason") @db.VarChar(500)
+  project      Project      @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  bqVersion    BqVersion?   @relation(fields: [tenantId, bqVersionId], references: [tenantId, id], onDelete: Restrict)
+  lines        BudgetLine[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, versionNo])
+  @@index([tenantId, projectId, status])
+  @@map("budgets")
+}
+
+// A budget line: one BQ item (by lineage, in the budget's BQ version) or one cost code, with an
+// amount in KES minor units. Lines change only while the budget is a draft.
+model BudgetLine {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  budgetId        String    @map("budget_id") @db.Uuid
+  lineNo          Int       @map("line_no")
+  bqVersionId     String?   @map("bq_version_id") @db.Uuid
+  bqItemLineageId String?   @map("bq_item_lineage_id") @db.Uuid
+  costCodeId      String?   @map("cost_code_id") @db.Uuid
+  category        String?   @db.VarChar(20)
+  description     String    @db.VarChar(300)
+  amountMinor     BigInt    @map("amount_minor")
+  budget          Budget    @relation(fields: [tenantId, budgetId], references: [tenantId, id], onDelete: Restrict)
+  bqItem          BqItem?   @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  costCode        CostCode? @relation(fields: [tenantId, costCodeId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, budgetId, lineNo])
+  @@unique([tenantId, budgetId, bqItemLineageId])
+  @@unique([tenantId, budgetId, costCodeId])
+  @@map("budget_lines")
+}
+
+// A manual cost journal (adjustment lines, or the reversal of one entry), proposed by one person
+// and approved or rejected by another; approval posts its lines to the cost ledger.
+model CostJournal {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  projectId      String            @map("project_id") @db.Uuid
+  number         String            @db.VarChar(20)
+  kind           String            @db.VarChar(12)
+  reason         String            @db.VarChar(500)
+  status         String            @default("submitted") @db.VarChar(12)
+  lineCount      Int               @map("line_count")
+  version        Int               @default(1)
+  createdBy      String            @map("created_by") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  decidedBy      String?           @map("decided_by") @db.Uuid
+  decidedAt      DateTime?         @map("decided_at") @db.Timestamptz
+  decisionReason String?           @map("decision_reason") @db.VarChar(500)
+  project        Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  lines          CostJournalLine[]
+  entries        CostEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, number])
+  @@index([tenantId, projectId, status])
+  @@map("cost_journals")
+}
+
+// A journal line: what will be posted (measure, tags, amount), or the reversal of one entry.
+model CostJournalLine {
+  id               String      @id @default(uuid(7)) @db.Uuid
+  tenantId         String      @map("tenant_id") @db.Uuid
+  projectId        String      @map("project_id") @db.Uuid
+  journalId        String      @map("journal_id") @db.Uuid
+  lineNo           Int         @map("line_no")
+  measure          String      @db.VarChar(8)
+  category         String      @db.VarChar(20)
+  costCodeId       String?     @map("cost_code_id") @db.Uuid
+  bqVersionId      String?     @map("bq_version_id") @db.Uuid
+  bqItemLineageId  String?     @map("bq_item_lineage_id") @db.Uuid
+  siteId           String?     @map("site_id") @db.Uuid
+  counterpartyKind String      @map("counterparty_kind") @db.VarChar(10)
+  supplierId       String?     @map("supplier_id") @db.Uuid
+  counterpartyName String?     @map("counterparty_name") @db.VarChar(200)
+  paymentReference String?     @map("payment_reference") @db.VarChar(60)
+  occurredOn       DateTime    @map("occurred_on") @db.Date
+  amountMinor      BigInt      @map("amount_minor")
+  reversesEntryId  String?     @map("reverses_entry_id") @db.Uuid
+  journal          CostJournal @relation(fields: [tenantId, projectId, journalId], references: [tenantId, projectId, id], onDelete: Restrict)
+  costCode         CostCode?   @relation(fields: [tenantId, costCodeId], references: [tenantId, id], onDelete: Restrict)
+  bqItem           BqItem?     @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  site             Site?       @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  supplier         Supplier?   @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  reverses         CostEntry?  @relation("JournalReversal", fields: [tenantId, reversesEntryId], references: [tenantId, id], onDelete: Restrict)
+  entries          CostEntry[] @relation("JournalLineEntries")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, journalId, id])
+  @@unique([tenantId, journalId, lineNo])
+  @@map("cost_journal_lines")
+}
+
+// The append-only cost ledger: every shilling tagged with project, site, BQ item or cost code,
+// category, counterparty and payment reference, in one of two measures (accrued, paid). Exactly
+// one source per entry, posted once per purpose; a correction is a reversing entry (journal).
+model CostEntry {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  projectId        String             @map("project_id") @db.Uuid
+  siteId           String?            @map("site_id") @db.Uuid
+  measure          String             @db.VarChar(8)
+  category         String             @db.VarChar(20)
+  costCodeId       String?            @map("cost_code_id") @db.Uuid
+  bqVersionId      String?            @map("bq_version_id") @db.Uuid
+  bqItemLineageId  String?            @map("bq_item_lineage_id") @db.Uuid
+  counterpartyKind String             @map("counterparty_kind") @db.VarChar(10)
+  supplierId       String?            @map("supplier_id") @db.Uuid
+  counterpartyName String?            @map("counterparty_name") @db.VarChar(200)
+  paymentReference String?            @map("payment_reference") @db.VarChar(60)
+  amountMinor      BigInt             @map("amount_minor")
+  occurredOn       DateTime           @map("occurred_on") @db.Date
+  source           String             @db.VarChar(20)
+  purpose          String             @db.VarChar(20)
+  invoiceId        String?            @map("invoice_id") @db.Uuid
+  settlementId     String?            @map("settlement_id") @db.Uuid
+  expenseId        String?            @map("expense_id") @db.Uuid
+  floatCountId     String?            @map("float_count_id") @db.Uuid
+  journalId        String?            @map("journal_id") @db.Uuid
+  journalLineId    String?            @map("journal_line_id") @db.Uuid
+  reversesEntryId  String?            @map("reverses_entry_id") @db.Uuid
+  recordedBy       String             @map("recorded_by") @db.Uuid
+  recordedAt       DateTime           @default(now()) @map("recorded_at") @db.Timestamptz
+  businessDate     DateTime           @map("business_date") @db.Date
+  project          Project            @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  site             Site?              @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  costCode         CostCode?          @relation(fields: [tenantId, costCodeId], references: [tenantId, id], onDelete: Restrict)
+  bqItem           BqItem?            @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  supplier         Supplier?          @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  invoice          SupplierInvoice?   @relation(fields: [tenantId, projectId, invoiceId], references: [tenantId, projectId, id], onDelete: Restrict)
+  settlement       InvoiceSettlement? @relation(fields: [tenantId, invoiceId, settlementId], references: [tenantId, invoiceId, id], onDelete: Restrict)
+  expense          PettyCashExpense?  @relation(fields: [tenantId, projectId, expenseId], references: [tenantId, projectId, id], onDelete: Restrict)
+  floatCount       PettyCashCount?    @relation(fields: [tenantId, projectId, floatCountId], references: [tenantId, projectId, id], onDelete: Restrict)
+  journal          CostJournal?       @relation(fields: [tenantId, projectId, journalId], references: [tenantId, projectId, id], onDelete: Restrict)
+  journalLine      CostJournalLine?   @relation("JournalLineEntries", fields: [tenantId, journalId, journalLineId], references: [tenantId, journalId, id], onDelete: Restrict)
+  reverses         CostEntry?         @relation("CostReversal", fields: [tenantId, reversesEntryId], references: [tenantId, id], onDelete: Restrict)
+  reversedBy       CostEntry?         @relation("CostReversal")
+  reversalLines    CostJournalLine[]  @relation("JournalReversal")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, reversesEntryId])
+  @@index([tenantId, projectId, recordedAt])
+  @@index([tenantId, projectId, bqItemLineageId])
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, expenseId])
+  @@index([tenantId, costCodeId])
+  @@map("cost_entries")
+}
+
+// A site's petty-cash float: a custodian, a limit and a book balance that only its own
+// append-only ledger moves (never below zero).
+model PettyCashFloat {
+  id              String             @id @default(uuid(7)) @db.Uuid
+  tenantId        String             @map("tenant_id") @db.Uuid
+  projectId       String             @map("project_id") @db.Uuid
+  siteId          String             @map("site_id") @db.Uuid
+  name            String             @db.VarChar(120)
+  custodianUserId String             @map("custodian_user_id") @db.Uuid
+  limitMinor      BigInt             @map("limit_minor")
+  balanceMinor    BigInt             @default(0) @map("balance_minor")
+  lastSeq         BigInt             @default(0) @map("last_seq")
+  lastEntryAt     DateTime?          @map("last_entry_at") @db.Timestamptz
+  status          String             @default("active") @db.VarChar(10)
+  version         Int                @default(1)
+  createdBy       String             @map("created_by") @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy       String             @map("updated_by") @db.Uuid
+  updatedAt       DateTime           @default(now()) @map("updated_at") @db.Timestamptz
+  site            Site               @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  entries         PettyCashEntry[]
+  topUps          PettyCashTopUp[]
+  expenses        PettyCashExpense[]
+  counts          PettyCashCount[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, siteId])
+  @@index([tenantId, projectId])
+  @@map("petty_cash_floats")
+}
+
+// The float's own append-only ledger: top-ups in, expenses out (back in if rejected) and approved
+// count variances, numbered per float with the running balance.
+model PettyCashEntry {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  tenantId     String            @map("tenant_id") @db.Uuid
+  floatId      String            @map("float_id") @db.Uuid
+  seq          BigInt
+  kind         String            @db.VarChar(20)
+  amountMinor  BigInt            @map("amount_minor")
+  balanceMinor BigInt            @map("balance_minor")
+  topUpId      String?           @map("top_up_id") @db.Uuid
+  expenseId    String?           @map("expense_id") @db.Uuid
+  countId      String?           @map("count_id") @db.Uuid
+  recordedBy   String            @map("recorded_by") @db.Uuid
+  recordedAt   DateTime          @default(now()) @map("recorded_at") @db.Timestamptz
+  businessDate DateTime          @map("business_date") @db.Date
+  float        PettyCashFloat    @relation(fields: [tenantId, floatId], references: [tenantId, id], onDelete: Restrict)
+  topUp        PettyCashTopUp?   @relation(fields: [tenantId, floatId, topUpId], references: [tenantId, floatId, id], onDelete: Restrict)
+  expense      PettyCashExpense? @relation(fields: [tenantId, floatId, expenseId], references: [tenantId, floatId, id], onDelete: Restrict)
+  count        PettyCashCount?   @relation(fields: [tenantId, floatId, countId], references: [tenantId, floatId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, floatId, seq])
+  @@index([tenantId, floatId, recordedAt])
+  @@map("petty_cash_entries")
+}
+
+// A top-up: requested → approved (payments.approve) → paid (payments.disburse, someone else).
+model PettyCashTopUp {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  tenantId       String           @map("tenant_id") @db.Uuid
+  projectId      String           @map("project_id") @db.Uuid
+  floatId        String           @map("float_id") @db.Uuid
+  number         String           @db.VarChar(20)
+  amountMinor    BigInt           @map("amount_minor")
+  reason         String           @db.VarChar(500)
+  status         String           @default("requested") @db.VarChar(12)
+  requestedBy    String           @map("requested_by") @db.Uuid
+  requestedAt    DateTime         @default(now()) @map("requested_at") @db.Timestamptz
+  decidedBy      String?          @map("decided_by") @db.Uuid
+  decidedAt      DateTime?        @map("decided_at") @db.Timestamptz
+  decisionReason String?          @map("decision_reason") @db.VarChar(500)
+  paidBy         String?          @map("paid_by") @db.Uuid
+  paidAt         DateTime?        @map("paid_at") @db.Timestamptz
+  paidOn         DateTime?        @map("paid_on") @db.Date
+  method         String?          @db.VarChar(15)
+  reference      String?          @db.VarChar(60)
+  referenceKey   String?          @map("reference_key") @db.VarChar(60)
+  cancelledBy    String?          @map("cancelled_by") @db.Uuid
+  cancelledAt    DateTime?        @map("cancelled_at") @db.Timestamptz
+  cancelReason   String?          @map("cancel_reason") @db.VarChar(500)
+  version        Int              @default(1)
+  float          PettyCashFloat   @relation(fields: [tenantId, projectId, floatId], references: [tenantId, projectId, id], onDelete: Restrict)
+  entries        PettyCashEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, floatId, id])
+  @@unique([tenantId, number])
+  @@unique([tenantId, method, referenceKey])
+  @@index([tenantId, floatId, status])
+  @@map("petty_cash_top_ups")
+}
+
+// A petty-cash expense: offline-ready (client ID, idempotency key and digest), tagged like every
+// cost, with an optional M-Pesa code (unique among expenses not rejected) and receipt photos.
+model PettyCashExpense {
+  id               String             @id @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  projectId        String             @map("project_id") @db.Uuid
+  floatId          String             @map("float_id") @db.Uuid
+  siteId           String             @map("site_id") @db.Uuid
+  number           String             @db.VarChar(20)
+  spentOn          DateTime           @map("spent_on") @db.Date
+  amountMinor      BigInt             @map("amount_minor")
+  chargeMinor      BigInt             @default(0) @map("charge_minor")
+  category         String             @db.VarChar(20)
+  costCodeId       String?            @map("cost_code_id") @db.Uuid
+  bqVersionId      String?            @map("bq_version_id") @db.Uuid
+  bqItemLineageId  String?            @map("bq_item_lineage_id") @db.Uuid
+  counterpartyKind String             @map("counterparty_kind") @db.VarChar(10)
+  supplierId       String?            @map("supplier_id") @db.Uuid
+  payeeName        String             @map("payee_name") @db.VarChar(200)
+  payeeAccount     String?            @map("payee_account") @db.VarChar(40)
+  payeePhoneMasked String?            @map("payee_phone_masked") @db.VarChar(16)
+  paymentMethod    String             @map("payment_method") @db.VarChar(10)
+  mpesaCode        String?            @map("mpesa_code") @db.Char(10)
+  parsedFromSms    Boolean            @default(false) @map("parsed_from_sms")
+  smsKind          String?            @map("sms_kind") @db.VarChar(10)
+  description      String             @db.VarChar(500)
+  status           String             @default("submitted") @db.VarChar(10)
+  idempotencyKey   String             @map("idempotency_key") @db.VarChar(100)
+  requestDigest    String             @map("request_digest") @db.Char(64)
+  capturedAt       DateTime           @map("captured_at") @db.Timestamptz
+  source           String             @db.VarChar(10)
+  recordedBy       String             @map("recorded_by") @db.Uuid
+  recordedAt       DateTime           @default(now()) @map("recorded_at") @db.Timestamptz
+  decidedBy        String?            @map("decided_by") @db.Uuid
+  decidedAt        DateTime?          @map("decided_at") @db.Timestamptz
+  decisionReason   String?            @map("decision_reason") @db.VarChar(500)
+  version          Int                @default(1)
+  float            PettyCashFloat     @relation(fields: [tenantId, projectId, floatId], references: [tenantId, projectId, id], onDelete: Restrict)
+  site             Site               @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  costCode         CostCode?          @relation(fields: [tenantId, costCodeId], references: [tenantId, id], onDelete: Restrict)
+  bqItem           BqItem?            @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  supplier         Supplier?          @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  entries          PettyCashEntry[]
+  receipts         PettyCashReceipt[]
+  costEntries      CostEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, floatId, id])
+  @@unique([tenantId, number])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, floatId, recordedAt])
+  @@map("petty_cash_expenses")
+}
+
+// A receipt photo of an expense: private object storage, content sniffed, insert-only.
+model PettyCashReceipt {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  projectId   String           @map("project_id") @db.Uuid
+  expenseId   String           @map("expense_id") @db.Uuid
+  objectKey   String           @map("object_key") @db.VarChar(300)
+  contentType String           @map("content_type") @db.VarChar(40)
+  sizeBytes   Int              @map("size_bytes")
+  sha256      String           @db.Char(64)
+  scanStatus  String           @map("scan_status") @db.VarChar(15)
+  scanEngine  String           @map("scan_engine") @db.VarChar(40)
+  scannedAt   DateTime         @map("scanned_at") @db.Timestamptz
+  uploadedBy  String           @map("uploaded_by") @db.Uuid
+  uploadedAt  DateTime         @default(now()) @map("uploaded_at") @db.Timestamptz
+  expense     PettyCashExpense @relation(fields: [tenantId, projectId, expenseId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, objectKey])
+  @@index([tenantId, expenseId])
+  @@map("petty_cash_receipts")
+}
+
+// A cash count: counted cash against the book balance at that moment; approved (variance posted)
+// or returned by someone who neither counted nor holds the float.
+model PettyCashCount {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  tenantId       String           @map("tenant_id") @db.Uuid
+  projectId      String           @map("project_id") @db.Uuid
+  floatId        String           @map("float_id") @db.Uuid
+  number         String           @db.VarChar(20)
+  countedMinor   BigInt           @map("counted_minor")
+  bookMinor      BigInt           @map("book_minor")
+  bookSeq        BigInt           @map("book_seq")
+  varianceMinor  BigInt           @map("variance_minor")
+  note           String?          @db.VarChar(500)
+  status         String           @default("submitted") @db.VarChar(10)
+  countedBy      String           @map("counted_by") @db.Uuid
+  countedAt      DateTime         @default(now()) @map("counted_at") @db.Timestamptz
+  decidedBy      String?          @map("decided_by") @db.Uuid
+  decidedAt      DateTime?        @map("decided_at") @db.Timestamptz
+  decisionReason String?          @map("decision_reason") @db.VarChar(500)
+  version        Int              @default(1)
+  float          PettyCashFloat   @relation(fields: [tenantId, projectId, floatId], references: [tenantId, projectId, id], onDelete: Restrict)
+  entries        PettyCashEntry[]
+  costEntries    CostEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, floatId, id])
+  @@unique([tenantId, number])
+  @@map("petty_cash_counts")
+}
+
+// A manual cash-flow line: an expected client receipt (until certificates exist, D6.3/D7.1) or
+// another expected payment, with what was actually received.
+model CashFlowItem {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  projectId     String    @map("project_id") @db.Uuid
+  direction     String    @db.VarChar(3)
+  description   String    @db.VarChar(200)
+  expectedOn    DateTime  @map("expected_on") @db.Date
+  amountMinor   BigInt    @map("amount_minor")
+  status        String    @default("expected") @db.VarChar(10)
+  receivedOn    DateTime? @map("received_on") @db.Date
+  receivedMinor BigInt?   @map("received_minor")
+  reference     String?   @db.VarChar(60)
+  version       Int       @default(1)
+  createdBy     String    @map("created_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy     String    @map("updated_by") @db.Uuid
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+  project       Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId, status, expectedOn])
+  @@map("cash_flow_items")
 }
 
 // ---------------------------------------------------------------------------------------------

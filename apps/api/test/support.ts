@@ -195,6 +195,36 @@ import {
   transfersResponseSchema,
   transferTargetsResponseSchema,
   varianceResponseSchema,
+  billItemsResponseSchema,
+  bqItemSearchResponseSchema,
+  budgetDetailResponseSchema,
+  budgetLinesResponseSchema,
+  budgetsResponseSchema,
+  cashFlowItemResponseSchema,
+  cashFlowItemsResponseSchema,
+  costCodeResponseSchema,
+  costCodesResponseSchema,
+  costLedgerResponseSchema,
+  countResponseSchema,
+  countsResponseSchema,
+  custodiansResponseSchema,
+  expenseResponseSchema,
+  expensesResponseSchema,
+  floatLedgerResponseSchema,
+  floatResponseSchema,
+  floatsResponseSchema,
+  forecastResponseSchema,
+  journalResponseSchema,
+  journalsResponseSchema,
+  loadCostCodeDefaultsResponseSchema,
+  projectSpendingResponseSchema,
+  receiptResponseSchema,
+  smsParseResponseSchema,
+  spendAlertsResponseSchema,
+  spendingSettingsResponseSchema,
+  spendingSummaryResponseSchema,
+  topUpResponseSchema,
+  topUpsResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -325,6 +355,8 @@ export function responseContract(method: string, target: string) {
   if (p2p) return p2p;
   const schedule = scheduleContract(method, path);
   if (schedule) return schedule;
+  const spending = spendingContract(method, path);
+  if (spending) return spending;
   const quality = qualityContract(method, path);
   if (quality) return quality;
   const safety = safetyContract(method, path);
@@ -359,6 +391,45 @@ function safetyContract(method: string, path: string) {
   if (/^\/first-aid\/kits(\/[^/]+\/(checks|retire))?$/.test(rest)) return firstAidKitResponseSchema;
   if (/^\/first-aid\/first-aiders(\/[^/]+\/remove)?$/.test(rest)) return firstAiderResponseSchema;
   if (/^\/first-aid\/treatments(\/[^/]+\/(void|link))?$/.test(rest)) return treatmentResponseSchema;
+  return null;
+}
+
+/** The D5.4 spending endpoints' success contracts. */
+function spendingContract(method: string, path: string) {
+  const get = method === "get";
+  if (path === "spending/summary") return spendingSummaryResponseSchema;
+  if (path === "spending/settings") return spendingSettingsResponseSchema;
+  if (path === "spending/ledger") return costLedgerResponseSchema;
+  if (path === "spending/forecast") return forecastResponseSchema;
+  if (path === "spending/alerts") return spendAlertsResponseSchema;
+  if (/^spending\/projects\/[^/]+$/.test(path)) return projectSpendingResponseSchema;
+  if (/^spending\/projects\/[^/]+\/bills\/[^/]+\/items$/.test(path)) return billItemsResponseSchema;
+  if (/^spending\/projects\/[^/]+\/bq-items$/.test(path)) return bqItemSearchResponseSchema;
+  if (path === "cost-codes") return get ? costCodesResponseSchema : costCodeResponseSchema;
+  if (path === "cost-codes/defaults") return loadCostCodeDefaultsResponseSchema;
+  if (/^cost-codes\/[^/]+$/.test(path)) return costCodeResponseSchema;
+  if (path === "budgets") return get ? budgetsResponseSchema : budgetDetailResponseSchema;
+  if (/^budgets\/[^/]+\/lines$/.test(path))
+    return get ? budgetLinesResponseSchema : budgetDetailResponseSchema;
+  if (/^budgets\/.+$/.test(path)) return budgetDetailResponseSchema;
+  if (path === "cost-journals") return get ? journalsResponseSchema : journalResponseSchema;
+  if (/^cost-journals\/.+$/.test(path)) return journalResponseSchema;
+  if (path === "petty-cash/floats") return get ? floatsResponseSchema : floatResponseSchema;
+  if (path === "petty-cash/floats/custodians") return custodiansResponseSchema;
+  if (/^petty-cash\/floats\/[^/]+\/ledger$/.test(path)) return floatLedgerResponseSchema;
+  if (/^petty-cash\/floats\/[^/]+$/.test(path)) return floatResponseSchema;
+  if (path === "petty-cash/sms/parse") return smsParseResponseSchema;
+  if (path === "petty-cash/expenses") return get ? expensesResponseSchema : expenseResponseSchema;
+  if (/^petty-cash\/expenses\/[^/]+\/receipts$/.test(path)) return receiptResponseSchema;
+  if (/^petty-cash\/expenses\/.+$/.test(path)) return expenseResponseSchema;
+  if (/^petty-cash\/receipts\/[^/]+$/.test(path)) return z.unknown();
+  if (path === "petty-cash/top-ups") return get ? topUpsResponseSchema : topUpResponseSchema;
+  if (/^petty-cash\/top-ups\/.+$/.test(path)) return topUpResponseSchema;
+  if (path === "petty-cash/counts") return get ? countsResponseSchema : countResponseSchema;
+  if (/^petty-cash\/counts\/.+$/.test(path)) return countResponseSchema;
+  if (path === "cash-flow-items")
+    return get ? cashFlowItemsResponseSchema : cashFlowItemResponseSchema;
+  if (/^cash-flow-items\/.+$/.test(path)) return cashFlowItemResponseSchema;
   return null;
 }
 

@@ -33,6 +33,7 @@ import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
 import { seedQuality, type QualitySeedSummary } from "./quality-seed.js";
 import { seedSafety, type SafetySeedSummary } from "./safety-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
+import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -42,7 +43,8 @@ import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
  * synthetic attendance with timesheet periods, anomalies and an adjustment (attendance-seed.ts),
  * and (D5.1) the starter catalogue with synthetic suppliers, prices and payout details
  * (demo-procurement.ts), and (D6.2) the RUI-HTS schedule with a baseline, slipped actuals and
- * delays (schedule-seed.ts). Idempotent: existing records are kept as they are. Never runs in
+ * delays (schedule-seed.ts), and (D5.4) an approved RUI-HTS budget, cost codes, a petty-cash float
+ * with expenses, a count, a journal and forecast lines (demo-spending.ts). Idempotent: existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
  */
@@ -400,6 +402,7 @@ export type SeedSummary = {
   procureToPay: ProcureToPaySeedSummary;
   stores: StoresSeedSummary;
   schedule: ScheduleSeedSummary;
+  spending: SpendingSeedSummary;
   quality: QualitySeedSummary;
   safety: SafetySeedSummary;
 };
@@ -591,6 +594,14 @@ export async function seedDemo(
   });
   // After the attendance seed, so the company's public holidays shape the working calendar.
   const schedule = await seedSchedule(app, tenantId, owner.id);
+  // After procure-to-pay and stores: the ledger already holds the invoice and its settlement, and
+  // the budget starts from the approved BQ.
+  const spending = await seedSpending(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    financeId: userOf("finance").id,
+  });
   // After attendance (diary snapshots) and the schedule.
   const quality = await seedQuality(app, tenantId, {
     ownerId: owner.id,
@@ -616,6 +627,7 @@ export async function seedDemo(
     procureToPay,
     stores,
     schedule,
+    spending,
     quality,
     safety,
   };

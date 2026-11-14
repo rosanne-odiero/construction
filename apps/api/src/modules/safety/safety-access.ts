@@ -90,7 +90,7 @@ export const hasAny = (effective: ReadonlySet<Permission>, permissions: readonly
   permissions.some((permission) => effective.has(permission));
 
 /**
- * Health and safety access (ARCHITECTURE §4.8, decision D-70): reading needs projects.view plus a
+ * Health and safety access (ARCHITECTURE §4.9, decision D-70): reading needs projects.view plus a
  * site or project staff permission (SAFETY_READ_PERMISSIONS), so portal-only roles, labourers and
  * office roles without a site permission never see safety records; recording needs site.diary or
  * safety.manage; investigations, verification, closing, voiding and first-aid management need

@@ -200,8 +200,8 @@ serialized tenant transactions.
 Assignable project permissions are the shared catalogue's project-scoped permissions
 (`PROJECT_ASSIGNABLE_PERMISSIONS` in `packages/types`: `projects.*`, `bq.*`, `labour.*`,
 `attendance.*`, `payroll.prepare`/`review`, `procurement.requisition`/`approve`,
-`stores.manage`, `finance.view`, `site.diary`/`photos`, `quality`/`safety`/`plant`/
-`documents.manage`, `reports.view`).
+`stores.manage`, `finance.view`, `finance.petty_cash` (D5.4), `site.diary`/`photos`,
+`quality`/`safety`/`plant`/`documents.manage`, `reports.view`).
 Company-wide roles (`owner`, `finance`, custom roles marked company-wide) act on every
 project; other roles act only on assigned projects with role ∩ assignment. Self-membership
 discovery (including the custom role the user holds) and verified-recipient invitation
@@ -689,7 +689,7 @@ in incidents, injury codes and who was treated are returned only to managers (ot
 `restricted` or `null`). Every change sends the `version` it read (409 `version-conflict`);
 closed and cancelled projects are read-only (409 `project-read-only`). Lists take `limit` (1–100)
 and `cursor`; most take `search` (a number such as `12` or `INC-0012`, or text). Design:
-[ARCHITECTURE §4.8](../../docs/ARCHITECTURE.md#48-health-and-safety-d82).
+[ARCHITECTURE §4.9](../../docs/ARCHITECTURE.md#49-health-and-safety-d82).
 
 | Method / path                                                                | Input                                                                                                                                                                                                                   | Result / permission                                                                                                                                       |
 | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -715,7 +715,7 @@ and `cursor`; most take `search` (a number such as `12` or `INC-0012`, or text).
 Rules: induction flags are read from attendance and never block it; PPE is a register (no stores
 movement); a regulator decision is required before closing serious or fatal injuries and dangerous
 occurrences (COMPLIANCE-REVIEW CR-HS-01). Closed incidents, confirmed talks, recorded inductions and
-kit checks are immutable in the database. Problem codes are listed in ARCHITECTURE §4.8.
+kit checks are immutable in the database. Problem codes are listed in ARCHITECTURE §4.9.
 
 ## Development seed
 

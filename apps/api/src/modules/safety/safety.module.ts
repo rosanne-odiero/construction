@@ -13,7 +13,7 @@ import { SafetyController } from "./safety.controller.js";
 import { ToolboxTalksService } from "./toolbox-talks.service.js";
 
 /**
- * Health and safety (D8.2, ARCHITECTURE §4.8): site inductions and their status against
+ * Health and safety (D8.2, ARCHITECTURE §4.9): site inductions and their status against
  * attendance, toolbox talks, the PPE register, incidents and near misses with investigation and
  * the regulator decision, corrective actions, and first aid.
  */

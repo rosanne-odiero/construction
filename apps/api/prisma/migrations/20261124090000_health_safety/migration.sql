@@ -1,6 +1,6 @@
 -- D8.2 Health and safety (brief §5.12 "site induction records, toolbox talks with attendance, PPE
 -- register, incident and near-miss reporting with photos, first-aid log, corrective actions" and
--- §15 C/F; ARCHITECTURE §4.8; ERD §9; WORKFLOWS "Health and safety").
+-- §15 C/F; ARCHITECTURE §4.9; ERD §9; WORKFLOWS "Health and safety").
 -- Enforces, in the database as well as the API:
 -- * safety_settings: the company's induction checklist, induction validity and attendance
 --   look-back, the first-aid kit check interval and PPE replacement periods.

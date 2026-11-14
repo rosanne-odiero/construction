@@ -52,6 +52,7 @@ export const PERMISSIONS = [
   "finance.view",
   "finance.manage",
   "finance.view_sensitive",
+  "finance.petty_cash",
   "site.diary",
   "site.photos",
   "quality.manage",
@@ -122,8 +123,9 @@ export const isProjectPermission = (permission: Permission): boolean =>
  * the portals, so a client or labourer sees only the projects they are assigned to): the project,
  * BQ, labour, attendance, timesheet, payroll view/preparation/review, advance request/approval,
  * procurement, stores, site, quality, safety, plant, documents, reports, finance-view and portal
- * permissions. The company-level payroll rule and export permissions are never project-scoped.
- * Approval and payment permissions (`payroll.approve`, `payments.*`, `finance.manage`,
+ * permissions. D5.4 added `finance.petty_cash` (hold a site's petty-cash float: record its
+ * expenses and counts, ask for top-ups). The company-level payroll rule and export permissions are
+ * never project-scoped. Approval and payment permissions (`payroll.approve`, `payments.*`, `finance.manage`,
  * `finance.view_sensitive`) and the supplier portal stay out until their modules define project
  * behaviour. The database CHECK
  * `project_permissions_check` lists the same keys; effective = role ∩ assignment.
@@ -157,6 +159,7 @@ export const PROJECT_ASSIGNABLE_PERMISSIONS = [
   "procurement.approve",
   "stores.manage",
   "finance.view",
+  "finance.petty_cash",
   "site.diary",
   "site.photos",
   "quality.manage",

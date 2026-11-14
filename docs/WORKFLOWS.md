@@ -312,3 +312,60 @@ stateDiagram-v2
 | draft / submitted → cancelled | `stores.manage` or `procurement.approve`; reason | Nothing posted, counts kept as evidence; `stock_take.cancelled` | Expected version |
 
 GRNs post to stores as part of their own workflow (D5.2): recording receives the accepted quantities into the site's store; a void reverses them and is refused (`grn-stock-consumed`) when the goods were already issued or moved.
+
+## Spending: petty cash, reconciliation, budgets and journals (D5.4)
+
+Implemented in D5.4 ([ARCHITECTURE §4.8](./ARCHITECTURE.md#48-spending-and-cash-flow-d54)). The transition tables live in `packages/domain/src/spending/lifecycle.ts` and are repeated by the database guards (`app.guard_budget`, `app.guard_petty_cash_top_up`, `app.guard_petty_cash_expense`, `app.guard_petty_cash_count`, `app.guard_cost_journal`). A float's balance only changes through its own ledger entries (`app.post_float_entry`), and cost only through `cost_entries` posted once per source.
+
+```mermaid
+stateDiagram-v2
+  state Budget {
+    [*] --> b_draft : prepare (empty, from the approved BQ, or a copy of the version in force)
+    b_draft --> b_draft : add / change / remove lines (preparer becomes a contributor)
+    b_draft --> b_submitted : submit (lines fingerprinted)
+    b_submitted --> b_approved : approve on the digest (finance.manage + step-up, not a contributor)
+    b_submitted --> b_draft : return (reason)
+    b_draft --> b_cancelled : cancel (reason)
+    b_submitted --> b_cancelled : cancel (reason)
+  }
+  state TopUp {
+    [*] --> t_requested : ask (custodian or finance.manage; within the limit)
+    t_requested --> t_approved : approve (payments.approve + step-up, not the requester)
+    t_requested --> t_rejected : reject (reason)
+    t_approved --> t_paid : pay (payments.disburse + step-up, not the approver; method + reference)
+    t_requested --> t_cancelled : cancel (reason)
+    t_approved --> t_cancelled : cancel (reason)
+  }
+  state Expense {
+    [*] --> e_submitted : record (custodian; cash leaves the float)
+    e_submitted --> e_approved : approve (receipt attached; not the recorder or custodian)
+    e_submitted --> e_rejected : reject (reason; cash back on the book)
+  }
+  state Count {
+    [*] --> c_submitted : count (book balance snapshotted)
+    c_submitted --> c_approved : approve (not the counter or custodian; variance posted)
+    c_submitted --> c_returned : return (reason; count again)
+  }
+```
+
+| Workflow / transition | Actor, scope and preconditions | Side effects and audit event | Retry |
+|---|---|---|---|
+| Float opened | `finance.manage` on the site's project; one float per site; the custodian holds `finance.petty_cash` on the project | Float with balance 0 and a limit; `petty_cash.float_created` | Unique per site (409 `float-exists`) |
+| Custodian or limit changed; float closed | `finance.manage`; a new custodian only after an **approved count with nothing moved since** (or an empty float); closing needs a zero balance and nothing open | `petty_cash.float_updated` / `petty_cash.float_closed` | Expected version |
+| Top-up asked → approved → paid | asked by the custodian or `finance.manage` (balance + amount ≤ limit); approved by `payments.approve` (not the requester nor the float's custodian); paid by `payments.disburse` (not the requester, the approver nor the custodian) with method, reference (unique per method) and a paid-on date between the request and today | Paid: a `top_up` float entry (the float row locked); `petty_cash.top_up_requested/approved/paid/rejected/cancelled` (IDs and statuses only) | Expected version |
+| Expense recorded (submitted) | the float's custodian holding `finance.petty_cash`; dated today or within 90 days; tagged with a BQ item of the BQ in force or an active cost code and a category; M-Pesa needs a code (unique among expenses not rejected); amount + charge ≤ book balance | An `expense` float entry for amount + charge (locked; never below zero); `petty_cash.expense_recorded` (no amounts, codes or payees) | Client ID + `Idempotency-Key`: a replay returns the original; a changed retry of a recorded attempt is 409 `idempotency-key-reused`/`expense-id-conflict`, and the form keeps its ID and key and links to the recorded expense |
+| Expense: pasted SMS | any petty-cash reader | Draft only (`confirmsSettlement: false`): the form is filled and labelled; records already holding the code are named; the text is never stored | Read-only |
+| Receipt added | the recorder or `finance.manage`; not rejected; ≤ 3; JPEG/PNG/WebP within the size limit; malware hook | Private object, metadata row; `petty_cash.receipt_added` | Repeatable |
+| submitted → approved | `finance.manage` or `procurement.approve` on the project; **not the recorder and not the custodian**; at least one receipt | Cost entries: accrual + payment of the amount (its tags), charge accrual + payment (fees); `petty_cash.expense_approved` | Expected version |
+| submitted → rejected | same approvers; reason | An `expense_rejected` float entry restores the book (the custodian owes the cash); `petty_cash.expense_rejected` | Expected version |
+| **Reconciliation**: count recorded | the custodian or `finance.manage`; one open count per float | Book balance snapshotted; variance = counted − book; `petty_cash.counted` | One open count (409 `count-open`) |
+| count submitted → approved | `finance.manage` or `procurement.approve`; **not the counter and not the custodian** | A `count_adjustment` float entry of the variance; cost entries of the shortage (positive) or overage (negative), category petty cash; `petty_cash.count_approved` | Expected version |
+| count submitted → returned | same approvers; reason | Nothing posted; count again; `petty_cash.count_returned` | Expected version |
+| **Budget** prepared, lines edited, submitted | `finance.manage` or `bq.edit` on the project; one draft or submitted version per project; a line is a BQ item **or** a cost code, once each | Totals kept by triggers; submit stores the SHA-256 digest of the lines; `budget.created/line_added/line_updated/line_removed/submitted` | Expected version |
+| budget submitted → approved | `finance.manage` + step-up; **not a contributor**; quotes the digest (409 `budget-stale` if the lines changed) | The newest approved version is in force; an approved version never changes; `budget.approved` | Expected version + digest |
+| budget submitted → draft / cancelled | return: `finance.manage`, reason; cancel: a preparer, reason | `budget.returned` / `budget.cancelled` | Expected version |
+| Journal proposed (adjustment or reversal) | company-wide `finance.manage`; each line tagged (BQ item or cost code, category, counterparty, reference, date, non-zero amount); a reversal names one entry not yet reversed and not itself a reversal | Nothing posts yet; `cost_journal.proposed` | — |
+| journal submitted → approved / rejected | `finance.manage` + step-up for approval; **never the proposer**; reason to reject | Approved: one cost entry per line (a reversal carries the opposite amount and the original's tags); `cost_journal.approved/rejected` | Expected version |
+| Expected receipt or payment (cash-flow line) | `finance.manage` on the project | Shown in the forecast on its expected date until received or cancelled; `cash_flow.item_created/updated/received/cancelled` | Expected version |
+
+Supplier invoices and settlements post to the cost ledger as part of their own workflow (D5.2): approval (matched → approved) posts the accrual net of VAT, each settlement posts the cost part of the cash paid; neither can be posted twice.

@@ -73,6 +73,21 @@ const ROUTES = [
   "/stores/movements/00000000-0000-4000-8000-000000000000/return",
   "/stores/transfers/00000000-0000-4000-8000-000000000000",
   "/stores/stock-takes/00000000-0000-4000-8000-000000000000",
+  "/spending",
+  "/spending/projects/30000000-0000-4000-8000-000000000001",
+  "/spending/projects/30000000-0000-4000-8000-000000000001/bills/74000000-0000-4000-8000-000000000001",
+  "/spending/ledger",
+  "/spending/petty-cash",
+  "/spending/petty-cash/75000000-0000-4000-8000-000000000001",
+  "/spending/petty-cash/75000000-0000-4000-8000-000000000001/expense",
+  "/spending/petty-cash/expenses/75100000-0000-4000-8000-000000000001",
+  "/spending/forecast",
+  "/spending/alerts",
+  "/spending/budgets",
+  "/spending/budgets/76000000-0000-4000-8000-000000000001",
+  "/spending/journals",
+  "/spending/journals/00000000-0000-4000-8000-000000000000",
+  "/spending/settings",
 ];
 
 export default async function warmUp(config: FullConfig) {

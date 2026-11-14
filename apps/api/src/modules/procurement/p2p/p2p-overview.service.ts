@@ -6,6 +6,7 @@ import {
   inboxResponseSchema,
   type InboxItem,
 } from "@pm-buddy/validation";
+import type { Prisma } from "../../../generated/prisma/client.js";
 import type { Scope } from "../../identity/access-policy.js";
 import type { Principal } from "../../identity/auth.service.js";
 import { TenantScope } from "../../identity/tenant-scope.service.js";
@@ -211,76 +212,12 @@ export class P2pOverviewService {
 
   commitments(principal: Principal, projectId: string, req: Request) {
     return this.scope.run(principal, req, async (scope: Scope) => {
-      const { tx, access } = scope;
       const project = await this.access.viewer(scope, projectId);
-      const [lpoLines, invoiceLines, settlements] = await Promise.all([
-        tx.lpoLine.findMany({
-          where: { tenantId: access.tenantId, lpo: { projectId, status: "approved" } },
-          include: {
-            requisitionLine: { include: { bqItem: { select: { ref: true, description: true } } } },
-          },
-        }),
-        tx.supplierInvoiceLine.findMany({
-          where: { tenantId: access.tenantId, invoice: { projectId, status: { in: ACCRUED } } },
-          include: {
-            lpoLine: {
-              include: {
-                requisitionLine: {
-                  include: { bqItem: { select: { ref: true, description: true } } },
-                },
-              },
-            },
-          },
-        }),
-        tx.invoiceSettlement.aggregate({
-          where: { tenantId: access.tenantId, payable: { invoice: { projectId } } },
-          _sum: { amountMinor: true },
-        }),
-      ]);
-      type Bucket = {
-        bqItem: {
-          versionId: string;
-          lineageId: string;
-          ref: string | null;
-          description: string;
-        } | null;
-        committed: number;
-        accrued: number;
-      };
-      const buckets = new Map<string, Bucket>();
-      const bucket = (line: {
-        bqVersionId: string | null;
-        bqItemLineageId: string | null;
-        bqItem: { ref: string | null; description: string } | null;
-      }) => {
-        const key =
-          line.bqVersionId && line.bqItemLineageId ? `${line.bqItemLineageId}` : "untagged";
-        if (!buckets.has(key))
-          buckets.set(key, {
-            bqItem:
-              line.bqVersionId && line.bqItemLineageId && line.bqItem
-                ? {
-                    versionId: line.bqVersionId,
-                    lineageId: line.bqItemLineageId,
-                    ref: line.bqItem.ref,
-                    description: line.bqItem.description,
-                  }
-                : null,
-            committed: 0,
-            accrued: 0,
-          });
-        return buckets.get(key)!;
-      };
-      for (const line of lpoLines)
-        bucket(line.requisitionLine).committed += Number(line.netAmountMinor);
-      for (const line of invoiceLines)
-        bucket(line.lpoLine.requisitionLine).accrued += Number(line.netAmountMinor);
-      const items = [...buckets.values()].map((entry) => ({
-        bqItem: entry.bqItem,
-        committedMinor: entry.committed,
-        accruedMinor: entry.accrued,
-        openCommitmentMinor: Math.max(0, entry.committed - entry.accrued),
-      }));
+      const { items, paidMinor } = await projectCommitments(
+        scope.tx,
+        scope.access.tenantId,
+        projectId,
+      );
       const sum = (pick: (item: (typeof items)[number]) => number) =>
         items.reduce((total, item) => total + pick(item), 0);
       return commitmentsResponseSchema.parse({
@@ -289,10 +226,91 @@ export class P2pOverviewService {
           committedMinor: sum((item) => item.committedMinor),
           accruedMinor: sum((item) => item.accruedMinor),
           openCommitmentMinor: sum((item) => item.openCommitmentMinor),
-          paidMinor: Number(settlements._sum.amountMinor ?? 0n),
+          paidMinor,
         },
         items,
       });
     });
   }
+}
+
+export type CommitmentBucket = {
+  bqItem: { versionId: string; lineageId: string; ref: string | null; description: string } | null;
+  committedMinor: number;
+  accruedMinor: number;
+  /** Committed − accrued, never below zero: approved LPOs not yet invoiced (net of VAT). */
+  openCommitmentMinor: number;
+};
+
+/**
+ * A project's commitments per BQ item of the requisitions (D5.2, brief §5.8, §15 C): committed
+ * (approved LPO lines, net of VAT), accrued (lines of approved invoices, net) and still open
+ * (committed − accrued, at least zero), plus what was paid (settlements, cash including VAT).
+ * Shared by the procurement commitments view and D5.4 budget against actual, so both show the
+ * same open commitment.
+ */
+export async function projectCommitments(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  projectId: string,
+): Promise<{ items: CommitmentBucket[]; paidMinor: number }> {
+  const [lpoLines, invoiceLines, settlements] = await Promise.all([
+    tx.lpoLine.findMany({
+      where: { tenantId, lpo: { projectId, status: "approved" } },
+      include: {
+        requisitionLine: { include: { bqItem: { select: { ref: true, description: true } } } },
+      },
+    }),
+    tx.supplierInvoiceLine.findMany({
+      where: { tenantId, invoice: { projectId, status: { in: ACCRUED } } },
+      include: {
+        lpoLine: {
+          include: {
+            requisitionLine: {
+              include: { bqItem: { select: { ref: true, description: true } } },
+            },
+          },
+        },
+      },
+    }),
+    tx.invoiceSettlement.aggregate({
+      where: { tenantId, payable: { invoice: { projectId } } },
+      _sum: { amountMinor: true },
+    }),
+  ]);
+  type Bucket = Omit<CommitmentBucket, "openCommitmentMinor">;
+  const buckets = new Map<string, Bucket>();
+  const bucket = (line: {
+    bqVersionId: string | null;
+    bqItemLineageId: string | null;
+    bqItem: { ref: string | null; description: string } | null;
+  }) => {
+    const key = line.bqVersionId && line.bqItemLineageId ? `${line.bqItemLineageId}` : "untagged";
+    if (!buckets.has(key))
+      buckets.set(key, {
+        bqItem:
+          line.bqVersionId && line.bqItemLineageId && line.bqItem
+            ? {
+                versionId: line.bqVersionId,
+                lineageId: line.bqItemLineageId,
+                ref: line.bqItem.ref,
+                description: line.bqItem.description,
+              }
+            : null,
+        committedMinor: 0,
+        accruedMinor: 0,
+      });
+    return buckets.get(key)!;
+  };
+  for (const line of lpoLines)
+    bucket(line.requisitionLine).committedMinor += Number(line.netAmountMinor);
+  for (const line of invoiceLines)
+    bucket(line.lpoLine.requisitionLine).accruedMinor += Number(line.netAmountMinor);
+  return {
+    items: [...buckets.values()].map((entry) => ({
+      ...entry,
+      openCommitmentMinor: Math.max(0, entry.committedMinor - entry.accruedMinor),
+    })),
+    paidMinor: Number(settlements._sum.amountMinor ?? 0n),
+  };
 }

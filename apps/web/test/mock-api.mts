@@ -87,6 +87,12 @@ import { handlePhotos, initialPhotos } from "./mock-photos.mts";
 import { latestApproved } from "./mock-bq-model.mts";
 import { handleP2p, initialP2p, p2pDocument, type P2pDeps, type P2pState } from "./mock-p2p.mts";
 import { handleStores, initialStores, type StoresState } from "./mock-stores.mts";
+import {
+  handleSpending,
+  initialSpending,
+  spendingReceipt,
+  type SpendingState,
+} from "./mock-spending.mts";
 import { handleSchedule, initialSchedule, type ScheduleState } from "./mock-schedule.mts";
 import { handleQuality, initialQuality, type QualityState } from "./mock-quality.mts";
 
@@ -170,6 +176,8 @@ type State = {
   p2p: P2pState;
   /** D5.3 stores, ledger, transfers, stock takes and variance (mock-stores.mts). */
   stores: StoresState;
+  /** D5.4 budgets, cost ledger, petty cash, forecast and alerts (mock-spending.mts). */
+  spending: SpendingState;
   labour: LabourState;
   attendance: AttendanceState;
   diaries: SiteDiary[];
@@ -406,6 +414,7 @@ function fixture(persona: Persona): State {
     procurement,
     p2p: initialP2p(p2pBase(projects, procurement, bq)),
     stores: initialStores(procurement, bq.buildups),
+    spending: initialSpending(projectInfo(projects)),
     projects,
     labour,
     attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
@@ -559,6 +568,17 @@ function projectPermissions(state: State, entry: ProjectState): Permission[] {
   const assignment =
     state.team.get(entry.project.id)?.find((member) => member.userId === user.id)?.assignment ?? [];
   return SYSTEM_ROLE_PERMISSIONS[user.role].filter((key) => assignment.includes(key));
+}
+
+/** Projects with their sites, as the spending and stores mocks see them. */
+function projectInfo(projects: ProjectState[]) {
+  return projects.map(({ project, sites }) => ({
+    id: project.id,
+    code: project.code,
+    name: project.name,
+    status: project.status,
+    sites: sites.map(({ site }) => ({ id: site.id, name: site.name })),
+  }));
 }
 
 function find(state: State, projectId: string, permission: Permission): ProjectState {
@@ -856,6 +876,42 @@ async function handle(
     body,
   );
   if (stores) return stores;
+  const spending = handleSpending(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      projects: projectInfo(state.projects),
+      projectPermissions: (projectId) => {
+        const entry = state.projects.find((candidate) => candidate.project.id === projectId);
+        return entry ? projectPermissions(state, entry) : [];
+      },
+      // Company-wide members (owner, finance) hold their role on every project, as in the API.
+      companyPermissions: isTenantWide(state.persona) ? rolePermissions(state) : null,
+      holders: (projectId, permission) =>
+        (state.team.get(projectId) ?? [])
+          .filter((member) =>
+            member.role === "owner"
+              ? true
+              : SYSTEM_ROLE_PERMISSIONS[member.role].includes(permission) &&
+                (member.assignment ?? []).includes(permission),
+          )
+          .map((member) => ({ id: member.userId, displayName: member.displayName })),
+      requireStepUp: () => requireStepUp(state),
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+      contentType: req.headers["content-type"],
+      raw,
+    },
+    state.spending,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (spending) return spending;
   const p2p = handleP2p(
     {
       ...p2pBase(state.projects, state.procurement, state.bq),
@@ -1297,6 +1353,18 @@ const server = createServer((req, res) => {
     if (download && req.method === "GET") {
       try {
         const file = p2pDocument(stateFor(req).p2p, download[1]!);
+        if (!file) return send(res, 404, { code: "not-found" }, true);
+        res.writeHead(200, { "Content-Type": file.contentType, "Cache-Control": "no-store" });
+        return res.end(file.content);
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
+    // Petty-cash receipt photos are downloaded as bytes too.
+    const receipt = /^\/petty-cash\/receipts\/([^/]+)$/.exec(path);
+    if (receipt && req.method === "GET") {
+      try {
+        const file = spendingReceipt(stateFor(req).spending, receipt[1]!);
         if (!file) return send(res, 404, { code: "not-found" }, true);
         res.writeHead(200, { "Content-Type": file.contentType, "Cache-Control": "no-store" });
         return res.end(file.content);

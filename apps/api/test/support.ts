@@ -30,8 +30,20 @@ import {
   auditEventsResponseSchema,
   authProvidersResponseSchema,
   authResponseSchema,
-  clientProjectResponseSchema,
-  clientProjectsResponseSchema,
+  clientDiariesResponseSchema,
+  clientPaymentsResponseSchema,
+  clientPayResponseSchema,
+  clientPhotosResponseSchema,
+  clientPortalOverviewResponseSchema,
+  clientPortalProjectsResponseSchema,
+  clientPreferencesResponseSchema,
+  clientProgressResponseSchema,
+  clientStatementResponseSchema,
+  clientVariationDetailResponseSchema,
+  clientVariationsResponseSchema,
+  fxRatesResponseSchema,
+  paymentInstructionsResponseSchema,
+  variationClientResponseSchema,
   csrfResponseSchema,
   diariesResponseSchema,
   diaryResponseSchema,
@@ -188,6 +200,7 @@ import {
   scheduleDelaysResponseSchema,
   scheduleDependencyResponseSchema,
   scheduleResponseSchema,
+  sitePhotoResponseSchema,
   sitePhotosResponseSchema,
   checklistTemplateResponseSchema,
   checklistTemplatesResponseSchema,
@@ -323,15 +336,15 @@ export function responseContract(method: string, target: string) {
     return method === "get" ? rolesResponseSchema : roleResponseSchema;
   if (/^tenants\/current\/roles\/[^/]+$/.test(path) && method === "patch")
     return roleResponseSchema;
-  if (path === "portal/client/projects") return clientProjectsResponseSchema;
-  if (/^portal\/client\/projects\/[^/]+$/.test(path)) return clientProjectResponseSchema;
+  const clientPortal = clientPortalContract(path);
+  if (clientPortal) return clientPortal;
   if (path === "portal/worker") return workerPortalResponseSchema;
   const supplierPortal = supplierPortalContract(method, path);
   if (supplierPortal) return supplierPortal;
   if (/^projects\/[^/]+\/labourers\/invitations$/.test(path)) return invitationResponseSchema;
   if (path === "projects") return method === "get" ? projectsResponseSchema : projectResponseSchema;
-  if (/^projects\/[^/]+\/photos(\?.*)?$/.test(path) && method === "get")
-    return sitePhotosResponseSchema;
+  if (/^projects\/[^/]+\/photos(\?.*)?$/.test(path))
+    return method === "get" ? sitePhotosResponseSchema : sitePhotoResponseSchema;
   if (/^projects\/[^/]+\/diaries\/attendance$/.test(path)) return diaryAttendanceResponseSchema;
   if (/^projects\/[^/]+\/diaries$/.test(path))
     return method === "get" ? diariesResponseSchema : diaryResponseSchema;
@@ -466,6 +479,34 @@ function documentsContract(method: string, path: string) {
   }
   if (rest === "") return get ? approvalListResponseSchema : approvalResponseSchema;
   return approvalResponseSchema;
+}
+
+/** The D7.1 client portal endpoints' success contracts (client and staff sides). */
+function clientPortalContract(full: string) {
+  const path = full.split("?")[0]!;
+  if (
+    /^projects\/[^/]+\/(client-payments(\/[^/]+\/reverse|\/cash-flow-items\/[^/]+\/link)?|client-settings)$/.test(
+      path,
+    )
+  )
+    return clientPaymentsResponseSchema;
+  if (/^projects\/[^/]+\/bq\/variations\/[^/]+\/client$/.test(path))
+    return variationClientResponseSchema;
+  if (path === "client-portal/payment-instructions") return paymentInstructionsResponseSchema;
+  if (path === "client-portal/fx-rates") return fxRatesResponseSchema;
+  if (!path.startsWith("portal/client")) return null;
+  if (path === "portal/client/projects") return clientPortalProjectsResponseSchema;
+  if (path === "portal/client/preferences") return clientPreferencesResponseSchema;
+  const rest = path.replace(/^portal\/client\/projects\/[^/]+/, "");
+  if (rest === "") return clientPortalOverviewResponseSchema;
+  if (rest === "/progress") return clientProgressResponseSchema;
+  if (rest === "/photos") return clientPhotosResponseSchema;
+  if (rest === "/diaries") return clientDiariesResponseSchema;
+  if (rest === "/statement") return clientStatementResponseSchema;
+  if (rest === "/pay") return clientPayResponseSchema;
+  if (rest === "/variations") return clientVariationsResponseSchema;
+  if (/^\/variations\/[^/]+(\/decision)?$/.test(rest)) return clientVariationDetailResponseSchema;
+  return z.unknown();
 }
 
 /** The D7.2 supplier portal endpoints' success contracts (supplier and staff sides). */

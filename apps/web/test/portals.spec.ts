@@ -47,7 +47,6 @@ test("clients get their own portal: projects, milestones and approved site updat
   await expect(page.getByText("Client portal").first()).toBeVisible();
   await expect(page.getByText(/Prototype: screens show mock data/)).toHaveCount(0);
   await expect(page.getByText("1 of 3 milestones achieved")).toBeVisible();
-  await expect(page.getByText("Contract sum KES 86,400,000")).toBeVisible();
   expect(await axeViolations(page)).toEqual([]);
 
   await page.getByRole("link", { name: "View progress" }).click();

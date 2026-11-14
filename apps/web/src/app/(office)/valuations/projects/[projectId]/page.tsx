@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { Ruler } from "lucide-react";
+import { HandCoins, Ruler } from "lucide-react";
 import {
   costToCompleteResponseSchema,
   earnedValueResponseSchema,
@@ -140,13 +140,22 @@ export default async function ProjectValuationsPage({
         title={project ? `${project.code} · ${project.name}` : t("metaTitle")}
         description={t("description")}
         actions={
-          access.measurements ? (
-            <Button asChild size="sm" variant="outline">
-              <Link href={`${base}/measure`}>
-                <Ruler aria-hidden /> {t("measure")}
-              </Link>
-            </Button>
-          ) : null
+          <>
+            {access.measurements ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`${base}/measure`}>
+                  <Ruler aria-hidden /> {t("measure")}
+                </Link>
+              </Button>
+            ) : null}
+            {access.certificates ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`${base}/client`}>
+                  <HandCoins aria-hidden /> {t("clientPayments")}
+                </Link>
+              </Button>
+            ) : null}
+          </>
         }
       />
       <ProjectTabs projectId={projectId} current={tab} tabs={tabs} />

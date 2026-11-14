@@ -44,6 +44,8 @@ import { peopleOf, personOf, safeMinor, type BqVersionRow } from "./bq-mappers.j
 import { BqVersionWriter } from "./bq-version-writer.js";
 import { latestApproved, versionsOf } from "./bq-versions.service.js";
 import { InstructionsService } from "./instructions.service.js";
+import { refuseClientPortalMember } from "../portals/client/client-portal-access.js";
+import { clientApprovalOf } from "./variation-client-approval.js";
 import { variationDigest } from "./variation-digest.js";
 
 type Tx = Prisma.TransactionClient;
@@ -113,6 +115,7 @@ export class VariationsService {
     return this.scope.run(principal, req, async (scope) => {
       const { tx, access } = scope;
       const { project, effective } = await this.access.load(scope, projectId, "bq.view");
+      refuseClientPortalMember(scope);
       const readOnly = isProjectReadOnly(project.status as ProjectStatus);
       const found = await versionsOf(tx, access.tenantId, projectId);
       const rows = found
@@ -144,6 +147,7 @@ export class VariationsService {
   get(principal: Principal, projectId: string, variationId: string, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       const { project, effective } = await this.access.load(scope, projectId, "bq.view");
+      refuseClientPortalMember(scope);
       const row = await this.row(scope, projectId, variationId);
       return this.detail(scope, row, project.status as ProjectStatus, effective);
     });
@@ -250,10 +254,15 @@ export class VariationsService {
     const status = row.status as VariationStatus;
     const maker = isVariationMaker(row, access.userId);
     const stale = summary!.stale;
+    const client = await clientApprovalOf(tx, access.tenantId, row);
     const actions = allowedVariationActions(status).filter((action) => {
       if (readOnly) return false;
       if (action === "approve" || action === "reject")
-        return effective.has("bq.approve_variation") && !maker && (action === "reject" || !stale);
+        return (
+          effective.has("bq.approve_variation") &&
+          !maker &&
+          (action === "reject" || (!stale && client.satisfied))
+        );
       if (action === "rebase") return effective.has("bq.edit") && stale;
       return effective.has("bq.edit");
     });
@@ -268,7 +277,9 @@ export class VariationsService {
               ? "maker"
               : stale
                 ? "stale"
-                : null;
+                : !client.satisfied
+                  ? "client"
+                  : null;
     const projected = projectedTotals(
       {
         subtotalMinor: safeMinor(base.subtotalMinor),
@@ -886,6 +897,11 @@ export class VariationsService {
           AND id = ${variationId}::uuid FOR UPDATE`;
         const row = await this.row(scope, projectId, variationId);
         const to = this.assertDecidable(scope, row, "approve", input);
+        if (!(await clientApprovalOf(tx, access.tenantId, row)).satisfied)
+          throw bqConflict(
+            "client-approval-required",
+            "This project needs the client's approval of this submission first; send it to the client",
+          );
         const found = (await versionsOf(tx, access.tenantId, projectId))!;
         const latest = latestApproved(found.versions)!;
         if (latest.id !== row.baseVersionId)

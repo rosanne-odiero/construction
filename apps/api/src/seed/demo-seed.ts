@@ -37,6 +37,7 @@ import { seedDocuments, type DocumentsSeedSummary } from "./documents-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 import { seedValuations, type ValuationsSeedSummary } from "./demo-valuations.js";
+import { seedClientPortal, type ClientPortalSeedSummary } from "./demo-client-portal.js";
 import {
   DEMO_SUPPLIER_PORTAL_USER,
   seedSupplierPortal,
@@ -439,6 +440,7 @@ export type SeedSummary = {
   valuations: ValuationsSeedSummary;
   safety: SafetySeedSummary;
   supplierPortal: SupplierPortalSeedSummary;
+  clientPortal: ClientPortalSeedSummary;
   plant: PlantSeedSummary;
   reports: ReportsSeedSummary;
   documents: DocumentsSeedSummary;
@@ -691,6 +693,20 @@ export async function seedDemo(
       identifier: namespaced(DEMO_SUPPLIER_PORTAL_USER.identifier, options.namespace),
     },
   );
+  // After valuations (certified certificates to pay) and documents (an open instruction): the
+  // client's account on RUI-HTS, Paybill and FX settings, a part payment and a variation sent to
+  // the client. It adds nothing the earlier summaries count.
+  const clientPortal = await seedClientPortal(
+    app,
+    tenantId,
+    {
+      ownerId: owner.id,
+      projectManagerId: userOf("projectManager").id,
+      siteAgentId: userOf("siteAgent").id,
+      financeId: userOf("finance").id,
+    },
+    { resetCredentials: options.resetCredentials },
+  );
   // Last: subscriptions to reports over everything above.
   const reports = await seedReports(app, tenantId, {
     ownerId: owner.id,
@@ -714,6 +730,7 @@ export async function seedDemo(
     valuations,
     safety,
     supplierPortal,
+    clientPortal,
     plant,
     reports,
     documents,

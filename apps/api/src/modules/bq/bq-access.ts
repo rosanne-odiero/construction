@@ -42,6 +42,7 @@ export type BqProblem =
   | "invalid-transition"
   | "reason-required"
   | "variation-stale"
+  | "client-approval-required"
   | "variation-not-stale"
   | "variation-empty"
   | "variation-line-invalid"

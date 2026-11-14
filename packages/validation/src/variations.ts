@@ -373,7 +373,9 @@ export const variationDetailSchema = variationSummarySchema.extend({
     canEdit: z.boolean(),
     actions: z.array(variationActionSchema),
     /** Why approval is not available to the caller, when it is not. */
-    approvalBlocker: z.enum(["permission", "maker", "stale", "status", "read-only"]).nullable(),
+    approvalBlocker: z
+      .enum(["permission", "maker", "stale", "status", "read-only", "client"])
+      .nullable(),
   }),
 });
 

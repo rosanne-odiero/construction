@@ -64,6 +64,7 @@ export type SpendingProblem =
   | "top-up-date-invalid"
   | "top-up-reference-taken"
   | "received-date-invalid"
+  | "cash-flow-item-linked"
   | "idempotency-key-required"
   | "idempotency-key-reused"
   | "expense-id-conflict"

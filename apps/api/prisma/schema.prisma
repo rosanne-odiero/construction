@@ -144,10 +144,10 @@ model RecoveryCode {
 }
 
 model Tenant {
-  id                  String                 @id @default(uuid()) @map("tenant_id") @db.Uuid
-  name                String                 @db.VarChar(150)
-  createdBy           String                 @map("created_by") @db.Uuid
-  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  id                  String                      @id @default(uuid()) @map("tenant_id") @db.Uuid
+  name                String                      @db.VarChar(150)
+  createdBy           String                      @map("created_by") @db.Uuid
+  createdAt           DateTime                    @default(now()) @map("created_at") @db.Timestamptz
   members             Membership[]
   projects            Project[]
   invites             Invitation[]
@@ -179,6 +179,9 @@ model Tenant {
   safetySettings      SafetySettings?
   plantSettings       PlantSettings?
   complianceTypes     ComplianceType[]
+  paymentInstructions ClientPaymentInstructions[]
+  fxRates             FxRate[]
+  clientPreferences   ClientPreference[]
 
   @@map("tenants")
 }
@@ -293,6 +296,10 @@ model Project {
   documents         Document[]
   complianceRecords ComplianceRecord[]
   approvalRequests  ApprovalRequest[]
+
+  clientSettings          ProjectClientSettings[]
+  clientPayments          ClientPayment[]
+  variationClientRequests VariationClientRequest[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -827,42 +834,44 @@ model Instruction {
 // API and app.guard_variation_order; submission freezes a snapshot digest; a decision is made by
 // someone other than the creator or submitter; approval creates the next BQ version atomically.
 model VariationOrder {
-  id             String                  @id @default(uuid(7)) @db.Uuid
-  tenantId       String                  @map("tenant_id") @db.Uuid
-  projectId      String                  @map("project_id") @db.Uuid
-  bqId           String                  @map("bq_id") @db.Uuid
-  instructionId  String                  @map("instruction_id") @db.Uuid
-  baseVersionId  String                  @map("base_version_id") @db.Uuid
-  number         String                  @db.VarChar(30)
-  title          String                  @db.VarChar(200)
-  description    String?                 @db.VarChar(4000)
-  status         String                  @default("draft") @db.VarChar(20)
-  additionsMinor BigInt                  @default(0) @map("additions_minor")
-  omissionsMinor BigInt                  @default(0) @map("omissions_minor")
-  netMinor       BigInt                  @default(0) @map("net_minor")
-  lineCount      Int                     @default(0) @map("line_count")
-  snapshotDigest String?                 @map("snapshot_digest") @db.Char(64)
-  submittedBy    String?                 @map("submitted_by") @db.Uuid
-  submittedAt    DateTime?               @map("submitted_at") @db.Timestamptz
-  decidedBy      String?                 @map("decided_by") @db.Uuid
-  decidedAt      DateTime?               @map("decided_at") @db.Timestamptz
-  decisionReason String?                 @map("decision_reason") @db.VarChar(500)
-  cancelReason   String?                 @map("cancel_reason") @db.VarChar(500)
-  version        Int                     @default(1)
-  createdBy      String                  @map("created_by") @db.Uuid
-  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy      String                  @map("updated_by") @db.Uuid
-  updatedAt      DateTime                @default(now()) @map("updated_at") @db.Timestamptz
-  contributors   String[]                @default([]) @db.Uuid
-  project        Project                 @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  bq             Bq                      @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Cascade)
-  instruction    Instruction             @relation(fields: [tenantId, projectId, instructionId], references: [tenantId, projectId, id], onDelete: Restrict)
-  baseVersion    BqVersion               @relation("VariationBase", fields: [tenantId, bqId, baseVersionId], references: [tenantId, bqId, id], onDelete: Restrict)
-  resultVersions BqVersion[]             @relation("VariationResult")
+  id             String                   @id @default(uuid(7)) @db.Uuid
+  tenantId       String                   @map("tenant_id") @db.Uuid
+  projectId      String                   @map("project_id") @db.Uuid
+  bqId           String                   @map("bq_id") @db.Uuid
+  instructionId  String                   @map("instruction_id") @db.Uuid
+  baseVersionId  String                   @map("base_version_id") @db.Uuid
+  number         String                   @db.VarChar(30)
+  title          String                   @db.VarChar(200)
+  description    String?                  @db.VarChar(4000)
+  status         String                   @default("draft") @db.VarChar(20)
+  additionsMinor BigInt                   @default(0) @map("additions_minor")
+  omissionsMinor BigInt                   @default(0) @map("omissions_minor")
+  netMinor       BigInt                   @default(0) @map("net_minor")
+  lineCount      Int                      @default(0) @map("line_count")
+  snapshotDigest String?                  @map("snapshot_digest") @db.Char(64)
+  submittedBy    String?                  @map("submitted_by") @db.Uuid
+  submittedAt    DateTime?                @map("submitted_at") @db.Timestamptz
+  decidedBy      String?                  @map("decided_by") @db.Uuid
+  decidedAt      DateTime?                @map("decided_at") @db.Timestamptz
+  decisionReason String?                  @map("decision_reason") @db.VarChar(500)
+  cancelReason   String?                  @map("cancel_reason") @db.VarChar(500)
+  version        Int                      @default(1)
+  createdBy      String                   @map("created_by") @db.Uuid
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy      String                   @map("updated_by") @db.Uuid
+  updatedAt      DateTime                 @default(now()) @map("updated_at") @db.Timestamptz
+  contributors   String[]                 @default([]) @db.Uuid
+  project        Project                  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  bq             Bq                       @relation(fields: [tenantId, projectId, bqId], references: [tenantId, projectId, id], onDelete: Cascade)
+  instruction    Instruction              @relation(fields: [tenantId, projectId, instructionId], references: [tenantId, projectId, id], onDelete: Restrict)
+  baseVersion    BqVersion                @relation("VariationBase", fields: [tenantId, bqId, baseVersionId], references: [tenantId, bqId, id], onDelete: Restrict)
+  resultVersions BqVersion[]              @relation("VariationResult")
   lines          VariationLine[]
   statusChanges  VariationStatusChange[]
+  clientRequests VariationClientRequest[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
   @@unique([tenantId, bqId, id])
   @@unique([tenantId, id, baseVersionId])
   @@unique([tenantId, projectId, number])
@@ -3528,6 +3537,8 @@ model Valuation {
   lines                    ValuationLine[]
   materials                ValuationMaterial[]
   adjustments              ValuationAdjustment[]
+  cashFlowItems            CashFlowItem[]
+  clientPayments           ClientPayment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -4266,26 +4277,31 @@ model PettyCashCount {
 // A manual cash-flow line: an expected client receipt (until certificates exist, D6.3/D7.1) or
 // another expected payment, with what was actually received.
 model CashFlowItem {
-  id            String    @id @default(uuid(7)) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  projectId     String    @map("project_id") @db.Uuid
-  direction     String    @db.VarChar(3)
-  description   String    @db.VarChar(200)
-  expectedOn    DateTime  @map("expected_on") @db.Date
-  amountMinor   BigInt    @map("amount_minor")
-  status        String    @default("expected") @db.VarChar(10)
-  receivedOn    DateTime? @map("received_on") @db.Date
-  receivedMinor BigInt?   @map("received_minor")
-  reference     String?   @db.VarChar(60)
-  version       Int       @default(1)
-  createdBy     String    @map("created_by") @db.Uuid
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy     String    @map("updated_by") @db.Uuid
-  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz
-  project       Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  id            String     @id @default(uuid(7)) @db.Uuid
+  tenantId      String     @map("tenant_id") @db.Uuid
+  projectId     String     @map("project_id") @db.Uuid
+  direction     String     @db.VarChar(3)
+  description   String     @db.VarChar(200)
+  expectedOn    DateTime   @map("expected_on") @db.Date
+  amountMinor   BigInt     @map("amount_minor")
+  status        String     @default("expected") @db.VarChar(10)
+  receivedOn    DateTime?  @map("received_on") @db.Date
+  receivedMinor BigInt?    @map("received_minor")
+  reference     String?    @db.VarChar(60)
+  version       Int        @default(1)
+  createdBy     String     @map("created_by") @db.Uuid
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy     String     @map("updated_by") @db.Uuid
+  updatedAt     DateTime   @default(now()) @map("updated_at") @db.Timestamptz
+  // The certified certificate this line pays (D7.1): set once; linked lines leave the forecast,
+  // the opening position and earned value, where the certificate and client receipts count it.
+  valuationId   String?    @map("valuation_id") @db.Uuid
+  project       Project    @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  valuation     Valuation? @relation(fields: [tenantId, valuationId], references: [tenantId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
   @@index([tenantId, projectId, status, expectedOn])
+  @@index([tenantId, valuationId])
   @@map("cash_flow_items")
 }
 
@@ -5672,4 +5688,151 @@ model ApprovalResponse {
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, requestId])
   @@map("approval_responses")
+}
+
+// ---------------------------------------------------------------------------------------------
+// D7.1 client portal (ARCHITECTURE §4.15, WORKFLOWS "Client receipts" and "Variation decisions by
+// the client"). Append-only rows, state rules, client isolation (restrictive RLS for client-role
+// members) and the client-approval hold on variations live in SQL (migration
+// 20261130090000_client_portal); partial unique indexes are SQL-only.
+
+// A project's client terms, versioned (append-only); no row = the defaults
+// (packages/types DEFAULT_CLIENT_SETTINGS). A certificate is due on its certification date plus the
+// payment period of the version in force when it was certified.
+model ProjectClientSettings {
+  tenantId               String   @map("tenant_id") @db.Uuid
+  projectId              String   @map("project_id") @db.Uuid
+  version                Int
+  clientApprovalRequired Boolean  @map("client_approval_required")
+  paymentTermsDays       Int      @map("payment_terms_days")
+  createdBy              String   @map("created_by") @db.Uuid
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz
+  project                Project  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, projectId, version])
+  @@map("project_client_settings")
+}
+
+// The company's C2B Paybill instructions shown to clients, versioned (append-only, config.manage).
+model ClientPaymentInstructions {
+  tenantId         String   @map("tenant_id") @db.Uuid
+  version          Int
+  paybillNumber    String?  @map("paybill_number") @db.VarChar(7)
+  tillNumber       String?  @map("till_number") @db.VarChar(7)
+  accountName      String   @map("account_name") @db.VarChar(150)
+  accountFormat    String   @map("account_format") @db.VarChar(20)
+  bankInstructions String?  @map("bank_instructions") @db.VarChar(500)
+  createdBy        String   @map("created_by") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, version])
+  @@map("client_payment_instructions")
+}
+
+// An indicative exchange rate (KES per unit) entered by finance, dated with a source note.
+// Append-only: a correction is a newer entry.
+model FxRate {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  currency   String   @db.Char(3)
+  kesPerUnit Decimal  @map("kes_per_unit") @db.Decimal(9, 4)
+  rateDate   DateTime @map("rate_date") @db.Date
+  source     String   @db.VarChar(200)
+  createdBy  String   @map("created_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, currency, rateDate])
+  @@map("fx_rates")
+}
+
+// A member's display currency in the client portal (their own row only).
+model ClientPreference {
+  tenantId        String   @map("tenant_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  displayCurrency String   @map("display_currency") @db.Char(3)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, userId])
+  @@map("client_preferences")
+}
+
+// Money the company recorded as received from the client against a certified certificate, or the
+// entry that reverses one receipt in full (append-only; one reversal per receipt).
+model ClientPayment {
+  id             String          @id @db.Uuid
+  tenantId       String          @map("tenant_id") @db.Uuid
+  projectId      String          @map("project_id") @db.Uuid
+  valuationId    String          @map("valuation_id") @db.Uuid
+  kind           String          @db.VarChar(10)
+  reversesId     String?         @map("reverses_id") @db.Uuid
+  amountMinor    BigInt          @map("amount_minor")
+  receivedOn     DateTime        @map("received_on") @db.Date
+  method         String?         @db.VarChar(20)
+  reference      String?         @db.VarChar(60)
+  note           String?         @db.VarChar(500)
+  reason         String?         @db.VarChar(500)
+  idempotencyKey String          @map("idempotency_key") @db.VarChar(100)
+  requestDigest  String          @map("request_digest") @db.Char(64)
+  recordedBy     String          @map("recorded_by") @db.Uuid
+  recordedAt     DateTime        @default(now()) @map("recorded_at") @db.Timestamptz
+  project        Project         @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  valuation      Valuation       @relation(fields: [tenantId, projectId, valuationId], references: [tenantId, projectId, id], onDelete: Restrict)
+  reverses       ClientPayment?  @relation("ClientPaymentReversal", fields: [tenantId, valuationId, reversesId], references: [tenantId, valuationId, id], onDelete: Restrict, onUpdate: NoAction, map: "client_payments_reverses_fkey")
+  reversals      ClientPayment[] @relation("ClientPaymentReversal")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, valuationId, id])
+  @@unique([tenantId, reversesId])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, projectId, receivedOn])
+  @@map("client_payments")
+}
+
+// A submitted variation sent to the client: the client's view of the proposal (JSON), frozen with
+// its digest, for one submission (variation snapshot digest and submission time). Append-only.
+model VariationClientRequest {
+  id             String                    @id @default(uuid(7)) @db.Uuid
+  tenantId       String                    @map("tenant_id") @db.Uuid
+  projectId      String                    @map("project_id") @db.Uuid
+  variationId    String                    @map("variation_id") @db.Uuid
+  snapshotDigest String                    @map("snapshot_digest") @db.Char(64)
+  submittedAt    DateTime                  @map("submitted_at") @db.Timestamptz
+  clientView     Json                      @map("client_view")
+  clientDigest   String                    @map("client_digest") @db.Char(64)
+  message        String?                   @db.VarChar(1000)
+  sentBy         String                    @map("sent_by") @db.Uuid
+  sentAt         DateTime                  @default(now()) @map("sent_at") @db.Timestamptz
+  project        Project                   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  variation      VariationOrder            @relation(fields: [tenantId, projectId, variationId], references: [tenantId, projectId, id], onDelete: Restrict)
+  decisions      VariationClientDecision[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, variationId, submittedAt])
+  @@index([tenantId, projectId, sentAt])
+  @@map("variation_client_requests")
+}
+
+// The client's decision on one sending, on the digest they saw (one per sending; append-only).
+model VariationClientDecision {
+  id           String                 @id @default(uuid(7)) @db.Uuid
+  tenantId     String                 @map("tenant_id") @db.Uuid
+  projectId    String                 @map("project_id") @db.Uuid
+  requestId    String                 @map("request_id") @db.Uuid
+  variationId  String                 @map("variation_id") @db.Uuid
+  decision     String                 @db.VarChar(10)
+  comment      String?                @db.VarChar(1000)
+  clientDigest String                 @map("client_digest") @db.Char(64)
+  decidedBy    String                 @map("decided_by") @db.Uuid
+  decidedAt    DateTime               @default(now()) @map("decided_at") @db.Timestamptz
+  request      VariationClientRequest @relation(fields: [tenantId, projectId, requestId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, requestId])
+  @@index([tenantId, variationId])
+  @@map("variation_client_decisions")
 }

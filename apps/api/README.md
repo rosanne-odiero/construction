@@ -778,6 +778,43 @@ movement); a regulator decision is required before closing serious or fatal inju
 occurrences (COMPLIANCE-REVIEW CR-HS-01). Closed incidents, confirmed talks, recorded inductions and
 kit checks are immutable in the database. Problem codes are listed in ARCHITECTURE §4.9.
 
+## Plant and equipment (D8.3)
+
+Company paths start with `/api/v1/plant`; the project tab with `/api/v1/projects/:projectId/plant`.
+Authentication, the selected company and the CSRF guard apply; permissions are per project (role ∩
+assignment). Reads need `projects.view` plus one of `plant.manage`, `site.diary`,
+`projects.manage`, `stores.manage`, `finance.view` or `finance.manage` (clients, suppliers,
+consultants and labourers get 403); records on projects the caller cannot read are left out.
+"Recorder" = `site.diary` or `plant.manage` on the site's project (fuel also `stores.manage`);
+"manager" = `plant.manage` on the item's project (anywhere while it is in the yard). Hire rates and
+estimates are `null` without `plant.manage`, `finance.view` or `finance.manage`. Readings and litres
+are decimal strings with one decimal place, the standard consumption with two. Usage and fuel
+creates and corrections need an `Idempotency-Key` header and a client `id` (offline-ready). Design:
+[ARCHITECTURE §4.11](../../docs/ARCHITECTURE.md#411-plant-and-equipment-d83).
+
+| Method / path                                                          | Input                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET `/plant`, GET `/plant/alerts`                                      | `status?` (incl. `active`), `category?`, `ownership?`, `projectId?`, `attention?`, `search?`, `cursor?`, `limit?` / `kind?`, `projectId?`                                                                                                                                                       |
+| GET / PUT `/plant/settings`                                            | — / `{fuelVariancePercent, fuelMinHours, fuelMinKm, idleHireDays, hireEndingDays, serviceDueSoonPercent, certificateCategories, version}` (`config.manage`)                                                                                                                                     |
+| GET `/plant/options`, POST `/plant`                                    | — / `{code, name, category, quantity?, makeModel?, registration?, ownership, supplierId?, lpoId?, hireRateMinor?, hireRateUnit?, hireStartOn?, hireEndOn?, meterType, fuelType, standardConsumption?, openingOn, openingReading?, serviceEvery?, serviceEveryDays?, notes?, siteId?}` (manager) |
+| GET / PATCH `/plant/:id`                                               | — / the editable fields + `version` (manager)                                                                                                                                                                                                                                                   |
+| POST `/plant/:id/moves`, `/plant/:id/close`                            | `{version, siteId \| null, movedOn, reason?}` / `{version, action: off_hire / dispose, closedOn, reason}` (manager)                                                                                                                                                                             |
+| POST `/plant/:id/operators`, `/operators/:assignmentId/end`            | `{projectId, kind, labourerId? \| userId?, fromOn, toOn?, certificateRef?, certificateExpiresOn?}` / `{version, toOn}` (manager)                                                                                                                                                                |
+| GET / POST `/plant/:id/usage`                                          | `cursor?`, `limit?` / `{id, usedOn, siteId, dayStatus, startReading?, endReading?, operatorLabourerId? \| operatorUserId?, bqItemLineageId? \| costCodeId?, notes?, capturedAt}` (recorder)                                                                                                     |
+| POST `/plant/:id/usage/:logId/corrections`                             | `{action: correct, id, reason, capturedAt, …usage values}` or `{action: void, id, reason, capturedAt}` (recorder and manager or the original recorder)                                                                                                                                          |
+| GET / POST `/plant/:id/fuel`                                           | `cursor?`, `limit?` / `{id, siteId, issuedAt, litres, meterReading?, tankFilled, source, reference?, receivedByLabourerId? \| receivedByUserId?, notes?, capturedAt}` (recorder or `stores.manage`)                                                                                             |
+| POST `/plant/:id/fuel/:issueId/corrections`                            | as for usage                                                                                                                                                                                                                                                                                    |
+| POST `/plant/:id/meter-resets`                                         | `{resetAt, oldReading, newReading, reason, note}` (manager)                                                                                                                                                                                                                                     |
+| POST `/plant/:id/breakdowns`, `/breakdowns/:breakdownId/resolve`       | `{siteId, reportedAt, severity, description}` (recorder) / `{version, resolution: repaired / off_hire / written_off, resolvedOn, note?, repairedBy?, costReference?}`                                                                                                                           |
+| POST `/plant/:id/services`, `/services/:serviceId/void`                | `{servicedAt, kind, meterReading?, description, doneBy?, costReference?}` (recorder) / `{version, reason}` (manager)                                                                                                                                                                            |
+| GET `/projects/:projectId/plant`, `/projects/:projectId/plant/options` | — / `search?`, `bqSearch?`                                                                                                                                                                                                                                                                      |
+
+Rules: meter readings never go backwards in time unless a meter reset lies between (409
+`meter-out-of-order`); usage and fuel are append-only (corrections are new rows); the fuel variance
+(full-tank windows against the standard, company tolerance and minimum sample) is an estimate,
+never proof of theft; nothing posts to the cost or stores ledgers. Problem codes are listed in
+ARCHITECTURE §4.11.
+
 ## Development seed
 
 `npx pnpm@12.17.0 db:seed` (root; it builds the API first) creates the synthetic company

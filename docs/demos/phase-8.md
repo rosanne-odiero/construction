@@ -1,11 +1,11 @@
-# Phase 8 demo: health and safety (D8.2)
+# Phase 8 demo: health and safety (D8.2), plant and equipment (D8.3)
 
 This walkthrough is **not** Phase 8 acceptance. It covers the health and safety module (D8.2):
 site inductions with flags from attendance, toolbox talks, the PPE register, incidents and near
 misses, corrective actions and first aid, and the done-when flow: incident → investigation →
-corrective actions → done → verified → incident closed and locked. Dashboards and reports (D8.1),
-plant (D8.3), documents and the compliance register (D8.4) and offline/site-app capture remain
-pending. Notifying the regulator (DOSH) and the OSHA/WIBA registers are **COMPLIANCE-REVIEW**
+corrective actions → done → verified → incident closed and locked. Plant and equipment (D8.3) has
+its own walkthrough [below](#plant-and-equipment-d83). Dashboards and reports (D8.1), documents and
+the compliance register (D8.4) and offline/site-app capture remain pending. Notifying the regulator (DOSH) and the OSHA/WIBA registers are **COMPLIANCE-REVIEW**
 items (CR-HS-01 to CR-HS-04): the system records what you did; it files nothing.
 
 ## Start
@@ -72,3 +72,61 @@ it. A foreman (`site.diary`) can record but not investigate, verify or close.
 - Overdue actions are listed first everywhere and counted on the tab.
 - The COMPLIANCE-REVIEW note on every view: thresholds and deadlines for notifying DOSH and the
   WIBA Director, the statutory registers, PPE and first-aid minimums await an adviser.
+
+## Plant and equipment (D8.3)
+
+This walkthrough covers the plant register, moves, operators, daily usage with monotonic meters,
+fuel issues and the done-when: **a fuel variance flagged**, as an estimate for review, never proof
+of theft. The seed (same commands as above) adds, on Ruiru Heights (RUI-HTS) and the Kitengela
+bungalow (KIT-BNG), synthetic plant written through the real services:
+
+- **EX-01** Excavator 20 t, hired from "Nairobi Plant Hire Ltd (synthetic)" at KES 18,000 a day,
+  standard 14.00 L/h, with a machine operator from the registry. Full-tank fuellings at 2,450.0 h
+  (70.0 L), 2,460.0 h (141.0 L: +0.7 %, within the standard) and 2,470.0 h (182.0 L against 140.0 L
+  expected: **+30.0 %, over the standard**), then usage to 2,478.0 h.
+- **MX-01** Concrete mixer 350 L (owned), serviced every 100 hours or 90 days: **service due**.
+- **VB-01** Poker vibrators (2, owned) with an open **major breakdown** (BRK-0001): under repair.
+- **RL-01** Vibrating roller 3 t, hired, on the KIT-BNG Bungalow plot with no working day since its
+  hire began: **idle on hire**, and its hire ends in four days.
+- **SCF-01** 240 scaffold frames (counted by quantity, no meter) and **GN-01** a generator in the
+  yard.
+
+The seed summary prints one line per item with its alerts.
+
+1. As the project manager, open **Plant** in the sidebar (`/plant`). *Needs attention* lists EX-01
+   "Fuel above the standard (estimate, not proof of theft)", MX-01 service due, VB-01 open
+   breakdown and RL-01 idle on hire / hire ending. The register shows each item's location, meter,
+   service state and (for cost holders) the estimated hire charge so far.
+2. Open **EX-01**. *Fuel and consumption* lists the full-tank windows: 182.0 L for 10.0 h against
+   140.0 L expected, +30.0 %, over the 15 % tolerance; the earlier window is within the standard.
+   The wording says it is an estimate for review. *Daily usage* shows the readings per day and the
+   operator; *Site history* the move onto the Main plot.
+3. As the site agent, on a phone (360 px), open Ruiru Heights → **Plant** tab. Rates and estimates
+   are hidden. *Log usage: EX-01*: the start reading is filled from the last one (2,478.0). Type a
+   lower start reading: refused — the meter never goes backwards. Type 2,478.0 → 2,486.5 ("8.5 hours
+   today") and save. *Log usage: VB-01* opens with *Broken down* selected (it is under repair).
+4. *Log fuel: EX-01*: 280 litres at 2,486.5 h, tank filled. The result shows the window this
+   fuelling closed: 16.5 h at 14.00 L/h = 231.0 L expected; 280.0 L is +21.2 %, **over the
+   standard (estimate)**. Switch to SW and the dark theme: the same forms in Kiswahili without
+   sideways scrolling.
+5. As the project manager on EX-01, **Correct** the fuel entry (for example 230 litres, with a
+   reason): the original stays visible as superseded; the window is judged again. Nothing can be
+   edited or deleted.
+6. On **VB-01**, *Record the repair* of BRK-0001: the item is back on site. Report an **unsafe**
+   breakdown on another item: it goes under repair, no working day can be logged, and only the
+   plant manager can record the repair.
+7. On **RL-01**, *Move* it to the yard or *Off hire* (date and reason; final). *Assign an operator*
+   without a certificate: the operator is flagged (rollers need one by default), not blocked.
+8. As the owner, **Plant settings** (`/plant/settings`): the fuel tolerance, the minimum sample,
+   idle-hire and hire-ending days, the service warning and the categories whose operators need a
+   certificate. Raise the tolerance to 35 %: EX-01's alert clears; set it back.
+
+What to look for:
+
+- Fuel alerts always say "estimate, not proof of theft"; they are a reason to look, not a finding.
+- Usage, fuel and hire estimates never appear in the cost ledger or the stores (cost enters through
+  supplier invoices and petty cash, D-53).
+- Clients, suppliers, consultants and labourers cannot open plant; site agents and storekeepers do
+  not see hire rates.
+- COMPLIANCE-REVIEW CR-PLT-01–03: operator certificate rules, consumption standards and record
+  keeping await an adviser.

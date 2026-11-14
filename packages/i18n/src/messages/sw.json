@@ -1760,6 +1760,31 @@
     "tooManyAdjustments": "Marekebisho ni mengi mno kwenye tathmini hii.",
     "valuationTooLarge": "Tathmini hii ina mistari mingi mno kukokotoa. Wasiliana na msaada.",
     "asOfFuture": "Tarehe ya data haiwezi kuwa siku zijazo.",
+    "plantCodeTaken": "Msimbo huu wa mtambo tayari uko kwenye rejista.",
+    "plantRegisterFull": "Rejista inashikilia vifaa visivyozidi 2,000 vinavyotumika. Rudisha au ondoa baadhi kwanza.",
+    "plantClosed": "Mtambo huu umerudishwa kwa mkodishaji au umeondolewa; hakuna kingine kinachoweza kurekodiwa.",
+    "plantNotOnSite": "Mtambo haukuwa kwenye eneo hili la kazi siku hiyo.",
+    "plantNotMetered": "Vipimo havilingani na kipima cha mtambo: viweke kwa mtambo wenye kipima tu.",
+    "plantNoFuel": "Mtambo huu hautumii mafuta.",
+    "plantUnsafe": "Mtambo huu una hitilafu ya hatari ambayo haijatatuliwa na haupaswi kutumika.",
+    "plantHasOpenBreakdowns": "Tatua kwanza hitilafu za mtambo ambazo hazijatatuliwa.",
+    "plantDateFuture": "Tarehe hii haiwezi kuwa ya baadaye.",
+    "plantDateTooOld": "Hii ni ya zamani mno kurekodiwa; muulize meneja wa mradi.",
+    "meterOutOfOrder": "Kipimo hakiwezi kuwa chini ya kipimo cha awali wala juu ya kipimo cha baadaye. Kagua vipimo, au rekodi kubadilishwa kwa kipima.",
+    "meterDayLimit": "Matumizi ya siku moja hayawezi kuzidi saa 24 au km 1,500.",
+    "meterResetOrder": "Kubadilishwa kwa kipima kunakuja baada ya kila kipimo kilichokwisha rekodiwa.",
+    "usageDayExists": "Siku hii tayari imerekodiwa kwa mtambo huu; sahihisha rekodi hiyo badala yake.",
+    "recordSuperseded": "Rekodi hii tayari imesahihishwa; sahihisha ile ya karibuni zaidi.",
+    "recordAlreadyVoid": "Rekodi hii tayari imebatilishwa.",
+    "operatorNotAssigned": "Mwendeshaji huyu hakuteuliwa kwa mtambo huu siku hiyo.",
+    "operatorOverlap": "Mwendeshaji huyu tayari ameteuliwa kwa mtambo huu kwa kipindi hicho.",
+    "moveStrandsRecords": "Kuna matumizi au mafuta yaliyorekodiwa kwenye eneo la sasa baada ya tarehe hiyo.",
+    "moveSamePlace": "Mtambo tayari uko hapo.",
+    "breakdownResolutionInvalid": "Mtambo wa kukodisha hurudishwa kwa mkodishaji; mtambo wa kampuni hufutwa.",
+    "lpoNotFound": "LPO hii si ya msambazaji huyu.",
+    "usageIdConflict": "Rekodi hii ya matumizi tayari imetumwa. Pakia upya uione.",
+    "fuelIdConflict": "Utoaji huu wa mafuta tayari umetumwa. Pakia upya uuone.",
+    "plantRule": "Badiliko hilo linavunja kanuni ya mitambo. Pakia upya ukurasa na ukague rekodi.",
     "supplierInvoiceLocked": "Msambazaji aliwasilisha ankara hii: haiwezi kufunguliwa tena. Ighairi kwa sababu na umuombe msambazaji iliyosahihishwa.",
     "supplierPortalUser": "Watumiaji wa lango la msambazaji wameunganishwa na msambazaji wao, si na miradi.",
     "portalUserExists": "Barua pepe au nambari hii tayari ina ufikiaji wa lango la msambazaji au mwaliko katika kampuni hii.",
@@ -1875,7 +1900,8 @@
       "quality": "Ubora",
       "bq": "BQ",
       "photos": "Picha",
-      "safety": "Afya na usalama"
+      "safety": "Afya na usalama",
+      "plant": "Mitambo"
     },
     "prototypeBadge": "Mfano",
     "readOnly": "Mradi huu umefungwa au umeghairiwa, kwa hiyo ni wa kusoma tu.",
@@ -8662,6 +8688,412 @@
         "addAdjustment": "Ongeza marekebisho",
         "adjustmentAmount": "Kiasi (KES)"
       }
+    }
+  },
+  "plant": {
+    "title": "Mitambo na vifaa",
+    "description": "Mitambo ya kampuni na ya kukodisha: ilipo, matumizi, mafuta dhidi ya kiwango, kuharibika, huduma na ukodishaji.",
+    "complianceNote": "Arifa za mafuta hulinganisha lita na kiwango cha matumizi cha mtambo: ni makadirio ya kukaguliwa, kamwe si ushahidi wa wizi. Masharti ya vyeti vya waendeshaji na viwango vya matumizi vinasubiri ukaguzi wa wataalamu (COMPLIANCE-REVIEW).",
+    "yard": "Yadi (haipo eneo la kazi)",
+    "closed": "Imefungwa {date}: {reason}",
+    "recordedBy": "Imerekodiwa na {name}, {at}",
+    "category": {
+      "concrete_mixer": "Mashine ya kuchanganya zege",
+      "vibrator": "Kitetemeshi cha zege",
+      "excavator": "Mashine ya kuchimba (excavator)",
+      "loader": "Mashine ya kupakia (loader)",
+      "roller": "Rola ya kushindilia",
+      "compactor": "Kishindiliaji (compactor)",
+      "generator": "Jenereta",
+      "pump": "Pampu",
+      "crane_hoist": "Kreni au lifti ya mizigo",
+      "scaffolding": "Jukwaa la ujenzi (scaffolding)",
+      "formwork": "Fomu za zege (formwork)",
+      "vehicle": "Gari (tipa, pick-up)",
+      "other": "Nyingine"
+    },
+    "ownership": {
+      "owned": "Ya kampuni",
+      "hired": "Ya kukodisha"
+    },
+    "status": {
+      "available": "Yadini",
+      "on_site": "Eneo la kazi",
+      "under_repair": "Inatengenezwa",
+      "off_hire": "Imerudishwa kwa mkodishaji",
+      "disposed": "Imeondolewa"
+    },
+    "meterType": {
+      "hours": "Kipima saa",
+      "km": "Odomita (km)",
+      "none": "Hakuna kipima"
+    },
+    "fuelType": {
+      "diesel": "Dizeli",
+      "petrol": "Petroli",
+      "none": "Haitumii mafuta"
+    },
+    "rateUnit": {
+      "day": "siku",
+      "hour": "saa",
+      "month": "mwezi"
+    },
+    "dayStatus": {
+      "working": "Imefanya kazi",
+      "idle": "Imesimama bila kazi",
+      "breakdown": "Imeharibika"
+    },
+    "fuelSource": {
+      "site_store": "Stoo ya eneo la kazi",
+      "fuel_station": "Kituo cha mafuta",
+      "bowser": "Gari la mafuta",
+      "other": "Nyingine"
+    },
+    "resetReason": {
+      "meter_replaced": "Kipima kimebadilishwa",
+      "meter_reset": "Kipima kimerudishwa sifuri",
+      "rollover": "Kipima kimezunguka",
+      "other": "Nyingine"
+    },
+    "severity": {
+      "minor": "Ndogo (inaweza kufanya kazi)",
+      "major": "Kubwa (haiwezi kufanya kazi)",
+      "unsafe": "Hatari (isitumike)"
+    },
+    "breakdownStatus": {
+      "open": "Haijatatuliwa",
+      "repaired": "Imetengenezwa",
+      "off_hire": "Imerudishwa kwa mkodishaji",
+      "written_off": "Imefutwa"
+    },
+    "serviceKind": {
+      "service": "Huduma ya kawaida",
+      "repair": "Matengenezo",
+      "inspection": "Ukaguzi"
+    },
+    "serviceState": {
+      "not_scheduled": "Hakuna ratiba",
+      "ok": "Huduma iko sawa",
+      "due": "Huduma inakaribia",
+      "overdue": "Huduma imechelewa"
+    },
+    "windowState": {
+      "within_standard": "Ndani ya kiwango",
+      "over_standard": "Juu ya kiwango (makadirio)",
+      "short_sample": "Kipindi kifupi mno kuamua"
+    },
+    "recordState": {
+      "current": "Inayotumika",
+      "superseded": "Imesahihishwa",
+      "voided": "Imebatilishwa"
+    },
+    "certificate": {
+      "not_required": "Cheti hakihitajiki",
+      "valid": "Cheti kimerekodiwa",
+      "expiring": "Cheti kinakaribia kuisha",
+      "expired": "Cheti kimeisha",
+      "missing": "Hakuna cheti kilichorekodiwa"
+    },
+    "alertKind": {
+      "fuel_over_standard": "Mafuta juu ya kiwango (makadirio, si ushahidi wa wizi)",
+      "fuel_meter_static": "Mafuta yametolewa kipima kikiwa hakijasogea (makadirio)",
+      "unsafe_breakdown": "Hatari: isitumike",
+      "breakdown_open": "Hitilafu haijatatuliwa",
+      "service_overdue": "Huduma imechelewa",
+      "service_due": "Huduma inakaribia",
+      "idle_on_hire": "Imekodishwa lakini haifanyi kazi",
+      "hire_overrun": "Muda wa kukodisha umeisha, bado imekodishwa",
+      "hire_ending": "Ukodishaji unaisha karibuni",
+      "operator_certificate": "Cheti cha mwendeshaji hakipo au kinaisha"
+    },
+    "actions": {
+      "cancel": "Ghairi",
+      "edit": "Badilisha maelezo",
+      "move": "Hamisha",
+      "offHire": "Rudisha kwa mkodishaji",
+      "dispose": "Ondoa",
+      "assignOperator": "Teua mwendeshaji",
+      "reportBreakdown": "Ripoti hitilafu",
+      "recordService": "Rekodi huduma",
+      "resetMeter": "Rekodi kubadilishwa kwa kipima",
+      "recordUsage": "Rekodi matumizi",
+      "recordFuel": "Rekodi mafuta",
+      "saveUsage": "Hifadhi matumizi",
+      "saveFuel": "Hifadhi utoaji wa mafuta",
+      "correct": "Sahihisha",
+      "void": "Batilisha",
+      "backToPlant": "Rudi kwenye mitambo ya mradi",
+      "openItem": "Fungua mtambo"
+    },
+    "filters": {
+      "status": "Hali",
+      "all": "Zote",
+      "active": "Zinazotumika",
+      "search": "Tafuta",
+      "searchPlaceholder": "Msimbo, jina, aina au namba ya usajili",
+      "apply": "Tumia",
+      "attention": "Mitambo inayohitaji uangalizi tu"
+    },
+    "register": {
+      "title": "Rejista",
+      "new": "Sajili mtambo",
+      "newHint": "Mtambo wa kampuni au wa kukodisha. Msimbo, umiliki, kipima na aina ya mafuta haviwezi kubadilishwa baadaye.",
+      "countsLabel": "Idadi katika rejista",
+      "alertsLabel": "Inahitaji uangalizi",
+      "empty": "Hakuna mtambo unaolingana.",
+      "pages": "Kurasa za rejista",
+      "where": "Mahali",
+      "restricted": "Kwenye mradi mwingine",
+      "meter": "Kipima",
+      "service": "Huduma",
+      "hire": "Ukodishaji",
+      "quantity": "{count, plural, one {kipande #} other {vipande #}}",
+      "hireLine": "{supplier} · {days, plural, one {siku #} other {siku #}} za kukodisha, {idle, plural, one {siku # bila kazi} other {siku # bila kazi}}",
+      "hireEnds": "inaisha {date}",
+      "estimate": "makadirio {amount} hadi sasa",
+      "counts": {
+        "total": "{count, plural, one {mtambo #} other {mitambo #}}",
+        "onSite": "{count} eneo la kazi",
+        "available": "{count} yadini",
+        "underRepair": "{count} inatengenezwa",
+        "hired": "{count} ya kukodisha",
+        "attention": "{count} zinahitaji uangalizi"
+      }
+    },
+    "alerts": {
+      "title": "Inahitaji uangalizi",
+      "none": "Hakuna kinachohitaji uangalizi.",
+      "estimateNote": "Arifa za mafuta ni makadirio ya kukaguliwa, kamwe si ushahidi wa wizi: kiwango cha tangi, kusimama injini ikiwaka, aina ya ardhi na viambatisho hubadilisha matumizi."
+    },
+    "form": {
+      "code": "Msimbo",
+      "codeHint": "Wa kipekee katika kampuni, mfano EX-01 (herufi, tarakimu na vistari).",
+      "name": "Jina",
+      "category": "Aina",
+      "quantity": "Idadi",
+      "quantityHint": "Jukwaa na fomu: fremu, nguzo au seti zilizopo.",
+      "makeModel": "Muundo na modeli (si lazima)",
+      "registration": "Namba ya usajili au ya utambulisho (si lazima)",
+      "ownership": "Umiliki",
+      "hireTerms": "Masharti ya kukodisha",
+      "supplier": "Msambazaji",
+      "lpo": "LPO (si lazima)",
+      "rate": "Bei ya kukodisha (KES)",
+      "rateUnit": "Kwa",
+      "hireStart": "Mwanzo wa kukodisha (DD/MM/YYYY)",
+      "hireEnd": "Mwisho wa kukodisha (si lazima, DD/MM/YYYY)",
+      "hireHint": "Gharama ya kukodisha inayoonyeshwa ni makadirio; ankara ya msambazaji ndiyo gharama (haiwekwi kwenye leja ya gharama).",
+      "meterType": "Kipima",
+      "fuelType": "Mafuta",
+      "standardHours": "Kiwango cha matumizi (lita kwa saa)",
+      "standardKm": "Kiwango cha matumizi (lita kwa km)",
+      "standardHint": "Kutoka kwa mtengenezaji au kumbukumbu zenu; mafuta yanayozidi kwa zaidi ya kiwango cha uvumilivu huwekewa alama.",
+      "openingOn": "Imeanza kutumika (DD/MM/YYYY)",
+      "openingReading": "Kipimo wakati huo",
+      "serviceEveryHours": "Huduma kila (saa, si lazima)",
+      "serviceEveryKm": "Huduma kila (km, si lazima)",
+      "serviceEveryDays": "Huduma kila (siku, si lazima)",
+      "startsAt": "Inaanzia",
+      "notes": "Maelezo",
+      "notesOptional": "Maelezo (si lazima)",
+      "register": "Sajili",
+      "save": "Hifadhi mabadiliko",
+      "choose": "Chagua…",
+      "none": "Hakuna",
+      "invalid": "Kagua sehemu: tarehe kama DD/MM/YYYY, vipimo vyenye desimali moja tu, na mtambo wa kukodisha unahitaji msambazaji, bei na tarehe ya kuanza.",
+      "fixedHint": "Msimbo, umiliki, kipima, aina ya mafuta na kipimo cha mwanzo haviwezi kubadilishwa.",
+      "date": "Tarehe (DD/MM/YYYY)",
+      "time": "Saa (HH:MM)",
+      "reason": "Sababu",
+      "reasonOptional": "Sababu (si lazima)",
+      "searchFailed": "Utafutaji haukufanikiwa. Jaribu tena."
+    },
+    "move": {
+      "hint": "Uhamisho huhifadhiwa kama historia. Matumizi na mafuta hukubaliwa tu kwenye eneo la kazi siku ambazo mtambo ulikuwepo.",
+      "to": "Kwenda",
+      "line": "{date}: {from} → {to}",
+      "restrictedLine": "{date}: umehamishwa (maelezo yako kwenye mradi mwingine)",
+      "registered": "Ilisajiliwa {date} na {name}"
+    },
+    "close": {
+      "hint": "Ni ya mwisho: mtambo unarudi yadini, waendeshaji wake wanaachiliwa na hakuna kingine kitakachorekodiwa."
+    },
+    "operator": {
+      "hint": "Kibarua aliyeajiriwa kwenye mradi au mfanyakazi wa ofisi. Cheti kisipokuwepo pale aina inapokihitaji huwekewa alama (COMPLIANCE-REVIEW), hakizuiwi.",
+      "kind": "Mwendeshaji",
+      "labourer": "Kibarua",
+      "staff": "Mfanyakazi wa ofisi",
+      "search": "Tafuta kibarua (jina au namba ya mfanyakazi)",
+      "from": "Kuanzia (DD/MM/YYYY)",
+      "to": "Hadi (si lazima)",
+      "certificate": "Namba ya cheti au leseni (si lazima)",
+      "expires": "Cheti kinaisha (si lazima, DD/MM/YYYY)",
+      "end": "Maliza uteuzi",
+      "active": "Anafanya kazi",
+      "none": "Hakuna waendeshaji walioteuliwa.",
+      "expiresOn": "kinaisha {date}"
+    },
+    "breakdown": {
+      "hint": "Hitilafu kubwa na za hatari hufanya mtambo uwe unatengenezwa; mtambo hatari hauwezi kurekodiwa kuwa umefanya kazi.",
+      "severity": "Uzito",
+      "description": "Kilichotokea",
+      "none": "Hakuna hitilafu zilizorekodiwa.",
+      "daysDown": "{count, plural, one {siku # bila kufanya kazi} other {siku # bila kufanya kazi}}",
+      "resolved": "Ilitatuliwa {date} na {name}"
+    },
+    "resolve": {
+      "repaired": "Rekodi matengenezo",
+      "off_hire": "Rudisha kwa mkodishaji",
+      "written_off": "Futa",
+      "repairedBy": "Imetengenezwa na (si lazima)",
+      "closeHint": "Hii inafunga mtambo kabisa."
+    },
+    "service": {
+      "hint": "Huduma ya kawaida huanzisha upya muda wa huduma.",
+      "kind": "Aina",
+      "description": "Kazi iliyofanywa",
+      "doneBy": "Imefanywa na (si lazima)",
+      "costReference": "Namba ya ankara au gharama (si lazima)",
+      "none": "Hakuna huduma zilizorekodiwa.",
+      "voidTitle": "Batilisha rekodi hii ya huduma"
+    },
+    "reset": {
+      "hint": "Kwa kipima kilichobadilishwa au kurudishwa sifuri tu; vipimo vinaweza kuanza tena kutoka thamani mpya.",
+      "old": "Kipimo cha mwisho kwenye kipima cha zamani",
+      "new": "Kipimo cha kwanza kwenye kipima kipya",
+      "reason": "Kwa nini",
+      "listLabel": "Kubadilishwa kwa vipima",
+      "line": "{at}: {old} → {new} ({reason})"
+    },
+    "correct": {
+      "title": "Sahihisha rekodi hii",
+      "voidTitle": "Batilisha rekodi hii",
+      "hint": "Rekodi hazibadilishwi: usahihishaji au ubatilishaji ni rekodi mpya yenye sababu yako, na ya awali inabaki kwenye historia.",
+      "start": "Kipimo cha mwanzo",
+      "end": "Kipimo cha mwisho",
+      "reading": "Kipimo cha kipima",
+      "because": "Kwa sababu: {reason}"
+    },
+    "detail": {
+      "overview": "Muhtasari",
+      "fuel": "Mafuta na matumizi",
+      "usage": "Matumizi ya kila siku",
+      "breakdowns": "Hitilafu",
+      "maintenance": "Matengenezo na huduma",
+      "operators": "Waendeshaji",
+      "moves": "Historia ya maeneo",
+      "standard": "Kiwango cha matumizi",
+      "perHour": "Lita {litres} kwa saa",
+      "perKm": "Lita {litres} kwa km",
+      "remaining": "{remaining} {unit} zimebaki",
+      "dueOn": "kufikia {date}",
+      "hirePeriod": "Muda wa kukodisha",
+      "openEnded": "wazi",
+      "hireDays": "{days, plural, one {siku #} other {siku #}} za kukodisha, {idle, plural, one {siku # bila kazi} other {siku # bila kazi}}",
+      "estimate": "Makadirio ya gharama ya kukodisha hadi sasa",
+      "estimateNote": "(makadirio; ankara ya msambazaji ndiyo gharama)"
+    },
+    "usage": {
+      "title": "Rekodi matumizi",
+      "hint": "Rekodi moja kwa mtambo kwa siku: kipimo mwanzo na mwisho, au kama ulifanya kazi.",
+      "item": "Mtambo",
+      "at": "Katika {site}",
+      "status": "Siku",
+      "operator": "Mwendeshaji (si lazima)",
+      "costCode": "Msimbo wa gharama (si lazima)",
+      "costCodeHint": "Mtambo ulifanyia kazi nini; hakuna kinachowekwa kwenye leja ya gharama.",
+      "noMeter": "Mtambo huu hauna kipima: rekodi kama ulifanya kazi, ulisimama bila kazi au uliharibika.",
+      "readingsHint": "Vipimo haviwezi kuwa chini ya kipimo cha awali.",
+      "start": {
+        "hours": "Saa mwanzoni",
+        "km": "Km mwanzoni"
+      },
+      "end": {
+        "hours": "Saa mwishoni",
+        "km": "Km mwishoni"
+      },
+      "reading": {
+        "hours": "Kipimo cha kipima saa",
+        "km": "Kipimo cha odomita",
+        "none": "Kipimo cha kipima"
+      },
+      "run": {
+        "hours": "Saa {run} leo",
+        "km": "Km {run} leo"
+      },
+      "invalid": "Kagua tarehe (DD/MM/YYYY, isiwe ya baadaye).",
+      "invalidMetered": "Kagua tarehe (DD/MM/YYYY, isiwe ya baadaye) na vipimo (desimali moja, cha mwisho kisiwe chini ya cha mwanzo).",
+      "totals": "Siku 30 zilizopita: {working, plural, one {siku # ya kazi} other {siku # za kazi}}, {idle} bila kazi, {breakdown} imeharibika",
+      "run30": "{run} {unit} zimetumika",
+      "entriesLabel": "Rekodi za matumizi",
+      "none": "Hakuna matumizi yaliyorekodiwa bado.",
+      "pages": "Kurasa za matumizi",
+      "operatorIs": "Mwendeshaji: {name}"
+    },
+    "fuel": {
+      "title": "Rekodi mafuta",
+      "hint": "Lita zilizotolewa kwa mtambo pamoja na kipimo cha kipima wakati wa kujaza. Jaza tangi likijaa unapoweza: kujaza hadi juu hufanya ulinganisho uwe wa haki.",
+      "litres": "Lita",
+      "tankFilled": "Imejazwa hadi juu",
+      "tankHint": "Acha alama ikiwa tangi lilijazwa hadi juu; iondoe kwa kuongeza kidogo tu.",
+      "source": "Kutoka",
+      "reference": "Rejea (si lazima, mfano namba ya utoaji stoo au risiti)",
+      "receivedBy": "Imepokelewa na (si lazima)",
+      "noFuelled": "Hakuna mtambo kwenye mradi huu unaotumia mafuta.",
+      "lastReading": "kipimo cha mwisho {reading}",
+      "invalid": "Kagua tarehe na saa na lita (0.1–2,000, desimali moja).",
+      "invalidMetered": "Kagua tarehe na saa, lita (0.1–2,000) na kipimo cha kipima (desimali moja).",
+      "recorded": "Mafuta yamerekodiwa kwa {code}",
+      "noWindow": "Ujazaji huu bado haujafunga kipindi cha tangi kamili cha kulinganisha.",
+      "windowLine": "Lita {litres} kwa {advance} {unit} dhidi ya lita {expected} zilizotarajiwa ({variance}).",
+      "estimateNote": "Ni makadirio ya kukaguliwa, kamwe si ushahidi wa wizi.",
+      "rules": "Vipindi vya tangi kamili vya angalau {sample} {unit} hulinganishwa na kiwango; kuzidi kwa zaidi ya {tolerance} % huwekewa alama.",
+      "windowsLabel": "Vipindi vya mafuta",
+      "window": "Kipindi",
+      "advance": "Kipima ({unit})",
+      "expected": "Lita zilizotarajiwa",
+      "rate": "Lita kwa kipimo",
+      "variance": "Tofauti",
+      "state": "Matokeo",
+      "noWindows": "Hakuna kipindi cha tangi kamili cha kulinganisha bado.",
+      "pending": "{count, plural, one {Ujazaji #} other {Ujazaji #}} tangu kipindi cha mwisho: lita {litres} kwa {advance} {unit} (bado haujaamuliwa).",
+      "issuesLabel": "Utoaji wa mafuta",
+      "full": "tangi kamili",
+      "partial": "kuongeza kidogo",
+      "pages": "Kurasa za mafuta"
+    },
+    "tab": {
+      "title": "Mitambo",
+      "hint": "Mitambo kwenye maeneo ya kazi ya mradi huu leo. Rekodi matumizi na mafuta ya siku kwa simu.",
+      "register": "Rejista ya kampuni",
+      "empty": "Hakuna mtambo kwenye maeneo ya kazi ya mradi huu.",
+      "usageToday": "Matumizi ya leo yamerekodiwa",
+      "noUsageToday": "Hakuna matumizi yaliyorekodiwa leo",
+      "fuelToday": "Lita {litres} za mafuta leo",
+      "operators": "Waendeshaji: {names}",
+      "logUsage": "Rekodi matumizi: {code}",
+      "logFuel": "Rekodi mafuta: {code}",
+      "saved": {
+        "usage": "Matumizi yamehifadhiwa.",
+        "fuel": "Utoaji wa mafuta umehifadhiwa."
+      }
+    },
+    "settings": {
+      "title": "Mipangilio ya mitambo",
+      "hint": "Kanuni za kampuni za tofauti ya mafuta, ukodishaji na arifa za huduma.",
+      "fuelVariancePercent": "Uvumilivu wa mafuta juu ya kiwango (%)",
+      "fuelMinHours": "Kipindi cha chini (saa za injini)",
+      "fuelMinKm": "Kipindi cha chini (km)",
+      "idleHireDays": "Weka alama mtambo wa kukodisha usiofanya kazi kwa (siku)",
+      "hireEndingDays": "Onya kabla ukodishaji haujaisha (siku)",
+      "serviceDueSoonPercent": "Huduma inakaribia ndani ya (% ya mwisho ya muda)",
+      "range": "{min}–{max}",
+      "certificateCategories": "Aina ambazo waendeshaji wake wanahitaji cheti",
+      "certificateHint": "Orodha ya tahadhari ya kuanzia ya kukaguliwa (COMPLIANCE-REVIEW CR-PLT-01): cheti kisipokuwepo huwekewa alama, hakizuiwi.",
+      "save": "Hifadhi mipangilio",
+      "saved": "Mipangilio imehifadhiwa.",
+      "readOnly": "Wanaosimamia mipangilio ya kampuni pekee wanaweza kubadilisha haya.",
+      "invalid": "Kila thamani iwe namba kamili ndani ya kiwango chake."
     }
   },
   "supplierStatementExport": {

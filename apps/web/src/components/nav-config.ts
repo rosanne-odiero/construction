@@ -78,7 +78,7 @@ export const navGroups: {
       { key: "quality", href: "/quality", icon: ClipboardCheck },
       { key: "materials", href: "/catalogue", icon: Package },
       { key: "stores", href: "/stores", icon: Warehouse },
-      { key: "plant", href: "/soon/plant", icon: Forklift, phase: 8 },
+      { key: "plant", href: "/plant", icon: Forklift },
       { key: "safety", href: "/safety", icon: ShieldAlert },
     ],
   },
@@ -105,7 +105,6 @@ export const comingSoonSections = {
   diary: 6,
   materials: 5,
   stores: 5,
-  plant: 8,
   safety: 8,
   payments: 4,
   spending: 5,
@@ -121,13 +120,14 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
  * project's BQ viewer and import wizard (D2.2), the labour registry (D3.1), attendance and
  * timesheets (D3.3 web slice), payroll (D4.1), the catalogue and suppliers (D5.1),
  * procure-to-pay (D5.2), stores (D5.3), spending and cash flow (D5.4), quality (D6.1),
- * measurement and valuations (D6.3) and health and safety (D8.2). The D0 labour, attendance and
- * payroll prototypes live under /prototype.
+ * measurement and valuations (D6.3), health and safety (D8.2) and plant and equipment (D8.3). The
+ * D0 labour, attendance and payroll prototypes live under /prototype.
  */
 export function isLiveRoute(pathname: string): boolean {
   if (pathname === "/projects" || pathname === "/bq" || pathname === "/diary") return true;
   if (/^\/quality(\/templates(\/[0-9a-f-]{36})?)?$/.test(pathname)) return true;
   if (pathname === "/safety" || pathname === "/safety/settings") return true;
+  if (/^\/plant(\/(new|settings|[0-9a-f-]{36}))?$/.test(pathname)) return true;
   if (pathname === "/labour" || pathname.startsWith("/labour/")) return true;
   if (pathname === "/attendance" || pathname.startsWith("/attendance/")) return true;
   if (pathname === "/payroll" || pathname.startsWith("/payroll/")) return true;
@@ -158,7 +158,7 @@ export function isLiveRoute(pathname: string): boolean {
     )
   )
     return true;
-  return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/quality\/inspections\/[0-9a-f-]{36}|\/safety\/(incidents|talks)\/(new|[0-9a-f-]{36})|\/bq(\/(import|instructions|versions|variations(\/[0-9a-f-]{36})?))?)?$/.test(
+  return /^\/projects\/[0-9a-f-]{36}(\/sites(\/[^/]+)?|\/quality\/inspections\/[0-9a-f-]{36}|\/safety\/(incidents|talks)\/(new|[0-9a-f-]{36})|\/plant\/(usage|fuel)|\/bq(\/(import|instructions|versions|variations(\/[0-9a-f-]{36})?))?)?$/.test(
     pathname,
   );
 }

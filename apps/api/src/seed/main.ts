@@ -128,6 +128,15 @@ function print(summary: SeedSummary) {
       (invoice) => `  invoice ${invoice.number} — ${invoice.status} (submitted by the supplier)`,
     ),
   );
+  const { plant } = summary;
+  lines.push(
+    "",
+    `Plant and equipment (synthetic, ${plant.created ? "created" : "already present"}): ${plant.items.length} items in service, ${plant.fuelVarianceAlerts} fuel variance alert(s) (an estimate, not proof of theft)`,
+    ...plant.items.map(
+      (item) =>
+        `  ${item.code} ${item.status}${item.alerts.length ? `: ${item.alerts.join(", ")}` : ""}`,
+    ),
+  );
   console.log(lines.join("\n"));
 }
 

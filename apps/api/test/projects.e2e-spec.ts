@@ -1302,6 +1302,14 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         }),
         invoiceSubmissions: await tx.supplierInvoiceSubmission.count({ where: { tenantId } }),
         lpoAcknowledgements: await tx.lpoAcknowledgement.count({ where: { tenantId } }),
+        plantItems: await tx.plantItem.findMany({
+          where: { tenantId },
+          select: { code: true, status: true },
+          orderBy: { code: "asc" },
+        }),
+        plantUsage: await tx.plantUsageLog.count({ where: { tenantId } }),
+        plantFuel: await tx.plantFuelIssue.count({ where: { tenantId } }),
+        plantBreakdowns: await tx.plantBreakdown.count({ where: { tenantId, status: "open" } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1330,7 +1338,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       // verified by the finance user and one Till/bank proposal pending.
       materials: 21,
       conversions: 8,
-      suppliers: 3,
+      // D8.3 adds the plant hire company.
+      suppliers: 4,
       // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold;
       // D5.3 three cement quotations; D7.2 six more at the D5.2 prices (no new alert).
       prices: 23,
@@ -1447,7 +1456,31 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       supplierPortalUsers: [{ status: "active" }],
       invoiceSubmissions: 2,
       lpoAcknowledgements: 1,
+      plantItems: [
+        { code: "EX-01", status: "on_site" },
+        { code: "GN-01", status: "available" },
+        { code: "MX-01", status: "on_site" },
+        { code: "RL-01", status: "on_site" },
+        { code: "SCF-01", status: "on_site" },
+        { code: "VB-01", status: "under_repair" },
+      ],
+      plantUsage: 7,
+      plantFuel: 3,
+      plantBreakdowns: 1,
     });
+    // One fuel variance alert, one service due, one open breakdown and one idle hired item.
+    const plantAlerts = Object.fromEntries(
+      first.plant.items.map((item) => [item.code, item.alerts]),
+    );
+    expect(plantAlerts).toEqual({
+      "EX-01": ["fuel_over_standard"],
+      "GN-01": [],
+      "MX-01": ["service_due"],
+      "RL-01": ["idle_on_hire", "hire_ending"],
+      "SCF-01": [],
+      "VB-01": ["breakdown_open"],
+    });
+    expect(first.plant.fuelVarianceAlerts).toBe(1);
     expect(afterFirst.valuations).toHaveLength(5);
     expect(first.valuations).toMatchObject({
       measurements: { approved: 14, pending: 1 },
@@ -1624,6 +1657,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         { number: "MQ-INV-2002", status: "matched" },
       ],
     });
+    expect(second.plant).toEqual({ ...first.plant, created: false });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
     // Seeds a whole company twice (about 7 s alone); parallel e2e files can triple that.
   }, 90_000);

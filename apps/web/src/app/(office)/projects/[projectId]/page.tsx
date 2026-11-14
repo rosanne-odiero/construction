@@ -19,8 +19,9 @@ import { TeamTab } from "./team-tab";
 import { WbsTab } from "./wbs-tab";
 import { DiaryTab } from "./diary-tab";
 import { PhotosTab } from "./photos-tab";
+import { SCHEDULE_VIEWS, ScheduleTab } from "./schedule-tab";
 
-const TABS = ["overview", "sites", "team", "wbs", "diary", "photos"] as const;
+const TABS = ["overview", "sites", "team", "wbs", "schedule", "diary", "photos"] as const;
 type Tab = (typeof TABS)[number];
 const PROTOTYPE_IDS = new Set(["ruiru-heights", "kitengela-bungalow"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -44,9 +45,12 @@ export default async function ProjectPage({
   // The D0 prototype detail moved to /prototype/projects/…; keep its old links working.
   if (PROTOTYPE_IDS.has(projectId)) redirect(`/prototype/projects/${projectId}`);
   if (!UUID.test(projectId)) notFound();
-  const { tab: rawTab, cursor } = await searchParams;
+  const { tab: rawTab, cursor, view: rawView, baseline } = await searchParams;
   const tab: Tab = TABS.find((candidate) => candidate === rawTab) ?? "overview";
-  const path = `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}`;
+  const view = SCHEDULE_VIEWS.find((candidate) => candidate === rawView) ?? "gantt";
+  const path = `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}${
+    tab === "schedule" && view !== "gantt" ? `&view=${view}` : ""
+  }`;
 
   const session = await requireSession(path);
   if (!session) return <LiveUnavailable retryHref={path} />;
@@ -146,6 +150,15 @@ export default async function ProjectPage({
       ) : null}
       {tab === "wbs" ? (
         <WbsTab project={project} canManage={canManage && !readOnly} returnTo={path} />
+      ) : null}
+      {tab === "schedule" ? (
+        <ScheduleTab
+          project={project}
+          view={view}
+          baselineId={typeof baseline === "string" ? baseline : undefined}
+          canPickBq={canViewBq}
+          returnTo={path}
+        />
       ) : null}
       {tab === "diary" ? (
         <DiaryTab

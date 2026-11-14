@@ -155,6 +155,18 @@ Code constants (`PHOTO_VERIFICATION_DEFAULTS`, `PHOTO_LIMITS` in `packages/domai
 | `photos.future_skew_minutes` | platform | 10 | Phone clocks running ahead | PRODUCT | D6.1 |
 | `photos.max_file_mb` / `photos.max_pixels` | platform | 15 / 50,000,000 | Upload and decompression-bomb limits (JPEG only) | SECURITY | D6.1 |
 
+### Schedule (D6.2)
+
+The working calendar is a per-project setting (`schedule_settings`, one row per project; no row means the defaults). It is read with `GET projects/:id/schedule` (`calendar`) and changed with `PUT projects/:id/schedule/calendar` (`projects.manage`, optimistic `version`; version 0 saves the defaults the first time; audited `schedule.calendar_updated`). In the web app it is the **Working calendar** card on the project's Schedule tab. The limits are code and database constants (`SCHEDULE_LIMITS` in `packages/types`, CHECKs in migration `20261119090000_schedule`).
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `schedule.working_weekdays` | project | Monday–Saturday (ISO 1–6). Any non-empty set of weekdays | Common Kenyan site practice (six-day week); ARCHITECTURE §4.6 | PRODUCT | D6.2 |
+| `schedule.include_public_holidays` | project | On: the company's `public_holidays` (attendance settings, seeded from the Public Holidays Act and Gazette notices, COMPLIANCE-REVIEW CR-PAY-14) are non-working days | Brief §5.9; attendance holidays (D3.3) | PRODUCT | D6.2 |
+| `schedule.data_date` | platform | Today in Africa/Nairobi (`nairobiDate()`): remaining work is never scheduled before it. Not configurable | ARCHITECTURE §4.6 | PRODUCT | D6.2 |
+| `schedule.limits` | platform | 500 activities and 2,000 dependencies per project; durations 1–1,000 working days; lags −60…365 working days; 50 baselines per project; 50 activities per delay; working days lost 0–1,000 in half days. Code constant `SCHEDULE_LIMITS` | ARCHITECTURE §4.6 | PRODUCT | D6.2 |
+| `schedule.progress_basis` | activity | `physical` (whole-percent estimate) or `quantity` (done ÷ total in a unit, rounded down to 0.01 %); project progress is weighted by planned duration | Brief §15 G | PRODUCT | D6.2 |
+
 ## 6. Security, auth and operations
 
 | Key | Scope | Seed / default | Source | Status | Used from |

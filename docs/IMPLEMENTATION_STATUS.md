@@ -2180,6 +2180,31 @@ not part of this deliverable.
 | Full API e2e suite | 29 files passed, 375 tests passed; the external sandbox file/test skipped |
 | Turbo dry-run with `PAYMENTS_WORKERS_ENABLED=false` | Verified that API dev receives the variable |
 
+**Final latest-main integration and verification**
+
+Merged `origin/main` at `016beb0` into the Daraja branch as `fb9686e`, preserving the
+subcontracts implementation, routes, navigation, translations and shared schema. The one manual
+conflict was the architecture document: subcontracts remains §4.16 and payments is §4.17.
+
+| Check after integration | Result |
+|---|---|
+| `turbo run lint typecheck test i18n:check build` | All 30 tasks passed; API and web production builds passed |
+| Unit tests across all packages | 1,011 passed: domain 571, validation 139, API 154, web 102, types 38, i18n 3, mock 4 |
+| EN/SW message parity and ICU compilation | 9,990 keys in each locale; passed |
+| Clean-database focused API regression: client portal, spending, projects, payments and subcontracts, `--maxWorkers=1` | 5 files, 72 tests passed |
+| Full API e2e, `--maxWorkers=1` | 30 files and 388 tests passed; only the external sandbox file/test skipped |
+| Payments Playwright, `--workers=1` | 7 passed; isolated web/mock helpers stopped automatically |
+| Focused payments/navigation unit regression | 7 passed, including subcontract navigation |
+| Formatting and whitespace | Prettier and `git diff --check` passed |
+
+The initial parallel API run hit timeouts; a subsequent run still had six state-sensitive
+assertions failing. With explicit owner approval, only the local `pmb_test` database on port
+55832 was rebuilt, including its `app` helper schema and the repository's bootstrap grants
+before deploying migrations. Both the focused and complete serial regressions then passed.
+Development data and other checkouts' services were untouched. Existing PostgreSQL concurrent-query
+deprecation and listener-count warnings remain; web lint has two pre-existing unused-variable
+warnings in `mock-client-portal.mts`, with no errors.
+
 **Not accepted / still open**
 
 - **Safaricom sandbox verification is not complete.** The optional smoke suite was skipped, not

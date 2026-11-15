@@ -2374,6 +2374,51 @@ Also found while verifying: the console's state timeline could list an attempt's
 made "treats a timeout…" flaky. Payment events are now stamped with `clock_timestamp()` (same
 migration). The database test writes two events in one transaction and fails with the old stamp.
 
+**Merge with `main` (D9.1 security, D4.1 payroll screens) and key rotation (15/11/2026)**
+
+`main` (D9.1 through PR #46, D4.1's live payroll screens through PR #47) was merged in. Conflicts
+were confined to documents, the navigation (live `/payroll` and `/payments` both kept), the
+`keys:rotate`/`payments:drain` scripts and the EN/SW catalogues (both new sections kept). D9.1
+took ARCHITECTURE §4.17, so payments is now **§4.18** (code comments updated). Two D9.1 guards
+needed D4.2 to fit:
+
+- **Key rotation.** D9.1's catalogue test failed on the eight payments ciphertext columns,
+  as designed. `keys:rotate rewrap` now covers them: the five Daraja credentials
+  (associated data names the company as the row, so the tool pages `payment_settings` by
+  `tenant_id`), callback path tokens of active and retired routes, recipients' phone numbers and
+  raw callback bodies. Migration `20261204093000_payments_key_rotation` splits the four payments
+  guards like D9.1's: an UPDATE skips them only for the schema owner's re-encryption of one
+  ciphertext; every other change still meets them. Cached OAuth tokens are refetched when they no
+  longer open. The rotation drill (`key-rotation.e2e-spec.ts`) now seeds payments through the
+  API under key v1 (settings, credentials, an STK request, a received callback) and shows that
+  after the rewrap every value opens with v2 alone and the settings page still shows the callback
+  URLs with the same token. It also refuses: the runtime role rewriting received callback
+  evidence, the owner combining a rewrap with another change, and two credentials rewrapped in one
+  update. The drill's sign-ins now pick the next unused TOTP step within the API's ±1 window,
+  because three sign-ins with fixed 30-second offsets would have used a code two steps ahead.
+  Mutation checks: restoring the unconditional guard on the callback inbox, or on payment
+  settings, fails the drill.
+- **BrowserGuard.** D9.1's test allowed only the health controller outside `BrowserGuard`. The
+  Daraja callback controller is the one other exception by design: Safaricom calls it server to
+  server, the company comes from the path token, there is no cookie for CSRF to protect, and it
+  sets `no-store` itself. The test, ARCHITECTURE §4.17 and SECURITY_CHECKLIST V3.5.1 now say so.
+
+The CSP sweep (`security-headers.spec.ts`) also renders the payments console and a request's
+timeline without violations.
+
+**Verification on the merged branch** (test database rebuilt empty first: drop, create and the
+repository's bootstrap grants, then migrations):
+
+| Check | Result |
+|---|---|
+| Unit tests | types 38, i18n 3, validation 139, domain 571, mock Daraja 4, API 169 (incl. `telemetry-redaction.spec.ts`, the key-rotation catalogue), web 113 |
+| API e2e, `--maxWorkers=5` | **31 files, 398 passed**; the Daraja sandbox file (1 test) skipped without credentials |
+| Payments e2e alone | 24 passed (twice in a row after the timeline fix) |
+| Lint, typecheck, `i18n:check` | API oxlint clean; web ESLint 0 errors (the 2 existing warnings in `mock-client-portal.mts`); API and web typecheck; 10,203 keys in EN and SW |
+| Builds | API `tsc` build; web `next build` (lists `/payments` and `ƒ Proxy (Middleware)`) |
+| Browser suite, `--workers=3` | **195 of 196 passed**; the one failure (site editor, a navigation timeout while the dev server logged a stream error under load) **passed on rerun** with the payments and header specs (**22 passed**, including the CSP sweep of the payments console) |
+| Formatting | Prettier |
+
 **Not accepted / still open**
 
 - **Safaricom sandbox verification is not complete.** The optional smoke suite was skipped, not

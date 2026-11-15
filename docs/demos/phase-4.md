@@ -21,11 +21,13 @@ Use the existing synthetic company and a company-wide owner/finance account with
    request's timeline. Duplicates create no second receipt; a late failure never undoes confirmation.
 7. KES 1,003 loses its result. After the configured result timeout, it becomes unknown.
    A B2C status query can reconcile; STK Query success without a receipt stays unverified and
-   needs an independent reviewer with exact statement evidence.
+   needs an independent reviewer with exact statement evidence. KES 1,015 answers the first
+   status query "busy": the next automatic query follows and reconciles it.
 8. Request an Account Balance check: it is advisory, never a reservation. Register C2B URLs,
    then use the mock's C2B control endpoint. Its receipt remains **unallocated**.
 9. A distinct authorised reviewer can request a reversal of a confirmed test payment with fresh
-   MFA and a reason. Check the separate reversal attempt and final reversed state.
+   MFA and a reason. Check the separate reversal attempt and final reversed state. If a
+   reversal's outcome is uncertain, neither its requester nor the payment's creator can settle it.
 10. Check English/Kiswahili and phone-width screens. Finance must not see credential values or
     unmasked callback URLs; clients/suppliers must not enter the office console.
 

@@ -107,6 +107,18 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 > tests; three unrelated load-timing failures passed on rerun). No production filing certification or payout
 > activation is claimed. See [completion evidence](./IMPLEMENTATION_STATUS.md#d41-payroll-live-engine-completion-15-november-2026).
 
+> **D4.2 is in review (🔎).** The Daraja transport and the payments console are on `main`
+> through PR #48 and were independently reviewed: seven findings were fixed with tests that fail
+> without the fix. They covered dropped follow-up status queries, a retired callback token in new
+> calls, a reversal's requester settling its outcome, shortcode drift, re-quarantined callbacks,
+> the token in idempotency records and traces, and long provider codes. D9.1's key rotation now
+> covers the payment ciphertexts. **Mock flows pass the integration suite**: 24 payments tests
+> against the local mock Daraja server, within the full API suite of 398. **The sandbox half of
+> the done-when is still open**: the Safaricom sandbox suite needs test credentials, the public
+> certificate and an approved public HTTPS callback endpoint. Production stays gated off
+> (CR-PMT-01–04). See the [review script and sandbox gate](./demos/phase-4.md) and the
+> [status record](./IMPLEMENTATION_STATUS.md#d42-daraja-payments-branch-phase-4d42-daraja).
+
 ### Phase 5: Materials, stores and spending
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |

@@ -66,7 +66,7 @@ const providerResultCode = (value: unknown): string | null =>
   typeof value === "string" || typeof value === "number" ? String(value) : null;
 
 /**
- * Executes payment work (ARCHITECTURE §4.17): submissions, status queries, callback processing,
+ * Executes payment work (ARCHITECTURE §4.18): submissions, status queries, callback processing,
  * float checks, C2B URL registration and the watchdog. Every step runs as the payments system
  * actor inside one company's transaction; provider calls happen between transactions, after the
  * call intent is committed. Each handler is idempotent with respect to database state, so a

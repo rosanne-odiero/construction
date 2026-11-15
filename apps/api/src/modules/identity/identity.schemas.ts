@@ -66,6 +66,13 @@ export const resetSchema = z
     password: passwordSchema,
   })
   .strict();
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: passwordSchema,
+    signOutOtherSessions: z.boolean().default(true),
+  })
+  .strict();
 export const uuidSchema = z.uuid();
 export const nameSchema = z.object({ name: z.string().trim().min(1).max(150) }).strict();
 export const inviteSchema = z

@@ -19,7 +19,7 @@ const wrongPins = (budget: number) => {
     release: async () => {},
   };
   const service = new PinService(
-    { $transaction: async () => null } as unknown as PrismaService,
+    { $transaction: async () => ({ failed: "unknown-account" }) } as unknown as PrismaService,
     {} as never,
     { throttle: async () => {} } as unknown as AuthService,
     security as unknown as AuthSecurity,

@@ -55,11 +55,12 @@ mfaRequired }`. `mfaEnabled` means at least one MFA factor (an authenticator app
 | POST auth/passkeys/step-up               | `{credential}`                           | authentication response (MFA verified, like `mfa/step-up`)                   |
 | POST auth/password/forgot                | `{identifier}`                           | `{message}` (always generic)                                                 |
 | POST auth/password/reset                 | `{token,password}`                       | `{message}`                                                                  |
+| POST auth/password/change                | `{currentPassword,newPassword,…}`        | `{message}`; step-up if MFA is on; ends other sessions (D9.1)                |
 | GET auth/providers                       | —                                        | `{google}`: whether "Continue with Google" is configured                     |
 | GET auth/google/start?next=              | —                                        | 303 to Google (or `/sign-in?google=unavailable`); see below                  |
 | GET auth/google/callback                 | — (Google's redirect)                    | 303 to `/sign-in`; see below                                                 |
 | GET auth/sessions                        | —                                        | `{sessions:[{id,createdAt,lastSeenAt,expiresAt,current}]}`                   |
-| DELETE auth/sessions/:id                 | —                                        | `{message}`                                                                  |
+| DELETE auth/sessions/:id                 | —                                        | `{message}`; another session: 403 unless signed in or MFA ≤ 5 min            |
 | GET tenants                              | —                                        | `{tenants:[{id,name,role,roleName,tenantWide,permissions}]}`                 |
 | POST tenants                             | `{name}`                                 | `{tenant:{id,name}}` (fresh MFA required; selects new tenant)                |
 | POST tenants/:id/select                  | `{}`                                     | authentication response (rotates cookies)                                    |
@@ -120,11 +121,12 @@ Identifiers accept email or Kenyan mobile numbers and are normalized. Passwords 
 12–128 characters; common passwords are rejected. Every new password (registration and
 reset) must also reach a zxcvbn-ts score of 3 or more, judged with the identifier, display
 name and "pm-buddy" as context (`@zxcvbn-ts/core` with the common and English dictionaries;
-only the first 64 characters are scored). With `AUTH_BREACHED_PASSWORD_CHECK=hibp` it is also
-looked up in Have I Been Pwned's range API (k-anonymity: only the first five hex characters
-of its SHA-1 are sent, with `Add-Padding: true`, two-second timeout); a failed lookup logs a
-warning without the password or hash and accepts the password (fails open). Refusals are 400
-problems with code `password-too-weak` or `password-breached`, and no score or match details.
+only the first 64 characters are scored). With `AUTH_BREACHED_PASSWORD_CHECK=hibp` (the
+default in production since D9.1) it is also looked up in Have I Been Pwned's range API
+(k-anonymity: only the first five hex characters of its SHA-1 are sent, with
+`Add-Padding: true`, two-second timeout); a failed lookup logs a warning without the password
+or hash and accepts the password (fails open). Refusals are 400 problems with code
+`password-too-weak` or `password-breached`, and no score or match details.
 Verification uses six-digit,
 five-minute single-use codes; reset and invitation credentials are opaque single-use
 tokens. These credentials are **never returned by the API**. Development/test
@@ -229,6 +231,19 @@ Errors use the existing RFC 9457 `application/problem+json` envelope. Invalid in
 429; unavailable notification/database/rate-limit dependency: explicit 503/500. Some 400s
 carry a more specific `code`: `password-too-weak`, `password-breached` and `passkey-invalid`
 (a registration response that failed verification).
+
+## Key rotation (D9.1)
+
+`pnpm --filter @pm-buddy/api keys:rotate status|rewrap` re-encrypts field-encrypted columns
+(`FIELD_ENCRYPTION_KEYS`) and sealed TOTP seeds (`AUTH_MFA_ENCRYPTION_KEY`) to the active key
+version. It runs as the schema owner (`DATABASE_MIGRATION_URL`), company by company, in
+batches with compare-and-swap updates, so it is idempotent and resumable; `rewrap` needs
+`--operator "<name>"` and records each run in `key_rotation_runs`. Options: `--only field|mfa`,
+`--tenant <company ID>`, `--batch <rows>`, `--dry-run`. `pmb_app` cannot rewrite a ciphertext:
+the append-only and immutable-row guards allow only the owner's re-encryption of the same
+value. The runbook (order of steps, PIN pepper and signing keys, what cannot rotate) is
+[OPERATIONS "Key rotation"](../../docs/OPERATIONS.md#key-rotation); design in
+[ARCHITECTURE §4.17](../../docs/ARCHITECTURE.md#417-security-hardening-d91).
 
 ## Continue with Google
 
@@ -632,8 +647,8 @@ users). Changes send the import `version` they read (409 `version-conflict` othe
 
 Upload refusals are problems with stable codes: 413 `payload-too-large`, 415
 `unsupported-file-type` / `macro-workbook`, 422 `unsafe-archive` (ZIP bomb, ZIP64, encrypted),
-400 `empty-file`, 503 `malware-scanner-unavailable` (`MALWARE_SCANNER=disabled`, the default)
-and 503 `parser-busy`. Other BQ codes: 409 `invalid-import-state`, `commit-blocked`,
+400 `empty-file`, 503 `malware-scanner-unavailable` (`MALWARE_SCANNER=disabled`, the default,
+or `clamav` with clamd unreachable) and 503 `parser-busy`. Other BQ codes: 409 `invalid-import-state`, `commit-blocked`,
 `validation-stale`, `bq-not-draft`, `project-read-only`, `template-name-taken`,
 `template-not-applicable`; 422
 `export-too-large` (PDF over 10,000 items). Quantities and rates are decimal strings; amounts

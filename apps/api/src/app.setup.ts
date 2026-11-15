@@ -52,7 +52,7 @@ export function configureApp(app: INestApplication): void {
   // Payment provider callbacks are read raw (and size-limited) before the JSON parser runs (D4.2).
   app.use(callbackBodyReader(config.get("PAYMENTS_CALLBACK_MAX_BYTES")));
 
-  if (config.get("API_DOCS_ENABLED")) {
+  if (config.apiDocsEnabled) {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder()

@@ -206,7 +206,7 @@ export class ClientPortalController {
     );
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
-    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("Cache-Control", "private, no-store");
     return new StreamableFile(content, {
       type: "image/jpeg",
       disposition: `inline; filename="photo-${photoId}.jpg"`,

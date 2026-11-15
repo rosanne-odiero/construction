@@ -18,7 +18,7 @@ import { PaymentRequestsService } from "./requests.service.js";
 import { PaymentSettingsService } from "./settings.service.js";
 
 /**
- * Payments and the Daraja integration (D4.2, ARCHITECTURE §4.17): the provider-neutral
+ * Payments and the Daraja integration (D4.2, ARCHITECTURE §4.18): the provider-neutral
  * PaymentProvider with DarajaProvider, per-company encrypted credentials, payment requests and
  * attempts, the durable callback inbox, reconciliation, the transactional outbox with BullMQ
  * workers and the watchdog. D4.3 imports it to create B2C attempts for payroll obligations

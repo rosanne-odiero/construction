@@ -15,6 +15,16 @@ export class AppConfig {
   get isProduction(): boolean {
     return this.get("NODE_ENV") === "production";
   }
+
+  /** Swagger UI and the OpenAPI document: off in production unless API_DOCS_ENABLED=true. */
+  get apiDocsEnabled(): boolean {
+    return this.get("API_DOCS_ENABLED") ?? !this.isProduction;
+  }
+
+  /** The breached-password check: HIBP in production unless explicitly `off`. */
+  get breachedPasswordCheck(): "off" | "hibp" {
+    return this.get("AUTH_BREACHED_PASSWORD_CHECK") ?? (this.isProduction ? "hibp" : "off");
+  }
 }
 
 /** Used by ConfigModule: fails fast with a readable message when the environment is invalid. */

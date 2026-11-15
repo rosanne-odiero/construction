@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Bell, Building2, KeyRound, LogIn, LogOut } from "lucide-react";
 import { csrfResponseSchema, messageResponseSchema } from "@pm-buddy/validation";
@@ -43,7 +43,6 @@ export function TopBar({ account }: { account: OfficeAccount | null }) {
   const tAlerts = useTranslations("alerts");
   const tSeverity = useTranslations("severity");
   const pathname = usePathname();
-  const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
   const live = isLiveRoute(pathname);
   const critical = alerts.filter((a) => a.severity === "critical").length;
@@ -60,8 +59,9 @@ export function TopBar({ account }: { account: OfficeAccount | null }) {
     } catch {
       // Sign-out always clears the cookies server-side; continue to the sign-in page either way.
     } finally {
-      router.replace("/sign-in");
-      router.refresh();
+      // A full page load, not a client navigation: the router cache of authenticated pages is
+      // dropped with the old document, so Back cannot show them on a shared computer (D-153).
+      window.location.replace("/sign-in");
     }
   }
 

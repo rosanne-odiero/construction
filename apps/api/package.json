@@ -18,7 +18,8 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:status": "prisma migrate status",
     "db:seed": "node --enable-source-maps dist/seed/main.js",
-    "payments:drain": "node --enable-source-maps dist/modules/payments/drain.main.js"
+    "payments:drain": "node --enable-source-maps dist/modules/payments/drain.main.js",
+    "keys:rotate": "node --enable-source-maps dist/keys/main.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",

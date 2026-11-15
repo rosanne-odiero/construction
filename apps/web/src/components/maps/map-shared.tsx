@@ -3,7 +3,7 @@
 import { AttributionControl, TileLayer, ZoomControl } from "react-leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
 import type { GeofenceVersion } from "@pm-buddy/validation";
-import { TILES_ENABLED } from "./tiles";
+import { TILE_URL, TILES_ENABLED } from "./tiles";
 
 export type GeofenceShape = GeofenceVersion["geofence"];
 export type MapLabels = { zoomIn: string; zoomOut: string };
@@ -44,7 +44,7 @@ export function MapChrome({ labels }: { labels: MapLabels }) {
       {TILES_ENABLED ? (
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          url={TILE_URL}
         />
       ) : null}
     </>

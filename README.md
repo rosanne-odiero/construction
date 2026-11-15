@@ -82,7 +82,7 @@ pnpm test:e2e      # API and web browser tests; API needs `pnpm services:up`
 
 Before the first web browser run, install its browser: `pnpm --filter @pm-buddy/web exec playwright install --no-shell chromium`.
 
-To run the checks from a second checkout (for example a `git worktree`) while the first is running, point its `apps/api/.env` at a second compose stack on other ports. The API e2e tests read Mailpit from `AUTH_MAILPIT_PORT`, and the browser tests take `PLAYWRIGHT_WEB_PORT` (default 3100) and `PLAYWRIGHT_MOCK_API_PORT` (default 3199).
+To run the checks from a second checkout (for example a `git worktree`) while the first is running, point its `apps/api/.env` at a second compose stack on other ports. The API e2e tests read Mailpit from `AUTH_MAILPIT_PORT`, and the browser tests take `PLAYWRIGHT_WEB_PORT` (default 3100) and `PLAYWRIGHT_MOCK_API_PORT` (default 3199). Concurrent browser runs in the same checkout also need distinct `PLAYWRIGHT_DIST_DIR` values (for example `.next-e2e/payroll`); the default remains `.next-e2e`.
 
 `pnpm services:down` stops the containers and keeps the data. To start again from empty databases and storage, run `docker compose -f infra/docker/compose.yaml down -v`. All local credentials are throwaway development values ([configuration §8](docs/CONFIGURATION.md#8-process-environment-deployment-settings)).
 

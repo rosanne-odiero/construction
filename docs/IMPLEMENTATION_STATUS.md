@@ -13,7 +13,7 @@
 | Surface | Implementation / limitation |
 |---|---|
 | Brief and design safeguards | Workflow states/transition contracts, invariants, proposed financial model, offline protocol, operations, release plan, compliance evidence schema, pilot proposal and acceptance matrix |
-| Existing business routes | Preserved mock prototype; not working payroll, Daraja, procurement, offline sync or biometric integrations |
+| Existing business prototypes | Preserved under `/prototype`; live modules are listed below. No real Daraja payouts or production biometric integration is claimed |
 | `/status` | Existing live API/dependency readiness |
 | `/design-system` | Shared tokens/controls, KES/Nairobi formats, explicit pending/conflict/failure/loading/offline examples; EN/SW and light/dark |
 | Web manifest | Same-origin installation metadata and icon; no service worker or sensitive-data cache; no offline business-sync claim |
@@ -24,8 +24,70 @@
 | BQ versions, variations and build-ups (D2.3) | Live baseline approval and contract sums on `/projects/[id]/bq` and the project overview, `…/bq/variations` (list, editor, submit/approve/reject/reopen/cancel/rebase with step-up), `…/bq/instructions`, `…/bq/versions` (history and compare), `/rate-buildups` (company library, versions, item links) and `/bq`; browser tests run against the mock API; no approval limits by amount, no attachment upload, no theoretical consumption yet |
 | `/labour` (D3.1) | Live labourer registry (saved views, worker side panel with masked identifiers and audited reveal, registration with consent, consent screen, gangs, trades & rates, NCA alerts); the D0 labour screens moved to `/prototype/labour` and stay labelled. Built and verified locally on branch `phase-3/d3.1-labour-registry`; not pushed, not reviewed, not approved |
 | `/attendance` (D3.3, web slice) | Live attendance and timesheets: overview, daily muster roll per project/site/day (keyboard entry, bulk "present", gang filter, inline flags), submit and confirm by a different person, corrections, anomaly review, weekly timesheet periods (submit, approve with an immutable snapshot, reject, reopen), adjustments to approved periods, rules & holidays, and an attendance summary in the worker panel; the D0 attendance screens moved to `/prototype/attendance`. Web-manual capture only (no site app, QR/NFC, photos, GPS/geofence, offline or biometrics). Built and verified locally on branch `phase-3/d3.3-web-timesheets`; not pushed, not reviewed, not approved |
+| `/payroll` (D4.1) | Live project/pay-period batch builder, recalculation, immutable submission, reasoned cancellation, register and payslip preview; rule versions and independent MFA verification, calendars, allowances, piece-rate output, advances and MFA-protected CSV templates. No payout approval or money movement; see the completion evidence below |
 | `/projects/[id]?tab=schedule` (D6.2) | Live schedule: SVG Gantt chart (critical path, baseline ghosts, actual dates, milestone diamonds, dependency arrows, today's line in Nairobi time, week/month zoom, keyboard item list, table alternative), activity editor with FS/SS/FF/SF links and lags, progress with a declared basis, per-project working calendar with the company's public holidays, CPM from `packages/domain`, append-only baselines with variance in working days, and the versioned delay log. Built and verified locally on `phase-6/d6.2-schedule`; not committed, not reviewed. No resource levelling, calendars per activity, MS Project/P6 import or client-portal schedule; measured progress and EVM are D6.3 |
 | CI | Existing lint/type/test/build/API/security workflows retained; browser/a11y job added |
+
+## D4.1 payroll: live engine completion (15 November 2026)
+
+The existing calculation engine and payroll API were already present. The missing
+delivery was the live web workflow: the sidebar still opened the D0 prototype.
+It now opens `/payroll`, with:
+
+- Project pay calendars, recent periods and historical batches; build a period
+  from the list or enter an older valid period start.
+- A batch register with API-calculated earnings, statutory deductions, advance
+  recovery, net pay, employer costs, warnings, excluded sources, unapproved
+  timesheets, pending output and rule versions. Draft recalculation and submission
+  use expected versions; submitted snapshots show their integrity result.
+- Payslip previews with earning quantities/rates/multipliers, withheld and
+  unwithheld deductions, advance recoveries, separate employer costs and
+  cumulative-month figures. Nothing is recomputed in the browser.
+- Effective-dated rule versions with parameter/source inspection, new superseding
+  versions, seed installation and independent verification with fresh MFA;
+  minimum-wage comparisons remain explicitly unverified.
+- Pay-calendar and advance-limit forms; taxable/non-taxable allowances scoped
+  to a project, trade or worker; individual/gang output and independent decisions;
+  advance requests, independent decisions, external-payment recording and recovery
+  history. Output-only recorders can use the inputs page without gaining
+  allowance access. Worker lookup is project-filtered, searchable and bounded,
+  and refuses identifier-like searches before sending them in a URL. Output
+  recorded against a D6.3 part B piece-rate job shows the job's code.
+- Monthly employer-wide export summaries and PAYE/NSSF/SHIF/NITA CSV downloads
+  with fresh MFA, explicit missing identifiers and unwithheld amounts. The
+  existing production block for unverified rules remains in place. CSVs remain
+  **COMPLIANCE-REVIEW templates**, not certified filing formats.
+- EN/SW, explicit forbidden/unavailable states, schema-checked successes and
+  translated payroll refusals. Commands retain one idempotency key across an
+  MFA retry or a retry after an uncertain response.
+
+Routes: `/payroll`, `/payroll/projects/[projectId]`,
+`/payroll/projects/[projectId]/inputs`, `/payroll/batches/[batchId]`,
+`/payroll/batches/[batchId]/lines/[lineId]`, `/payroll/rules`,
+`/payroll/advances`, `/payroll/exports`, `/payroll/settings`.
+The prototype remains at `/prototype/payroll`.
+
+Executed evidence (on branch `phase-4/d4.1-payroll-ui`, built on `main` with D6.3 part B):
+
+| Check | Actual result |
+|---|---|
+| Domain payroll unit suite | **68 passed**, including statutory boundaries and cumulative-month/recovery behaviour |
+| Validation unit suites | **139 passed** (21 files), including the payroll contracts |
+| Web unit suites | **98 passed** (23 files), including the live-navigation check that every sidebar link has a page |
+| Full web browser suite | **174 of 177 passed**; the 3 failures (a quality and a safety 5 s wait, and a dropped dev-server connection in valuations, under load) **passed on rerun** together with the payroll and subcontract specs (**11 passed**) |
+| Payroll Playwright suite | **5 passed**: build → payslip → freeze/reload; stale/malformed responses; calendar/allowance/output/advance forms; rule verification/export MFA; reader/output-only permissions, EN/SW, 360px/dark and axe |
+| Format, web ESLint and typecheck | Passed (`prettier --check .`; ESLint 0 errors, 2 existing warnings in `mock-client-portal.mts`) |
+| Shared i18n build and catalogue check | Passed; EN/SW key parity and ICU compilation |
+| Production build | Passed, including all nine live payroll routes |
+| API payroll unit and real PostgreSQL integration suites | Not rerun on this branch (the API is unchanged by this work): **3** and **12 passed** before it was rebuilt on D6.3 part B; CI runs both |
+
+The browser mock answers only the payroll routes these screens use, so D6.3
+part B's piece-rate job routes still reach their own mock. Concurrent browser
+runs in one checkout can set `PLAYWRIGHT_DIST_DIR`.
+No payroll calculation, database schema or statutory seed value changed.
+No independent review, deployment, production legal verification or
+payment activation is claimed. D4.2 (Daraja) and D4.3 (approval/payout/reconciliation)
+remain separate work; recording an external advance payment does not send money.
 
 ## Executed evidence (this session)
 
@@ -2135,6 +2197,84 @@ API unit (146), the photos, client-portal and documents e2e files (45) and the p
 - HEVC is a patented codec: decoding HEIC in a commercial service needs a licence review before go-live. HEIC decoding runs in the API process's worker threads (memory up to about four times the pixel count of the declared images while decoding); an OS-level memory limit (a separate process or container) would bound it further.
 - The development database on this machine was **not** migrated (a running API there was built from `main`); run `pnpm --filter @pm-buddy/api db:migrate` and rebuild after merging. Kiswahili strings need a native speaker's review.
 
+## D9.1 security (branch `phase-9/d9.1-security`)
+
+Status: built in the `construction-pin` worktree on `phase-9/d9.1-security` (from `main` at `a233a90`) with its own Docker stack (`pmb-pin`: PostgreSQL 55732; API 4500, web 3500; Playwright 3510/3599); committed and opened as PR #46, then brought up to date with `main` (D6.3 part B, D6.1 photo evidence) and **independently reviewed** (findings below, all fixed). Security hardening is ARCHITECTURE §4.17 (decisions D-150–D-156). Roadmap: D9.1 🔎. Done-when — **"The checklist passes"** — is met as defined in [SECURITY_CHECKLIST §1](./SECURITY_CHECKLIST.md#1-what-the-checklist-passes-means): all 253 OWASP ASVS **5.0.0** L1/L2 requirements are Pass (139), N/A with a reason (51), fixed in D9.1 with a test (43) or deferred to D9.3 with the reason (20: TLS, edge, secrets manager, egress, log shipping, the operations view's session controls); none is a gap or partial. The deferred ones must pass in D9.3 before go-live.
+
+**What changed**
+
+- **Web headers and CSP** (the real gap: the web app sent no CSP or security headers although THREAT_MODEL assumed a nonce-based CSP): `apps/web/src/proxy.ts` (Next.js 16 proxy, every path except `/api/*`) and `src/lib/security-headers.ts` (`contentSecurityPolicy`, `createNonce`, `securityHeaders`): a fresh 128-bit nonce per request; `default-src 'self'; script-src 'self' 'nonce-…' 'strict-dynamic'` (`'unsafe-eval'` only under `next dev`); `style-src 'self' 'unsafe-inline'` (Radix and Recharts style attributes and `<style>` elements from Sonner, react-remove-scroll and the chart component carry no nonce; scripts stay nonce-only); `img-src 'self' blob:` and `connect-src 'self'` (uploads, thumbnails and downloads all go through the API on the same origin, never pre-signed storage URLs, so no storage origin and no new variable were needed; `blob:` is only the camera screen's preview of the photo just taken, added when D6.1's in-app capture was merged in; a future direct-to-storage flow must add its origin through configuration); `object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src 'none'`; `upgrade-insecure-requests` and HSTS (two years, subdomains, no `preload`) on HTTPS production only; `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera, geolocation and passkeys for this origin; microphone, payment, USB and the rest off; the camera is for D6.1's in-app photo capture), COOP and CORP `same-origin`, `X-Frame-Options: DENY`. The root layout reads `x-nonce` and passes it to next-themes (`Providers`); `poweredByHeader: false`. `src/lib/zod-config.ts` (`z.config({ jitless: true })`, imported by `Providers`): the production walk found Zod 4 probing `new Function` on every page. The OpenStreetMap tiles of the D0 map prototype load in development only (`components/maps/tiles.ts`).
+- **API** (helmet configuration unchanged, now asserted in full): `API_DOCS_ENABLED` unset means **off in production** (`AppConfig.apiDocsEnabled`); `AUTH_BREACHED_PASSWORD_CHECK` unset means **`hibp` in production** (`AppConfig.breachedPasswordCheck`); client-portal photo images `private, no-store`; **`POST /auth/password/change`** (current password, fresh step-up when MFA is on, the registration policy, other sessions ended unless `signOutOtherSessions: false`, e-mail notice, `password-change` rate limit; 400 `current-password-incorrect`); ending **another** session needs a sign-in or MFA within five minutes (403 `reauthentication-required`); **security events** (`identity/security-events.ts`: login succeeded, failed or locked for password, PIN, Google and passkeys, MFA, refresh-token reuse, password reset and change, logout, revocation — IDs, method and reason codes only); request logs carry user, session and company (`setRequestActor`) and log 401/403/429 at `warn`; **ClamAV** (`MALWARE_SCANNER=clamav`, `CLAMAV_HOST`/`PORT`/`TIMEOUT_MS`: clamd INSTREAM in 64 KiB frames, fails closed on error, timeout or size limit); the seed CLI gained `--namespace` (used by the drill test).
+- **Key rotation**: `AUTH_MFA_ENCRYPTION_KEY` is now a versioned list like the field keys (`sealed-secrets.ts`: the version in the JWE `kid`; values without a `kid` are version 1, so existing data reads unchanged; `AUTH_MFA_ENCRYPTION_ACTIVE_KEY_VERSION`). New `apps/api/src/keys/` (`key-rotation.ts`, `cli-args.ts`, `main.ts`) behind `pnpm --filter @pm-buddy/api keys:rotate status|rewrap` (schema owner only; company by company in batches with compare-and-swap updates; idempotent, resumable; `--operator` recorded; counts only, never values; exit 1 and row references when anything is unreadable). Migration **`20261202090000_key_rotation`** (no shipped migration edited): `key_rotation_runs` (no `pmb_app` grant; forced RLS with an owner-only policy, so the "every `tenant_id` table forces RLS" invariant test covers it), `app.is_field_rewrap()` bound to the schema owner, an owner-only SELECT policy on `tenants` and UPDATE policy on `do_not_rehire_events` (without it the owner's updates silently matched nothing under forced RLS), and the append-only/immutable guards of `do_not_rehire_events`, `supplier_payout_versions` and `supplier_contacts` split so that only the owner's re-encryption of the same value passes (no payout warning or phone-change record for a rewrap). The blind-index key cannot rotate (payroll snapshots keep indexes without plaintext; OR-21) and the PIN pepper re-hashes lazily on sign-in (`status` shows PINs per version); both are documented in the runbook.
+- **Web console**: a *Change password* card on the account page (`foundation-console.tsx`; EN/SW, problem codes mapped); sign-out (top bar and portals) loads `/sign-in` as a new document so the client router cache of authenticated pages is dropped.
+- **CI**: `.github/workflows/security.yml` gained a weekly schedule and a `dependency-audit` job (`pnpm audit --prod --audit-level high`, CycloneDX SBOM as an artifact; actions pinned by SHA; the audit and SBOM take seconds locally); web-e2e unchanged.
+- **Shared packages**: `packages/validation/src/env.ts` (the new and relaxed variables above), EN/SW strings for the password card (`foundation.*`, 8 keys each).
+- **Tests and config**: `apps/api/vitest.config.e2e.ts` pins the active key versions to 1 so a developer's rotated `apps/api/.env` cannot leak into the e2e suite (found when the drill left the development `.env` on version 2); `pin.service.spec.ts` mock returns the new failure shape.
+- **Docs**: new [SECURITY_CHECKLIST](./SECURITY_CHECKLIST.md) (the checklist report: §1 pass rule, §2 counts per chapter, §3 the 14 gaps fixed, §4 deferred items and owner decisions, §5 ASVS documentation requirements — risk-based remediation, cryptographic inventory, data classification, authentication and session policies, sanitisation and logging inventories — and §6 every requirement with status and evidence) and [PENTEST_SCOPE](./PENTEST_SCOPE.md); THREAT_MODEL refreshed (status note; T-02/04/05/07/10/14/23/60/66/67/69 reconciled with what is built — e.g. the CSP claim was untrue until D9.1; A-130–A-135; §7.1 pinned to ASVS 5.0.0 with the checklist link; §8 D1.2 and D9.1 rows; §9 OR-07/OR-14 updated, OR-20 MFA for every office role, OR-21 blind-index rotation, OR-22 CSP reporting and alerting); ARCHITECTURE §4.17, D-150–D-156 and as-built corrections in §7, §10, §17, §18 and §19; OPERATIONS "Key rotation" runbook with the drill; CONFIGURATION (new and changed variables); ERD ("Implemented in D9.1"); INVARIANTS (key rotation); ACCEPTANCE_MATRIX (four D9.1 rows); the API README (password change, session revocation, HIBP default, ClamAV, `keys:rotate`); ROADMAP.
+- **Dependencies**: none added; `pnpm-lock.yaml` unchanged.
+
+**Tests added or changed** (each fails without its fix; see the mutation checks below)
+
+- Web unit: `src/lib/security-headers.test.ts` (**10**: nonce-only scripts and the other directives, `'unsafe-eval'` and map tiles in development only, nonce format, fresh 128-bit nonces, HSTS in production only, Permissions-Policy, the proxy's fresh nonce handed to the render, a client-supplied nonce ignored, HTTPS-only `upgrade-insecure-requests`/HSTS, `/api` excluded) and `src/lib/zod-config.test.ts` (**1**: never probes eval).
+- Playwright: `test/security-headers.spec.ts` (**8**: headers on pages and static files; injected inline handlers, `javascript:` URLs and foreign images blocked; sign-in, dashboard, a project, the project photos tab (upload), client portal and supplier portal render with no CSP violation).
+- API unit: `sealed-secrets.spec.ts` (3), `keys/key-rotation.spec.ts` (2: the column catalogue matches every `Bytes *_enc` column in `schema.prisma`; CLI arguments), `malware-scanner.spec.ts` (+4 against a fake clamd: framed streaming, infected, errors/stalls/unreachable fail closed, selection by configuration), `logging.spec.ts` (+2), `app-config.spec.ts` (+1), `password-policy.spec.ts` (+1); `pin.service.spec.ts` mock updated to the new failure shape.
+- API e2e: new `key-rotation.e2e-spec.ts` (**2**: the drill — a namespaced demo company seeded with v1, plus NSSF/SHA/next-of-kin values, a do-not-rehire reason, supplier KRA PIN, contact phone, payout account and TOTP seeds; v2 added and active, reads unchanged; dry run, rewrap in batches of 7, idempotent rerun, run records; no phone-change record created; v1 removed, reads unchanged through the API and no v1 ciphertext left — and `pmb_app` cannot use the path while the owner cannot change anything else on immutable rows); `passwords.e2e-spec.ts` (+3: change password; keep sessions and step-up with MFA; security events without identifiers or secrets); `identity.e2e-spec.ts` (session revocation needs recent authentication); `health.e2e-spec.ts` (+2: every controller but health behind `BrowserGuard`; TRACE refused, problem+json with a charset; the full helmet header set asserted); `client-portal.e2e-spec.ts` (photo images `no-store`). The existing "forces RLS and policies on every tenant_id table" test caught `key_rotation_runs` without RLS in the first full run (fixed).
+
+**Real-API verification** (`pmb-pin` development database `pmb`, seeded; API on 4500, web on 3500; temporary Playwright scripts kept in the session folder, not in the repository; servers stopped afterwards)
+
+- **CSP walk, `next dev`**: owner 160, client 10, supplier 21 page loads (links followed breadth-first from each landing page): **no CSP violation and no page error**.
+- **CSP walk, production build** (`next build && next start` on 3500): the first walk reported `script-src blocked eval` on every page (Zod 4's JIT probe) → `zod-config.ts`; after the fix owner 160, project manager 60, client 10, supplier 21 page loads: **no CSP violation and no page error**.
+- **Functional checks, production build: 21/21** — next-themes' script ran with the nonce; 22 framework scripts carry it; an injected inline handler, a `javascript:` URL and a third-party image are blocked; the catalogue price chart (Recharts, injected `<style>`) renders; four project photo thumbnails load; BQ Excel and PDF exports download; a drawing upload through the API (revision G) and its download; four client photo images and the S-curve; client statement PDF and Excel; supplier statement PDF and Excel; no CSP console errors on the owner, client and supplier pages.
+- **ClamAV**: a temporary `clamav/clamav-debian:stable` container (127.0.0.1:3311; the official `clamav/clamav` image has no arm64 build) with the API's `ClamavMalwareScanner`: a clean file → accepted, the EICAR test file → refused as malware, 30 MB → accepted; container removed afterwards.
+- **Key rotation drill** on the development database: steps, commands and results in [OPERATIONS "Key rotation"](./OPERATIONS.md#drill-on-the-development-database-14112026-d91). In short: 102 field values (40 ID numbers, 39 labourer phones, 18 KRA PINs, a do-not-rehire reason, 2 supplier KRA PINs, a contact phone, a bank account number) and 2 TOTP seeds moved from v1 to v2; the revealed identifiers' fingerprint was the same before, during and after; the rerun found nothing to do; the retired v1 keys read none of the 104 values; replacing the signing key gave 401 for the old access token and 200 after one refresh; owner TOTP sign-in worked throughout. `apps/api/.env` of this worktree now holds the drill's version 2 keys (throwaway, development only); after the `key_rotation_runs` RLS change the same migration was applied to `pmb` by hand (policy and checksum) and `keys:rotate status` still reports every value on v2.
+
+**Commands run (from the worktree root unless noted; PATH set to the arm64 Node 24.22.2 and the pnpm shim) and actual results**
+
+| Command | Actual result |
+|---|---|
+| `pnpm format:check` | "All matched files use Prettier code style!" (exit 0) |
+| `pnpm turbo run lint typecheck test i18n:check build --force` | **26 successful, 26 total** (0 cached). oxlint "Found 0 warnings and 0 errors" in `types`, `i18n`, `domain`, `validation` and `api`; ESLint in web: 0 errors, the 2 existing warnings in `test/mock-client-portal.mts` (unused `_by`/`_at`, not touched by D9.1). Unit tests: types 38, domain 533, validation 137, i18n 3, web 105 (24 files, incl. `security-headers.test.ts` 10 and `zod-config.test.ts` 1), API 155 (31 files). i18n "OK: 9141 keys in en and sw, all ICU messages compile". API and web builds pass (the web build lists `ƒ Proxy (Middleware)`). The first forced run failed one API unit test (`pin.service.spec.ts`: its mocked transaction still returned `null`, the old failure shape) — mock updated |
+| Reset `pmb_test`, then `cd apps/api && pnpm test:e2e` | **29 files, 357 tests passed** (incl. `key-rotation.e2e-spec.ts` 2/2, `passwords.e2e-spec.ts` 7/7, `health.e2e-spec.ts` 9/9). Earlier runs on the way: (1) every suite skipped because `apps/api/.env`, switched to the drill's version 2 keys, leaked `FIELD_ENCRYPTION_ACTIVE_KEY_VERSION=2` into the test environment → the e2e config now pins the active versions; (2) two failures — the RLS invariant test on `key_rotation_runs` (fixed: forced RLS with an owner-only policy) and a 90 s timeout of the existing demo-seed test in `projects.e2e-spec.ts` under load (16 s in the final run, unchanged code path) |
+| `cd apps/web && PLAYWRIGHT_MOCK_API_PORT=3599 PLAYWRIGHT_WEB_PORT=3510 npx playwright test --reporter=line` | **176 passed (7.0 min)**, incl. `security-headers.spec.ts` 8/8; no retries needed |
+| `cd apps/api && npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma` (migrated `pmb_test`, as `pmb_migrator`) | "No difference detected." (exit 0) |
+| `pnpm audit --prod --audit-level high` | exit 0: no high or critical advisories (one moderate `minimatch` and one low `deepmerge`, both through the `shadcn` CLI) |
+| `pnpm sbom --sbom-format cyclonedx --lockfile-only --prod` | A CycloneDX document (the CI job's artifact) |
+| `pnpm --filter @pm-buddy/api keys:rotate …` on `pmb` | See the drill above and OPERATIONS |
+| Mutation checks (`d91/mutations.py`, session folder): each change applied alone, `pmb_test` reset when the migration changed, the named test file run, file restored | **22/22 caught** (below) |
+
+Mutation checks — each must make a test fail: (1) API: ending another session without recent authentication → identity "lists and revokes only the caller's sessions"; (2) password change without checking the current password, (3) without the MFA step-up, (4) without ending other sessions → the matching `passwords.e2e-spec.ts` test; (5) no security event for a failed sign-in → "logs authentication outcomes as security events…"; (6) client photo images cacheable → client-portal "shows general photos only…"; (7) `BrowserGuard` removed from the client portal controller → health "puts every controller but health behind BrowserGuard…"; (8) API docs on by default in production → `app-config.spec.ts`; (9) breach check off by default in production → `password-policy.spec.ts`; (10) refusals logged at info → `logging.spec.ts`; (11) sealed values without `kid` not read as version 1, (12) new values sealed without `kid` → `sealed-secrets.spec.ts`; (13) a column dropped from the rotation catalogue → `key-rotation.spec.ts`; DB: (14) `app.is_field_rewrap()` not bound to the owner, (15) not requiring the rest of the row unchanged → "lets only the schema owner rewrite a ciphertext…"; (16) no owner UPDATE policy on do-not-rehire history, (17) payout-version guard without the rewrap exception → "rotates every encrypted column…"; (18) `key_rotation_runs` without forced RLS → identity "forces RLS and policies on every tenant_id table…"; web: (19) `frame-ancestors *` → `security-headers.test.ts`; (20) the proxy without the security headers, (21) the nonce not passed to next-themes → Playwright `security-headers.spec.ts` (sign-in and dashboard report CSP violations); (22) Zod without `jitless` → `zod-config.test.ts`.
+
+**Merge with `main` and independent review (15/11/2026)**
+
+Merging `main` (D6.3 part B subcontracts, D6.1 photo evidence) conflicted only in the documents (sections added side by side). The migrations `20261201` (subcontracts), `20261202` (key rotation) and `20261203` (photo evidence) redefine no common function or trigger, so their order does not matter on databases that already ran the later ones. The key-rotation catalogue still covers every encrypted column (`key-rotation.spec.ts`).
+
+| # | Severity | Finding | Fix and evidence |
+|---|---|---|---|
+| 1 | High | Once D6.1's in-app camera was merged in, D9.1's headers blocked it: `Permissions-Policy: camera=()` refused `getUserMedia`, and `img-src 'self'` blocked the `blob:` preview of the photo just taken. On Chrome the camera never opened, so no photo could be verified (THREAT_MODEL A-13) | `camera=(self)` and `img-src 'self' blob:` (`security-headers.ts`; unit and browser header tests updated). The existing browser test of the in-app camera failed on the merged branch (shutter never enabled) and passes after the fix; a Chromium probe with the exact headers showed the camera refused and the preview blocked before, and both working after (the muted viewfinder plays under `autoplay=()`) |
+| 2 | Low | The rotation runbook added the new field/MFA key and made it active in one deploy, so during a rolling deploy instances on the old configuration could not read values sealed by new ones (refused CSRF tokens, failed TOTP checks, failed identifier reveals) | OPERATIONS "Key rotation": add the key with the current version still active, then activate it in a second deploy, as the PIN pepper section already did |
+
+Also found while verifying the merge: the client-portal demo seed always created `client@mavuno-homes.example.test`, ignoring the seed namespace, so the projects, reports and key-rotation test files (all seeding demo companies in parallel) could race to create that one user (unique violation). Copies of the demo company now get a namespaced client, like the supplier contact. The key-rotation drill's set-up now seeds subcontracts and photo evidence too, so its time limit was raised from 120 to 300 seconds, as the reports test already allows.
+
+After the fixes, on the merged branch: API unit **158**, domain 555, validation 139, types 38, i18n 3; API e2e **30 files, 374 passed** on a fresh test database (`--maxWorkers=5`; with all 14 workers on this shared machine, under load from other sessions, many tests hit the 20-second limit); web unit 109; header unit tests 10; the photo and header browser tests 11; the full browser suite **180 passed** (`--workers=3`); `next build`; typecheck, lint (0 errors), `i18n:check` and Prettier.
+
+Test-database note: `client-portal.e2e-spec.ts` (on `main` since D7.1) relaxes every restrictive client-portal policy in the shared test database for a moment to prove the API alone keeps clients apart, then restores it. A run killed in that window leaves policies relaxed (it happened here once; the test database was reset), and another test file checking client isolation in the database at that moment could fail by chance.
+
+D4.1's live payroll screens (PR #47) reached `main` while CI ran on PR #46, so `main` was merged in once more. Only `apps/web/next.config.ts` conflicted: it keeps both D4.1's `PLAYWRIGHT_DIST_DIR` and D9.1's `poweredByHeader: false`. The payroll screens make no inline scripts, frames or foreign requests; their CSV download is a same-page `blob:` link, which the CSP does not restrict. The CSP sweep in `security-headers.spec.ts` now also renders the payroll batch register and the exports page, and reports no violations. On the merged branch: web typecheck, lint (0 errors), unit 109; payroll, photo and header browser tests **16 passed**; then the header tests with the payroll pages **10 passed**.
+
+**Limitations**
+
+- **`style-src 'unsafe-inline'`** stays (D-150): Radix and Recharts set style attributes and Sonner, react-remove-scroll and the chart component insert `<style>` elements without a nonce. Scripts are nonce-only, so this allows CSS injection (layout defacement, attribute-selector probing), not script.
+- The default **`/_global-error` page is prerendered** without a nonce: if the root layout itself throws, that page's scripts are blocked (its static message still shows). Every other page is rendered per request.
+- **No CSP violation reporting** endpoint and no alerting on security events yet (OR-22, D9.3); violations were checked in browsers and tests only.
+- HSTS and `upgrade-insecure-requests` were verified by unit tests and response headers, not over real HTTPS (no TLS in development; D9.3).
+- **Blind-index key** cannot rotate (OR-21); the **PIN pepper** rotates lazily at sign-in; **signing-key** rotation is a replacement (every access token is refused once and refreshed); MFA keys rotate, but short-lived CSRF tokens and the Google sign-in cookie simply expire.
+- ClamAV was checked against a temporary container; the Docker Compose development stack still uses the development scanner, and production needs clamd on the private network (D9.3).
+- The pen test itself is not done: [PENTEST_SCOPE](./PENTEST_SCOPE.md) prepares it (staging only, synthetic data, after D9.3). ZAP baseline against staging is D9.3.
+- 20 ASVS requirements are **deferred to D9.3** (TLS, edge, secrets manager, egress, log protection and shipping, operations-view session controls); the checklist must be re-run after D4.2, D7.3, D9.2 and D9.3 and before real money moves.
+- `apps/api/.env` of this worktree holds the drill's throwaway version 2 keys (the previous file is kept in the session folder); other worktrees are untouched.
+
+**Open risks and owner decisions** (THREAT_MODEL §9, [QUESTIONS](./QUESTIONS.md#security-d91) Q-SEC1–Q-SEC8): MFA for every office role (OR-20, D-155 proposed); HSTS preload; separate portal hostnames; prototype pages in production; HIBP on by default; versioned blind indexes (OR-21); one-time tokens in URL query strings (A-131); pen-test vendor, timing and `security.txt` contacts (OR-13, OR-14).
+
 ## D4.2 Daraja payments (branch `phase-4/d4.2-daraja`)
 
 Continued on 15 November 2026 in the existing `construction-p34b` checkout. The previous
@@ -2184,7 +2324,8 @@ not part of this deliverable.
 
 Merged `origin/main` at `016beb0` into the Daraja branch as `fb9686e`, preserving the
 subcontracts implementation, routes, navigation, translations and shared schema. The one manual
-conflict was the architecture document: subcontracts remains §4.16 and payments is §4.17.
+conflict was the architecture document: subcontracts remains §4.16 and payments became §4.17
+(§4.18 once D9.1, merged to `main` first, took §4.17).
 
 | Check after integration | Result |
 |---|---|

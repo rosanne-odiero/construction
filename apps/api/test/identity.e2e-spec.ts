@@ -411,6 +411,20 @@ describe("Identity, tenancy and project permissions (real runtime role)", () => 
     another.identifier = client.identifier;
     await another.initialize();
     await another.login();
+    // D9.1 (ASVS V7.5.2): signing out another session needs a recent sign-in or MFA check.
+    const reauthenticated = (minutesAgo: number) =>
+      prisma.session.update({
+        where: { id: client.auth.session.id },
+        data: { authTime: new Date(Date.now() - minutesAgo * 60_000), mfaVerifiedAt: null },
+      });
+    await reauthenticated(10);
+    const stale = await client.call("delete", `auth/sessions/${another.auth.session.id}`);
+    expect([stale.status, (stale.body as { code?: string }).code]).toEqual([
+      403,
+      "reauthentication-required",
+    ]);
+    expect((await another.call("get", "auth/me")).status).toBe(200);
+    await reauthenticated(1);
     expect((await client.call("delete", `auth/sessions/${another.auth.session.id}`)).status).toBe(
       200,
     );

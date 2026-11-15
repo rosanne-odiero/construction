@@ -156,6 +156,10 @@ function errorKey(error: unknown) {
       return "passwordWeak";
     case "password-breached":
       return "passwordBreached";
+    case "current-password-incorrect":
+      return "currentPasswordIncorrect";
+    case "reauthentication-required":
+      return "reauthenticationRequired";
     case "passkey-invalid":
       return "passkeyInvalid";
     case "passkey-cancelled":
@@ -774,6 +778,54 @@ export function FoundationConsole({ google = false }: { google?: boolean }) {
               onStepUp={passkeyStepUp}
               onRemove={removePasskey}
             />
+            <ActionForm
+              id="change-password"
+              title={t("changePassword")}
+              submit={t("changePassword")}
+              fields={[
+                {
+                  name: "currentPassword",
+                  label: t("currentPassword"),
+                  type: "password",
+                  autoComplete: "current-password",
+                  maxLength: 128,
+                },
+                {
+                  name: "newPassword",
+                  label: t("newPassword"),
+                  type: "password",
+                  autoComplete: "new-password",
+                  minLength: 12,
+                  maxLength: 128,
+                },
+              ]}
+              disabled={disabled}
+              onSubmit={(data) =>
+                void run(
+                  "changePassword",
+                  async () => {
+                    await mutate("/auth/password/change", messageResponseSchema, {
+                      currentPassword: value(data, "currentPassword"),
+                      newPassword: value(data, "newPassword"),
+                      signOutOtherSessions: data.get("signOutOtherSessions") === "on",
+                    });
+                    setSessions([]);
+                  },
+                  "passwordUpdated",
+                )
+              }
+            >
+              <p className="text-sm text-muted-foreground">{t("changePasswordHint")}</p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="signOutOtherSessions"
+                  defaultChecked
+                  className="size-4 accent-primary"
+                />
+                {t("signOutOtherSessions")}
+              </label>
+            </ActionForm>
           </div>
           {recoveryCodes.length ? (
             <Card>

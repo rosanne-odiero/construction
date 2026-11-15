@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { LogOut } from "lucide-react";
 import { csrfResponseSchema, messageResponseSchema } from "@pm-buddy/validation";
@@ -11,7 +10,6 @@ import { foundationRequest } from "@/lib/foundation-api";
 /** Signs out (the API revokes the session and clears its cookies), then opens /sign-in. */
 export function SignOutButton() {
   const t = useTranslations("topbar");
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   async function signOut() {
     setBusy(true);
@@ -25,8 +23,9 @@ export function SignOutButton() {
     } catch {
       // Sign-out always clears the cookies server-side; continue to the sign-in page either way.
     } finally {
-      router.replace("/sign-in");
-      router.refresh();
+      // A full page load, not a client navigation: the router cache of authenticated pages is
+      // dropped with the old document, so Back cannot show them on a shared computer (D-153).
+      window.location.replace("/sign-in");
     }
   }
   return (

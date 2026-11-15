@@ -74,6 +74,8 @@ describe("Health and safety (real runtime role)", () => {
   const labourers: string[] = [];
   let notificationSpy: ReturnType<typeof vi.spyOn>;
   const today = nairobiDate();
+  // Incident and treatment times are yesterday morning, so they are never in the future, even
+  // just after midnight in Nairobi.
   const yesterday = addCalendarDays(today, -1);
   const base = (project = projectId) => `projects/${project}/safety`;
   const context = (browser = owner, tenant = tenantId) => ({
@@ -153,7 +155,7 @@ describe("Health and safety (real runtime role)", () => {
       siteId,
       kind: "injury",
       severity: "moderate",
-      occurredAt: `${today}T08:15:00+03:00`,
+      occurredAt: `${yesterday}T08:15:00+03:00`,
       location: "Block A scaffold, second lift",
       description: `Synthetic slip on wet boards ${randomUUID().slice(0, 8)}`,
       immediateActions: "Area cordoned off and boards dried",
@@ -536,7 +538,7 @@ describe("Health and safety (real runtime role)", () => {
     const treatment = ok(
       await foreman.call("post", `${base()}/first-aid/treatments`, {
         siteId,
-        treatedAt: `${today}T08:30:00+03:00`,
+        treatedAt: `${yesterday}T08:30:00+03:00`,
         labourerId: labourers[0],
         injuryType: "sprain",
         treatment: "cold_compress",
@@ -1405,7 +1407,7 @@ describe("Health and safety (real runtime role)", () => {
         siteId,
         kind: "near_miss",
         severity: "minor",
-        occurredAt: `${today}T08:00:00+03:00`,
+        occurredAt: `${yesterday}T08:00:00+03:00`,
         location: "Gate",
         description: "A client tries to report an incident",
         firstAidGiven: false,

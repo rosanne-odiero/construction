@@ -1,5 +1,13 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { nairobiDate, outputAmountMinor, splitEqually, normaliseDecimal } from "@pm-buddy/domain";
+import {
+  checkJobOutput,
+  jobQuantityInForce,
+  nairobiDate,
+  normaliseDecimal,
+  outputAmountMinor,
+  pieceRateJobCode,
+  splitEqually,
+} from "@pm-buddy/domain";
 import type { OutputStatus } from "@pm-buddy/types";
 import {
   allowanceResponseSchema,
@@ -330,6 +338,7 @@ export class PayrollInputsService {
       async (scope) => {
         const { tx, access } = scope;
         const row = await this.decidable(scope, outputId, input.version);
+        if (row.jobId) await this.checkJobApproval(scope, row);
         const members = row.labourerId
           ? [{ labourerId: row.labourerId }]
           : await this.gangMembers(tx, access.tenantId, row.gangId!, toCalendarDate(row.workDate));
@@ -423,6 +432,47 @@ export class PayrollInputsService {
     return row;
   }
 
+  /**
+   * D6.3 part B: output recorded against a piece-rate job is approved only while the job's
+   * approved output stays within its agreed quantity plus approved extensions (the job row is
+   * locked; the database repeats the check).
+   */
+  private async checkJobApproval(
+    scope: Scope,
+    row: { jobId: string | null; id: string; quantity: Prisma.Decimal },
+  ) {
+    const { tx, access } = scope;
+    await tx.$queryRaw`SELECT id FROM piece_rate_jobs WHERE tenant_id = ${access.tenantId}::uuid AND id = ${row.jobId}::uuid FOR UPDATE`;
+    const job = await tx.pieceRateJob.findUniqueOrThrow({
+      where: { tenantId_id: { tenantId: access.tenantId, id: row.jobId! } },
+      include: { extensions: { where: { status: "approved" }, select: { quantity: true } } },
+    });
+    const approved = await tx.pieceRateOutput.aggregate({
+      where: {
+        tenantId: access.tenantId,
+        jobId: row.jobId,
+        status: "approved",
+        id: { not: row.id },
+      },
+      _sum: { quantity: true },
+    });
+    const check = checkJobOutput({
+      inForce: jobQuantityInForce(
+        job.agreedQuantity.toFixed(),
+        job.extensions.map((entry) => entry.quantity.toFixed()),
+      ),
+      approved: approved._sum.quantity?.toFixed() ?? "0",
+      pending: "0",
+      quantity: row.quantity.toFixed(),
+      stage: "approve",
+    });
+    if (!check.ok)
+      throw payrollConflict(
+        "job-quantity-exceeded",
+        `Approving this takes the job above its agreed quantity (${check.remaining} left); approve an extension first.`,
+      );
+  }
+
   /** Current members of a gang on a date, by worker number (the equal-split order). */
   private async gangMembers(tx: Tx, tenantId: string, gangId: string, date: string) {
     const day = fromCalendarDate(date);
@@ -460,7 +510,8 @@ export class PayrollInputsService {
     return outputResponseSchema.parse({ output: (await this.toOutputs(tx, tenantId, [row]))[0] });
   }
 
-  private async toOutputs(
+  /** Outputs on the wire with their shares, batches and job (also used by piece-rate jobs). */
+  async toOutputs(
     tx: Tx,
     tenantId: string,
     rows: Prisma.PieceRateOutputGetPayload<object>[],
@@ -504,6 +555,10 @@ export class PayrollInputsService {
       where: { tenantId, id: { in: rows.flatMap((row) => (row.bqItemId ? [row.bqItemId] : [])) } },
       select: { id: true, ref: true },
     });
+    const jobs = await tx.pieceRateJob.findMany({
+      where: { tenantId, id: { in: rows.flatMap((row) => (row.jobId ? [row.jobId] : [])) } },
+      select: { id: true, number: true },
+    });
     const names: Names = await displayNames(tx, [
       ...rows.map((row) => row.recordedBy),
       ...rows.map((row) => row.decidedBy),
@@ -515,6 +570,10 @@ export class PayrollInputsService {
       labourer: labourers.find((entry) => entry.id === row.labourerId) ?? null,
       gang: gangs.find((entry) => entry.id === row.gangId) ?? null,
       bqItem: items.find((entry) => entry.id === row.bqItemId) ?? null,
+      job: (() => {
+        const job = jobs.find((entry) => entry.id === row.jobId);
+        return job ? { id: job.id, code: pieceRateJobCode(job.number) } : null;
+      })(),
       description: row.description,
       unit: row.unit,
       quantity: normaliseDecimal(row.quantity.toString()),

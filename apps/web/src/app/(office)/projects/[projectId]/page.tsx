@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, Handshake } from "lucide-react";
 import { isProjectReadOnly } from "@pm-buddy/domain";
 import {
   bqContractSumResponseSchema,
@@ -24,6 +24,7 @@ import { QUALITY_VIEWS, qualityAccess, qualityHref } from "@/lib/quality";
 import { plantAccess } from "@/lib/plant";
 import { SAFETY_VIEWS, safetyAccess, safetyHref } from "@/lib/safety";
 import { scheduleAccess } from "@/lib/schedule";
+import { subcontractAccess } from "@/lib/subcontracts";
 import { cn } from "@/lib/utils";
 import { serverApi, requireSession } from "@/lib/server-api";
 import { signInHref } from "@/lib/safe-next";
@@ -125,6 +126,7 @@ export default async function ProjectPage({
   const canReadPlant = plantAccess(detail.permissions).read;
   // Documents, compliance and instructions: project staff and consultants (decision D-110).
   const canReadDocuments = documentsAccess(detail.permissions).read;
+  const subcontracts = subcontractAccess(detail.permissions);
   const readOnly = isProjectReadOnly(project.status);
   // Original vs revised contract sum on the overview, for people who can see the BQ.
   const sums =
@@ -201,6 +203,17 @@ export default async function ProjectPage({
               >
                 <FileSpreadsheet className="size-4" aria-hidden />
                 {t("tabs.bq")}
+              </Link>
+            </li>
+          ) : null}
+          {subcontracts.read || subcontracts.pieceRate ? (
+            <li>
+              <Link
+                href={`/subcontracts/projects/${project.id}${subcontracts.read ? "" : "/piece-rate"}`}
+                className="-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground hover:text-foreground"
+              >
+                <Handshake className="size-4" aria-hidden />
+                {t("tabs.subcontracts")}
               </Link>
             </li>
           ) : null}

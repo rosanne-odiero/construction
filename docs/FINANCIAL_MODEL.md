@@ -36,6 +36,34 @@ Provider confirmation may first post to a clearing account, with statement recon
 
 These are proposed accounting policies, not approved defaults for production.
 
+## Subcontract certificates — rule KE-SUB-1 (D6.3 part B, as implemented)
+
+[ARCHITECTURE §4.16](./ARCHITECTURE.md#416-subcontracts-and-piece-rate-jobs-d63-part-b), decisions D-144–D-148. KES minor units, net of VAT, rounded half away from zero once per figure (`packages/domain` `computeSubcontractCertificate`, repeated by the database CHECK `subcontract_certificates_check`):
+
+| Figure | Rule |
+|---|---|
+| Work done W | Σ lines: quantity to date × the subcontract's own rate (a lump-sum share: lump sum × % to date ÷ share). Quantities are claims allocated from **approved D6.3 measurement**; per BQ item all subcontracts together never claim more than was measured |
+| Retention R | min(round(W × retention %), round(original value × limit %)); after the practical release R − round(R × release %); after final 0 |
+| Advance recovery V | min(round(W × recovery %), advances paid on or before the certificate date) — outstanding (paid − V) is never negative |
+| Amount due D | W − R − V − Σ amounts due already certified (may be negative: it corrects the last certificate) |
+| VAT | round(D × VAT % × VATable work ÷ W), VATable = standard-rated lines (CR-SCN-02) |
+| Withholding tax | round(D × WHT %), shown separately, default 0 until configured (CR-SCN-01) |
+| Payable | D + VAT − WHT (negative on a correcting certificate: nothing is paid against it, and it nets off what is left to pay on the subcontract — payments are capped per certificate **and** at Σ certified payable − Σ paid for the subcontract) |
+
+Golden figures (synthetic; seed, e2e and domain tests): plastering 450 m² @ 280 = 126,000.00, retention 5 % limited to 5 % (6,300.00), advance 20,000.00 paid and recovered at 20 %, WHT 3 %, no VAT; at 200 m²: W 56,000.00, R 2,800.00, V 11,200.00, D 42,000.00, WHT 1,260.00, payable 40,740.00; the practical release then pays 1,400.00 (WHT 42.00, payable 1,358.00). Windows 36 m² @ 8,200, standard-rated at 16 %, retention 10 % limited to 5 %: at 12 m² W 98,400.00, R 9,840.00, D 88,560.00, VAT 14,169.60, payable 102,729.60.
+
+**Cost postings (D-145, D-53, database triggers, each once):**
+
+| Event | Cost ledger entry | Control |
+|---|---|---|
+| Certificate certified | `accrued`, category `subcontract`, per line on its BQ item: value to date − previous (source `subcontract_certificate`) | Unique per certificate and line; a retention release posts nothing (work accrued gross) |
+| Payment recorded against it (outside PM-Buddy) | `paid`, `subcontract`: the cost part of the cash, `settlement_cost_minor(due, payable, paid before, amount)` (cumulative half-up; the parts add up to D) | Unique per payment; never above payable − paid; never by the certifier |
+| Advance recorded as paid | `paid`, `subcontract`, no BQ item: the advance (source `subcontract_advance`) | Unique per advance; recovered by later certificates |
+| Subcontractor's tax invoice matched | **Nothing** (the certificate is the accrual) | Its number can never also be a D5.2 supplier invoice of the same supplier |
+| Correction | A D5.4 reversal journal of the entry, approved by another person | The original entry is never changed |
+
+Committed (D-146) = approved and active subcontracts' value in force − certified work, per line and BQ item; it is reported apart from actual (accrued) and paid, so no shilling is counted twice. The spending page's *cash paid* counts a subcontract payment's cash (VAT included, before withholding), not the cost part the ledger holds. An accounting reviewer must still approve these policies and the withholding-tax and VAT treatment before live use (COMPLIANCE_TODO CR-SCN-01–05).
+
 ## Allocations, corrections and period closure
 
 - Positive settlement allocations lock the obligation and cannot exceed its authorised outstanding balance after reservations/confirmed allocations.

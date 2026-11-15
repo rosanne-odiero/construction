@@ -60,6 +60,7 @@ export function SupplierForm({ existing }: { existing?: SupplierDetailResponse }
     notes: supplier?.notes ?? "",
     status: (supplier?.status ?? "active") as SupplierStatus,
     statusReason: supplier?.statusReason ?? "",
+    isSubcontractor: supplier?.isSubcontractor ?? false,
   });
   const [contacts, setContacts] = useState<Contact[]>(
     existing
@@ -129,6 +130,7 @@ export function SupplierForm({ existing }: { existing?: SupplierDetailResponse }
       creditDays,
       creditLimitMinor: creditLimit,
       notes: form.notes.trim(),
+      isSubcontractor: form.isSubcontractor,
       contacts: contactBody,
     };
     const pin = form.kraPin.trim();
@@ -249,6 +251,23 @@ export function SupplierForm({ existing }: { existing?: SupplierDetailResponse }
               value={form.etimsCheckedOn}
               onChange={(event) => setForm({ ...form, etimsCheckedOn: event.target.value })}
             />
+          </Field>
+          <Field className="md:col-span-2">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                id="supplier-subcontractor"
+                type="checkbox"
+                className="mt-0.5 size-4"
+                checked={form.isSubcontractor}
+                onChange={(event) => setForm({ ...form, isSubcontractor: event.target.checked })}
+              />
+              <span>
+                {t("isSubcontractor")}
+                <span className="block text-xs text-muted-foreground">
+                  {t("isSubcontractorHint")}
+                </span>
+              </span>
+            </label>
           </Field>
           <Field>
             <FieldLabel htmlFor="supplier-credit-days">{t("creditDays")}</FieldLabel>

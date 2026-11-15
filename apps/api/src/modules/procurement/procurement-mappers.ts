@@ -321,6 +321,7 @@ export function toSupplier(
     statusReason: row.statusReason,
     creditDays: row.creditDays,
     creditLimitMinor: row.creditLimitMinor === null ? null : safeMinor(row.creditLimitMinor),
+    isSubcontractor: row.isSubcontractor,
     primaryContact: extras.primary
       ? {
           name: extras.primary.name,

@@ -330,7 +330,7 @@ export class PaymentsController {
   @HttpCode(200)
   @ApiOperation({
     summary: "Resolve or dismiss a quarantined callback with a reason",
-    description: `Requires payments.review; ${stepUp} Not the creator of a linked payment. ${versioned}`,
+    description: `Requires payments.review; ${stepUp} Not the creator of a linked payment, nor whoever asked for a linked reversal (409 same-person). ${versioned}`,
     operationId: "reviewPaymentCallback",
   })
   @ApiHeader(optional)
@@ -374,7 +374,7 @@ export class PaymentsController {
   @HttpCode(200)
   @ApiOperation({
     summary: "Resolve a reconciliation case",
-    description: `Requires payments.review; ${stepUp} Not the payment's creator (409 same-person). ${versioned} Confirming needs the M-Pesa receipt and exact amount (409 evidence-mismatch); an uncertain payment cannot be dismissed.`,
+    description: `Requires payments.review; ${stepUp} Not the payment's creator, nor, for a reversal, whoever asked for it (409 same-person). ${versioned} Confirming needs the M-Pesa receipt and exact amount (409 evidence-mismatch); an uncertain payment cannot be dismissed.`,
     operationId: "resolveReconciliationCase",
   })
   @ApiHeader(optional)

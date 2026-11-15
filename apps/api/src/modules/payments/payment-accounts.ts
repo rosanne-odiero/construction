@@ -13,7 +13,11 @@ type Tx = Prisma.TransactionClient;
 
 /**
  * Builds a company's provider account inside its transaction: secrets decrypted in memory only,
- * callback URLs from the route the attempt was created with (or the active one).
+ * callback URLs from the company's active route. Every provider call made after a token rotation
+ * (a queued submission, a status query) gets the new token, so a rotated token is never sent
+ * again; callbacks already addressed to the retired route are still accepted during its grace
+ * period. An attempt keeps the route it was created with for the record only; matching a result
+ * never depends on the route.
  */
 @Injectable()
 export class PaymentAccounts {
@@ -22,16 +26,10 @@ export class PaymentAccounts {
     private readonly runtime: PaymentsRuntime,
   ) {}
 
-  async token(
-    tx: Tx,
-    tenantId: string,
-    routeId?: string | null,
-  ): Promise<{ routeId: string; token: string } | null> {
-    const route = routeId
-      ? await tx.paymentCallbackRoute.findUnique({
-          where: { tenantId_id: { tenantId, id: routeId } },
-        })
-      : await tx.paymentCallbackRoute.findFirst({ where: { tenantId, status: "active" } });
+  async token(tx: Tx, tenantId: string): Promise<{ routeId: string; token: string } | null> {
+    const route = await tx.paymentCallbackRoute.findFirst({
+      where: { tenantId, status: "active" },
+    });
     if (!route) return null;
     return { routeId: route.id, token: this.crypto.openToken(tenantId, route.id, route.tokenEnc) };
   }
@@ -62,10 +60,10 @@ export class PaymentAccounts {
     };
   }
 
-  async load(tx: Tx, tenantId: string, routeId?: string | null) {
+  async load(tx: Tx, tenantId: string) {
     const settings = await tx.paymentSettings.findUnique({ where: { tenantId } });
     if (!settings) return null;
-    const route = await this.token(tx, tenantId, routeId);
+    const route = await this.token(tx, tenantId);
     if (!route) return null;
     return { settings, routeId: route.routeId, account: this.account(settings, route.token) };
   }

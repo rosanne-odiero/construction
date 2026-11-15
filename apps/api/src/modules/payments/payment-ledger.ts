@@ -86,7 +86,12 @@ export class PaymentLedger {
     });
   }
 
-  /** Durable work for the relay; at most one pending row per topic and subject. */
+  /**
+   * Durable work for the relay; at most one pending row per topic and subject. Work that is already
+   * pending keeps its row and is brought forward when asked for earlier (a reviewer's "query now"
+   * overtakes a scheduled query). A row being processed is not affected: the processor re-arms
+   * status queries from the attempt's schedule once that row is done.
+   */
   async enqueue(
     tx: Tx,
     tenantId: string,
@@ -94,10 +99,12 @@ export class PaymentLedger {
     refId: string,
     availableAt = new Date(),
   ) {
-    await tx.paymentOutbox.createMany({
-      data: [{ id: uuidv7(), tenantId, topic, refId, availableAt }],
-      skipDuplicates: true,
-    });
+    await tx.$executeRaw`
+      INSERT INTO payment_outbox (id, tenant_id, topic, ref_id, available_at)
+      VALUES (${uuidv7()}::uuid, ${tenantId}::uuid, ${topic}, ${refId}::uuid,
+        ${availableAt.toISOString()}::timestamptz)
+      ON CONFLICT (tenant_id, topic, ref_id, pending_marker)
+      DO UPDATE SET available_at = LEAST(payment_outbox.available_at, EXCLUDED.available_at)`;
   }
 
   /**
@@ -143,7 +150,11 @@ export class PaymentLedger {
     });
   }
 
-  /** Opens a reconciliation case unless the same one is already open. */
+  /**
+   * Opens a reconciliation case unless the same one is already open. A callback has at most one
+   * open case: when its evidence is re-classified (an unmatched callback later found to conflict
+   * with a recorded result), its earlier case closes as superseded and the new one opens.
+   */
   async openCase(
     tx: Tx,
     tenantId: string,
@@ -152,16 +163,28 @@ export class PaymentLedger {
     link: { requestId?: string | null; attemptId?: string | null; callbackId?: string | null },
     actorId: string | null,
   ) {
-    const existing = link.attemptId
-      ? await tx.paymentCase.findFirst({
-          where: { tenantId, status: "open", attemptId: link.attemptId, kind },
-        })
-      : link.callbackId
-        ? await tx.paymentCase.findFirst({
-            where: { tenantId, status: "open", callbackId: link.callbackId },
-          })
-        : null;
-    if (existing) return existing;
+    if (link.attemptId) {
+      const existing = await tx.paymentCase.findFirst({
+        where: { tenantId, status: "open", attemptId: link.attemptId, kind },
+      });
+      if (existing) return existing;
+    }
+    if (link.callbackId) {
+      const open = await tx.paymentCase.findFirst({
+        where: { tenantId, status: "open", callbackId: link.callbackId },
+      });
+      if (open?.kind === kind) return open;
+      if (open)
+        await this.closeCase(
+          tx,
+          tenantId,
+          open.id,
+          open.version,
+          "no_payment_effect",
+          `Superseded: the callback is now reviewed as ${kind.replace(/_/g, " ")}`,
+          actorId,
+        );
+    }
     const created = await tx.paymentCase.create({
       data: {
         id: uuidv7(),

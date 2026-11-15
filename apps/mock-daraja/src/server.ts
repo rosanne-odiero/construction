@@ -67,6 +67,8 @@ type Transaction = {
   partyA: string;
   partyB: string;
   phone?: string;
+  /** Status queries answered so far (status_busy_then_completed refuses the first). */
+  queries?: number;
 };
 
 export type MockDaraja = {
@@ -370,6 +372,7 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
         break;
       case "timeout_completed":
       case "timeout_failed":
+      case "status_busy_then_completed":
         break;
       case "duplicate_callback": {
         const body = success();
@@ -583,10 +586,22 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
     };
   }
 
+  /** True for the first status query of a status_busy_then_completed transaction. */
+  const busyFirstQuery = (tx: Transaction | undefined) => {
+    if (tx?.scenario !== "status_busy_then_completed") return false;
+    tx.queries = (tx.queries ?? 0) + 1;
+    return tx.queries === 1;
+  };
+
   function stkQuery(body: Json): Reply {
     const tx = transactions.get(str(body["CheckoutRequestID"]));
     if (!tx || tx.kind !== "stk")
       return gatewayError(400, "400.002.02", "Bad Request - Invalid CheckoutRequestID");
+    if (busyFirstQuery(tx))
+      return {
+        ...gatewayError(500, "500.001.1001", "The transaction is being processed"),
+        scenario: tx.scenario,
+      };
     return {
       status: 200,
       body: {
@@ -664,6 +679,22 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
       return gatewayError(400, "400.002.02", "Bad Request - Invalid ResultURL");
     if (!str(body["Initiator"]))
       return gatewayError(400, "400.002.02", "Bad Request - Invalid Initiator");
+    // A selected next scenario applies to a reversal only as server_error (uncertain outcome).
+    if (kind === "reversal" && nextScenario && pickScenario(null) === "server_error")
+      return {
+        ...gatewayError(500, "500.003.1001", "Internal Server Error"),
+        scenario: "server_error",
+      };
+    if (kind === "status") {
+      const queried =
+        transactions.get(str(body["OriginalConversationID"])) ??
+        transactions.get(str(body["TransactionID"]));
+      if (busyFirstQuery(queried))
+        return {
+          ...gatewayError(500, "500.003.02", "System is busy. Please try again in few minutes."),
+          scenario: queried!.scenario,
+        };
+    }
     const ids = { OriginatorConversationID: originatorId(), ConversationID: conversationId() };
     const valid = credentialValid(body["SecurityCredential"]);
     const failure = (code: string, desc: string) => ({

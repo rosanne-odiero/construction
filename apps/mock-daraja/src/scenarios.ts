@@ -20,6 +20,7 @@ export const MOCK_SCENARIOS = [
   "server_error",
   "interim_then_success",
   "invalid_credentials",
+  "status_busy_then_completed",
 ] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
 
@@ -39,6 +40,7 @@ export const MAGIC_AMOUNTS: Readonly<Record<number, MockScenario>> = {
   1012: "server_error",
   1013: "interim_then_success",
   1014: "result_before_response",
+  1015: "status_busy_then_completed",
 };
 
 export const SCENARIO_HELP: Readonly<Record<MockScenario, string>> = {
@@ -65,6 +67,8 @@ export const SCENARIO_HELP: Readonly<Record<MockScenario, string>> = {
   interim_then_success: "Accepted; a ResultType 1 interim result, then the success callback.",
   invalid_credentials:
     "Selected automatically when the SecurityCredential cannot be decrypted: ResultCode 2001.",
+  status_busy_then_completed:
+    "Accepted; no callback ever. The first status query is refused as busy (STK Query 500.001.1001 'The transaction is being processed'; Transaction Status 500.003.02 'System is busy'); later ones report it completed.",
 };
 
 export function scenarioForAmount(amount: unknown): MockScenario {

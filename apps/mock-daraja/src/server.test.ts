@@ -63,6 +63,7 @@ describe("mock Daraja server", () => {
     expect(parsed.verify(certificate.publicKey)).toBe(true);
     expect(scenarioForAmount(1001)).toBe("failure");
     expect(scenarioForAmount("1003")).toBe("timeout_completed");
+    expect(scenarioForAmount(1015)).toBe("status_busy_then_completed");
     expect(scenarioForAmount(250)).toBe("success");
   });
 

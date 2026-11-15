@@ -6,6 +6,7 @@ import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import {
   IDEMPOTENCY_KEY,
+  maskCallbackTokens,
   paymentBadRequest,
   paymentConflict,
   requestFingerprint,
@@ -13,9 +14,18 @@ import {
 } from "./payments-support.js";
 
 /**
+ * The copy of a response kept for replays. A settings response gives credential managers the full
+ * callback URLs; the stored copy masks their token, which stays sealed everywhere it is kept, so a
+ * replay shows the masked URLs (the settings page reads the full ones again).
+ */
+const storedResponse = (result: unknown) =>
+  JSON.parse(maskCallbackTokens(JSON.stringify(result))) as Prisma.InputJsonValue;
+
+/**
  * Payment commands (WORKFLOWS shared rules): one serialised company transaction writes the change,
  * its timeline and audit events, outbox work and the stored response. With an Idempotency-Key a
- * retry with the same key and payload returns that response (`Idempotent-Replayed: true`); the same
+ * retry with the same key and payload returns that response (`Idempotent-Replayed: true`, callback
+ * tokens masked); the same
  * key with another payload or caller is 409 `idempotency-key-reused`. Commands that create money
  * movements require the key.
  */
@@ -81,7 +91,7 @@ export class PaymentCommands {
               idempotencyKey: key,
               userId: access.userId,
               fingerprint,
-              response: result as Prisma.InputJsonValue,
+              response: storedResponse(result),
             },
           });
           return result;

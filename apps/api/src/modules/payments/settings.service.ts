@@ -27,6 +27,7 @@ import { PaymentsRuntime } from "./payments-runtime.js";
 import {
   holds,
   canonicalJson,
+  maskCallbackTokens,
   notFound,
   paymentConflict,
   requireOne,
@@ -101,7 +102,7 @@ export class PaymentSettingsService {
       ? urls
       : urls.map((entry) => ({
           ...entry,
-          url: entry.url.replace(/hooks\/[0-9a-f]{64}/, "hooks/••••"),
+          url: maskCallbackTokens(entry.url),
         }));
     const warnings = [
       ...new Set(
@@ -249,6 +250,21 @@ export class PaymentSettingsService {
         fields: changed,
         environment: input.environment,
       });
+      if (changed.length > 0) {
+        // Submissions held because the environment or their shortcode changed after they were
+        // queued are checked again now (held again unless the settings match what they recorded).
+        await tx.paymentOutbox.updateMany({
+          where: {
+            tenantId: access.tenantId,
+            topic: "attempt.submit",
+            processedAt: null,
+            deadAt: null,
+            lastError: { in: ["environment-changed", "shortcode-changed"] },
+          },
+          data: { availableAt: new Date(), dispatchedAt: null },
+        });
+        this.relay.kick();
+      }
       return this.view(scope);
     });
   }

@@ -2164,7 +2164,7 @@ model PaymentAttempt {
   resultCode               String?                @map("result_code") @db.VarChar(20)
   resultDesc               String?                @map("result_desc") @db.VarChar(300)
   reason                   String?                @db.VarChar(40)
-  providerCode             String?                @map("provider_code") @db.VarChar(30)
+  providerCode             String?                @map("provider_code") @db.VarChar(100)
   requestDigest            String?                @map("request_digest") @db.Char(64)
   leaseOwner               String?                @map("lease_owner") @db.VarChar(80)
   leaseExpiresAt           DateTime?              @map("lease_expires_at") @db.Timestamptz

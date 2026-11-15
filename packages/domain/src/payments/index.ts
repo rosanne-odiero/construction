@@ -22,6 +22,7 @@ export {
   classifySubmission,
   DEFINITIVE_REJECTION_CODES,
   DUPLICATE_ORIGINATOR_CODE,
+  PROVIDER_CODE_MAX,
   type SubmissionOutcome,
   type SubmissionTransport,
 } from "./submission.js";

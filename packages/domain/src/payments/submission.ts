@@ -58,10 +58,14 @@ const isObject = (value: unknown): value is Json =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const str = (value: unknown): string | null =>
   typeof value === "string" && value.trim()
-    ? value.trim().slice(0, 100)
+    ? value.trim().slice(0, PROVIDER_CODE_MAX)
     : typeof value === "number"
-      ? String(value)
+      ? String(value).slice(0, PROVIDER_CODE_MAX)
       : null;
+
+/** Provider and transport codes are kept for diagnosis, at most this long (the stored column). */
+export const PROVIDER_CODE_MAX = 100;
+const transportCode = (code: string) => code.slice(0, PROVIDER_CODE_MAX);
 
 /** Classifies a submission (pure; unit-tested for every branch). Never "confirmed": results are asynchronous. */
 export function classifySubmission(
@@ -70,11 +74,19 @@ export function classifySubmission(
   sentOriginatorConversationId: string | null,
 ): SubmissionOutcome {
   if (transport.type === "not_sent")
-    return { outcome: "failed", reason: "not_delivered", providerCode: transport.code };
+    return {
+      outcome: "failed",
+      reason: "not_delivered",
+      providerCode: transportCode(transport.code),
+    };
   if (transport.type === "timeout")
     return { outcome: "unknown", reason: "timeout", providerCode: null };
   if (transport.type === "network")
-    return { outcome: "unknown", reason: "lost_response", providerCode: transport.code };
+    return {
+      outcome: "unknown",
+      reason: "lost_response",
+      providerCode: transportCode(transport.code),
+    };
 
   const body = isObject(transport.body) ? transport.body : null;
   const errorCode = body ? str(body["errorCode"]) : null;

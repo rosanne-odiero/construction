@@ -113,24 +113,27 @@ export class ReconciliationService {
     });
   }
 
-  /** The person who created the payment cannot review its reconciliation (maker-checker). */
-  private async creatorOf(
+  /**
+   * Who cannot review a reconciliation (maker-checker): the person who created the payment and, for
+   * an attempt, the person who started it (for a reversal, whoever asked for it).
+   */
+  private async makersOf(
     tx: Tx,
     tenantId: string,
     item: { requestId: string | null; attemptId: string | null },
-  ) {
-    let requestId = item.requestId;
-    if (!requestId && item.attemptId) {
-      const attempt = await tx.paymentAttempt.findUnique({
-        where: { tenantId_id: { tenantId, id: item.attemptId } },
-      });
-      requestId = attempt?.requestId ?? null;
-    }
-    if (!requestId) return null;
-    const request = await tx.paymentRequest.findUnique({
-      where: { tenantId_id: { tenantId, id: requestId } },
-    });
-    return request?.createdBy ?? null;
+  ): Promise<string[]> {
+    const attempt = item.attemptId
+      ? await tx.paymentAttempt.findUnique({
+          where: { tenantId_id: { tenantId, id: item.attemptId } },
+        })
+      : null;
+    const requestId = item.requestId ?? attempt?.requestId ?? null;
+    const request = requestId
+      ? await tx.paymentRequest.findUnique({
+          where: { tenantId_id: { tenantId, id: requestId } },
+        })
+      : null;
+    return [request?.createdBy, attempt?.createdBy].filter((id): id is string => Boolean(id));
   }
 
   private async casesToWire(scope: Scope, rows: PaymentCase[]) {
@@ -155,8 +158,10 @@ export class ReconciliationService {
     const canReview = await holds(this.policy, scope, "payments.review");
     return rows.map((row) => {
       const attempt = row.attemptId ? (byId.get(row.attemptId) ?? null) : null;
-      const creator = attempt ? creators.get(attempt.requestId) : null;
-      return caseToWire(row, attempt, names, canReview && creator !== access.userId);
+      const maker =
+        attempt !== null &&
+        (creators.get(attempt.requestId) === access.userId || attempt.createdBy === access.userId);
+      return caseToWire(row, attempt, names, canReview && !maker);
     });
   }
 
@@ -224,11 +229,11 @@ export class ReconciliationService {
   private async review(scope: Scope, item: { requestId: string | null; attemptId: string | null }) {
     await this.policy.require(scope, "payments.review");
     requireStepUp(this.auth, scope.principal);
-    const creator = await this.creatorOf(scope.tx, scope.access.tenantId, item);
-    if (creator && creator === scope.access.userId)
+    const makers = await this.makersOf(scope.tx, scope.access.tenantId, item);
+    if (makers.includes(scope.access.userId))
       throw paymentConflict(
         "same-person",
-        "Someone other than the person who created the payment must review it.",
+        "Someone other than the person who created the payment or asked for its reversal must review it.",
       );
   }
 
@@ -458,14 +463,14 @@ export class ReconciliationService {
     const requests = await this.requestsOf(tx, access.tenantId, [row]);
     const names = await displayNames(tx, [row.reviewedBy]);
     const requestId = row.attemptId ? (requests.get(row.attemptId) ?? null) : null;
-    const creator = await this.creatorOf(tx, access.tenantId, {
+    const makers = await this.makersOf(tx, access.tenantId, {
       requestId,
       attemptId: row.attemptId,
     });
     const canReview =
       row.status === "quarantined" &&
       (await holds(this.policy, scope, "payments.review")) &&
-      creator !== access.userId;
+      !makers.includes(access.userId);
     return { callback: callbackToWire(row, requestId, names), canReview };
   }
 

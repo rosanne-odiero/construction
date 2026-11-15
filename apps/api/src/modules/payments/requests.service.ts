@@ -30,6 +30,7 @@ import {
   paymentConflict,
   paymentReference,
   requireStepUp,
+  shortcodeFor,
   versionConflict,
 } from "./payments-support.js";
 
@@ -143,15 +144,15 @@ export class PaymentRequestsService {
       });
       if (!project) throw notFound("Project");
     }
+    const shortcode = shortcodeFor(settings, input.kind);
+    if (!shortcode)
+      throw paymentConflict(
+        "payments-not-configured",
+        "Set the shortcode for this kind of payment in the payment settings first.",
+      );
     await this.checkLimits(tx, settings, input.kind, input.amountMinor);
     const requestId = uuidv7();
     const direction = directionOfKind(input.kind);
-    const shortcode =
-      input.kind === "stk_push"
-        ? settings.stkShortcode
-        : input.kind === "b2c"
-          ? settings.b2cShortcode
-          : settings.b2bShortcode;
     const request = await tx.paymentRequest.create({
       data: {
         id: requestId,
@@ -377,14 +378,12 @@ export class PaymentRequestsService {
       attempts: attempts.map(attemptToWire),
       timeline: events.map((event) => eventToWire(event, names)),
       callbacks: callbacks.map((callback) => callbackToWire(callback, requestId, names)),
-      cases: cases.map((item) =>
-        caseToWire(
-          item,
-          item.attemptId ? (byId.get(item.attemptId) ?? null) : null,
-          names,
-          canReview && request.createdBy !== access.userId,
-        ),
-      ),
+      cases: cases.map((item) => {
+        const attempt = item.attemptId ? (byId.get(item.attemptId) ?? null) : null;
+        // Maker-checker: neither the payment's creator nor whoever started the attempt (a reversal).
+        const maker = request.createdBy === access.userId || attempt?.createdBy === access.userId;
+        return caseToWire(item, attempt, names, canReview && !maker);
+      }),
       queries: queries.map(queryToWire),
       transactions: transactions.map(transactionToWire),
       canReverse,

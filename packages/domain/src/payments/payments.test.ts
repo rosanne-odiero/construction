@@ -11,6 +11,7 @@ import {
   canTransitionAttempt,
   checkPaymentLimits,
   classifySubmission,
+  PROVIDER_CODE_MAX,
   darajaAmount,
   interpretStkQuery,
   interpretTransactionStatus,
@@ -482,6 +483,26 @@ describe("submission classification (never settlement from the initial response)
       outcome: "unknown",
       reason: "lost_response",
     });
+    // TLS and other transport codes can be long (UNABLE_TO_GET_ISSUER_CERT_LOCALLY is 33
+    // characters); they are kept, cut to the stored length, and never stop the outcome being recorded.
+    const longCode = `UNABLE_TO_GET_ISSUER_CERT_LOCALLY_${"X".repeat(120)}`;
+    for (const transport of [
+      { type: "not_sent", code: longCode },
+      { type: "network", code: longCode },
+      { type: "response", httpStatus: 500, body: { errorCode: longCode } },
+    ] as const) {
+      const outcome = classifySubmission("b2c", transport, "o");
+      expect(outcome.outcome === "pending" ? null : outcome.providerCode).toBe(
+        longCode.slice(0, PROVIDER_CODE_MAX),
+      );
+    }
+    expect(
+      classifySubmission(
+        "b2c",
+        { type: "not_sent", code: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" },
+        "o",
+      ),
+    ).toMatchObject({ providerCode: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" });
   });
 
   it("accepts only complete, consistent acknowledgements", () => {

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Server } from "node:http";
@@ -7,6 +7,7 @@ import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { startMockDaraja, type MockDaraja } from "@pm-buddy/mock-daraja";
+import { PROVIDER_CODE_MAX } from "@pm-buddy/domain";
 import { PAYMENT_ATTEMPT_STATUSES, PAYMENT_ATTEMPT_TRANSITIONS } from "@pm-buddy/types";
 import {
   paymentCallbackResponseSchema,
@@ -26,6 +27,8 @@ import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
 import { CallbackIntake } from "../src/modules/payments/callback-intake.js";
+import { PaymentLedger } from "../src/modules/payments/payment-ledger.js";
+import { PAYMENTS_SYSTEM_ACTOR } from "../src/modules/payments/payments-support.js";
 import { PaymentsRelay } from "../src/modules/payments/payments-relay.js";
 import { PaymentsRuntime } from "../src/modules/payments/payments-runtime.js";
 import { Browser, notifications } from "./support.js";
@@ -351,6 +354,18 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
     );
     expect(replay.status).toBe(200);
     expect(replay.headers["idempotent-replayed"]).toBe("true");
+    // The credentials manager gets the full callback URLs; the copy kept for replays masks the
+    // token, which is sealed everywhere it is stored.
+    const urlsOf = (body: unknown) =>
+      paymentSettingsResponseSchema.parse(body).settings!.callbackUrls.map((entry) => entry.url);
+    expect(urlsOf(credentials.body).every((url) => /\/hooks\/[0-9a-f]{64}\//.test(url))).toBe(true);
+    expect(urlsOf(replay.body).every((url) => url.includes("/hooks/••••/"))).toBe(true);
+    const stored = await readA((tx) =>
+      tx.idempotencyRecord.findFirstOrThrow({
+        where: { tenantId: tenantA, idempotencyKey: credentialsKey },
+      }),
+    );
+    expect(JSON.stringify(stored.response)).not.toMatch(/hooks\/[0-9a-f]{64}/);
     const changedSecret = await owner.call(
       "put",
       "payments/settings/credentials",
@@ -463,13 +478,80 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
       ),
     ).toBe("step-up-required");
     await fresh(owner);
+    // A queued payout is sent only from the shortcode it recorded: after the B2C shortcode changes,
+    // enabling payouts still holds it, and nothing reaches the provider until the setting matches.
+    const settingsBody = (shortcodes: Record<string, unknown>) => ({
+      environment: "mock",
+      shortcodes,
+      limits: LIMITS,
+    });
+    const moved = await owner.call("put", "payments/settings", {
+      version: await settingsVersion(owner),
+      ...settingsBody({ ...SHORTCODES, b2cShortcode: "600999" }),
+    });
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200);
     const enabled = await owner.call("put", "payments/settings/payouts", {
       version: await settingsVersion(owner),
       enabled: true,
       reason: "Turning on payouts for the mock run",
     });
     expect(enabled.status, JSON.stringify(enabled.body)).toBe(200);
+    const held = async () =>
+      readA((tx) =>
+        tx.paymentOutbox.findFirst({
+          where: {
+            tenantId: tenantA,
+            topic: "attempt.submit",
+            refId: latest(view).id,
+            processedAt: null,
+          },
+        }),
+      );
+    for (let tries = 0; (await held())?.lastError !== "shortcode-changed"; tries += 1) {
+      expect(tries, "the payout should be held for its changed shortcode").toBeLessThan(60);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    view = await detail(finance, id);
+    expect(latest(view).status).toBe("queued");
+    const sentFor = (attemptId: string) =>
+      mock.requests.filter(
+        (entry) =>
+          (entry.body as { OriginatorConversationID?: string })?.OriginatorConversationID ===
+          attemptId,
+      );
+    expect(sentFor(latest(view).id)).toHaveLength(0);
+    // Without a B2B shortcode, a B2B payment cannot be created at all.
+    await fresh(owner);
+    expect(
+      (
+        await owner.call("put", "payments/settings", {
+          version: await settingsVersion(owner),
+          ...settingsBody({ ...SHORTCODES, b2bShortcode: null }),
+        })
+      ).status,
+    ).toBe(200);
+    const noShortcode = await create(finance, {
+      kind: "b2b_paybill",
+      amountMinor: 10_000,
+      partyB: "600000",
+      accountReference: "INV-1",
+      remarks: "Test bill",
+    });
+    expect([noShortcode.status, problem(noShortcode)]).toEqual([409, "payments-not-configured"]);
+    // Restoring the shortcodes releases the payout, which is sent from its recorded shortcode.
+    await fresh(owner);
+    expect(
+      (
+        await owner.call("put", "payments/settings", {
+          version: await settingsVersion(owner),
+          ...settingsBody(SHORTCODES),
+        })
+      ).status,
+    ).toBe(200);
     view = await waitFor(finance, id, (current) => current.request.status === "confirmed");
+    expect(
+      sentFor(latest(view).id).map((entry) => (entry.body as { PartyA?: string }).PartyA),
+    ).toEqual(["600992"]);
     expect(latest(view).providerIds.originatorConversationId).toBe(latest(view).id);
     expect(view.transactions[0]).toMatchObject({
       kind: "b2c",
@@ -573,6 +655,59 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
     );
     expect(latest(failed).reason).toBe("status_query_failure");
     expect(failed.cases[0]).toMatchObject({ kind: "unknown_outcome", resolution: "failed" });
+  });
+
+  it("queries again after a busy or undetermined status answer, and a reviewer's query runs at once", async () => {
+    // Transaction Status refused as busy, then answered: the follow-up query is not lost.
+    const b2cView = await waitFor(
+      finance,
+      createdId(await create(finance, b2c(1015))),
+      (current) => current.request.status === "confirmed",
+      25_000,
+    );
+    expect(latest(b2cView).reason).toBe("status_query_success");
+    expect(
+      b2cView.queries
+        .filter((query) => query.kind === "transaction_status")
+        .map((query) => query.status),
+    ).toEqual(["failed", "answered"]);
+    // STK Query answers "being processed" (undetermined), then success (left for a reviewer).
+    const stkView = await waitFor(
+      finance,
+      createdId(await create(finance, stk(1015))),
+      (current) => current.cases.some((item) => item.kind === "unverified_success"),
+      25_000,
+    );
+    expect(
+      stkView.queries.filter((query) => query.kind === "stk_query").map((query) => query.status),
+    ).toEqual(["unknown", "answered"]);
+
+    // With the next automatic query an hour away, a reviewer's request overtakes it.
+    runtime.statusQueryIntervalSeconds = 3_600;
+    try {
+      const id = createdId(await create(owner, b2c(1003)));
+      const uncertain = await waitFor(
+        finance,
+        id,
+        (current) => latest(current).status === "unknown",
+      );
+      expect(uncertain.queries).toHaveLength(0);
+      const asked = await finance.call(
+        "post",
+        `payments/attempts/${latest(uncertain).id}/status-query`,
+        {},
+      );
+      expect(asked.status, JSON.stringify(asked.body)).toBe(200);
+      const confirmed = await waitFor(
+        finance,
+        id,
+        (current) => current.request.status === "confirmed",
+      );
+      expect(latest(confirmed).reason).toBe("status_query_success");
+      expect(confirmed.queries).toHaveLength(1);
+    } finally {
+      runtime.statusQueryIntervalSeconds = 1;
+    }
   });
 
   it("treats a timeout or a result before the acknowledgement as uncertain, then confirms on the verified result", async () => {
@@ -781,6 +916,88 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
       quarantineReason: "amount_mismatch",
     });
     expect(latest(mismatch).reason).toBe("status_query_success");
+  });
+
+  it("re-classifies a quarantined callback's review instead of failing on a second open case", async () => {
+    // A result no stored identifier matches: quarantined, with a quarantined-callback case. (Letters
+    // only, so the redacted copy cannot mask part of it as a phone number.)
+    const forgedId = `forged-${randomUUID().replace(/\d/g, (digit) => "ghijklmnop"[Number(digit)]!)}`;
+    const forged = await postCallback(
+      await callbackUrl("b2c_result"),
+      JSON.stringify({
+        Result: {
+          ResultType: 0,
+          ResultCode: 0,
+          OriginatorConversationID: forgedId,
+          ConversationID: `AG_${forgedId}`,
+          TransactionID: "FORGED0002",
+          ResultParameters: {
+            ResultParameter: [
+              { Key: "TransactionAmount", Value: 278 },
+              { Key: "TransactionReceipt", Value: "FORGED0002" },
+            ],
+          },
+        },
+      }),
+    );
+    expect(forged.status).toBe(200);
+    const openCaseOf = () =>
+      readA((tx) =>
+        tx.paymentCase.findFirst({
+          where: {
+            tenantId: tenantA,
+            status: "open",
+            callback: {
+              redactedBody: { path: ["Result", "OriginatorConversationID"], equals: forgedId },
+            },
+          },
+        }),
+      );
+    let quarantined = await openCaseOf();
+    for (let tries = 0; !quarantined; tries += 1) {
+      expect(tries, "the forged callback should be quarantined").toBeLessThan(60);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      quarantined = await openCaseOf();
+    }
+    expect(quarantined.kind).toBe("quarantined_callback");
+    // Re-processed later, the same callback conflicts with a settled payment (in production: its
+    // identifiers arrived after it did). Its review moves to one conflicting-evidence case.
+    const settled = await waitFor(
+      finance,
+      createdId(await create(finance, b2c(278))),
+      (current) => current.request.status === "confirmed",
+    );
+    const ledger = app.get(PaymentLedger);
+    const reclassify = () =>
+      db.run(
+        { userId: PAYMENTS_SYSTEM_ACTOR, tenantId: tenantA, requestId: `e2e-${Date.now()}` },
+        (tx) =>
+          ledger.openCase(
+            tx,
+            tenantA,
+            "conflicting_evidence",
+            "conflicting_result",
+            {
+              requestId: settled.request.id,
+              attemptId: latest(settled).id,
+              callbackId: quarantined.callbackId,
+            },
+            null,
+          ),
+      );
+    const conflict = await reclassify();
+    expect((await reclassify()).id).toBe(conflict.id);
+    const cases = await readA((tx) =>
+      tx.paymentCase.findMany({
+        where: { tenantId: tenantA, callbackId: quarantined.callbackId },
+        orderBy: { openedAt: "asc" },
+      }),
+    );
+    expect(cases.map((item) => [item.kind, item.status, item.resolution])).toEqual([
+      ["quarantined_callback", "resolved", "no_payment_effect"],
+      ["conflicting_evidence", "open", null],
+    ]);
+    expect(cases[1]).toMatchObject({ id: conflict.id, attemptId: latest(settled).id });
   });
 
   it("hardens the callback endpoint: unknown tokens, types, sizes, malformed bodies and failed persistence", async () => {
@@ -1003,6 +1220,50 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
     ).toBe("attempt-not-confirmed");
   });
 
+  it("keeps whoever asked for a reversal, and the payment's creator, from settling its uncertain outcome", async () => {
+    const confirmed = await waitFor(
+      owner,
+      createdId(await create(owner, stk(301))),
+      (current) => current.request.status === "confirmed",
+    );
+    const original = latest(confirmed);
+    await fresh(finance);
+    // The provider answers the reversal with HTTP 500 after processing: its outcome is unknown.
+    mock.setNextScenario("server_error");
+    const requested = await finance.call(
+      "post",
+      `payments/attempts/${original.id}/reversal`,
+      { version: original.version, reason: "Customer paid twice by mistake" },
+      true,
+      { "Idempotency-Key": key() },
+    );
+    expect(requested.status, JSON.stringify(requested.body)).toBe(200);
+    const uncertain = await waitFor(finance, confirmed.request.id, (current) =>
+      current.cases.some((item) => item.kind === "unknown_outcome" && item.status === "open"),
+    );
+    const reversal = uncertain.attempts.find((entry) => entry.kind === "reversal")!;
+    expect(reversal.status).toBe("unknown");
+    const reversalCase = uncertain.cases.find(
+      (item) => item.kind === "unknown_outcome" && item.attemptId === reversal.id,
+    )!;
+    for (const browser of [finance, owner]) {
+      const view = await detail(browser, confirmed.request.id);
+      expect(view.cases.find((item) => item.id === reversalCase.id)!.canResolve).toBe(false);
+      const listed = reconciliationCasesResponseSchema.parse(
+        (await browser.call("get", "payments/cases?status=open")).body,
+      );
+      expect(listed.cases.find((item) => item.id === reversalCase.id)!.canResolve).toBe(false);
+      await fresh(browser);
+      const settled = await browser.call("post", `payments/cases/${reversalCase.id}/resolve`, {
+        version: reversalCase.version,
+        resolution: "failed",
+        reason: "The reversal did not go through",
+      });
+      expect([settled.status, problem(settled)]).toEqual([409, "same-person"]);
+    }
+    expect(latest(await detail(finance, confirmed.request.id)).status).toBe("reversal_pending");
+  });
+
   it("enforces the configured limits and whole shillings", async () => {
     expect(problem(await create(finance, stk(250_001)))).toBe("amount-above-limit");
     expect(problem(await create(finance, { ...b2c(9), amountMinor: 900 }))).toBe(
@@ -1158,7 +1419,7 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
     relay.start();
   });
 
-  it("rotates callback URLs without losing a queued attempt's original callback route", async () => {
+  it("rotates callback URLs: a queued payment is sent with the new one, the old one still accepts results", async () => {
     await relay.onModuleDestroy();
     try {
       const oldPath = await callbackUrl("stk");
@@ -1174,20 +1435,23 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
       const retired = await readA((tx) =>
         tx.paymentCallbackRoute.findFirstOrThrow({
           where: { tenantId: tenantA, status: "retired" },
+          orderBy: { retiredAt: "desc" },
         }),
       );
       expect(retired.acceptUntil!.getTime() - Date.now()).toBeGreaterThan(71 * 3_600_000);
       expect((await postCallback(newPath, "{new route malformed")).status).toBe(200);
+      // Results already addressed to the retired route are accepted during its grace period.
+      expect((await postCallback(oldPath, "{old route malformed")).status).toBe(200);
+      const sentBefore = mock.requests.length;
       relay.start();
       const view = await waitFor(finance, id, (current) => current.request.status === "confirmed");
       expect(view.callbacks[0]).toMatchObject({ kind: "stk", status: "processed" });
-      expect(
-        mock.requests.some(
-          (entry) =>
-            entry.path === "/mpesa/stkpush/v1/processrequest" &&
-            (entry.body as { CallBackURL?: string }).CallBackURL === `${callbackBase}${oldPath}`,
-        ),
-      ).toBe(true);
+      // The payment queued before the rotation never sends the retired token to the provider.
+      const sent = mock.requests
+        .slice(sentBefore)
+        .filter((entry) => entry.path === "/mpesa/stkpush/v1/processrequest")
+        .map((entry) => (entry.body as { CallBackURL?: string }).CallBackURL);
+      expect(sent).toEqual([`${callbackBase}${newPath}`]);
     } finally {
       relay.start();
     }
@@ -1326,6 +1590,14 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
           pair.t,
         ),
       );
+    // Every provider or transport code the domain keeps fits the column, so an outcome is always recorded.
+    const [providerCode] = await readA(
+      (tx) => tx.$queryRaw<{ length: number }[]>`
+        SELECT character_maximum_length AS length FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'payment_attempts'
+           AND column_name = 'provider_code'`,
+    );
+    expect(providerCode!.length).toBe(PROVIDER_CODE_MAX);
     const confirmed = await readA((tx) =>
       tx.paymentAttempt.findFirstOrThrow({
         where: { tenantId: tenantA, status: "confirmed", kind: "b2c" },

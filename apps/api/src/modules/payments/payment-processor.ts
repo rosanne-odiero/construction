@@ -29,7 +29,7 @@ import { PaymentAccounts } from "./payment-accounts.js";
 import { PaymentLedger, type OutboxTopic } from "./payment-ledger.js";
 import { PaymentsCrypto } from "./payments-crypto.js";
 import { PaymentsRuntime } from "./payments-runtime.js";
-import { minor, PAYMENTS_SYSTEM_ACTOR } from "./payments-support.js";
+import { minor, PAYMENTS_SYSTEM_ACTOR, shortcodeFor } from "./payments-support.js";
 import {
   PAYMENT_PROVIDER,
   ProviderNotReady,
@@ -110,12 +110,14 @@ export class PaymentProcessor {
     if (!row || row.processedAt || row.deadAt) return;
     try {
       await this.handle(tenantId, row.topic as OutboxTopic, row.refId);
-      await this.run(tenantId, "outbox-done", (tx) =>
-        tx.paymentOutbox.updateMany({
+      await this.run(tenantId, "outbox-done", async (tx) => {
+        await tx.paymentOutbox.updateMany({
           where: { tenantId, id: row.id, processedAt: null, deadAt: null },
           data: { processedAt: new Date(), lastError: null },
-        }),
-      );
+        });
+        if (row.topic === "attempt.status_query")
+          await this.rearmStatusQuery(tx, tenantId, row.refId);
+      });
     } catch (error) {
       const retry =
         error instanceof RetryLater
@@ -234,12 +236,19 @@ export class PaymentProcessor {
         where: { tenantId_id: { tenantId, id: attemptId } },
       });
       if (!attempt || attempt.status !== "queued") return null;
-      const loaded = await this.accounts.load(tx, tenantId, attempt.routeId);
+      const loaded = await this.accounts.load(tx, tenantId);
       if (!loaded) throw new RetryLater("payments-not-configured");
       if (this.payoutGated(attempt) && !loaded.settings.payoutsEnabled)
         throw new RetryLater("payouts-disabled", 30_000, false);
       if (loaded.settings.environment !== attempt.environment)
         throw new RetryLater("environment-changed", 60_000, false);
+      // Sent only from the shortcode it records: if the setting changed while it was queued, it
+      // waits until the setting matches again (like an environment change).
+      if (
+        attempt.kind !== "reversal" &&
+        shortcodeFor(loaded.settings, attempt.kind) !== attempt.shortcode
+      )
+        throw new RetryLater("shortcode-changed", 60_000, false);
       return { attempt, account: loaded.account, instruction: await this.instruction(tx, attempt) };
     });
     if (!prepared) return;
@@ -438,7 +447,7 @@ export class PaymentProcessor {
       });
       if (!attempt || (attempt.status !== "unknown" && attempt.status !== "pending")) return null;
       if (!this.ledger.statusQuerySupported(attempt)) return null;
-      const loaded = await this.accounts.load(tx, tenantId, attempt.routeId);
+      const loaded = await this.accounts.load(tx, tenantId);
       if (!loaded) throw new RetryLater("payments-not-configured");
       return { attempt, account: loaded.account };
     });
@@ -599,6 +608,28 @@ export class PaymentProcessor {
       data: { nextStatusQueryAt: next, version: attempt.version + 1 },
     });
     await this.ledger.enqueue(tx, attempt.tenantId, "attempt.status_query", attempt.id, next);
+  }
+
+  /**
+   * The attempt's next_status_query_at is its query schedule; the outbox row only runs it. While a
+   * status-query row is still pending (the query scheduling its own follow-up, or a status answer
+   * processed meanwhile) no second row can be added, so once the row is done the next one is.
+   */
+  private async rearmStatusQuery(tx: Tx, tenantId: string, attemptId: string) {
+    const attempt = await tx.paymentAttempt.findUnique({
+      where: { tenantId_id: { tenantId, id: attemptId } },
+    });
+    if (
+      attempt?.nextStatusQueryAt &&
+      (attempt.status === "unknown" || attempt.status === "pending")
+    )
+      await this.ledger.enqueue(
+        tx,
+        tenantId,
+        "attempt.status_query",
+        attempt.id,
+        attempt.nextStatusQueryAt,
+      );
   }
 
   // Float checks and C2B registration --------------------------------------------------------------

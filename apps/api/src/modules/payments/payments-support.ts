@@ -8,6 +8,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import type { Permission, PaymentProblem } from "@pm-buddy/types";
+import type { PaymentSettings } from "../../generated/prisma/client.js";
 import {
   hasDatabaseCode,
   isCheckViolation,
@@ -85,9 +86,31 @@ export const requestFingerprint = (operation: string, userId: string, payload: u
 
 export const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
 
+/**
+ * Masks callback path tokens (64 hex digits after `hooks/`). Full callback URLs are shown only to
+ * credential managers, in the response to them; the token is sealed wherever it is kept.
+ */
+export const maskCallbackTokens = (text: string) =>
+  text.replace(/hooks\/[0-9a-f]{64}/g, "hooks/••••");
+
 /** "PAY-" and eight upper-case hex digits from the random part of the request's UUIDv7. */
 export const paymentReference = (requestId: string) =>
   `PAY-${requestId.replace(/-/g, "").slice(-8).toUpperCase()}`;
+
+/**
+ * The configured shortcode an attempt of this kind is sent from. An attempt records it when it is
+ * created and is only ever sent from that one (a reversal uses its original's), so receipts, status
+ * queries and reversals all name the shortcode the money actually moved through.
+ */
+export function shortcodeFor(
+  settings: Pick<PaymentSettings, "stkShortcode" | "b2cShortcode" | "b2bShortcode">,
+  kind: string,
+): string | null {
+  if (kind === "stk_push") return settings.stkShortcode;
+  if (kind === "b2c") return settings.b2cShortcode;
+  if (kind === "b2b_paybill" || kind === "b2b_buygoods") return settings.b2bShortcode;
+  return null;
+}
 
 /** Minor units from a BigInt column (all payment amounts are bounded well inside 2^53). */
 export const minor = (value: bigint | number): number => Number(value);

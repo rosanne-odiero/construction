@@ -44,9 +44,10 @@ export function contentSecurityPolicy({
       ...(development ? ["'unsafe-eval'"] : []),
     ],
     ["style-src", "'self'", "'unsafe-inline'"],
-    // Photos, receipts and documents stream through same-origin /api routes; OpenStreetMap tiles
-    // are a development-only aid (D-10).
-    ["img-src", "'self'", ...(development ? [TILE_ORIGIN] : [])],
+    // Photos, receipts and documents stream through same-origin /api routes; blob: is the camera
+    // screen's preview of the photo just taken (D6.1), made by this page's own script.
+    // OpenStreetMap tiles are a development-only aid (D-10).
+    ["img-src", "'self'", "blob:", ...(development ? [TILE_ORIGIN] : [])],
     ["font-src", "'self'"],
     // Uploads and downloads go through the API (multipart, never pre-signed storage URLs).
     ["connect-src", "'self'"],
@@ -67,13 +68,14 @@ export function createNonce(): string {
 }
 
 /**
- * Only what the app uses: geolocation (GRN delivery position) and passkeys. Camera capture uses
- * `<input capture>`, which opens the camera app and needs no camera permission.
+ * Only what the app uses, for this origin only: the camera (PM-Buddy's in-app photo capture,
+ * getUserMedia, D6.1), geolocation (GRN delivery position, the photo's GPS fix) and passkeys.
+ * The camera viewfinder is a muted video, which `autoplay=()` does not stop.
  */
 export const PERMISSIONS_POLICY = [
   "accelerometer=()",
   "autoplay=()",
-  "camera=()",
+  "camera=(self)",
   "display-capture=()",
   "geolocation=(self)",
   "gyroscope=()",

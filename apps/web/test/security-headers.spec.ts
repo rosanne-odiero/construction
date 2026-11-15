@@ -48,7 +48,7 @@ test("sends the CSP and security headers on pages and static files", async ({ pa
   expect(headers["x-frame-options"]).toBe("DENY");
   expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
   expect(headers["cross-origin-opener-policy"]).toBe("same-origin");
-  expect(headers["permissions-policy"]).toContain("camera=()");
+  expect(headers["permissions-policy"]).toContain("camera=(self)");
   expect(headers["permissions-policy"]).toContain("geolocation=(self)");
   expect(headers["x-powered-by"]).toBeUndefined();
   // Next.js puts the nonce on its own scripts; the theme script gets it from the root layout.

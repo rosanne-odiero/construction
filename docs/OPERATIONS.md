@@ -62,10 +62,11 @@ pnpm --filter @pm-buddy/api keys:rotate rewrap --operator "<your name>" [--only 
 ### Field encryption and sealing keys (`FIELD_ENCRYPTION_KEYS`, `AUTH_MFA_ENCRYPTION_KEY`)
 
 1. Generate the new key (version `n+1`) and add it to the secrets manager next to the current one.
-2. Deploy every API instance with both versions and the new one active: `FIELD_ENCRYPTION_KEYS=<n>:…,<n+1>:…` and `FIELD_ENCRYPTION_ACTIVE_KEY_VERSION=<n+1>`; `AUTH_MFA_ENCRYPTION_KEY=<n>:…,<n+1>:…` and `AUTH_MFA_ENCRYPTION_ACTIVE_KEY_VERSION=<n+1>` (a single 64-hex `AUTH_MFA_ENCRYPTION_KEY` is version 1). New values now use the new key; old values still read.
-3. `keys:rotate status`, then `rewrap --dry-run` (every old value must read), then `rewrap`; repeat until `status` shows only the new version.
-4. Deploy without the old version. Check sign-in with TOTP and a labourer identifier reveal.
-5. Move the old key to "restore only" in the secrets manager (backups taken before step 3 still need it), and destroy it when the backup retention period has passed.
+2. Deploy every API instance with both versions and the **current one still active**: `FIELD_ENCRYPTION_KEYS=<n>:…,<n+1>:…` with `FIELD_ENCRYPTION_ACTIVE_KEY_VERSION=<n>`; `AUTH_MFA_ENCRYPTION_KEY=<n>:…,<n+1>:…` with `AUTH_MFA_ENCRYPTION_ACTIVE_KEY_VERSION=<n>` (a single 64-hex `AUTH_MFA_ENCRYPTION_KEY` is version 1). Wait until every instance runs it.
+3. Deploy again with `<n+1>` active. New values now use the new key and every instance can already read them; old values still read. (Doing steps 2 and 3 in one deploy lets instances still on the old configuration meet values they cannot read during the roll-out: refused CSRF tokens, failed TOTP checks, failed identifier reveals.)
+4. `keys:rotate status`, then `rewrap --dry-run` (every old value must read), then `rewrap`; repeat until `status` shows only the new version.
+5. Deploy without the old version. Check sign-in with TOTP and a labourer identifier reveal.
+6. Move the old key to "restore only" in the secrets manager (backups taken before step 4 still need it), and destroy it when the backup retention period has passed.
 
 Short-lived values sealed with the old MFA key (CSRF tokens, the Google sign-in cookie) simply expire; the web app fetches a new CSRF token before each change.
 

@@ -32,7 +32,7 @@ describe("contentSecurityPolicy", () => {
     expect(policy.get("frame-src")).toEqual(["'none'"]);
     expect(policy.get("form-action")).toEqual(["'self'"]);
     expect(policy.get("connect-src")).toEqual(["'self'"]);
-    expect(policy.get("img-src")).toEqual(["'self'"]);
+    expect(policy.get("img-src")).toEqual(["'self'", "blob:"]);
     expect(policy.get("font-src")).toEqual(["'self'"]);
     expect(policy.get("upgrade-insecure-requests")).toEqual([]);
     // Never in production: these would let injected markup run script.
@@ -46,7 +46,7 @@ describe("contentSecurityPolicy", () => {
       contentSecurityPolicy({ nonce, development: true, upgradeInsecureRequests: false }),
     );
     expect(policy.get("script-src")).toContain("'unsafe-eval'");
-    expect(policy.get("img-src")).toEqual(["'self'", "https://tile.openstreetmap.org"]);
+    expect(policy.get("img-src")).toEqual(["'self'", "blob:", "https://tile.openstreetmap.org"]);
     expect(policy.has("upgrade-insecure-requests")).toBe(false);
   });
 
@@ -72,11 +72,11 @@ describe("securityHeaders", () => {
     expect(new Map(securityHeaders(false)).has("Strict-Transport-Security")).toBe(false);
   });
 
-  it("keeps geolocation and passkeys for this origin and switches off the camera", () => {
+  it("keeps the camera, geolocation and passkeys for this origin only", () => {
     expect(PERMISSIONS_POLICY).toContain("geolocation=(self)");
     expect(PERMISSIONS_POLICY).toContain("publickey-credentials-get=(self)");
     expect(PERMISSIONS_POLICY).toContain("publickey-credentials-create=(self)");
-    expect(PERMISSIONS_POLICY).toContain("camera=()");
+    expect(PERMISSIONS_POLICY).toContain("camera=(self)");
     expect(PERMISSIONS_POLICY).toContain("microphone=()");
   });
 });

@@ -106,8 +106,8 @@ export async function requireOne(
     try {
       await policy.require(scope, permission);
       return;
-    } catch {
-      // try the next one
+    } catch (error) {
+      if (!(error instanceof ForbiddenException)) throw error;
     }
   }
   throw new ForbiddenException(`One of these permissions is required: ${permissions.join(", ")}`);
@@ -117,7 +117,8 @@ export async function holds(policy: AccessPolicy, scope: Scope, permission: Perm
   try {
     await policy.require(scope, permission);
     return true;
-  } catch {
+  } catch (error) {
+    if (!(error instanceof ForbiddenException)) throw error;
     return false;
   }
 }

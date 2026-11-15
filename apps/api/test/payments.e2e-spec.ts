@@ -17,7 +17,6 @@ import {
   paymentsOverviewResponseSchema,
   reconciliationCaseResponseSchema,
   reconciliationCasesResponseSchema,
-  balanceCheckResponseSchema,
   type PaymentRequestDetailResponse,
 } from "@pm-buddy/validation";
 import { AppModule } from "../src/app.module.js";
@@ -29,7 +28,6 @@ import { TenantDatabase } from "../src/modules/identity/tenant-database.service.
 import { CallbackIntake } from "../src/modules/payments/callback-intake.js";
 import { PaymentsRelay } from "../src/modules/payments/payments-relay.js";
 import { PaymentsRuntime } from "../src/modules/payments/payments-runtime.js";
-import { CertificateStore } from "../src/modules/payments/provider/security-credential.js";
 import { Browser, notifications } from "./support.js";
 
 /**
@@ -335,11 +333,32 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
       problem(await owner.call("put", "payments/settings/credentials", { version, ...SECRETS })),
     ).toBe("step-up-required");
     await fresh(owner);
-    const credentials = await owner.call("put", "payments/settings/credentials", {
-      version,
-      ...SECRETS,
-    });
+    const credentialsKey = key();
+    const credentials = await owner.call(
+      "put",
+      "payments/settings/credentials",
+      { version, ...SECRETS },
+      true,
+      { "Idempotency-Key": credentialsKey },
+    );
     expect(credentials.status, JSON.stringify(credentials.body)).toBe(200);
+    const replay = await owner.call(
+      "put",
+      "payments/settings/credentials",
+      { version, ...SECRETS },
+      true,
+      { "Idempotency-Key": credentialsKey },
+    );
+    expect(replay.status).toBe(200);
+    expect(replay.headers["idempotent-replayed"]).toBe("true");
+    const changedSecret = await owner.call(
+      "put",
+      "payments/settings/credentials",
+      { version, ...SECRETS, consumerSecret: "a-different-mock-secret" },
+      true,
+      { "Idempotency-Key": credentialsKey },
+    );
+    expect([changedSecret.status, problem(changedSecret)]).toEqual([409, "idempotency-key-reused"]);
     const text = JSON.stringify(credentials.body);
     for (const value of Object.values(SECRETS)) expect(text).not.toContain(value);
     expect(
@@ -475,6 +494,37 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
     );
     expect(latest(broke).resultCode).toBe("1");
     expect(broke.transactions).toHaveLength(0);
+  });
+
+  it("pays test Paybill and Buy Goods requests through B2B and reconciles each receipt once", async () => {
+    for (const kind of ["b2b_paybill", "b2b_buygoods"] as const) {
+      const id = createdId(
+        await create(finance, {
+          kind,
+          amountMinor: 26_000,
+          partyB: "600994",
+          accountReference: "TEST-B2B",
+          remarks: "Mock business payment",
+        }),
+      );
+      const view = await waitFor(finance, id, (current) => current.request.status === "confirmed");
+      expect(latest(view)).toMatchObject({ kind, direction: "out", amountMinor: 26_000 });
+      expect(view.transactions).toHaveLength(1);
+      expect(view.transactions[0]).toMatchObject({
+        kind: "b2b",
+        direction: "out",
+        amountMinor: 26_000,
+        status: "matched",
+      });
+      expect(view.callbacks[0]).toMatchObject({ kind: "b2b_result", status: "processed" });
+      const sent = mock.requests.filter(
+        (entry) =>
+          entry.path === "/mpesa/b2b/v1/paymentrequest" &&
+          (entry.body as { CommandID?: string }).CommandID ===
+            (kind === "b2b_paybill" ? "BusinessPayBill" : "BusinessBuyGoods"),
+      );
+      expect(sent).toHaveLength(1);
+    }
   });
 
   it("reconciles a lost result: pending → unknown → Transaction Status → confirmed or failed, never resubmitted", async () => {
@@ -782,6 +832,16 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
     );
     expect(row.duplicates).toBe(1);
     expect(Buffer.from(row.bodyEnc).toString("latin1")).not.toContain("ws_CO_down");
+    const concurrent = await Promise.all(
+      Array.from({ length: 8 }, () => postCallback(stkPath, body)),
+    );
+    expect(concurrent.map((res) => res.status)).toEqual(Array(8).fill(200));
+    const delivered = await readA((tx) =>
+      tx.paymentCallbackInbox.findUniqueOrThrow({
+        where: { tenantId_id: { tenantId: tenantA, id: row.id } },
+      }),
+    );
+    expect(delivered.duplicates).toBe(9);
     await new Promise((resolve) => setTimeout(resolve, 800));
     const quarantined = paymentCallbacksResponseSchema.parse(
       (await finance.call("get", "payments/callbacks?status=quarantined&kind=stk")).body,
@@ -1033,19 +1093,20 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
       }),
     );
     expect(accepted.body).toEqual({ ResultCode: "0", ResultDesc: "Accepted" });
-    const refused = await postCallback(
-      validation,
-      JSON.stringify({
-        TransactionType: "Pay Bill",
-        TransID: "TVALID0002",
-        TransTime: "20261111120000",
-        TransAmount: "10.00",
-        BusinessShortCode: "999999",
-        BillRefNumber: "INV-1",
-        MSISDN: "2547 ***** 126",
-      }),
-    );
+    const refusedBody = JSON.stringify({
+      TransactionType: "Pay Bill",
+      TransID: "TVALID0002",
+      TransTime: "20261111120000",
+      TransAmount: "10.00",
+      BusinessShortCode: "999999",
+      BillRefNumber: "INV-1",
+      MSISDN: "2547 ***** 126",
+    });
+    const refused = await postCallback(validation, refusedBody);
     expect(refused.body).toEqual({ ResultCode: "C2B00015", ResultDesc: "Rejected" });
+    const repeated = await postCallback(validation, refusedBody);
+    expect(repeated.status).toBe(200);
+    expect(repeated.body).toEqual(refused.body);
     await new Promise((resolve) => setTimeout(resolve, 600));
     const quarantined = paymentCallbacksResponseSchema.parse(
       (await finance.call("get", "payments/callbacks?status=quarantined&kind=c2b_confirmation"))
@@ -1095,6 +1156,41 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
     await relay.drain();
     expect((await detail(finance, id)).timeline.length).toBe(done.timeline.length);
     relay.start();
+  });
+
+  it("rotates callback URLs without losing a queued attempt's original callback route", async () => {
+    await relay.onModuleDestroy();
+    try {
+      const oldPath = await callbackUrl("stk");
+      const id = createdId(await create(finance, stk(275)));
+      await fresh(owner);
+      const rotated = await owner.call("post", "payments/settings/callback-token", {
+        version: await settingsVersion(owner),
+        reason: "Rotate the test callback path token",
+      });
+      expect(rotated.status, JSON.stringify(rotated.body)).toBe(200);
+      const newPath = await callbackUrl("stk");
+      expect(newPath).not.toBe(oldPath);
+      const retired = await readA((tx) =>
+        tx.paymentCallbackRoute.findFirstOrThrow({
+          where: { tenantId: tenantA, status: "retired" },
+        }),
+      );
+      expect(retired.acceptUntil!.getTime() - Date.now()).toBeGreaterThan(71 * 3_600_000);
+      expect((await postCallback(newPath, "{new route malformed")).status).toBe(200);
+      relay.start();
+      const view = await waitFor(finance, id, (current) => current.request.status === "confirmed");
+      expect(view.callbacks[0]).toMatchObject({ kind: "stk", status: "processed" });
+      expect(
+        mock.requests.some(
+          (entry) =>
+            entry.path === "/mpesa/stkpush/v1/processrequest" &&
+            (entry.body as { CallBackURL?: string }).CallBackURL === `${callbackBase}${oldPath}`,
+        ),
+      ).toBe(true);
+    } finally {
+      relay.start();
+    }
   });
 
   it("isolates every payments table by company (API and runtime role)", async () => {
@@ -1157,6 +1253,63 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
       (tx) => tx.paymentRequest.count(),
     );
     expect(none).toBe(0);
+  });
+
+  it("keeps the company's payment records out of client and supplier portal database contexts", async () => {
+    const role = await readA((tx) =>
+      tx.tenantRole.create({
+        data: {
+          tenantId: tenantA,
+          name: "Client-only payment isolation test",
+          permissions: ["projects.view", "bq.view", "portal.client"],
+          tenantWide: false,
+          createdBy: owner.auth.user.id,
+        },
+      }),
+    );
+    try {
+      for (const portalRole of ["client", "supplier", "custom"]) {
+        await readA((tx) =>
+          tx.membership.update({
+            where: { tenantId_userId: { tenantId: tenantA, userId: manager.auth.user.id } },
+            data: { role: portalRole, customRoleId: portalRole === "custom" ? role.id : null },
+          }),
+        );
+        expect((await manager.call("get", "payments/overview")).status).toBe(403);
+        const counts = await db.run(as(manager, tenantA), async (tx) => ({
+          settings: await tx.paymentSettings.count(),
+          routes: await tx.paymentCallbackRoute.count(),
+          requests: await tx.paymentRequest.count(),
+          attempts: await tx.paymentAttempt.count(),
+          events: await tx.paymentEvent.count(),
+          inbox: await tx.paymentCallbackInbox.count(),
+          cases: await tx.paymentCase.count(),
+          queries: await tx.providerQuery.count(),
+          receipts: await tx.providerTransaction.count(),
+          outbox: await tx.paymentOutbox.count(),
+        }));
+        expect(Object.values(counts), portalRole).toEqual(Array(10).fill(0));
+        await expect(
+          db.run(as(manager, tenantA), (tx) =>
+            tx.paymentEvent.create({
+              data: {
+                tenantId: tenantA,
+                subjectType: "request",
+                subjectId: role.id,
+                event: "request.forged",
+              },
+            }),
+          ),
+        ).rejects.toThrow();
+      }
+    } finally {
+      await readA((tx) =>
+        tx.membership.update({
+          where: { tenantId_userId: { tenantId: tenantA, userId: manager.auth.user.id } },
+          data: { role: "project_manager", customRoleId: null },
+        }),
+      );
+    }
   });
 
   it("enforces the state machine, write-once evidence and append-only history in the database", async () => {

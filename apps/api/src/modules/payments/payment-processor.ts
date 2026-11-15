@@ -62,9 +62,11 @@ const CALLBACK_FOR_KIND: Record<PaymentAttemptKind, readonly CallbackKind[]> = {
   reversal: ["reversal_result", "timeout"],
 };
 const TOKEN_ERRORS = new Set(["400.003.01", "404.001.03", "401.002.01"]);
+const providerResultCode = (value: unknown): string | null =>
+  typeof value === "string" || typeof value === "number" ? String(value) : null;
 
 /**
- * Executes payment work (ARCHITECTURE §4.5): submissions, status queries, callback processing,
+ * Executes payment work (ARCHITECTURE §4.17): submissions, status queries, callback processing,
  * float checks, C2B URL registration and the watchdog. Every step runs as the payments system
  * actor inside one company's transaction; provider calls happen between transactions, after the
  * call intent is committed. Each handler is idempotent with respect to database state, so a
@@ -498,10 +500,9 @@ export class PaymentProcessor {
         transport.type === "response" &&
         transport.httpStatus === 200 &&
         body &&
-        String(body["ResponseCode"]) === "0";
+        providerResultCode(body["ResponseCode"]) === "0";
       if (query.kind === "stk_query") {
-        const resultCode =
-          ok && body?.["ResultCode"] !== undefined ? String(body?.["ResultCode"]) : null;
+        const resultCode = ok ? providerResultCode(body?.["ResultCode"]) : null;
         const answer = interpretStkQuery(resultCode);
         await this.answerQuery(
           tx,
@@ -560,7 +561,7 @@ export class PaymentProcessor {
         query.id,
         query.version,
         transport.type === "response" ? "failed" : "unknown",
-        body ? String(body["errorCode"] ?? body["ResponseCode"] ?? "") || null : null,
+        providerResultCode(body?.["errorCode"] ?? body?.["ResponseCode"]),
         "Transaction Status request not accepted",
       );
       await this.scheduleNextQuery(tx, current);
@@ -649,14 +650,14 @@ export class PaymentProcessor {
         transport.type === "response" &&
         transport.httpStatus === 200 &&
         body &&
-        String(body["ResponseCode"]) === "0";
+        providerResultCode(body["ResponseCode"]) === "0";
       if (query.kind === "c2b_register") {
         await this.answerQuery(
           tx,
           query.id,
           query.version,
           accepted ? "answered" : transport.type === "response" ? "failed" : "unknown",
-          body ? String(body["ResponseCode"] ?? body["errorCode"] ?? "") || null : null,
+          providerResultCode(body?.["ResponseCode"] ?? body?.["errorCode"]),
           accepted ? "C2B URLs registered" : "C2B URL registration refused",
         );
         await this.ledger.audit(tx, "payments.c2b_registration_answered", query.id, {
@@ -684,7 +685,7 @@ export class PaymentProcessor {
         query.id,
         query.version,
         transport.type === "response" ? "failed" : "unknown",
-        body ? String(body["errorCode"] ?? "") || null : null,
+        providerResultCode(body?.["errorCode"]),
         "Account balance request not accepted",
       );
     });

@@ -54,6 +54,10 @@ export class PaymentsCrypto {
     );
   }
 
+  credentialFingerprint(tenantId: string, canonical: string): string {
+    return this.cipher.blindIndex(tenantId, "payment_credentials", canonical);
+  }
+
   sealMsisdn(tenantId: string, requestId: string, msisdn: string) {
     return this.seal(
       { tenantId, table: "payment_requests", column: "msisdn_enc", rowId: requestId },

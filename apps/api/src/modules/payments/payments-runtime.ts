@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { isIP } from "node:net";
 import type { PaymentEnvironment } from "@pm-buddy/types";
 import { AppConfig } from "../../config/app-config.js";
 
@@ -23,12 +24,18 @@ export function parseAllowList(raw: string | undefined): AllowEntry[] {
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry): AllowEntry => {
-      const [address, bits] = entry.split("/");
-      if (bits === undefined) return { address: address! };
+      const parts = entry.split("/");
+      const [address, bits] = parts;
+      const invalid = () =>
+        new Error("PAYMENTS_CALLBACK_IP_ALLOWLIST contains an invalid address or IPv4 CIDR");
+      if (bits === undefined) {
+        if (!address || !isIP(address)) throw invalid();
+        return { address: address.startsWith("::ffff:") ? address.slice(7) : address };
+      }
       const base = ipv4(address!);
       const length = Number(bits);
-      if (base === null || !Number.isInteger(length) || length < 0 || length > 32)
-        throw new Error(`PAYMENTS_CALLBACK_IP_ALLOWLIST has an invalid entry: ${entry}`);
+      if (parts.length !== 2 || !/^\d{1,2}$/.test(bits) || base === null || length > 32)
+        throw invalid();
       const mask = length === 0 ? 0 : (0xffffffff << (32 - length)) >>> 0;
       return { network: (base & mask) >>> 0, mask };
     });

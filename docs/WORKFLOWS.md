@@ -388,6 +388,26 @@ stateDiagram-v2
 
 Late/out-of-order results never regress confirmed settlement to pending/failed. Conflicting definitive evidence opens a dispute. A callback can be processed after a timeout even if local state is still `submitting`; route through reconciliation with the same verification/atomic settlement controls. New payouts target only demonstrably unpaid outstanding obligations.
 
+### Payment transport as implemented (D4.2)
+
+The console creates **test** requests only. `created → queued` commits the request, attempt,
+timeline, audit and outbox together. The worker commits `queued → submitting` with a lease before
+one money-moving HTTP call, then records `pending` on acceptance, `failed` only on a definitive
+refusal, or `unknown` when acceptance is uncertain. A stopped payout switch leaves outbound work
+queued without consuming its retry budget. Pending result timeouts and expired submission leases
+open a reconciliation case; they never enqueue another submission.
+
+Callbacks are encrypted and persisted before acknowledgement, then processed from the outbox.
+Matching verified evidence confirms once and writes a unique provider receipt; duplicate/late
+callbacks cannot regress a final state. Unknown or mismatched callbacks are quarantined. Read-only
+status queries reconcile when evidence suffices; STK Query success without a receipt remains
+unverified. Manual confirmation/reversal requires fresh MFA and someone other than the maker.
+The reversal is a separate attempt; a refused reversal leaves the original confirmed.
+
+These transport outcomes do not allocate to payroll, supplier invoices or client certificates.
+The client portal remains on its disabled STK boundary, and C2B confirmations are unallocated
+provider receipts. See [the review script and sandbox gate](./demos/phase-4.md).
+
 ## Procurement and certification
 
 ```mermaid

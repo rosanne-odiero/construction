@@ -850,6 +850,60 @@ Stable error codes: `client-portal-only`, `client-portal-rule`, `client-portal-f
 
 **Not in D7.1:** STK Push (waits for D4.2's Daraja provider: the done-when's "pay (sandbox)" part is open); automatic C2B matching of Paybill payments to certificates (D4.2); notifications to clients (D7.3); documents shared with clients (D8.4 has no "shared with client" flag); receipts as KRA eTIMS documents (CR-CLI-02); several clients' decisions on one sending (the first assigned client's decision counts); FX rates from an external service.
 
+### 4.17 Daraja payments transport and console (D4.2)
+
+`apps/api/src/modules/payments` owns the provider-neutral `PaymentProvider`, `DarajaProvider`,
+company credentials, requests/attempts, callback inbox, reconciliation cases, provider receipts
+and the transactional payment outbox. The office console is `/payments`; settings, requests,
+callbacks and cases use `/api/v1/payments`. Swagger documents the authenticated operations;
+the token-bearing callback route is deliberately excluded.
+
+- **Provider operations:** OAuth, STK Push and query, C2B URL registration and confirmations,
+  B2C, B2B Paybill/Buy Goods, Transaction Status, Account Balance and reversal. B2C uses
+  `/mpesa/b2c/v3/paymentrequest`; C2B registration uses v2. These remain subject to sandbox
+  verification (CR-PMT-01), not a claim of provider certification.
+- **Permissions:** company-wide `payments.view` reads the console; `payments.manage_credentials`
+  changes configuration and write-only credentials; `payments.initiate_test` creates test
+  transactions; `payments.review` queries/reconciles; `payments.reverse` requests a reversal.
+  Configuration changes, enabling payouts, reviews and reversals require fresh MFA. A payment's
+  creator cannot review it or request its reversal. Finance can pause payouts without step-up;
+  only a credentials manager with step-up can enable them. Production payment settings are refused.
+- **No optimistic settlement:** creating a request atomically writes its queued attempt, timeline,
+  audit and outbox. The worker commits a submission lease before making one provider call.
+  Acceptance means `pending`, not paid. Lost acknowledgements, elapsed leases and result timeouts
+  become `unknown`, with a case and bounded read-only status queries, never another money-moving
+  call. A successful STK query without a receipt needs independent review and exact statement
+  evidence. Verified results atomically write a unique provider receipt and settle the attempt.
+- **Durable intake:** callbacks need no browser session or CSRF token. A 256-bit path token
+  identifies the company; its digest resolves through a narrowly scoped definer function.
+  Bounded raw JSON is encrypted and persisted with a redacted display copy and outbox row before
+  acknowledgement. Persistence failure returns 503. Duplicates are counted atomically; duplicate
+  C2B validations check the shortcode again rather than blindly accepting. Unknown/mismatched/conflicting results are
+  quarantined with an alert, never silently applied. Tokens rotate with a 72-hour overlap for
+  existing attempts. Source-IP restrictions are optional defence in depth, not proof of settlement.
+- **Workers:** the API runs a periodic outbox relay, BullMQ consumers and a watchdog by default
+  (`PAYMENTS_WORKERS_ENABLED`). PostgreSQL is the source of truth; queue loss does not lose payment
+  intent or callbacks. Queue failure is logged and due work is drained directly; bounded outbox
+  retries dead-letter for operator investigation. `payments:drain` is the explicit recovery tool.
+  This is an in-process payment worker, not the future standalone worker for all application jobs.
+- **Isolation and secrets:** all ten payment tables have forced tenant RLS plus restrictive
+  client/supplier portal policies (including client-only custom roles). Discovery functions return
+  identifiers only; workers then use company-scoped transactions as a system actor. Credentials,
+  raw callback bodies, phone numbers, callback tokens and cached OAuth tokens reuse field encryption.
+  Callback path tokens are removed from request logs. Credential idempotency includes a keyed
+  fingerprint of the values without storing them in responses, audit or idempotency payloads.
+
+**Boundary:** console transactions have purpose `test`, no payroll/invoice accounting effect.
+`PaymentRequestsService.createRequest` and `PaymentOutcomeHandlers` are integration points for
+business modules. Bulk payroll, supplier settlement allocations, tariffs, recipient-name checks
+and statement uploads remain D4.3. The client portal's `DisabledClientPaymentRequests` remains
+bound: safely enabling it still needs certificate-bound receipt allocation and the long account
+reference decision (CR-CLI-04). C2B confirmations are retained as **unallocated** provider receipts;
+they do not automatically reduce a client's balance. D7.1's sandbox-payment acceptance is still open.
+
+The [mock Daraja server](../apps/mock-daraja/README.md) provides deterministic success, failure,
+timeout, duplicate and out-of-order scenarios. A skipped sandbox suite is not sandbox acceptance.
+
 ## 5. Folder structure
 
 ```text

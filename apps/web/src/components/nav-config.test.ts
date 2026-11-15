@@ -36,4 +36,18 @@ describe("sidebar", () => {
       expect(isLiveRoute(path)).toBe(true);
     expect(isLiveRoute("/reports/cost-ledger/extra")).toBe(false);
   });
+
+  it("recognises the payments console without treating arbitrary descendants as live", () => {
+    for (const path of [
+      "/payments",
+      "/payments/settings",
+      "/payments/new",
+      "/payments/requests",
+      "/payments/callbacks/90000000-0000-4000-8000-000000000002",
+      "/payments/cases",
+    ])
+      expect(isLiveRoute(path)).toBe(true);
+    expect(isLiveRoute("/payments/requests/retry")).toBe(false);
+    expect(isLiveRoute("/payments/production")).toBe(false);
+  });
 });

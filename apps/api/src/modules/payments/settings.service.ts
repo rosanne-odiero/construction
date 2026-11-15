@@ -26,6 +26,7 @@ import { PaymentsRelay } from "./payments-relay.js";
 import { PaymentsRuntime } from "./payments-runtime.js";
 import {
   holds,
+  canonicalJson,
   notFound,
   paymentConflict,
   requireOne,
@@ -255,12 +256,16 @@ export class PaymentSettingsService {
   /** Write-only secrets: sealed, never returned; the audit names the fields replaced. */
   updateCredentials(principal: Principal, req: Request, input: UpdatePaymentCredentialsRequest) {
     const fields = PAYMENT_SECRET_FIELDS.filter((field) => input[field] !== undefined);
-    // The fingerprint covers which fields changed, not their values.
+    // Bind retries to the secret values without storing them or an unkeyed password hash.
+    const credentialsDigest = this.crypto.credentialFingerprint(
+      principal.session.activeTenantId ?? "",
+      canonicalJson(input),
+    );
     return this.commands.run(
       principal,
       req,
       "payments.credentials.update",
-      { version: input.version, fields },
+      { version: input.version, fields, credentialsDigest },
       async (scope) => {
         await this.manage(scope);
         const { tx, access } = scope;

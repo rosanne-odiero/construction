@@ -67,4 +67,19 @@ describe("log serializers", () => {
     });
     expect(logged).toEqual({ statusCode: 201 });
   });
+
+  it("removes callback path tokens as well as query parameters", () => {
+    const logged = serializeRequest({
+      id: "req-hook",
+      method: "POST",
+      url: `/api/v1/payments/hooks/${"a".repeat(64)}/stk?token=secret`,
+      headers: {},
+      remoteAddress: "127.0.0.1",
+      remotePort: 50_000,
+      params: {},
+      query: {},
+      raw: {} as IncomingMessage,
+    });
+    expect(logged.url).toBe("/api/v1/payments/hooks/[REDACTED]/stk");
+  });
 });

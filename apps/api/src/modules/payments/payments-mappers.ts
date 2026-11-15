@@ -1,4 +1,5 @@
 import { maskPhone } from "@pm-buddy/domain";
+import { balanceCheckSchema } from "@pm-buddy/validation";
 import {
   callbackPathSegment,
   CALLBACK_KINDS,
@@ -255,21 +256,12 @@ export function queryToWire(row: ProviderQuery): WireQuery {
 }
 
 export function balanceToWire(row: ProviderQuery): BalanceCheck {
-  const balances = Array.isArray(row.balances)
-    ? (row.balances as { account?: unknown; currency?: unknown; availableMinor?: unknown }[]).map(
-        (entry) => ({
-          account: String(entry.account ?? ""),
-          currency: String(entry.currency ?? ""),
-          availableMinor: typeof entry.availableMinor === "number" ? entry.availableMinor : null,
-        }),
-      )
-    : null;
   return {
     id: row.id,
     status: row.status as BalanceCheck["status"],
     requestedAt: row.createdAt.toISOString(),
     answeredAt: iso(row.answeredAt),
-    balances,
+    balances: balanceCheckSchema.shape.balances.parse(row.balances),
   };
 }
 

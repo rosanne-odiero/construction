@@ -73,9 +73,16 @@ export class CallbackIntake {
         throw new ServiceUnavailableException("Callback could not be persisted; deliver it again");
       }
       // Two identical deliveries raced: the other one is persisted, so this one is a duplicate.
-      ack = await this.persist(route.tenant_id, route.route_id, kind, raw, sourceIp).catch(() => {
-        throw new ServiceUnavailableException("Callback could not be persisted; deliver it again");
-      });
+      ack = await this.persist(route.tenant_id, route.route_id, kind, raw, sourceIp).catch(
+        (retryError: unknown) => {
+          this.logger.error(
+            `Duplicate callback could not be persisted (${kind}): ${describeError(retryError)}`,
+          );
+          throw new ServiceUnavailableException(
+            "Callback could not be persisted; deliver it again",
+          );
+        },
+      );
     }
     this.relay.kick();
     return ack;
@@ -90,6 +97,13 @@ export class CallbackIntake {
   ): Promise<CallbackAck> {
     const bodySha256 = sha256(raw);
     const fingerprint = sha256(`${kind}:${bodySha256}`);
+    const text = raw.toString("utf8");
+    let json: unknown = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      // Malformed callbacks are still durably stored and quarantined by the worker.
+    }
     return this.db.run(
       {
         userId: PAYMENTS_SYSTEM_ACTOR,
@@ -101,12 +115,12 @@ export class CallbackIntake {
           where: { tenantId_fingerprint: { tenantId, fingerprint } },
         });
         if (duplicate) {
-          await tx.paymentCallbackInbox.update({
+          const updated = await tx.paymentCallbackInbox.update({
             where: { tenantId_id: { tenantId, id: duplicate.id } },
             data: {
               duplicates: { increment: 1 },
               lastDuplicateAt: new Date(),
-              version: duplicate.version + 1,
+              version: { increment: 1 },
             },
           });
           await this.ledger.event(tx, tenantId, {
@@ -114,16 +128,9 @@ export class CallbackIntake {
             subjectId: duplicate.id,
             event: "callback.duplicate",
             actorId: null,
-            detail: { kind, duplicates: duplicate.duplicates + 1 },
+            detail: { kind, duplicates: updated.duplicates },
           });
-          return this.acknowledge(tx, tenantId, kind, null);
-        }
-        const text = raw.toString("utf8");
-        let json: unknown = null;
-        try {
-          json = JSON.parse(text);
-        } catch {
-          json = null;
+          return this.acknowledge(tx, tenantId, kind, json);
         }
         const redacted = json === null ? { unparseable: true } : redactCallbackBody(json);
         const id = uuidv7();

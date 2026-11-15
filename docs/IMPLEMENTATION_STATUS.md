@@ -2016,3 +2016,65 @@ API unit (146), the photos, client-portal and documents e2e files (45) and the p
 - The reuse check only finds pictures already in PM-Buddy, scans the company's photos linearly (fine for tens of thousands; an index is needed at much larger volumes) and may flag a fixed-viewpoint progress photo on another day where nothing visibly changed.
 - HEVC is a patented codec: decoding HEIC in a commercial service needs a licence review before go-live. HEIC decoding runs in the API process's worker threads (memory up to about four times the pixel count of the declared images while decoding); an OS-level memory limit (a separate process or container) would bound it further.
 - The development database on this machine was **not** migrated (a running API there was built from `main`); run `pnpm --filter @pm-buddy/api db:migrate` and rebuild after merging. Kiswahili strings need a native speaker's review.
+
+## D4.2 Daraja payments (branch `phase-4/d4.2-daraja`)
+
+Continued on 15 November 2026 in the existing `construction-p34b` checkout. The previous
+work-in-progress backend already included `PaymentProvider`/`DarajaProvider`, all transport
+operations, encrypted company credentials, attempts, callback inbox, reconciliation, an outbox
+relay/BullMQ worker and a local mock. The main working checkout and other sessions' changes are
+not part of this deliverable.
+
+**Delivered in this continuation**
+
+- Finished the office payments console for mock/sandbox review: requests and attempt timeline,
+  redacted callbacks, unknown/mismatch alerts and cases, configuration and write-only credentials,
+  test transactions and the provider/review actions. Production remains unavailable.
+- Fixed a real integration failure: duplicate delivery raced the callback worker and wrote a stale
+  callback version, returning 503 for an already stored delivery. Duplicate version/counter updates
+  are now atomic; eight simultaneous redeliveries are accepted and counted exactly.
+- Fixed C2B validation replay: a repeated rejected validation used to return the generic success
+  acknowledgement. It now revalidates the original input and still rejects the foreign shortcode.
+- Credential-update idempotency now binds the actual secret values through a company-specific
+  keyed fingerprint. A changed secret under the same key is rejected rather than returning a
+  success-shaped replay of an unrelated update. No secret is stored in the idempotency record.
+- Added restrictive portal RLS to all ten payment tables, including client-only custom roles,
+  without altering the previously applied Daraja migration. Added direct runtime-role tests for
+  all tables and a refused forged timeline insert.
+- Malformed callback IP/CIDR configuration now fails startup instead of silently broadening the
+  network (for example an empty CIDR suffix). Permission probes no longer swallow unrelated errors.
+- Added B2B Paybill/Buy Goods end-to-end coverage, callback-token rotation with a queued request
+  still using its original route, callback-token log-redaction coverage, and stricter balance
+  response mapping. Backend lint has no warnings.
+- Turbo forwards `PAYMENTS_*`, `DARAJA_*` and `MOCK_DARAJA_*` to dev and e2e tasks, so an operator's
+  worker-off switch or sandbox configuration is not silently discarded.
+- Added the [mock server guide](../apps/mock-daraja/README.md), [Phase 4 review script](./demos/phase-4.md),
+  runtime configuration, operations/recovery instructions and implementation boundaries.
+
+**Verification before the final latest-main integration**
+
+| Check | Result |
+|---|---|
+| Backend baseline: domain / validation / API / mock types and unit tests | Domain 557, validation 139, API 146 and mock 4 passed |
+| Backend after the fixes: build, lint, typecheck | API and mock clean; zero lint warnings/errors |
+| API unit tests after the fixes | 154 passed |
+| Focused API regression: payments, client portal, procure-to-pay | 45 passed |
+| Full API e2e suite | 29 files passed, 375 tests passed; the external sandbox file/test skipped |
+| Turbo dry-run with `PAYMENTS_WORKERS_ENABLED=false` | Verified that API dev receives the variable |
+
+**Not accepted / still open**
+
+- **Safaricom sandbox verification is not complete.** The optional smoke suite was skipped, not
+  passed. It requires securely supplied test credentials, the public certificate and an approved
+  public HTTPS callback endpoint; the smoke itself does not certify every operation. No existing
+  credential scratch files were read, no public tunnel was opened, and no real provider call or
+  money movement was made. CR-PMT-01–04 and the roadmap's mock-and-sandbox done-when remain open.
+- **The client portal still cannot initiate STK payments.** Its disabled boundary remains until
+  certificate-bound receipt allocation and safe account references are implemented. C2B
+  confirmations remain unallocated provider receipts. D7.1's sandbox-payment acceptance is open.
+- D4.3's payroll approvals, reservations, recipient-name checks, business settlement/allocation,
+  statement uploads, tariffs and payslip notifications are not implemented by this transport.
+- Payment workers run inside the API, not a separately deployed generic application worker.
+  Report email scheduling has not been moved to this payment-specific outbox.
+- Production is blocked. Credential-manager actions still need organisational controls and the
+  release security review; unsigned callbacks and leaked callback paths retain residual risk.

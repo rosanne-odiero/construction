@@ -13,6 +13,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
+import { handlePayments } from "./mock-payments.mts";
 import type { z } from "zod";
 import {
   activationGaps,
@@ -1026,6 +1027,25 @@ async function handle(
     ]);
     return { status: 201, body: { project }, schema: projectResponseSchema };
   }
+  const payments = handlePayments(
+    {
+      permissions: rolePermissions(state),
+      tenantWide: isTenantWide(state.persona),
+      stepUp: () => requireStepUp(state),
+      parse,
+      key:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+      fail: (status, code) => new HttpError(status, code),
+    },
+    state,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (payments) return payments;
   const documents = handleDocuments(
     documentsDeps(state),
     state.documents,

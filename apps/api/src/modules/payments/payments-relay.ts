@@ -17,7 +17,7 @@ type Due = { tenant_id: string; work: "outbox" | "watchdog"; ref_id: string };
 type JobData = { tenantId: string; work: "outbox" | "watchdog"; refId: string };
 
 /**
- * The transactional outbox relay and BullMQ workers (ARCHITECTURE §4.5). Every few seconds the
+ * The transactional outbox relay and BullMQ workers (ARCHITECTURE §4.17). Every few seconds the
  * relay asks the database (a definer function returning identifiers only) for due outbox rows and
  * stuck attempts, enqueues each as a BullMQ job whose ID is derived from the row (so a repeated
  * dispatch is ignored), and marks the row dispatched. When Valkey is unavailable the same items are

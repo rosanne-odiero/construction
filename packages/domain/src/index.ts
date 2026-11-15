@@ -106,17 +106,28 @@ export * from "./payroll/index.js";
 export * from "./site-diary.js";
 export { PIN_LENGTH, pinProblem, PIN_PROBLEMS, type PinProblem } from "./pin.js";
 export {
+  differenceHash,
+  hammingDistance,
+  isVerifiedPhoto,
+  PHOTO_CAPTURE_METHODS,
+  PHOTO_CONTENT_TYPES,
   PHOTO_LIMITS,
   PHOTO_LOCATION_CHECKS,
   PHOTO_PURPOSES,
+  PHOTO_SIMILARITY_CHECKS,
   PHOTO_TIME_CHECKS,
   PHOTO_TIME_SOURCES,
   PHOTO_VERIFICATION_DEFAULTS,
+  sniffPhotoType,
   verifyPhotoEvidence,
+  type PhotoCapture,
+  type PhotoCaptureMethod,
+  type PhotoContentType,
   type PhotoEvidence,
   type PhotoEvidenceInput,
   type PhotoLocationCheck,
   type PhotoPurpose,
+  type PhotoSimilarityCheck,
   type PhotoTimeCheck,
   type PhotoTimeSource,
 } from "./photo-evidence.js";

@@ -3,35 +3,38 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Camera, ExternalLink, LoaderCircle, MapPin, ShieldAlert, ShieldCheck } from "lucide-react";
-import { PHOTO_LIMITS, PHOTO_VERIFICATION_DEFAULTS } from "@pm-buddy/domain";
 import {
-  sitePhotoResponseSchema,
-  type Site,
-  type SiteDiary,
-  type SitePhoto,
-} from "@pm-buddy/validation";
+  Camera,
+  Copy,
+  ExternalLink,
+  FileUp,
+  LoaderCircle,
+  MapPin,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
+import { PHOTO_LIMITS, PHOTO_VERIFICATION_DEFAULTS } from "@pm-buddy/domain";
+import type { Site, SiteDiary, SitePhoto } from "@pm-buddy/validation";
+import { CameraCapture } from "@/components/photos/camera-capture";
+import {
+  PHOTO_IMPORT_ACCEPT,
+  uploadSitePhoto,
+  usePhotoProblem,
+} from "@/components/photos/site-photo-upload";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { formatCalendarDate, formatDateTime } from "@/lib/format";
-import { LiveApiError, liveUpload } from "@/lib/live-api";
-import { useProblemMessage } from "./use-problem-message";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none";
-const photoErrors = {
-  "photo-duplicate": "duplicate",
-  "unsupported-file-type": "notJpeg",
-  "invalid-image": "invalidImage",
-  "payload-too-large": "tooLarge",
-  "diary-not-draft": "diaryNotDraft",
-  "file-required": "fileRequired",
-} as const;
 
-/** Geotagged site photos: upload (site.photos) and a timeline with each photo's verification. */
+/**
+ * Site photos: take one with PM-Buddy's camera screen (the only way to a verified photo) or import
+ * a JPEG/HEIC file (site.photos), and a timeline with each photo's checks and reasons.
+ */
 export function PhotosPanel({
   projectId,
   photos,
@@ -46,48 +49,47 @@ export function PhotosPanel({
   canUpload: boolean;
 }) {
   const t = useTranslations("livePhotos");
-  const problem = useProblemMessage();
+  const errors = useTranslations("photoCapture.errors");
+  const problem = usePhotoProblem();
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
   const [siteId, setSiteId] = useState(sites[0]?.id ?? "");
   const [diaryId, setDiaryId] = useState("");
   const [caption, setCaption] = useState("");
   const [busy, setBusy] = useState(false);
+  const [camera, setCamera] = useState(false);
   const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null);
   const siteName = (id: string) => sites.find((site) => site.id === id)?.name ?? "—";
   const siteDrafts = drafts.filter((diary) => diary.siteId === siteId);
 
-  async function upload() {
+  /** Uploads with the form's site, diary and caption; throws so the camera can show the error. */
+  async function send(file: File, capture: Record<string, string> = {}) {
+    const photo = await uploadSitePhoto(projectId, file, {
+      siteId,
+      ...(diaryId ? { diaryId } : {}),
+      ...(caption.trim() ? { caption: caption.trim() } : {}),
+      ...capture,
+    });
+    setMessage({
+      error: false,
+      text: photo.verified ? t("uploadedVerified") : t("uploadedUnverified"),
+    });
+    setCaption("");
+    router.refresh();
+  }
+
+  async function importFile() {
     const file = fileInput.current?.files?.[0];
-    if (!file) return setMessage({ error: true, text: t("errors.fileRequired") });
+    if (!file) return setMessage({ error: true, text: errors("fileRequired") });
     if (file.size > PHOTO_LIMITS.maxFileBytes)
-      return setMessage({ error: true, text: t("errors.tooLarge") });
+      return setMessage({ error: true, text: errors("tooLarge") });
     setBusy(true);
     setMessage(null);
     try {
-      const { photo } = await liveUpload(
-        `/projects/${projectId}/photos`,
-        file,
-        sitePhotoResponseSchema,
-        {
-          siteId,
-          ...(diaryId ? { diaryId } : {}),
-          ...(caption.trim() ? { caption: caption.trim() } : {}),
-        },
-      );
-      setMessage({
-        error: false,
-        text: photo.verified ? t("uploadedVerified") : t("uploadedUnverified"),
-      });
-      setCaption("");
+      await send(file);
       if (fileInput.current) fileInput.current.value = "";
-      router.refresh();
     } catch (error) {
-      const key =
-        error instanceof LiveApiError
-          ? photoErrors[error.code as keyof typeof photoErrors]
-          : undefined;
-      setMessage({ error: true, text: key ? t(`errors.${key}`) : problem(error) });
+      setMessage({ error: true, text: problem(error) });
     } finally {
       setBusy(false);
     }
@@ -104,7 +106,7 @@ export function PhotosPanel({
           <p className="rounded-md border bg-muted p-3 text-sm">
             {t("evidenceNote", {
               tolerance: PHOTO_VERIFICATION_DEFAULTS.toleranceM,
-              hours: PHOTO_VERIFICATION_DEFAULTS.maxAgeHours,
+              minutes: PHOTO_VERIFICATION_DEFAULTS.captureWindowMinutes,
             })}
           </p>
         </CardHeader>
@@ -115,22 +117,9 @@ export function PhotosPanel({
               className="grid gap-4 md:grid-cols-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                void upload();
+                void importFile();
               }}
             >
-              <Field>
-                <FieldLabel htmlFor="photo-file">{t("file")}</FieldLabel>
-                <Input
-                  id="photo-file"
-                  ref={fileInput}
-                  type="file"
-                  accept="image/jpeg"
-                  capture="environment"
-                  disabled={busy}
-                  aria-describedby="photo-file-hint"
-                />
-                <FieldDescription id="photo-file-hint">{t("fileHint")}</FieldDescription>
-              </Field>
               <Field>
                 <FieldLabel htmlFor="photo-site">{t("site")}</FieldLabel>
                 <select
@@ -179,24 +168,56 @@ export function PhotosPanel({
                   onChange={(event) => setCaption(event.target.value)}
                 />
               </Field>
-              <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-                <Button type="submit" disabled={busy}>
+              <div className="md:col-span-2">
+                <Button
+                  type="button"
+                  disabled={busy || !siteId}
+                  onClick={() => {
+                    setMessage(null);
+                    setCamera(true);
+                  }}
+                >
+                  <Camera aria-hidden /> {t("takePhoto")}
+                </Button>
+              </div>
+              <fieldset className="grid gap-3 rounded-md border p-3 md:col-span-2 md:grid-cols-[1fr_auto] md:items-end">
+                <legend className="px-1 text-sm font-medium">{t("importTitle")}</legend>
+                <Field>
+                  <FieldLabel htmlFor="photo-file">{t("file")}</FieldLabel>
+                  <Input
+                    id="photo-file"
+                    ref={fileInput}
+                    type="file"
+                    accept={PHOTO_IMPORT_ACCEPT}
+                    disabled={busy}
+                    aria-describedby="photo-file-hint"
+                  />
+                  <FieldDescription id="photo-file-hint">{t("fileHint")}</FieldDescription>
+                </Field>
+                <Button type="submit" variant="outline" disabled={busy}>
                   {busy ? (
                     <LoaderCircle className="animate-spin" aria-hidden />
                   ) : (
-                    <Camera aria-hidden />
+                    <FileUp aria-hidden />
                   )}
                   {busy ? t("uploading") : t("upload")}
                 </Button>
-                <p
-                  aria-live="polite"
-                  role={message?.error ? "alert" : "status"}
-                  className={`text-sm ${message?.error ? "text-destructive" : ""}`}
-                >
-                  {message?.text}
-                </p>
-              </div>
+              </fieldset>
+              <p
+                aria-live="polite"
+                role={message?.error ? "alert" : "status"}
+                className={`text-sm md:col-span-2 ${message?.error ? "text-destructive" : ""}`}
+              >
+                {message?.text}
+              </p>
             </form>
+            <CameraCapture
+              projectId={projectId}
+              siteId={siteId}
+              open={camera}
+              onOpenChange={setCamera}
+              onCaptured={({ file, fields }) => send(file, fields)}
+            />
           </CardContent>
         ) : canUpload ? (
           <CardContent>
@@ -234,6 +255,14 @@ export function PhotosPanel({
                     </div>
                     <ul className="space-y-1 text-muted-foreground">
                       <li className="flex gap-1.5">
+                        {photo.captureMethod === "in_app" ? (
+                          <Camera className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                        ) : (
+                          <FileUp className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                        )}
+                        <span>{t(`capture.${photo.captureMethod}`)}</span>
+                      </li>
+                      <li className="flex gap-1.5">
                         <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                         <span>
                           {photo.checks.location === "outside"
@@ -244,17 +273,50 @@ export function PhotosPanel({
                             : t(`location.${photo.checks.location}`, {
                                 site: siteName(photo.siteId),
                                 version: photo.geofenceVersion ?? 0,
+                                accuracy: Math.round(photo.location?.accuracyM ?? 0),
                               })}
                         </span>
                       </li>
                       <li>
                         {photo.capturedAt
-                          ? t(`time.${photo.checks.time}`, {
-                              date: formatDateTime(photo.capturedAt),
-                            })
+                          ? t(
+                              photo.captureMethod === "in_app" && photo.checks.time === "stale"
+                                ? "time.late"
+                                : `time.${photo.checks.time}`,
+                              {
+                                date: formatDateTime(photo.capturedAt),
+                                minutes: PHOTO_VERIFICATION_DEFAULTS.captureWindowMinutes,
+                              },
+                            )
                           : t("time.missing")}
                         {photo.timeSource === "assumed_nairobi" ? ` ${t("assumedZone")}` : ""}
                       </li>
+                      {photo.checks.similarTo ? (
+                        <li className="flex gap-1.5 text-foreground">
+                          <Copy className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                          <span>
+                            {photo.checks.similarTo.otherProject
+                              ? t("similarity.otherProject")
+                              : t("similarity.sameProject")}
+                            {photo.checks.similarTo.photoId ? (
+                              <>
+                                {" "}
+                                <a
+                                  href={`/api/v1/projects/${projectId}/photos/${photo.checks.similarTo.photoId}/thumbnail`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary underline-offset-4 hover:underline"
+                                >
+                                  {t("similarity.open")}
+                                  <span className="sr-only"> {t("newTab")}</span>
+                                </a>
+                              </>
+                            ) : null}
+                          </span>
+                        </li>
+                      ) : photo.checks.similarity === "not_checked" ? (
+                        <li>{t("similarity.not_checked")}</li>
+                      ) : null}
                       <li>
                         {t("uploadedBy", {
                           name: photo.uploadedBy.displayName,
@@ -270,7 +332,8 @@ export function PhotosPanel({
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
                     >
-                      {t("original")} <ExternalLink className="size-3.5" aria-hidden />
+                      {photo.contentType === "image/heic" ? t("originalHeic") : t("original")}{" "}
+                      <ExternalLink className="size-3.5" aria-hidden />
                       <span className="sr-only">{t("newTab")}</span>
                     </a>
                   </div>

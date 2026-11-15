@@ -1,4 +1,12 @@
-import { isPaybillNumber, parseFxRate } from "@pm-buddy/domain";
+import {
+  isPaybillNumber,
+  parseFxRate,
+  PHOTO_CAPTURE_METHODS,
+  PHOTO_LOCATION_CHECKS,
+  PHOTO_SIMILARITY_CHECKS,
+  PHOTO_TIME_CHECKS,
+  PHOTO_TIME_SOURCES,
+} from "@pm-buddy/domain";
 import {
   CLIENT_CERTIFICATE_STATES,
   CLIENT_DECISIONS,
@@ -199,18 +207,22 @@ export const clientPhotoSchema = z.strictObject({
   id: uuid,
   siteName: z.string(),
   caption: z.string().nullable(),
-  /** The capture time the photo's own metadata claims (null when it had none). */
+  /** The capture time the phone or the photo's own metadata claims (null when it had none). */
   capturedAt: timestamp.nullable(),
-  timeSource: z.enum(["gps", "offset", "assumed_nairobi"]).nullable(),
+  timeSource: z.enum(PHOTO_TIME_SOURCES).nullable(),
   /** When the server received it. */
   uploadedAt: timestamp,
-  /** Server checks of the photo's metadata (D6.1); evidence for review, not proof. */
+  /** `in_app`: taken with PM-Buddy's camera screen; `imported`: a file, never verified. */
+  captureMethod: z.enum(PHOTO_CAPTURE_METHODS),
+  /** Server checks of the photo (D6.1, THREAT_MODEL A-13); strong evidence, not proof. */
   verified: z.boolean(),
   checks: z.strictObject({
-    location: z.enum(["inside", "outside", "missing", "no_geofence"]),
-    time: z.enum(["ok", "future", "stale", "missing", "diary_mismatch"]),
+    location: z.enum(PHOTO_LOCATION_CHECKS),
+    time: z.enum(PHOTO_TIME_CHECKS),
     /** Metres outside the site boundary when the location is outside. */
     distanceM: z.number().nullable(),
+    /** `similar`: looks like an earlier photo (which one is not shown to clients). */
+    similarity: z.enum(PHOTO_SIMILARITY_CHECKS),
   }),
   width: z.number().int().min(1),
   height: z.number().int().min(1),

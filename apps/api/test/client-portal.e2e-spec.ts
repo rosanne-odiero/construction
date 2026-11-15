@@ -46,7 +46,7 @@ import { PrismaClient } from "../src/generated/prisma/client.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
-import { jpegWithExif } from "./photo-fixtures.js";
+import { inAppCapture, jpegWithExif, plainJpeg } from "./photo-fixtures.js";
 import { Browser, notifications, origin } from "./support.js";
 import { testDatabaseUrls } from "./test-database.js";
 
@@ -66,13 +66,6 @@ import { testDatabaseUrls } from "./test-database.js";
 const today = nairobiDate();
 const daysAgo = (days: number) => addCalendarDays(today, -days);
 const SITE = { lat: -1.2921, lng: 36.8219 };
-const HOUR = 3_600_000;
-const exifTime = (date: Date) =>
-  new Date(date.getTime() + 3 * HOUR)
-    .toISOString()
-    .slice(0, 19)
-    .replace("T", " ")
-    .replace(/-/g, ":");
 
 type Tx = {
   $executeRaw: (s: TemplateStringsArray, ...v: unknown[]) => Promise<number>;
@@ -177,11 +170,13 @@ describe("Client portal (real runtime role)", () => {
     content: Buffer,
     caption: string,
     purpose?: "safety_incident",
+    capture: Record<string, string> = {},
   ) => {
     const res = await agent.upload(`projects/${project}/photos`, content, "IMG_0001.jpg", {
       siteId: site,
       caption,
       ...(purpose ? { purpose } : {}),
+      ...capture,
     });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     return sitePhotoResponseSchema.parse(res.body).photo;
@@ -448,18 +443,15 @@ describe("Client portal (real runtime role)", () => {
       }),
     );
 
-    // Photos: verified (GPS on site, taken an hour ago), unverified (no metadata), an incident
-    // photo, and a photo of the other project.
+    // Photos: verified (taken on site with the in-app camera), unverified (an imported file
+    // without metadata), an incident photo, and a photo of the other project.
     const verified = await upload(
       projectId,
       siteId,
-      await jpegWithExif({
-        ...SITE,
-        original: exifTime(new Date(Date.now() - HOUR)),
-        offset: "+03:00",
-        make: "TestCam",
-      }),
+      await plainJpeg(),
       "Column bases cast",
+      undefined,
+      await inAppCapture(agent, projectId, siteId, SITE),
     );
     expect(verified.verified).toBe(true);
     photos.verified = verified.id;
@@ -1003,10 +995,16 @@ describe("Client portal (real runtime role)", () => {
     expect(next.photos.map((row) => [row.id, row.verified, row.checks.location])).toEqual([
       [photos.verified, true, "inside"],
     ]);
+    expect(next.photos[0]).toMatchObject({
+      captureMethod: "in_app",
+      timeSource: "device",
+      checks: { similarity: "unique" },
+    });
     expect(page.photos[0]).toMatchObject({
+      captureMethod: "imported",
       verified: false,
       capturedAt: null,
-      checks: { location: "missing", time: "missing" },
+      checks: { location: "missing", time: "missing", similarity: "unique" },
     });
     const text = JSON.stringify([page, next]);
     expect(text).not.toContain(photos.incident);

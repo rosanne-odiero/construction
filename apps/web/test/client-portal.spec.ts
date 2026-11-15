@@ -82,15 +82,18 @@ test("a client follows progress, photos and money and sees how to pay on a 360 p
   expect(await axeViolations(page)).toEqual([]);
 
   await openSection(page, "Photos", `${PORTAL}/photos`);
-  await expect(page.getByText("Location and time verified", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("Verified on site", { exact: true })).toHaveCount(1);
   await expect(page.getByText("Not verified", { exact: true })).toHaveCount(1);
   await expect(page.getByText("No GPS position in the photo")).toBeVisible();
+  await expect(page.getByText(/Imported from a file, so not verified/)).toBeVisible();
   await expect(page.getByRole("img", { name: "Synthetic: first-floor columns" })).toHaveAttribute(
     "src",
     new RegExp(`/api/v1/portal/client/projects/${RUIRU_ID}/photos/[0-9a-f-]+/image$`),
   );
   await page.getByText("What “verified” means").click();
-  await expect(page.getByText(/treat a verified photo as evidence, not proof/)).toBeVisible();
+  await expect(
+    page.getByText(/treat a verified photo as strong evidence, not proof/),
+  ).toBeVisible();
   expect(await noHorizontalScroll(page)).toBe(true);
   expect(await axeViolations(page)).toEqual([]);
 

@@ -26,8 +26,10 @@ import {
   ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
-import { PHOTO_LIMITS } from "@pm-buddy/domain";
+import { PHOTO_LIMITS, PHOTO_VERIFICATION_DEFAULTS } from "@pm-buddy/domain";
 import {
+  photoCaptureTicketRequestSchema,
+  photoCaptureTicketResponseSchema,
   photoUploadFieldsSchema,
   sitePhotoListQuerySchema,
   sitePhotoResponseSchema,
@@ -71,8 +73,32 @@ export class PhotoUploadGuard implements CanActivate {
 export class PhotosController {
   constructor(
     private readonly auth: AuthService,
+    private readonly security: AuthSecurity,
     private readonly photos: PhotosService,
   ) {}
+
+  @Post("capture-tickets")
+  @ApiOperation({
+    summary: "Open an in-app photo capture for a site (when the camera screen opens)",
+    description: `Requires site.photos; closed and cancelled projects are read-only. The ticket records the server time; the photo uploaded with it is checked against that time (the shutter time may not be earlier, and the upload must come within ${PHOTO_VERIFICATION_DEFAULTS.captureWindowMinutes} minutes, \`useBy\`). Single use. 404 for a site outside the project.`,
+    operationId: "openSitePhotoCapture",
+  })
+  @ApiBody({ schema: openApi(photoCaptureTicketRequestSchema) })
+  @ApiCreatedResponse({ schema: openApi(photoCaptureTicketResponseSchema) })
+  async openCapture(
+    @Param("projectId") projectId: string,
+    @Body() body: unknown,
+    @Req() req: Request,
+  ) {
+    const principal = await this.auth.principal(req);
+    await this.security.limit(`photo-capture:${principal.user.id}`, 600, 3_600);
+    return this.photos.openCapture(
+      principal,
+      uuidSchema.parse(projectId),
+      photoCaptureTicketRequestSchema.parse(body).siteId,
+      req,
+    );
+  }
 
   @Get()
   @ApiOperation({
@@ -101,8 +127,8 @@ export class PhotosController {
       limits: {
         fileSize: PHOTO_LIMITS.maxFileBytes,
         files: 1,
-        fields: 3,
-        parts: 4,
+        fields: 9,
+        parts: 10,
         fieldNameSize: 20,
         fieldSize: 2_000,
         headerPairs: 20,
@@ -110,9 +136,8 @@ export class PhotosController {
     }),
   )
   @ApiOperation({
-    summary: "Upload a JPEG site photo (at most 15 MB); the server verifies its metadata",
-    description:
-      "Requires site.photos; closed and cancelled projects are read-only. The position and capture time come only from the photo's EXIF, checked against the site geofence version in force at capture (30 m GPS tolerance) and the upload time (not more than 10 minutes ahead or 72 hours old; the diary's date when attached to a draft diary). The original is stored privately with its SHA-256, plus a metadata-free thumbnail; the malware hook runs. 409 `photo-duplicate` for a file already in the project, `diary-not-draft` for submitted or approved diaries; 415 `unsupported-file-type`; 422 `invalid-image`.",
+    summary: "Upload a JPEG or HEIC site photo (at most 15 MB); the server checks its evidence",
+    description: `Requires site.photos; closed and cancelled projects are read-only. **In-app capture** (PM-Buddy's camera screen): send \`captureTicketId\` from openSitePhotoCapture, \`capturedAt\` (the phone's clock at the shutter) and, when the browser gave a position, \`latitude\`, \`longitude\` and \`accuracyM\` together; the time must fall after the ticket and the upload within ${PHOTO_VERIFICATION_DEFAULTS.captureWindowMinutes} minutes of it, and a position less accurate than ${PHOTO_VERIFICATION_DEFAULTS.maxAccuracyM} m is not used. **Imported files** send none of these: the photo's own EXIF is checked (not more than 10 minutes ahead or 72 hours old) but an imported photo is never verified. Either way the position is checked against the site geofence version in force at capture (${PHOTO_VERIFICATION_DEFAULTS.toleranceM} m tolerance) and the diary's date when attached to a draft diary, and a photo whose difference hash is within ${PHOTO_VERIFICATION_DEFAULTS.similarityMaxDistance} bits of an earlier company photo from another day or project is not verified. The original is stored privately with its SHA-256 (HEIC as uploaded), plus a metadata-free JPEG thumbnail; the malware hook runs. 409 \`photo-duplicate\` for a file already in the project, \`capture-ticket-used\`, \`diary-not-draft\` for submitted or approved diaries; 415 \`unsupported-file-type\`; 422 \`invalid-image\`, \`capture-ticket-invalid\`; 503 \`photo-decoder-busy\`.`,
     operationId: "uploadSitePhoto",
   })
   @ApiConsumes("multipart/form-data")
@@ -125,6 +150,12 @@ export class PhotosController {
         siteId: { type: "string", format: "uuid" },
         diaryId: { type: "string", format: "uuid" },
         caption: { type: "string", maxLength: 500 },
+        purpose: { type: "string", enum: ["general", "safety_incident"] },
+        captureTicketId: { type: "string", format: "uuid" },
+        capturedAt: { type: "string", format: "date-time" },
+        latitude: { type: "string", example: "-1.148912" },
+        longitude: { type: "string", example: "36.961234" },
+        accuracyM: { type: "string", example: "8.5" },
       },
     },
   })
@@ -161,7 +192,7 @@ export class PhotosController {
 
   @Get(":photoId/original")
   @ApiOperation({
-    summary: "A photo's original upload (JPEG, including its metadata)",
+    summary: "A photo's original upload (JPEG or HEIC, including its metadata)",
     description: readNote,
     operationId: "getSitePhotoOriginal",
   })
@@ -182,7 +213,7 @@ export class PhotosController {
     res: Response,
   ) {
     const id = uuidSchema.parse(photoId);
-    const content = await this.photos.content(
+    const { content, contentType } = await this.photos.content(
       await this.auth.principal(req),
       uuidSchema.parse(projectId),
       id,
@@ -192,9 +223,10 @@ export class PhotosController {
     // Served as an image only: never sniffed, never scriptable.
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    const name = `photo-${id}${variant === "thumbnail" ? "-thumbnail" : ""}`;
     return new StreamableFile(content, {
-      type: "image/jpeg",
-      disposition: `inline; filename="photo-${id}${variant === "thumbnail" ? "-thumbnail" : ""}.jpg"`,
+      type: contentType,
+      disposition: `inline; filename="${name}.${contentType === "image/heic" ? "heic" : "jpg"}"`,
       length: content.length,
     });
   }

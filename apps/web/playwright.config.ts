@@ -17,7 +17,19 @@ export default defineConfig({
     // Transitions finish instantly (see globals.css), so axe never scans a half-faded button.
     contextOptions: { reducedMotion: "reduce" },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], channel: "chromium" } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chromium",
+        // A synthetic camera for the in-app photo capture (it affects getUserMedia only).
+        launchOptions: {
+          args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+        },
+      },
+    },
+  ],
   webServer: [
     {
       command: "node test/mock-api.mts",

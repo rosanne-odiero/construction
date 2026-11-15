@@ -41,8 +41,8 @@ import { PrismaClient } from "../src/generated/prisma/client.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
-import { jpegWithExif, plainJpeg } from "./photo-fixtures.js";
-import { Browser, notifications, origin } from "./support.js";
+import { inAppCapture, jpegWithExif, plainJpeg } from "./photo-fixtures.js";
+import { Browser, notifications } from "./support.js";
 import { testDatabaseUrls } from "./test-database.js";
 
 /** A small valid PDF; the label keeps every file's SHA-256 distinct. */
@@ -1383,21 +1383,21 @@ describe("Documents and compliance register (real runtime role)", () => {
       409,
       "attachment-exists",
     );
-    const photo = async (content: Buffer) =>
+    const photo = async (content: Buffer, fields: Record<string, string> = { siteId }) =>
       ok(
-        await request(app.getHttpServer())
-          .post(`/api/v1/${base()}/photos`)
-          .set("Cookie", [...agent.cookies].map(([name, value]) => `${name}=${value}`).join("; "))
-          .set("Origin", origin)
-          .set("X-CSRF-Token", agent.csrf)
-          .field("siteId", siteId)
-          .attach("file", content, "site.jpg"),
+        await agent.upload(`${base()}/photos`, content, "site.jpg", fields),
         (body) => sitePhotoResponseSchema.parse(body).photo,
         201,
       );
+    // Only a photo taken with the in-app camera can be verified; an imported one never is.
     const verified = await photo(
+      await plainJpeg(),
+      await inAppCapture(agent, projectId, siteId, centre),
+    );
+    const imported = await photo(
       await jpegWithExif({ ...centre, original: exifNow(), offset: "+03:00", make: "TestCam" }),
     );
+    expect(imported.verified).toBe(false);
     expect(verified.verified).toBe(true);
     const unverified = await photo(await plainJpeg());
     expect(unverified.verified).toBe(false);

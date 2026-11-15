@@ -37,6 +37,11 @@ export const COST_SOURCES = [
   "petty_cash_expense",
   "petty_cash_count",
   "cost_journal",
+  // D6.3 part B (decision D-145): a certified subcontract certificate, a payment recorded against
+  // one, and an advance recorded as paid.
+  "subcontract_certificate",
+  "subcontract_payment",
+  "subcontract_advance",
 ] as const;
 export type CostSource = (typeof COST_SOURCES)[number];
 

@@ -383,6 +383,8 @@ export const pieceRateOutputSchema = z
     labourer: labourerRef.nullable(),
     gang: z.object({ id: uuid, name: z.string() }).strict().nullable(),
     bqItem: z.object({ id: uuid, ref: z.string().nullable() }).strict().nullable(),
+    /** The piece-rate job it was recorded against (D6.3 part B); its rate is the job's. */
+    job: z.object({ id: uuid, code: z.string() }).strict().nullable(),
     description: z.string(),
     unit: z.string(),
     quantity: z.string(),

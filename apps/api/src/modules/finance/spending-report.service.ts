@@ -19,6 +19,7 @@ import type { Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import { projectCommitments } from "../procurement/p2p/p2p-overview.service.js";
+import { subcontractCommitments } from "../subcontracts/subcontract-commitments.js";
 import {
   approvedBqVersion,
   bqItemSelect,
@@ -46,7 +47,9 @@ type BillRef = { lineageId: string; number: string; title: string };
 /**
  * Everything budget against actual and committed needs for one project, computed on read:
  * - budget: the newest approved budget version's lines (BQ items and cost codes);
- * - committed: approved LPOs not yet invoiced, per requisition BQ item (the D5.2 commitments);
+ * - committed: approved LPOs not yet invoiced, per requisition BQ item (the D5.2 commitments,
+ *   category materials), and the uncertified value of approved or active subcontracts per BQ item
+ *   (D6.3 part B, category subcontract, decision D-146);
  * - actual: accrued cost entries; paid: paid cost entries (net of VAT);
  * - materials issued: stock issues net of returns per BQ item, at the stores' weighted average.
  *   ISSUES RE-ALLOCATE COST, THEY NEVER ADD IT (decision D-53): material cost is accrued once,
@@ -70,7 +73,12 @@ export type ProjectFacts = {
   }[];
   /** Accrued and paid per (category, BQ lineage or null). */
   entries: { measure: string; category: CostCategory; lineageId: string | null; sum: number }[];
-  commitments: { lineageId: string | null; versionId: string | null; open: number }[];
+  commitments: {
+    lineageId: string | null;
+    versionId: string | null;
+    open: number;
+    category: CostCategory;
+  }[];
   /** Issued − returned value per BQ lineage (whole cents, rounded once per item). */
   issued: Map<string, { versionId: string; value: number }>;
   materialsAccruedMinor: number;
@@ -89,28 +97,38 @@ export async function loadProjectFacts(
     where: { tenantId, projectId, status: "approved" },
     orderBy: { versionNo: "desc" },
   });
-  const [lines, grouped, commitments, issueRows, transferRows, settled, materials, paidOther] =
-    await Promise.all([
-      budget
-        ? tx.budgetLine.findMany({
-            where: { tenantId, budgetId: budget.id },
-            select: { bqItemLineageId: true, category: true, costCodeId: true, amountMinor: true },
-          })
-        : Promise.resolve([]),
-      tx.costEntry.groupBy({
-        by: ["measure", "category", "bqItemLineageId"],
-        where: { tenantId, projectId },
-        _sum: { amountMinor: true },
-      }),
-      projectCommitments(tx, tenantId, projectId),
-      tx.$queryRaw<{ version_id: string; lineage_id: string; value: string }[]>`
+  const [
+    lines,
+    grouped,
+    commitments,
+    issueRows,
+    transferRows,
+    settled,
+    materials,
+    paidOther,
+    subcontracted,
+    subcontractCash,
+  ] = await Promise.all([
+    budget
+      ? tx.budgetLine.findMany({
+          where: { tenantId, budgetId: budget.id },
+          select: { bqItemLineageId: true, category: true, costCodeId: true, amountMinor: true },
+        })
+      : Promise.resolve([]),
+    tx.costEntry.groupBy({
+      by: ["measure", "category", "bqItemLineageId"],
+      where: { tenantId, projectId },
+      _sum: { amountMinor: true },
+    }),
+    projectCommitments(tx, tenantId, projectId),
+    tx.$queryRaw<{ version_id: string; lineage_id: string; value: string }[]>`
         SELECT (array_agg(bq_version_id ORDER BY recorded_at DESC))[1] AS version_id,
                bq_item_lineage_id AS lineage_id, (-sum(value_minor))::text AS value
           FROM stock_ledger_entries
          WHERE tenant_id = ${tenantId}::uuid AND project_id = ${projectId}::uuid
            AND kind IN ('issue', 'return') AND bq_item_lineage_id IS NOT NULL
          GROUP BY bq_item_lineage_id`,
-      tx.$queryRaw<{ direction: string; value: string }[]>`
+    tx.$queryRaw<{ direction: string; value: string }[]>`
         SELECT CASE WHEN e.kind = 'transfer_in' THEN 'in' ELSE 'out' END AS direction,
                abs(sum(e.value_minor))::text AS value
           FROM stock_ledger_entries e
@@ -118,19 +136,32 @@ export async function loadProjectFacts(
          WHERE e.tenant_id = ${tenantId}::uuid AND e.project_id = ${projectId}::uuid
            AND t.from_project_id <> t.to_project_id
          GROUP BY 1`,
-      tx.invoiceSettlement.aggregate({
-        where: { tenantId, payable: { invoice: { projectId } } },
-        _sum: { amountMinor: true },
-      }),
-      tx.costEntry.aggregate({
-        where: { tenantId, projectId, measure: "accrued", invoiceId: { not: null } },
-        _sum: { amountMinor: true },
-      }),
-      tx.costEntry.aggregate({
-        where: { tenantId, projectId, measure: "paid", settlementId: null },
-        _sum: { amountMinor: true },
-      }),
-    ]);
+    tx.invoiceSettlement.aggregate({
+      where: { tenantId, payable: { invoice: { projectId } } },
+      _sum: { amountMinor: true },
+    }),
+    tx.costEntry.aggregate({
+      where: { tenantId, projectId, measure: "accrued", invoiceId: { not: null } },
+      _sum: { amountMinor: true },
+    }),
+    // A subcontract payment's cost entries hold only its cost share (no VAT, withholding added
+    // back), so the cash comes from the payments themselves.
+    tx.costEntry.aggregate({
+      where: {
+        tenantId,
+        projectId,
+        measure: "paid",
+        settlementId: null,
+        subcontractPaymentId: null,
+      },
+      _sum: { amountMinor: true },
+    }),
+    subcontractCommitments(tx, tenantId, projectId),
+    tx.subcontractPayment.aggregate({
+      where: { tenantId, projectId },
+      _sum: { amountMinor: true },
+    }),
+  ]);
   const issued = new Map<string, { versionId: string; value: number }>();
   for (const row of issueRows) {
     const value = stockValueToMinor(row.value);
@@ -163,17 +194,27 @@ export async function loadProjectFacts(
       lineageId: row.bqItemLineageId,
       sum: minorOf(row._sum.amountMinor ?? 0n),
     })),
-    commitments: commitments.items.map((item) => ({
-      lineageId: item.bqItem?.lineageId ?? null,
-      versionId: item.bqItem?.versionId ?? null,
-      open: item.openCommitmentMinor,
-    })),
+    commitments: [
+      ...commitments.items.map((item) => ({
+        lineageId: item.bqItem?.lineageId ?? null,
+        versionId: item.bqItem?.versionId ?? null,
+        open: item.openCommitmentMinor,
+        category: "materials" as CostCategory,
+      })),
+      ...subcontracted.map((line) => ({
+        lineageId: line.lineageId,
+        versionId: line.versionId,
+        open: line.openMinor,
+        category: "subcontract" as CostCategory,
+      })),
+    ],
     issued,
     materialsAccruedMinor: minorOf(materials._sum.amountMinor ?? 0n),
     transferredInMinor: transfer("in"),
     transferredOutMinor: transfer("out"),
     settledCashMinor: minorOf(settled._sum.amountMinor ?? 0n),
-    paidNotFromSettlementsMinor: minorOf(paidOther._sum.amountMinor ?? 0n),
+    paidNotFromSettlementsMinor:
+      minorOf(paidOther._sum.amountMinor ?? 0n) + minorOf(subcontractCash._sum.amountMinor ?? 0n),
   };
 }
 
@@ -259,8 +300,8 @@ export class SpendingReportService {
         const figures = empty();
         for (const line of facts.budgetLines)
           if (line.category === category) addBudget(figures, line.amountMinor);
-        if (category === "materials")
-          for (const commitment of facts.commitments) figures.committedMinor += commitment.open;
+        for (const commitment of facts.commitments)
+          if (commitment.category === category) figures.committedMinor += commitment.open;
         for (const entry of facts.entries)
           if (entry.category === category) {
             if (entry.measure === "accrued") figures.actualMinor += entry.sum;

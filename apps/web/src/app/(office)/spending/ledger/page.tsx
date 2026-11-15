@@ -42,6 +42,11 @@ function documentHref(entry: CostEntry): string | null {
       return `/spending/petty-cash/expenses/${entry.document.id}`;
     case "cost_journal":
       return `/spending/journals/${entry.document.id}`;
+    case "subcontract_certificate":
+    case "subcontract_payment":
+      return `/subcontracts/certificates/${entry.document.id}`;
+    case "subcontract_advance":
+      return `/subcontracts/${entry.document.id}`;
     default:
       return null;
   }

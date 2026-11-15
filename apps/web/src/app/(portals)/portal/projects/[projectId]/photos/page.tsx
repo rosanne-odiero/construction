@@ -103,10 +103,16 @@ export default async function ClientPhotosPage({
                   </span>
                   {photo.verified ? null : (
                     <span className="block text-xs">
+                      {photo.captureMethod === "imported" ? `${t("imported")} ` : ""}
                       {t(`location.${photo.checks.location}`, {
                         metres: Math.round(photo.checks.distanceM ?? 0),
                       })}{" "}
-                      {t(`time.${photo.checks.time}`)}
+                      {t(
+                        photo.captureMethod === "in_app" && photo.checks.time === "stale"
+                          ? "time.late"
+                          : `time.${photo.checks.time}`,
+                      )}
+                      {photo.checks.similarity === "similar" ? ` ${t("similar")}` : ""}
                     </span>
                   )}
                 </figcaption>

@@ -21,6 +21,7 @@ import { PlantModule } from "./modules/plant/plant.module.js";
 import { DocumentsModule } from "./modules/documents/documents.module.js";
 import { ScheduleModule } from "./modules/schedule/schedule.module.js";
 import { ReportsModule } from "./modules/reports/reports.module.js";
+import { SubcontractsModule } from "./modules/subcontracts/subcontracts.module.js";
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ReportsModule } from "./modules/reports/reports.module.js";
     AttendanceModule,
     PayrollModule,
     ProgressModule,
+    SubcontractsModule,
     ScheduleModule,
     QualityModule,
     SafetyModule,

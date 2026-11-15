@@ -51,6 +51,10 @@ export type PayrollProblem =
   | "batch-stale"
   | "batch-empty"
   | "nothing-to-export"
+  | "unit-not-convertible"
+  | "job-not-approved"
+  | "job-dates"
+  | "job-quantity-exceeded"
   | "payroll-rule";
 
 export const payrollConflict = (code: PayrollProblem, message: string) =>
@@ -78,6 +82,19 @@ export function rethrowPayrollDbError(error: unknown): never {
     throw error;
   if (isUniqueViolation(error))
     throw payrollConflict("payroll-rule", "This conflicts with an existing payroll record.");
+  // D6.3 part B: the piece-rate job guards keep their own codes.
+  if (isCheckViolation(error)) {
+    const text = JSON.stringify(error, Object.getOwnPropertyNames(error as object));
+    if (/agreed quantity without an approved extension/.test(text))
+      throw payrollConflict(
+        "job-quantity-exceeded",
+        "This takes the job above its agreed quantity; ask for an approved extension first.",
+      );
+    if (/against an approved job/.test(text))
+      throw payrollConflict("job-not-approved", "Output is recorded against an approved job.");
+    if (/within the job's dates/.test(text))
+      throw payrollConflict("job-dates", "Output is recorded within the job's dates.");
+  }
   if (isCheckViolation(error) || isForeignKeyViolation(error) || hasDatabaseCode(error, ["P2004"]))
     throw payrollConflict("payroll-rule", "The change breaks a payroll rule.");
   throw error;

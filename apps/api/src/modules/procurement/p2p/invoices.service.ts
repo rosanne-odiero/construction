@@ -882,16 +882,7 @@ export class InvoicesService {
     key: string,
     self: string | null,
   ) {
-    const taken = await scope.tx.supplierInvoice.count({
-      where: {
-        tenantId: scope.access.tenantId,
-        supplierId,
-        invoiceNumberKey: key,
-        status: { not: "cancelled" },
-        ...(self ? { id: { not: self } } : {}),
-      },
-    });
-    if (taken)
+    if (await invoiceNumberTaken(scope.tx, scope.access.tenantId, supplierId, key, self))
       throw p2pConflict(
         "invoice-number-taken",
         "This supplier's invoice number is already recorded",
@@ -1249,8 +1240,42 @@ const dueDate = (invoiceDate: string, creditDays: number) => {
   return date;
 };
 
+/**
+ * Whether a supplier's invoice number (its normalised key) is already recorded: on another live
+ * supplier invoice, or matched to a subcontract certificate (D6.3 part B), which would accrue the
+ * same work twice.
+ */
+export async function invoiceNumberTaken(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  supplierId: string,
+  key: string,
+  self: string | null,
+): Promise<boolean> {
+  const [taken, matched] = await Promise.all([
+    tx.supplierInvoice.count({
+      where: {
+        tenantId,
+        supplierId,
+        invoiceNumberKey: key,
+        status: { not: "cancelled" },
+        ...(self ? { id: { not: self } } : {}),
+      },
+    }),
+    tx.subcontractInvoice.count({ where: { tenantId, supplierId, invoiceNumberKey: key } }),
+  ]);
+  return taken + matched > 0;
+}
+
 function numberTaken(error: unknown): never {
-  if (isUniqueViolation(error))
+  // Also the database's refusal of a number matched meanwhile to a subcontract certificate.
+  if (
+    isUniqueViolation(error) ||
+    (isCheckViolation(error) &&
+      String((error as { message?: unknown }).message).includes(
+        "matched to a subcontract certificate",
+      ))
+  )
     throw p2pConflict("invoice-number-taken", "This supplier's invoice number is already recorded");
   throw error;
 }

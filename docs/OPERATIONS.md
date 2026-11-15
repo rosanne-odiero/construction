@@ -67,10 +67,16 @@ Keep obligations and reservations; show pending/unknown rather than success. Bou
 6. Only a credentials manager with fresh MFA can resume payouts. Re-check queued requests before
    resuming: enabling the switch releases eligible queued test transactions.
 
-Callback-token rotation keeps the old route for 72 hours for in-flight work. Update registered
-C2B URLs after a rotation. For results arriving later than the overlap, obtain provider evidence
-and reconcile; never submit the money movement again. Keep the public HTTPS callback endpoint
-and the approved source-IP/proxy configuration under monitoring.
+Callback-token rotation keeps accepting results on the old route for 72 hours (work already in
+flight); every provider call made after the rotation, queued payments and status queries for older
+attempts included, carries the new route. Update registered C2B URLs after a rotation. For results
+arriving later than the overlap, obtain provider evidence and reconcile; never submit the money
+movement again. Keep the public HTTPS callback endpoint and the approved source-IP/proxy
+configuration under monitoring.
+
+A queued payment waits while its environment or the shortcode it recorded differs from the
+settings; it never goes out from another shortcode. D4.2 has no action to cancel a queued attempt:
+restore the setting to release it, or leave it queued (it stays in progress in the console).
 
 ## Capacity and costs
 

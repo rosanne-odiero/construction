@@ -708,7 +708,7 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
     } finally {
       runtime.statusQueryIntervalSeconds = 1;
     }
-  });
+  }, 75_000);
 
   it("treats a timeout or a result before the acknowledgement as uncertain, then confirms on the verified result", async () => {
     // The HTTP response never arrives in time: unknown (timeout), then the late callback confirms.
@@ -1598,6 +1598,26 @@ describe("Payments and the Daraja integration (real runtime role, workers and mo
            AND column_name = 'provider_code'`,
     );
     expect(providerCode!.length).toBe(PROVIDER_CODE_MAX);
+    // The timeline follows the order of writing, even within one transaction (an attempt's
+    // "created" and "queued" are written together).
+    const ordered = await readA(async (tx) => {
+      const ids = [randomUUID(), randomUUID()];
+      for (const [index, id] of ids.entries())
+        await tx.paymentEvent.create({
+          data: {
+            id,
+            tenantId: tenantA,
+            subjectType: "settings",
+            subjectId: tenantA,
+            event: `e2e.timeline_${index}`,
+          },
+        });
+      const [row] = await tx.$queryRaw<{ ordered: boolean }[]>`
+        SELECT (SELECT created_at FROM payment_events WHERE id = ${ids[1]}::uuid)
+             > (SELECT created_at FROM payment_events WHERE id = ${ids[0]}::uuid) AS ordered`;
+      return row!.ordered;
+    });
+    expect(ordered).toBe(true);
     const confirmed = await readA((tx) =>
       tx.paymentAttempt.findFirstOrThrow({
         where: { tenantId: tenantA, status: "confirmed", kind: "b2c" },

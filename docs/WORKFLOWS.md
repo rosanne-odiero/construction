@@ -394,14 +394,22 @@ The console creates **test** requests only. `created → queued` commits the req
 timeline, audit and outbox together. The worker commits `queued → submitting` with a lease before
 one money-moving HTTP call, then records `pending` on acceptance, `failed` only on a definitive
 refusal, or `unknown` when acceptance is uncertain. A stopped payout switch leaves outbound work
-queued without consuming its retry budget. Pending result timeouts and expired submission leases
-open a reconciliation case; they never enqueue another submission.
+queued without consuming its retry budget, and so does a change of the environment or of the
+shortcode the attempt recorded at creation: it is sent only from those, once the settings match
+again (a settings change re-checks it at once). A payment kind with no shortcode configured cannot
+be requested. Pending result timeouts and expired submission leases open a reconciliation case;
+they never enqueue another submission. Every provider call uses the company's active callback
+path, so after a token rotation even an older attempt's calls carry the new one.
 
 Callbacks are encrypted and persisted before acknowledgement, then processed from the outbox.
 Matching verified evidence confirms once and writes a unique provider receipt; duplicate/late
 callbacks cannot regress a final state. Unknown or mismatched callbacks are quarantined. Read-only
-status queries reconcile when evidence suffices; STK Query success without a receipt remains
-unverified. Manual confirmation/reversal requires fresh MFA and someone other than the maker.
+status queries reconcile when evidence suffices; a busy, refused or undetermined answer schedules
+the next automatic query (up to `PAYMENTS_STATUS_QUERY_MAX`), and a reviewer's query runs at once.
+STK Query success without a receipt remains unverified. Manual confirmation/reversal requires
+fresh MFA and someone other than the maker: neither the payment's creator nor, for a reversal's
+outcome, whoever requested the reversal. A quarantined callback has one open case; if it is later
+found to conflict with recorded evidence, its review moves to a conflicting-evidence case.
 The reversal is a separate attempt; a refused reversal leaves the original confirmed.
 
 These transport outcomes do not allocate to payroll, supplier invoices or client certificates.

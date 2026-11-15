@@ -927,13 +927,19 @@ the token-bearing callback route is deliberately excluded.
   changes configuration and write-only credentials; `payments.initiate_test` creates test
   transactions; `payments.review` queries/reconciles; `payments.reverse` requests a reversal.
   Configuration changes, enabling payouts, reviews and reversals require fresh MFA. A payment's
-  creator cannot review it or request its reversal. Finance can pause payouts without step-up;
+  creator cannot review it or request its reversal, and whoever requested a reversal cannot settle
+  that reversal's outcome (cases and callbacks). Finance can pause payouts without step-up;
   only a credentials manager with step-up can enable them. Production payment settings are refused.
 - **No optimistic settlement:** creating a request atomically writes its queued attempt, timeline,
   audit and outbox. The worker commits a submission lease before making one provider call.
   Acceptance means `pending`, not paid. Lost acknowledgements, elapsed leases and result timeouts
   become `unknown`, with a case and bounded read-only status queries, never another money-moving
-  call. A successful STK query without a receipt needs independent review and exact statement
+  call. The attempt's `next_status_query_at` is its query schedule: a busy, refused or undetermined
+  answer schedules the next one (`PAYMENTS_STATUS_QUERY_MAX` automatic queries), and a reviewer's
+  query brings a scheduled one forward. An attempt is sent only from the environment and shortcode
+  it recorded at creation; if either setting changed while it was queued, it waits (without using
+  its retry budget) until they match again, and a settings change re-checks it. A payment kind
+  with no shortcode configured cannot be requested. A successful STK query without a receipt needs independent review and exact statement
   evidence. Verified results atomically write a unique provider receipt and settle the attempt.
 - **Durable intake:** callbacks need no browser session or CSRF token. A 256-bit path token
   identifies the company; its digest resolves through a narrowly scoped definer function.
@@ -941,7 +947,11 @@ the token-bearing callback route is deliberately excluded.
   acknowledgement. Persistence failure returns 503. Duplicates are counted atomically; duplicate
   C2B validations check the shortcode again rather than blindly accepting.
   Unknown/mismatched/conflicting results are quarantined with an alert, never silently applied.
-  Tokens rotate with a 72-hour overlap for existing attempts. Source-IP restrictions are optional
+  Tokens rotate with a 72-hour overlap: results already addressed to the old path are accepted for
+  72 hours, while every provider call made after the rotation (a queued submission, a status query
+  for an older attempt) carries the new path, so a rotated token is never sent again. Matching
+  never depends on the route; an attempt keeps the route it was created with for the record only.
+  Source-IP restrictions are optional
   defence in depth, not proof of settlement.
 - **Workers:** the API runs a periodic outbox relay, BullMQ consumers and a watchdog by default
   (`PAYMENTS_WORKERS_ENABLED`). PostgreSQL is the source of truth; queue loss does not lose payment
@@ -952,8 +962,11 @@ the token-bearing callback route is deliberately excluded.
   client/supplier portal policies (including client-only custom roles). Discovery functions return
   identifiers only; workers then use company-scoped transactions as a system actor. Credentials,
   raw callback bodies, phone numbers, callback tokens and cached OAuth tokens reuse field encryption.
-  Callback path tokens are removed from request logs. Credential idempotency includes a keyed
-  fingerprint of the values without storing them in responses, audit or idempotency payloads.
+  Callback path tokens are removed from request logs and from exported trace spans (span names,
+  `url.path`, `url.full`, `http.target`, event attributes: `RedactingSpanExporter`), and masked
+  in stored idempotent responses (only the live response to a credentials manager carries them).
+  Credential idempotency includes a keyed fingerprint of the values without storing them in
+  responses, audit or idempotency payloads.
 
 **Boundary:** console transactions have purpose `test`, no payroll/invoice accounting effect.
 `PaymentRequestsService.createRequest` and `PaymentOutcomeHandlers` are integration points for

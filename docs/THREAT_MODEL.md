@@ -470,8 +470,11 @@ The local Daraja transport now exercises T-52–55 and A-06/A-07 through
 unknown/mismatched callback quarantine, concurrent duplicate deliveries, monotonic outcomes,
 lost results/acknowledgements, status reconciliation, write-only credentials, independent
 review/reversal and tenant/portal RLS. Runtime tests reject malformed IP allow-lists; logging
-tests ensure callback path tokens are removed. A credential update's idempotency fingerprint is
-keyed and includes the values, not just field names.
+tests ensure callback path tokens are removed, and since the independent review they are also
+removed from exported trace spans and masked in stored idempotent responses. After a token
+rotation no provider call carries the retired token. A reversal's requester cannot settle its
+outcome. A credential update's idempotency fingerprint is keyed and includes the values, not just
+field names.
 
 These are **not production approvals**. In particular:
 

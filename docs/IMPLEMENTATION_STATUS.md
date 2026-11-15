@@ -2161,9 +2161,9 @@ not part of this deliverable.
   all tables and a refused forged timeline insert.
 - Malformed callback IP/CIDR configuration now fails startup instead of silently broadening the
   network (for example an empty CIDR suffix). Permission probes no longer swallow unrelated errors.
-- Added B2B Paybill/Buy Goods end-to-end coverage, callback-token rotation with a queued request
-  still using its original route, callback-token log-redaction coverage, and stricter balance
-  response mapping. Backend lint has no warnings.
+- Added B2B Paybill/Buy Goods end-to-end coverage, callback-token rotation coverage (since the
+  independent review below, a queued request is sent with the new route), callback-token
+  log-redaction coverage, and stricter balance response mapping. Backend lint has no warnings.
 - Turbo forwards `PAYMENTS_*`, `DARAJA_*` and `MOCK_DARAJA_*` to dev and e2e tasks, so an operator's
   worker-off switch or sandbox configuration is not silently discarded.
 - Added the [mock server guide](../apps/mock-daraja/README.md), [Phase 4 review script](./demos/phase-4.md),
@@ -2204,6 +2204,34 @@ before deploying migrations. Both the focused and complete serial regressions th
 Development data and other checkouts' services were untouched. Existing PostgreSQL concurrent-query
 deprecation and listener-count warnings remain; web lint has two pre-existing unused-variable
 warnings in `mock-client-portal.mts`, with no errors.
+
+**Independent review of D4.2 (15/11/2026)**
+
+An independent review (read-only, of `590ce24` against `main` at `016beb0`) found no way for one
+request to cause two money-moving provider calls. It checked: the queued → submitting
+compare-and-swap with the lease committed before the call; uncertain outcomes never resubmitted;
+transport-error classification; idempotency keys and fingerprints; callback intake (size limit
+before parsing, raw body, durable insert and outbox before acknowledgement, racing duplicates,
+company binding through the token digest, allow-list and trusted proxies); matching on stored
+identifiers only; exact amount and receipt checks; one live reversal per original; the SQL state
+machine matching `PAYMENT_ATTEMPT_TRANSITIONS`; forced RLS with the staff-only policies; the
+permission catalogue; and credential sealing. It raised seven findings, all fixed. Each fix was
+reverted in turn and the named test then failed (mutation check):
+
+| # | Severity | Finding | Fix and evidence |
+|---|---|---|---|
+| 1 | Medium | Follow-up automatic status queries were dropped. A busy, refused or undetermined query scheduled its follow-up while its own outbox row was still pending, so the insert hit the one-pending-row index and was skipped. A reviewer's "query now" also did nothing while an automatic query was scheduled | `enqueue` brings pending work forward (an upsert on the pending index), and a finished status-query row re-arms the attempt's next query from `next_status_query_at`. Mock KES 1,015 refuses the first status query as busy. e2e "queries again after a busy or undetermined status answer, and a reviewer's query runs at once" covers Transaction Status, STK Query, and a manual query overtaking one scheduled an hour away |
+| 2 | Medium | Submissions and status queries built callback URLs from the attempt's original route. After a token rotation, a queued payout or any later status query sent the retired token; after the 72-hour grace its results were refused, so the payment could only be reconciled by hand | Every new provider call uses the active route (matching never depended on it). The rotation e2e now shows that a payment queued before the rotation is sent with the new URL, and that results on the old path are still accepted |
+| 3 | Medium | Whoever requested a reversal could settle that reversal's uncertain outcome: as confirmed, or as failed, which allows another reversal. Maker-checker only looked at the original request's creator | Reviews refuse both the request's creator and the attempt's creator (for a reversal, its requester): in the API (409 `same-person`), in `canResolve` on the case list and request detail, and in callback reviews. e2e "keeps whoever asked for a reversal, and the payment's creator, from settling its uncertain outcome" (the mock answers the reversal with `server_error`) |
+| 4 | Low | A queued attempt recorded one shortcode but was sent from whatever was configured at submission. Receipts, status queries and reversals used the recorded value, which could be empty | An attempt is sent only from its recorded shortcode. Until the setting matches it is held, without using its retry budget; a settings change re-checks held submissions; a kind with no configured shortcode is refused at creation (409 `payments-not-configured`). The extended e2e "holds payouts while the master switch is off…" shows the payout held after a shortcode change, released when it is restored and sent with `PartyA` = the recorded shortcode, and a B2B request refused without a B2B shortcode |
+| 5 | Low | Re-quarantining a callback as conflicting evidence, after it was first quarantined as unknown, failed on the one-open-case-per-callback index. The work dead-lettered and the conflict stayed hidden | A callback keeps one open case: an earlier case of another kind closes as superseded (`no_payment_effect`, with a note) and the conflicting-evidence case opens. e2e "re-classifies a quarantined callback's review…" calls the ledger directly, because the mock cannot deliver a callback before identifiers that arrive later |
+| 6 | Low | The callback token left its sealed column: stored idempotent settings responses kept the full URLs, and exported trace spans recorded the hook path (`url.path`, `url.full`, `http.target`, span names) | Stored idempotent responses mask the token, so replays show masked URLs. `RedactingSpanExporter` removes it from span names, attributes and event attributes before export. Evidence: the settings e2e (stored record and replay masked) and the unit test `telemetry-redaction.spec.ts` (3 tests) |
+| 7 | Low | `provider_code` was 30 characters, so some TLS error codes (`UNABLE_TO_GET_ISSUER_CERT_LOCALLY` is 33) could not be recorded. A call that never left waited for the lease watchdog and manual reconciliation instead of failing | Widened to 100 (migration `20261204092000_payments_review_fixes`); the domain caps provider and transport codes at `PROVIDER_CODE_MAX` = 100. Evidence: a domain unit test, and the database test checks that the column matches |
+
+Also found while verifying: the console's state timeline could list an attempt's "created" and
+"queued" in either order. Both are written in one transaction and shared its `now()`, which also
+made "treats a timeout…" flaky. Payment events are now stamped with `clock_timestamp()` (same
+migration). The database test writes two events in one transaction and fails with the old stamp.
 
 **Not accepted / still open**
 

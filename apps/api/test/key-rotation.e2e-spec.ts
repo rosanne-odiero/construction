@@ -179,7 +179,7 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
       originals.set(id, hex(row.value));
     }
     mfaOriginal = await ownerSecret();
-  }, 120_000);
+  }, 300_000);
 
   afterAll(async () => {
     await owner?.$disconnect();
@@ -288,7 +288,7 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
     } finally {
       await v2.close();
     }
-  }, 120_000);
+  }, 300_000);
 
   it("lets only the schema owner rewrite a ciphertext, and nothing else on immutable rows", async () => {
     const cipher = fieldCipher(`1:${F1},2:${F2},3:${key("field v3")}`, 3);

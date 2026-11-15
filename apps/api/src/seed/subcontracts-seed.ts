@@ -93,6 +93,8 @@ export async function seedSubcontracts(
   app: INestApplicationContext,
   tenantId: string,
   users: SeedUsers,
+  /** The demo client's sign-in (namespaced for a copy of the demo company). */
+  options: { clientIdentifier?: string } = {},
 ): Promise<SubcontractsSeedSummary> {
   const prisma = app.get(PrismaService);
   const db = app.get(TenantDatabase);
@@ -511,7 +513,7 @@ export async function seedSubcontracts(
       request = view.requests.find((row) => row.state === "awaiting_decision")!;
     }
     const clientUser = await prisma.user.findUniqueOrThrow({
-      where: { identifier: DEMO_CLIENT_USER.identifier },
+      where: { identifier: options.clientIdentifier ?? DEMO_CLIENT_USER.identifier },
       select: { id: true },
     });
     await app.get(ClientPortalService).decide(

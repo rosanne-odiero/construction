@@ -66,6 +66,7 @@ Foundation review: `/foundation` (API-backed identity/company setup) and `/desig
 | http://localhost:3000/status                    | Live system status                         |
 | http://localhost:3000/portal                    | Client portal (live, clients only)         |
 | http://localhost:3000/worker                    | Labourer portal (live, phone + PIN)        |
+| http://localhost:3000/payments                  | Daraja test console (mock/sandbox only)    |
 | http://localhost:3000/api/docs                  | API reference (Swagger UI) through the web |
 | http://localhost:4000/api/v1/health/ready       | API readiness (JSON)                       |
 | http://localhost:8025                           | Mailpit: emails sent in development        |
@@ -91,6 +92,7 @@ To run the checks from a second checkout (for example a `git worktree`) while th
 apps/web/          Next.js + shared design system: /foundation, /status and labelled business previews
   src/mocks/       Mock data (replaced by the API from D1.3 onwards)
 apps/api/          NestJS API: health, identity/MFA/sessions, tenancy, roles and permissions, project access and audit
+apps/mock-daraja/  Loopback-only Daraja simulator (synthetic transactions, never real money)
 packages/i18n/     English and Kiswahili ICU catalogues (src/messages) and the i18n:check parity script
 packages/types/    Permission catalogue, system role defaults, shared types
 packages/domain/   Pure business rules: Kenyan phones, money, age, geofences

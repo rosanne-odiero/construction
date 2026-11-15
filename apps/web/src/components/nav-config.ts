@@ -90,7 +90,7 @@ export const navGroups: {
     items: [
       // The live payroll screens (D4.1 web) are not on main yet; the D0 prototype stands in.
       { key: "payroll", href: "/payroll", icon: Wallet },
-      { key: "payments", href: "/soon/payments", icon: Banknote, phase: 4 },
+      { key: "payments", href: "/payments", icon: Banknote },
       { key: "spending", href: "/spending", icon: Receipt },
     ],
   },
@@ -127,6 +127,10 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
  * labour, attendance and payroll prototypes live under /prototype.
  */
 export function isLiveRoute(pathname: string): boolean {
+  if (
+    /^\/payments(\/(requests|callbacks|cases)(\/[0-9a-f-]{36})?|\/(settings|new))?$/.test(pathname)
+  )
+    return true;
   if (pathname === "/projects" || pathname === "/bq" || pathname === "/diary") return true;
   if (pathname === "/dashboard" || /^\/reports(\/[a-z-]+)?$/.test(pathname)) return true;
   if (/^\/quality(\/templates(\/[0-9a-f-]{36})?)?$/.test(pathname)) return true;

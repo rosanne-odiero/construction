@@ -23,6 +23,8 @@ export default defineConfig({
       FIELD_ENCRYPTION_ACTIVE_KEY_VERSION: "1",
       AUTH_PIN_PEPPER_ACTIVE_VERSION: "1",
       DATABASE_URL: testDatabaseUrls().appUrl,
+      // Payment workers run only where a suite starts them against its own mock Daraja server.
+      PAYMENTS_WORKERS_ENABLED: "false",
       // Tests run due report subscriptions themselves (ReportSchedulerService.runDue).
       REPORT_SCHEDULER: "off",
     },

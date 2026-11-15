@@ -39,7 +39,7 @@ export type FieldKeys = {
 /** Binds a ciphertext to where it is stored. */
 export type FieldContext = { tenantId: string; table: string; column: string; rowId: string };
 
-export type BlindIndexPurpose = "id" | "phone" | "kra_pin";
+export type BlindIndexPurpose = "id" | "phone" | "kra_pin" | "payment_credentials";
 
 /** Deliberately vague: never carries plaintext, ciphertext or key material. */
 export class FieldCipherError extends Error {

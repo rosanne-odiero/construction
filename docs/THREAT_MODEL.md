@@ -471,6 +471,37 @@ The brief targets **ASVS Level 2**. **Pinned in D9.1: ASVS 5.0.0** (release `v5.
 
 ---
 
+## D4.2 implementation evidence and residual limits
+
+The local Daraja transport now exercises T-52–55 and A-06/A-07 through
+`apps/api/test/payments.e2e-spec.ts`: encrypted durable callbacks before acknowledgement,
+unknown/mismatched callback quarantine, concurrent duplicate deliveries, monotonic outcomes,
+lost results/acknowledgements, status reconciliation, write-only credentials, independent
+review/reversal and tenant/portal RLS. Runtime tests reject malformed IP allow-lists; logging
+tests ensure callback path tokens are removed, and since the independent review they are also
+removed from exported trace spans and masked in stored idempotent responses. After a token
+rotation no provider call carries the retired token. A reversal's requester cannot settle its
+outcome. A credential update's idempotency fingerprint is keyed and includes the values, not just
+field names.
+
+These are **not production approvals**. In particular:
+
+- Daraja callbacks are unsigned. The implemented path token is per company/rotated route, not a
+  separate secret per request. Source allow-lists are optional and need approved ranges plus a
+  correctly configured trusted proxy. A leaked valid path and known provider identifiers remain
+  a risk; OR-11's high-value independent verification is still open.
+- Secrets are field-encrypted in PostgreSQL under versioned external master keys, rather than
+  individual secrets-manager references; the configured master keys must come from approved key
+  management outside development. Losing a key loses decryptability.
+- C2B validation checks the company's shortcode, **not** whether a client certificate is open.
+  Confirmations remain unallocated; neither they nor console STK test payments create client
+  receipts. T-56 and the client portal's disabled STK boundary remain open.
+- Payroll reservations, recipient-name comparison, statement upload/reconciliation, tariffs and
+  business-ledger outcome handlers are D4.3. No production environment can be selected. A mock
+  test pass or a skipped sandbox suite does not close CR-PMT-01–04.
+- The mock is loopback-only by default and has unauthenticated control routes; it must never be
+  publicly exposed or configured with real credentials.
+
 ## 8. Security testing plan per phase
 
 Every mitigation above needs at least one automated test before it counts as implemented. Tooling follows §21.

@@ -96,7 +96,7 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
 | D4.1 | **Payroll engine**:<br/>• Daily, weekly, fortnightly or monthly pay periods<br/>• Gross pay from attendance, overtime, piece-rate output and allowances<br/>• Versioned statutory rules (PAYE, NSSF, SHIF, Housing Levy, NITA)<br/>• Advances with automatic recovery<br/>• Payslip preview; statutory export CSVs | Payroll batch builder, payslip preview, rule versions screen | Unit tests cover every rule boundary; seed rules are flagged `COMPLIANCE-REVIEW` | L | 🔎 |
-| D4.2 | **Daraja integration**:<br/>• `PaymentProvider` interface with `DarajaProvider`: OAuth, STK Push + query, C2B, B2C, B2B, transaction status, account balance, reversal<br/>• Per-tenant credentials<br/>• Outbox + BullMQ<br/>• Callback hardening<br/>• Local mock Daraja server for success, failure, timeout, duplicate and out-of-order callbacks | Payments console: requests, callbacks, state timeline, unknown-callback alerts | Mock and sandbox flows pass the integration suite | XL | ⬜ |
+| D4.2 | **Daraja integration**:<br/>• `PaymentProvider` interface with `DarajaProvider`: OAuth, STK Push + query, C2B, B2C, B2B, transaction status, account balance, reversal<br/>• Per-tenant credentials<br/>• Outbox + BullMQ<br/>• Callback hardening<br/>• Local mock Daraja server for success, failure, timeout, duplicate and out-of-order callbacks | Payments console: requests, callbacks, state timeline, unknown-callback alerts | Mock and sandbox flows pass the integration suite; [review and external sandbox gate](./demos/phase-4.md) | XL | 🔎 |
 | D4.3 | **Approvals and payouts**:<br/>• Maker-checker with step-up MFA and approval limits<br/>• Float check, then bulk B2C payout with per-worker status<br/>• Recipient name check<br/>• SMS payslips<br/>• Daily reconciliation and statement upload<br/>• M-Pesa charges booked as cost<br/>• Cash and bank payments; unusual-payout alerts | Approval flow, live payout statuses, reconciliation screen | **Phase 4 acceptance:** a weekly payroll for 40 workers pays out in sandbox with every callback reconciled; failed and duplicate cases are handled | L | ⬜ |
 
 > **D4.1 is built, pending review (🔎).** The live `/payroll`
@@ -106,6 +106,18 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 > validation 139, web 98), the production build and the browser suite pass (177
 > tests; three unrelated load-timing failures passed on rerun). No production filing certification or payout
 > activation is claimed. See [completion evidence](./IMPLEMENTATION_STATUS.md#d41-payroll-live-engine-completion-15-november-2026).
+
+> **D4.2 is in review (🔎).** The Daraja transport and the payments console are on `main`
+> through PR #48 and were independently reviewed: seven findings were fixed with tests that fail
+> without the fix. They covered dropped follow-up status queries, a retired callback token in new
+> calls, a reversal's requester settling its outcome, shortcode drift, re-quarantined callbacks,
+> the token in idempotency records and traces, and long provider codes. D9.1's key rotation now
+> covers the payment ciphertexts. **Mock flows pass the integration suite**: 24 payments tests
+> against the local mock Daraja server, within the full API suite of 398. **The sandbox half of
+> the done-when is still open**: the Safaricom sandbox suite needs test credentials, the public
+> certificate and an approved public HTTPS callback endpoint. Production stays gated off
+> (CR-PMT-01–04). See the [review script and sandbox gate](./demos/phase-4.md) and the
+> [status record](./IMPLEMENTATION_STATUS.md#d42-daraja-payments-branch-phase-4d42-daraja).
 
 ### Phase 5: Materials, stores and spending
 

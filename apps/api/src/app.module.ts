@@ -11,6 +11,7 @@ import { IdentityModule } from "./modules/identity/identity.module.js";
 import { FinanceModule } from "./modules/finance/finance.module.js";
 import { ProcurementModule } from "./modules/procurement/procurement.module.js";
 import { LabourModule } from "./modules/labour/labour.module.js";
+import { PaymentsModule } from "./modules/payments/payments.module.js";
 import { PayrollModule } from "./modules/payroll/payroll.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
 import { PortalsModule } from "./modules/portals/portals.module.js";
@@ -41,6 +42,7 @@ import { SubcontractsModule } from "./modules/subcontracts/subcontracts.module.j
     FinanceModule,
     LabourModule,
     AttendanceModule,
+    PaymentsModule,
     PayrollModule,
     ProgressModule,
     SubcontractsModule,

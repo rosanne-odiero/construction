@@ -40,6 +40,44 @@ Test a coherent restore, not just backup job success. Never copy production pers
 
 Keep obligations and reservations; show pending/unknown rather than success. Bound retries, respect provider limits and use dead-letter review. A pause must block new provider calls without deleting queued obligations. Callback intake remains durable while workers are stopped. Notification outages leave confirmed payments unchanged.
 
+## Payments: queue outage and reconciliation (D4.2)
+
+1. In **Payments → Settings**, pause payouts (`payments.review` or
+   `payments.manage_credentials`; no step-up needed to pause). This retains queued work and
+   blocks new outbound submissions; callback intake, STK collections and read-only reconciliation
+   remain active. To stop every payment worker, set `PAYMENTS_WORKERS_ENABLED=false` and restart
+   the API; leave callback intake reachable.
+2. Check request timelines, quarantined callbacks and open cases. A timeout is **unknown**, never
+   permission to retry the payment with another key. **Query status** is read-only. STK Query
+   success without a receipt still needs statement evidence. A reviewer other than the maker,
+   with fresh MFA, supplies the exact receipt and amount before manually confirming.
+3. If Valkey is unavailable, the relay logs the outage and processes PostgreSQL work directly.
+   The inbox and outbox remain durable. After restoring queue access, or with workers disabled,
+   run `pnpm --filter @pm-buddy/api build` then
+   `pnpm --filter @pm-buddy/api payments:drain`. It runs a bounded number of passes over **due**
+   work only; delayed retries may need a later pass. Repeating it does not resubmit an accepted
+   or uncertain attempt.
+4. Investigate `outbox.dead_lettered` timeline/audit events and the `ALERT payments outbox` log;
+   dead-lettered rows are not silently retried by drain. Resolve the cause and use a reviewed
+   operator recovery procedure; never directly rewrite attempts or receipts. The console's
+   pending-outbox count excludes dead letters, so also monitor these alerts.
+5. Unknown callbacks and mismatches need review, not deletion. Dismissing a callback does not
+   make a payment confirmed. C2B provider receipts marked **unallocated** are not client-ledger
+   receipts. Keep callback URLs and credentials out of support tickets and log exports.
+6. Only a credentials manager with fresh MFA can resume payouts. Re-check queued requests before
+   resuming: enabling the switch releases eligible queued test transactions.
+
+Callback-token rotation keeps accepting results on the old route for 72 hours (work already in
+flight); every provider call made after the rotation, queued payments and status queries for older
+attempts included, carries the new route. Update registered C2B URLs after a rotation. For results
+arriving later than the overlap, obtain provider evidence and reconcile; never submit the money
+movement again. Keep the public HTTPS callback endpoint and the approved source-IP/proxy
+configuration under monitoring.
+
+A queued payment waits while its environment or the shortcode it recorded differs from the
+settings; it never goes out from another shortcode. D4.2 has no action to cancel a queued attempt:
+restore the setting to release it, or leave it queued (it stays in progress in the console).
+
 ## Capacity and costs
 
 Before pilot approval, estimate monthly database/backup, private storage/versioning, egress, SMS/USSD/WhatsApp, monitoring/log retention, support and hardware costs at one-site and growth volumes. Obtain current supplier prices and explicitly record assumptions; there is no verified quote yet.
@@ -69,6 +107,8 @@ pnpm --filter @pm-buddy/api keys:rotate rewrap --operator "<your name>" [--only 
 6. Move the old key to "restore only" in the secrets manager (backups taken before step 4 still need it), and destroy it when the backup retention period has passed.
 
 Short-lived values sealed with the old MFA key (CSRF tokens, the Google sign-in cookie) simply expire; the web app fetches a new CSRF token before each change.
+
+Payments (D4.2) are field-encrypted too, and `rewrap` covers them: the five Daraja credentials of each company, callback path tokens (active and retired routes), recipients' phone numbers on payment requests and raw callback bodies (migration `20261204093000_payments_key_rotation` lets the owner re-encrypt them and nothing else). Daraja OAuth tokens cached in Valkey are also sealed with the field key; after step 5 one sealed under the removed version no longer opens and is fetched again (a cache miss), so they need no rewrap. A rotation does not change callback URLs.
 
 ### Token signing key (`AUTH_SIGNING_PRIVATE_KEY`)
 

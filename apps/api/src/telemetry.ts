@@ -1,9 +1,11 @@
 /**
  * OpenTelemetry bootstrap (ARCHITECTURE §19). Loaded before the app with
  * `node --import ./dist/telemetry.js dist/main.js` so ESM modules can be instrumented.
- * Does nothing unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
+ * Does nothing unless OTEL_EXPORTER_OTLP_ENDPOINT is set. Spans are exported without payment
+ * callback tokens (telemetry-redaction.ts).
  */
 import { register } from "node:module";
+import { RedactingSpanExporter } from "./telemetry-redaction.js";
 
 if (process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]) {
   register("@opentelemetry/instrumentation/hook.mjs", import.meta.url);
@@ -15,7 +17,7 @@ if (process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]) {
 
   const sdk = new NodeSDK({
     serviceName: process.env["OTEL_SERVICE_NAME"] ?? "pm-buddy-api",
-    traceExporter: new OTLPTraceExporter(),
+    traceExporter: new RedactingSpanExporter(new OTLPTraceExporter()),
     instrumentations: [new HttpInstrumentation(), new NestInstrumentation()],
   });
   sdk.start();

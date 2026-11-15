@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Params } from "nestjs-pino";
 import type { SerializedRequest, SerializedResponse } from "pino";
 import type { AppConfig } from "../config/app-config.js";
+import { redactCallbackPath } from "./callback-path.js";
 
 /**
  * Never log secrets or personal data (brief §7, ARCHITECTURE §19). Paths are matched by pino's
@@ -47,10 +48,11 @@ export function requestId(req: IncomingMessage, res: ServerResponse): string {
 /** Request logs keep what is needed to trace a call; headers and query strings can hold personal data. */
 export function serializeRequest(req: SerializedRequest) {
   const queryStart = req.url.indexOf("?");
+  const path = queryStart === -1 ? req.url : req.url.slice(0, queryStart);
   return {
     id: req.id,
     method: req.method,
-    url: queryStart === -1 ? req.url : req.url.slice(0, queryStart),
+    url: redactCallbackPath(path),
     remoteAddress: req.remoteAddress,
   };
 }

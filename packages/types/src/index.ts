@@ -254,6 +254,7 @@ export {
   type TimesheetPeriodStatus,
   type TimesheetRuleValues,
 } from "./attendance.js";
+export * from "./payments.js";
 export {
   ADVANCE_DISBURSEMENT_METHODS,
   ADVANCE_DISPLAY_STATUSES,

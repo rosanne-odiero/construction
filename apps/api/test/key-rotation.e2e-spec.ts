@@ -5,7 +5,8 @@ import { Test } from "@nestjs/testing";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Secret, TOTP } from "otpauth";
 import type { ApiEnv } from "@pm-buddy/validation";
-import { revealResponseSchema } from "@pm-buddy/validation";
+import { paymentSettingsResponseSchema, revealResponseSchema } from "@pm-buddy/validation";
+import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../src/app.module.js";
@@ -28,6 +29,15 @@ const F1 = key("field v1");
 const F2 = key("field v2");
 const M1 = key("mfa v1");
 const M2 = key("mfa v2");
+
+/** Synthetic Daraja values for the drill company (mock environment; never real credentials). */
+const PAYMENT_SECRETS = {
+  consumerKey: "key-drill-consumer-key",
+  consumerSecret: "key-drill-consumer-secret",
+  initiatorName: "keydrillinitiator",
+  initiatorPassword: "Key#Drill$Initiator",
+  passkey: "key-drill-passkey-0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+};
 
 /** AppConfig with the key variables of one rotation phase; everything else from the test env. */
 class PhaseConfig extends AppConfig {
@@ -80,16 +90,17 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
   const originals = new Map<string, string>();
   let mfaOriginal = "";
   let ownerUserId = "";
-  let totpOffset = 0;
+  let lastTotpStep = 0;
 
   /** Every stored field ciphertext of the drill company, read as the schema owner. */
   const stored = async (): Promise<Stored[]> =>
     owner.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
       const rows: Stored[] = [];
-      for (const { table, column } of FIELD_COLUMNS) {
+      for (const { table, column, rowKey } of FIELD_COLUMNS) {
         const found = await tx.$queryRaw<{ id: string; value: Uint8Array }[]>(Prisma.sql`
-          SELECT id::text AS id, ${Prisma.raw(column)} AS value FROM ${Prisma.raw(table)}
+          SELECT ${Prisma.raw(rowKey)}::text AS id, ${Prisma.raw(column)} AS value
+            FROM ${Prisma.raw(table)}
            WHERE tenant_id = ${tenantId}::uuid AND ${Prisma.raw(column)} IS NOT NULL`);
         rows.push(...found.map((row) => ({ table, column, ...row })));
       }
@@ -104,8 +115,8 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
   const ownerSecret = async () =>
     (await owner.user.findUniqueOrThrow({ where: { id: ownerUserId } })).mfaSecret!;
 
-  /** Signs the seeded owner in through the API (password and TOTP) and reveals one ID number. */
-  async function signInAndReveal(app: INestApplication<App>, labourerId: string) {
+  /** Signs the seeded owner in through the API (password and TOTP), in the drill company. */
+  async function signIn(app: INestApplication<App>) {
     const browser = new Browser(app);
     browser.identifier = ownerAccount.identifier;
     await browser.initialize();
@@ -114,20 +125,101 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
       password: ownerAccount.password,
     });
     expect(login.status, JSON.stringify(login.body)).toBe(200);
-    // Each sign-in uses the next time step: a TOTP code is accepted once (replay protection).
+    // Each sign-in uses a time step not used before (a TOTP code is accepted once), and the API
+    // accepts the current step ±1: wait while the next unused step is further ahead than that.
+    const stepOf = () => Math.floor(Date.now() / 30_000);
+    const step = Math.max(stepOf(), lastTotpStep + 1);
+    while (step > stepOf() + 1) await new Promise((resolve) => setTimeout(resolve, 1_000));
+    lastTotpStep = step;
     const code = new TOTP({ secret: Secret.fromBase32(ownerAccount.totp!.secret) }).generate({
-      timestamp: Date.now() + totpOffset,
+      timestamp: step * 30_000,
     });
-    totpOffset += 30_000;
     const stepUp = await browser.call("post", "auth/mfa/step-up", { code });
     expect(stepUp.status, JSON.stringify(stepUp.body)).toBe(200);
     expect((await browser.call("post", `tenants/${tenantId}/select`, {})).status).toBe(200);
+    return browser;
+  }
+
+  async function reveal(browser: Browser, labourerId: string) {
     const revealed = await browser.call("post", `labour/labourers/${labourerId}/reveal`, {
       field: "idNumber",
       purpose: "identity_verification",
     });
     expect(revealed.status, JSON.stringify(revealed.body)).toBe(200);
     return revealResponseSchema.parse(revealed.body).value;
+  }
+
+  const signInAndReveal = async (app: INestApplication<App>, labourerId: string) =>
+    reveal(await signIn(app), labourerId);
+
+  const paymentSettings = async (browser: Browser) => {
+    const res = await browser.call("get", "payments/settings");
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    return paymentSettingsResponseSchema.parse(res.body).settings!;
+  };
+
+  /**
+   * D4.2 payments through the API's own endpoints: settings with all five credentials and a
+   * callback route, one request with a phone number, and one received callback (workers are off,
+   * so nothing is sent or processed).
+   */
+  async function seedPayments(app: INestApplication<App>) {
+    const browser = await signIn(app);
+    expect((await browser.call("post", "payments/settings", {})).status).toBe(201);
+    const shortcodes = {
+      stkShortcode: "174379",
+      stkPartyB: null,
+      stkTransactionType: "CustomerPayBillOnline",
+      c2bShortcode: "600966",
+      b2cShortcode: "600992",
+      b2bShortcode: "600993",
+    };
+    const limits = {
+      stkMaxMinor: 25_000_000,
+      b2cMinMinor: 1_000,
+      b2cMaxMinor: 25_000_000,
+      b2bMaxMinor: 25_000_000,
+      dailyPayoutMaxMinor: 2_000_000_000,
+    };
+    const updated = await browser.call("put", "payments/settings", {
+      version: (await paymentSettings(browser)).version,
+      environment: "mock",
+      shortcodes,
+      limits,
+    });
+    expect(updated.status, JSON.stringify(updated.body)).toBe(200);
+    const credentials = await browser.call("put", "payments/settings/credentials", {
+      version: (await paymentSettings(browser)).version,
+      ...PAYMENT_SECRETS,
+    });
+    expect(credentials.status, JSON.stringify(credentials.body)).toBe(200);
+    const created = await browser.call(
+      "post",
+      "payments/requests",
+      { kind: "stk_push", amountMinor: 10_000, phone: "0708374149", accountReference: "KEY-DRILL" },
+      true,
+      { "Idempotency-Key": `key-drill-${randomUUID()}` },
+    );
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const hook = (await paymentSettings(browser)).callbackUrls.find(
+      (entry) => entry.kind === "stk",
+    )!;
+    const received = await request(app.getHttpServer())
+      .post(new URL(hook.url).pathname)
+      .set("Content-Type", "application/json")
+      .send(
+        JSON.stringify({
+          Body: {
+            stkCallback: {
+              MerchantRequestID: "key-drill",
+              CheckoutRequestID: "ws_CO_key_drill",
+              ResultCode: 1032,
+              ResultDesc: "Request cancelled by user",
+            },
+          },
+        }),
+      );
+    expect(received.status).toBe(200);
   }
 
   beforeAll(async () => {
@@ -169,6 +261,7 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
             },
           });
         });
+      await seedPayments(v1);
     } finally {
       await v1.close();
     }
@@ -284,7 +377,18 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
     });
     try {
       // The TOTP seed (now under version 2) still verifies codes; the ID still reveals.
-      expect(await signInAndReveal(v2, labourerId)).toBe(plaintexts.get(labourer));
+      const browser = await signIn(v2);
+      expect(await reveal(browser, labourerId)).toBe(plaintexts.get(labourer));
+      // Payments read under version 2 alone: the callback URLs carry the same token, and every
+      // credential is still configured.
+      const token = [...plaintexts.entries()].find(([id]) =>
+        id.startsWith("payment_callback_routes.token_enc."),
+      )![1];
+      const settings = await paymentSettings(browser);
+      expect(settings.callbackUrls.every((entry) => entry.url.includes(`/hooks/${token}/`))).toBe(
+        true,
+      );
+      expect(Object.values(settings.secrets).every((secret) => secret.configured)).toBe(true);
     } finally {
       await v2.close();
     }
@@ -306,6 +410,35 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
       rowId: payout!.id,
     };
     const next = cipher.reencrypt(rowContext, payout!.value);
+    // A received payment callback (immutable evidence) and the company's payment credentials.
+    const [callback] = await owner.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+      return tx.$queryRaw<{ id: string; value: Uint8Array }[]>`
+        SELECT id::text AS id, body_enc AS value FROM payment_callback_inbox
+         WHERE tenant_id = ${tenantId}::uuid LIMIT 1`;
+    });
+    expect(callback).toBeDefined();
+    const nextBody = cipher.reencrypt(
+      { tenantId, table: "payment_callback_inbox", column: "body_enc", rowId: callback!.id },
+      callback!.value,
+    );
+    const [credentials] = await owner.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+      return tx.$queryRaw<{ key: Uint8Array; secret: Uint8Array }[]>`
+        SELECT consumer_key_enc AS key, consumer_secret_enc AS secret FROM payment_settings
+         WHERE tenant_id = ${tenantId}::uuid`;
+    });
+    const settingsContext = (column: string) => ({
+      tenantId,
+      table: "payment_settings",
+      column,
+      rowId: tenantId,
+    });
+    const nextKey = cipher.reencrypt(settingsContext("consumer_key_enc"), credentials!.key);
+    const nextSecret = cipher.reencrypt(
+      settingsContext("consumer_secret_enc"),
+      credentials!.secret,
+    );
 
     // The runtime role meets the original guard, even for a pure re-encryption.
     const runtime = new PrismaClient({
@@ -326,6 +459,13 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
             WHERE tenant_id = ${tenantId}::uuid`;
         }),
       ).rejects.toThrow(/permission denied|append-only/);
+      await expect(
+        runtime.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+          await tx.$executeRaw`UPDATE payment_callback_inbox SET body_enc = ${nextBody}
+            WHERE tenant_id = ${tenantId}::uuid AND id = ${callback!.id}::uuid`;
+        }),
+      ).rejects.toThrow(/immutable/);
     } finally {
       await runtime.$disconnect();
     }
@@ -339,6 +479,23 @@ describe("Key rotation drill (field encryption and TOTP seeds)", () => {
           WHERE tenant_id = ${tenantId}::uuid AND id = ${payout!.id}::uuid`;
       }),
     ).rejects.toThrow(/never change/);
+    await expect(
+      owner.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+        await tx.$executeRaw`UPDATE payment_callback_inbox
+          SET body_enc = ${nextBody}, redacted_body = '{}'::jsonb
+          WHERE tenant_id = ${tenantId}::uuid AND id = ${callback!.id}::uuid`;
+      }),
+    ).rejects.toThrow(/immutable/);
+    // One re-encryption per update: two credentials at once meet the settings guard.
+    await expect(
+      owner.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+        await tx.$executeRaw`UPDATE payment_settings
+          SET consumer_key_enc = ${nextKey}, consumer_secret_enc = ${nextSecret}
+          WHERE tenant_id = ${tenantId}::uuid`;
+      }),
+    ).rejects.toThrow(/next version/);
     // …nor rewrite a value under the same key version.
     await expect(
       owner.$transaction(async (tx) => {

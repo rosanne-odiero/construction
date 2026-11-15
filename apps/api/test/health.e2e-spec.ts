@@ -86,7 +86,7 @@ describe("API (e2e)", () => {
     expect(trace.headers["content-type"]).toBe("application/problem+json; charset=utf-8");
   });
 
-  it("puts every controller but health behind BrowserGuard: CSRF on writes, no-store on all", async () => {
+  it("puts every controller but health and the provider callbacks behind BrowserGuard: CSRF on writes, no-store on all", async () => {
     const controllers = [...app.get(ModulesContainer).values()].flatMap((module) =>
       [...module.controllers.values()].map((wrapper) => wrapper.metatype as object),
     );
@@ -99,7 +99,10 @@ describe("API (e2e)", () => {
           ),
       )
       .map((controller) => (controller as { name: string }).name);
-    expect(unguarded).toEqual(["HealthController"]);
+    // Daraja calls its callback route server to server (no cookie, so nothing for CSRF to protect;
+    // the company comes from the path token) and that controller sets no-store itself (payments e2e
+    // "hardens the callback endpoint…").
+    expect(unguarded.sort()).toEqual(["HealthController", "PaymentCallbacksController"]);
     // Even a refused request is never cached by the browser.
     const refused = await request(app.getHttpServer()).get("/api/v1/auth/me").expect(401);
     expect(refused.headers["cache-control"]).toBe("no-store");

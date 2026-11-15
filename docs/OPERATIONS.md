@@ -108,6 +108,8 @@ pnpm --filter @pm-buddy/api keys:rotate rewrap --operator "<your name>" [--only 
 
 Short-lived values sealed with the old MFA key (CSRF tokens, the Google sign-in cookie) simply expire; the web app fetches a new CSRF token before each change.
 
+Payments (D4.2) are field-encrypted too, and `rewrap` covers them: the five Daraja credentials of each company, callback path tokens (active and retired routes), recipients' phone numbers on payment requests and raw callback bodies (migration `20261204093000_payments_key_rotation` lets the owner re-encrypt them and nothing else). Daraja OAuth tokens cached in Valkey are also sealed with the field key; after step 5 one sealed under the removed version no longer opens and is fetched again (a cache miss), so they need no rewrap. A rotation does not change callback URLs.
+
 ### Token signing key (`AUTH_SIGNING_PRIVATE_KEY`)
 
 Replace the key and restart every API instance. Access tokens signed with the old key are refused (401); browsers refresh once with their opaque refresh token, which no key protects, and carry on. Server-rendered pages bounce through `/sign-in` and resume the session without asking for credentials. Keep the old key nowhere: nothing stored depends on it.

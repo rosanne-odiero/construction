@@ -235,8 +235,9 @@ carry a more specific `code`: `password-too-weak`, `password-breached` and `pass
 ## Key rotation (D9.1)
 
 `pnpm --filter @pm-buddy/api keys:rotate status|rewrap` re-encrypts field-encrypted columns
-(`FIELD_ENCRYPTION_KEYS`) and sealed TOTP seeds (`AUTH_MFA_ENCRYPTION_KEY`) to the active key
-version. It runs as the schema owner (`DATABASE_MIGRATION_URL`), company by company, in
+(`FIELD_ENCRYPTION_KEYS`, including the D4.2 payment credentials, callback tokens, recipients'
+phone numbers and callback bodies) and sealed TOTP seeds (`AUTH_MFA_ENCRYPTION_KEY`) to the
+active key version. It runs as the schema owner (`DATABASE_MIGRATION_URL`), company by company, in
 batches with compare-and-swap updates, so it is idempotent and resumable; `rewrap` needs
 `--operator "<name>"` and records each run in `key_rotation_runs`. Options: `--only field|mfa`,
 `--tenant <company ID>`, `--batch <rows>`, `--dry-run`. `pmb_app` cannot rewrite a ciphertext:

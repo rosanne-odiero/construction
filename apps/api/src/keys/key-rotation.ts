@@ -12,23 +12,51 @@ import type { SealedSecrets } from "../modules/identity/sealed-secrets.js";
  * Safe to stop and run again: only values on another key version are selected, every batch is one
  * transaction, and each update is compare-and-swap on the old value, so a value the application
  * changed meanwhile is left alone. Runs as the schema owner; the database lets the owner rewrite
- * a ciphertext and nothing else on append-only or immutable rows (migration 20261202090000).
+ * a ciphertext and nothing else on append-only or immutable rows (migrations 20261202090000
+ * and, for payments, 20261204093000).
  * Every run is recorded in key_rotation_runs. Plaintext never leaves this process and is never
  * logged; failures name the table, column and row only.
  */
-export const FIELD_COLUMNS = [
-  { table: "labourers", column: "id_number_enc" },
-  { table: "labourers", column: "phone_enc" },
-  { table: "labourers", column: "kra_pin_enc" },
-  { table: "labourers", column: "nssf_number_enc" },
-  { table: "labourers", column: "sha_number_enc" },
-  { table: "labourers", column: "next_of_kin_enc" },
-  { table: "do_not_rehire_events", column: "reason_enc" },
-  { table: "suppliers", column: "kra_pin_enc" },
-  { table: "supplier_contacts", column: "phone_enc" },
-  { table: "supplier_payout_versions", column: "account_number_enc" },
-] as const;
-export type FieldColumn = (typeof FIELD_COLUMNS)[number];
+export type FieldColumn = {
+  table: string;
+  column: string;
+  /**
+   * The column naming the row in the ciphertext's associated data (and for paging): `id`, or
+   * `tenant_id` for a table with one row per company (payment settings).
+   */
+  rowKey: "id" | "tenant_id";
+};
+const each = (table: string, columns: string[], rowKey: FieldColumn["rowKey"] = "id") =>
+  columns.map((column): FieldColumn => ({ table, column, rowKey }));
+export const FIELD_COLUMNS: readonly FieldColumn[] = [
+  ...each("labourers", [
+    "id_number_enc",
+    "phone_enc",
+    "kra_pin_enc",
+    "nssf_number_enc",
+    "sha_number_enc",
+    "next_of_kin_enc",
+  ]),
+  ...each("do_not_rehire_events", ["reason_enc"]),
+  ...each("suppliers", ["kra_pin_enc"]),
+  ...each("supplier_contacts", ["phone_enc"]),
+  ...each("supplier_payout_versions", ["account_number_enc"]),
+  // D4.2 payments (migration 20261204093000_payments_key_rotation lets the owner rewrap them).
+  ...each(
+    "payment_settings",
+    [
+      "consumer_key_enc",
+      "consumer_secret_enc",
+      "initiator_name_enc",
+      "initiator_password_enc",
+      "passkey_enc",
+    ],
+    "tenant_id",
+  ),
+  ...each("payment_callback_routes", ["token_enc"]),
+  ...each("payment_requests", ["msisdn_enc"]),
+  ...each("payment_callback_inbox", ["body_enc"]),
+];
 
 /** users columns sealed with AUTH_MFA_ENCRYPTION_KEY (TOTP seeds, sealed for `totp:<user ID>`). */
 const MFA_COLUMNS = ["mfa_secret", "mfa_pending"] as const;
@@ -176,14 +204,15 @@ export class KeyRotation {
           const before = { ...result };
           let after = FIRST_ID;
           for (;;) {
+            const key = Prisma.raw(spec.rowKey);
             const rows = await this.inTenant(tenantId, async (tx) => {
               const found = await tx.$queryRaw<Row[]>(Prisma.sql`
-                SELECT id::text AS id, ${Prisma.raw(spec.column)} AS value
+                SELECT ${key}::text AS id, ${Prisma.raw(spec.column)} AS value
                   FROM ${Prisma.raw(spec.table)}
                  WHERE tenant_id = ${tenantId}::uuid AND ${Prisma.raw(spec.column)} IS NOT NULL
                    AND get_byte(${Prisma.raw(spec.column)}, 1) <> ${target}
-                   AND id > ${after}::uuid
-                 ORDER BY id LIMIT ${batch}`);
+                   AND ${key} > ${after}::uuid
+                 ORDER BY ${key} LIMIT ${batch}`);
               for (const row of found) {
                 result.checked += 1;
                 const context = { tenantId, table: spec.table, column: spec.column, rowId: row.id };
@@ -197,7 +226,7 @@ export class KeyRotation {
                 if (options.dryRun) continue;
                 result.rewrapped += await tx.$executeRaw(Prisma.sql`
                   UPDATE ${Prisma.raw(spec.table)} SET ${Prisma.raw(spec.column)} = ${next}
-                   WHERE tenant_id = ${tenantId}::uuid AND id = ${row.id}::uuid
+                   WHERE tenant_id = ${tenantId}::uuid AND ${key} = ${row.id}::uuid
                      AND ${Prisma.raw(spec.column)} = ${row.value}`);
               }
               return found;

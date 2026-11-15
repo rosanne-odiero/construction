@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { RUIRU_ID, signInAs } from "./live-helpers";
+import { PAYMENT_REQUEST_ID } from "./mock-payments.mts";
 import { PAYROLL_BATCH_ID } from "./mock-payroll.mts";
 
 /**
@@ -97,6 +98,12 @@ const pages: { name: string; persona?: "owner" | "client" | "supplier"; path: st
     name: "payroll exports (CSV download)",
     persona: "owner",
     path: "/payroll/exports?month=2026-11",
+  },
+  { name: "payments console", persona: "owner", path: "/payments" },
+  {
+    name: "payment request (timeline)",
+    persona: "owner",
+    path: `/payments/requests/${PAYMENT_REQUEST_ID}`,
   },
   { name: "client portal", persona: "client", path: "/portal" },
   { name: "supplier portal", persona: "supplier", path: "/supplier" },

@@ -8,6 +8,7 @@ import {
   startMockDaraja,
   type MockDaraja,
 } from "./index.js";
+import { loopbackCallbackTarget } from "./server.js";
 
 describe("mock Daraja server", () => {
   let mock: MockDaraja;
@@ -166,5 +167,39 @@ describe("mock Daraja server", () => {
       Result: { ResultCode: number | string };
     };
     expect(String(failure.Result.ResultCode)).toBe("2001");
+  });
+
+  it("delivers callbacks to loopback HTTP URLs only, never to another host", async () => {
+    expect(
+      loopbackCallbackTarget("http://localhost:4000/api/v1/payments/hooks/t/stk?x=1")?.href,
+    ).toBe("http://127.0.0.1:4000/api/v1/payments/hooks/t/stk?x=1");
+    for (const url of [
+      "http://198.51.100.7/hook",
+      "https://127.0.0.1:4000/hook",
+      "http://127.0.0.1.example.test/hook",
+      "http://user@evil.example/hook",
+      "file:///etc/passwd",
+      "not a url",
+    ])
+      expect(loopbackCallbackTarget(url), url).toBeNull();
+    // A request naming another host is answered, but its callback is recorded as refused, not sent.
+    const before = mock.callbacks.length;
+    const accepted = await post("/mpesa/b2c/v3/paymentrequest", {
+      OriginatorConversationID: "pmb-test-elsewhere",
+      InitiatorName: "testapi",
+      SecurityCredential: credential("Safaricom999!*!"),
+      CommandID: "BusinessPayment",
+      Amount: "250",
+      PartyA: "600992",
+      PartyB: "254705912645",
+      Remarks: "Test payout",
+      QueueTimeOutURL: "http://198.51.100.7/timeout",
+      ResultURL: "http://198.51.100.7/b2c",
+    });
+    expect(accepted.body["ResponseCode"]).toBe("0");
+    await mock.waitForCallbacks(before + 1, 2_000);
+    expect(mock.callbacks.slice(before)).toEqual([
+      expect.objectContaining({ url: "http://198.51.100.7/b2c", status: null, refused: true }),
+    ]);
   });
 });

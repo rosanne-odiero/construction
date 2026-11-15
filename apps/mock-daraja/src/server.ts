@@ -49,7 +49,30 @@ export type SentCallback = {
   body: unknown;
   status: number | null;
   attempt: number;
+  /** Not sent: the callback URL was not a loopback HTTP URL. */
+  refused?: boolean;
 };
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
+
+/**
+ * Callbacks go to the API on this machine only. The mock is a loopback development and test tool,
+ * so a callback URL naming any other host or scheme is refused rather than requested: requests
+ * cannot use the mock to reach other hosts. The target is rebuilt on a fixed loopback address;
+ * only the port, path and query come from the request.
+ */
+export function loopbackCallbackTarget(url: string): URL | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" || !LOOPBACK_HOSTS.has(parsed.hostname)) return null;
+  const target = new URL(`http://127.0.0.1/${parsed.pathname.slice(1)}${parsed.search}`);
+  target.port = parsed.port;
+  return target;
+}
 
 type Kind = "stk" | "b2c" | "b2b" | "reversal";
 type Transaction = {
@@ -198,9 +221,24 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
     label: string,
     attempt = 1,
   ): Promise<number | null> {
+    const target = loopbackCallbackTarget(url);
+    if (!target) {
+      callbacks.push({
+        at: new Date().toISOString(),
+        url,
+        label,
+        body,
+        status: null,
+        attempt,
+        refused: true,
+      });
+      notifyWaiters();
+      log(`callback ${label} refused: not a loopback HTTP URL`);
+      return null;
+    }
     let status: number | null = null;
     try {
-      const response = await fetch(url, {
+      const response = await fetch(target, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),

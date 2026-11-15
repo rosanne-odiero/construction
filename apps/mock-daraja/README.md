@@ -2,6 +2,8 @@
 
 Development and tests only: no Safaricom calls and no real money. The server binds to loopback
 on port 4690. Never expose it publicly: its control endpoints are intentionally unauthenticated.
+It delivers callbacks only to loopback HTTP URLs (`127.0.0.1` or `localhost`); a callback URL
+naming another host or scheme is recorded as refused and never requested.
 
 ```bash
 pnpm --filter @pm-buddy/mock-daraja build

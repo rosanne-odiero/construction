@@ -169,6 +169,9 @@ import {
   complianceTypesResponseSchema,
   documentListResponseSchema,
   documentResponseSchema,
+  dpiaResponseSchema,
+  biometricSwitchResponseSchema,
+  biometricsOverviewResponseSchema,
   documentsOverviewResponseSchema,
   drawingRegisterResponseSchema,
   instructionLogListResponseSchema,
@@ -447,7 +450,18 @@ export function responseContract(method: string, target: string) {
   if (reports) return reports;
   const documents = documentsContract(method, path);
   if (documents) return documents;
+  const biometrics = biometricsContract(path);
+  if (biometrics) return biometrics;
   return messageResponseSchema;
+}
+
+/** The D3.4 DPIA gate endpoints' success contracts. */
+function biometricsContract(path: string) {
+  if (path === "biometrics") return biometricsOverviewResponseSchema;
+  if (/^biometrics\/sites\/[^/]+\/methods\/[^/]+$/.test(path)) return biometricSwitchResponseSchema;
+  if (/^biometrics\/dpias(\/[^/]+(\/(document|approve|reject|withdraw))?)?$/.test(path))
+    return dpiaResponseSchema;
+  return null;
 }
 
 /** The D8.1 dashboard, reports and subscription endpoints' success contracts. */

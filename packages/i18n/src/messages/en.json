@@ -141,6 +141,7 @@
       "bq": "Bill of quantities",
       "labour": "Labour",
       "attendance": "Attendance",
+      "biometrics": "Biometrics",
       "payroll": "Payroll",
       "advances": "Salary advances",
       "payments": "Payments",
@@ -264,6 +265,10 @@
         "submit": "Submit timesheet periods",
         "approve": "Approve timesheet periods",
         "manage_rules": "Manage timesheet rules"
+      },
+      "biometrics": {
+        "manage": "Prepare the biometrics DPIA",
+        "approve": "Approve the DPIA and switch biometrics on"
       }
     },
     "notices": {
@@ -1827,7 +1832,21 @@
     "fxRateInvalid": "Enter a rate above zero with at most four decimal places, dated today or earlier.",
     "receiptMethodRequired": "Say how the money was received: the line becomes a client receipt.",
     "cashFlowItemNotLinkable": "This line is already linked or was cancelled. Reload and check.",
-    "cashFlowItemLinked": "This line is linked to a certificate: record the money as a client receipt on the Client payments page."
+    "cashFlowItemLinked": "This line is linked to a certificate: record the money as a client receipt on the Client payments page.",
+    "dpiaDraftExists": "A draft DPIA is already open. Finish it or close it first.",
+    "dpiaNotDraft": "Only a draft DPIA can change. Reload the page.",
+    "dpiaNotApproved": "Only the approved DPIA can be withdrawn.",
+    "dpiaIncomplete": "The DPIA is not complete enough to approve. Check what is still missing.",
+    "conditionsUnconfirmed": "Confirm every condition before go-live.",
+    "reviewDateInvalid": "Choose a review date after today and at most 12 months ahead.",
+    "documentChanged": "The signed document changed since you opened it. Review the new file before approving.",
+    "unknownSite": "One of the chosen sites is not one of this company's sites.",
+    "pdfRequired": "Upload the signed DPIA as a PDF.",
+    "biometricsUnavailable": "Biometric capture is not available on this PM-Buddy installation.",
+    "dpiaRequired": "Approve the company's DPIA before switching biometric capture on.",
+    "dpiaLapsed": "The DPIA has passed its review date. Approve a renewal first.",
+    "dpiaScope": "The DPIA in force does not cover this site and method.",
+    "biometricsRule": "The change breaks a DPIA or biometrics rule. Reload and check."
   },
   "projectStatus": {
     "planning": "Planning",
@@ -3924,6 +3943,7 @@
       "muster": "Muster roll",
       "periods": "Timesheets",
       "anomalies": "Anomalies",
+      "biometrics": "Biometrics",
       "settings": "Rules & holidays"
     },
     "common": {
@@ -4341,6 +4361,184 @@
       "lastWorked": "Last worked",
       "totals": "{days} days · {hours} h · OT {overtime} h",
       "anomalies": "{count, plural, one {# open anomaly} other {# open anomalies}}"
+    }
+  },
+  "biometrics": {
+    "title": "Biometric attendance",
+    "description": "Biometric capture stays off until the company's DPIA is approved here, and then runs only for the sites and methods switched on under it. The card, photo and supervisor method always works.",
+    "platformOff": "Biometric capture is not available on this PM-Buddy installation yet. You can prepare and approve the DPIA; nothing is captured until PM-Buddy switches biometrics on.",
+    "methods": {
+      "face": "Face kiosk",
+      "fingerprint": "Fingerprint scanner",
+      "terminal": "Biometric terminal"
+    },
+    "states": {
+      "draft": "Draft",
+      "in_force": "In force",
+      "lapsed": "Lapsed",
+      "rejected": "Not approved",
+      "superseded": "Superseded",
+      "withdrawn": "Withdrawn"
+    },
+    "reasons": {
+      "platform_off": "Not available on this installation",
+      "project_closed": "Project closed or cancelled",
+      "no_dpia": "No approved DPIA",
+      "dpia_lapsed": "DPIA past its review date",
+      "not_in_scope": "Not covered by the DPIA",
+      "switched_off": "Switched off"
+    },
+    "on": "On",
+    "dpia": {
+      "title": "DPIA",
+      "version": "DPIA v{version}",
+      "none": "No DPIA has been approved. Biometric capture is off on every site.",
+      "inForce": "In force until {date}. Covers {methods} on {count, plural, one {# site} other {# sites}}.",
+      "lapsed": "This DPIA passed its review date on {date}. Biometric capture has stopped on every site. Approve a renewal to start again.",
+      "draft": "Draft v{version} is being prepared.",
+      "open": "Open v{version}",
+      "continue": "Continue the draft",
+      "start": "Start a DPIA",
+      "renew": "Start a renewal",
+      "startHint": "A renewal starts with the methods, sites and names of the DPIA in force; the opinion, decision and signed document must be new."
+    },
+    "sites": {
+      "title": "Sites",
+      "description": "Switch biometric capture on per site and method. It runs only while the DPIA in force covers them; switching off is always possible.",
+      "none": "The company has no sites yet.",
+      "switchOn": "Switch on",
+      "switchOff": "Switch off",
+      "switchOnLabel": "Switch on {method} at {site}",
+      "switchOffLabel": "Switch off {method} at {site}",
+      "lastOn": "Switched on by {name}, {at}",
+      "lastOff": "Switched off by {name}, {at}",
+      "carried": "Kept on by the renewal"
+    },
+    "history": {
+      "title": "Versions",
+      "none": "No versions yet.",
+      "columns": {
+        "version": "Version",
+        "status": "Status",
+        "methods": "Methods",
+        "sites": "Sites",
+        "reviewDue": "Review by",
+        "approved": "Approved"
+      }
+    },
+    "detail": {
+      "back": "Biometric attendance",
+      "scope": "Scope",
+      "methods": "Capture methods",
+      "sites": "Sites in scope",
+      "noSites": "No sites chosen.",
+      "dpo": "Data Protection Officer",
+      "controller": "Controller's decision",
+      "name": "Name",
+      "role": "Role",
+      "opinion": "Opinion",
+      "decision": "Decision",
+      "date": "Date signed",
+      "note": "Conditions or reasons",
+      "residualRisk": "Residual risk",
+      "odpcReference": "ODPC prior consultation reference",
+      "notRecorded": "Not recorded",
+      "document": "Signed DPIA",
+      "noDocument": "No signed document uploaded yet.",
+      "download": "Download",
+      "replaced": "{count, plural, one {# earlier upload replaced} other {# earlier uploads replaced}}",
+      "uploadedBy": "Uploaded by {name}, {at}",
+      "sha256": "SHA-256",
+      "notScanned": "Not scanned for malware (development only)",
+      "approval": "Approval",
+      "approvedBy": "Approved by {name}, {at}",
+      "reviewDue": "Review by {date}",
+      "digest": "Approval digest",
+      "conditionsConfirmed": "Conditions confirmed before go-live",
+      "rejectedBy": "Closed as not approved by {name}, {at}",
+      "withdrawnBy": "Withdrawn by {name}, {at}",
+      "supersededBy": "Superseded by v{version}, {at}",
+      "gapsTitle": "Before it can be approved",
+      "ready": "Ready to approve.",
+      "createdBy": "Started by {name}, {at}"
+    },
+    "opinions": {
+      "approve": "Approve",
+      "approve_with_conditions": "Approve with conditions",
+      "reject": "Reject"
+    },
+    "decisions": {
+      "proceed": "Proceed",
+      "proceed_with_conditions": "Proceed with conditions",
+      "do_not_proceed": "Do not proceed"
+    },
+    "risks": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "gaps": {
+      "document": "Upload the signed DPIA (PDF).",
+      "methods": "Choose at least one capture method.",
+      "sites": "Choose at least one site.",
+      "dpo": "Record the DPO's name, opinion and date.",
+      "dpo_rejected": "The DPO advised against it, so it cannot be approved.",
+      "dpo_conditions": "Write down the DPO's conditions.",
+      "controller": "Record the controller's name, decision and date.",
+      "controller_declined": "The controller decided not to proceed: close it as not approved.",
+      "controller_conditions": "Write down the controller's conditions.",
+      "signature_dates": "Signature dates cannot be in the future.",
+      "residual_risk": "Record the residual risk.",
+      "odpc_consultation": "A high residual risk needs the ODPC prior consultation reference."
+    },
+    "form": {
+      "title": "Edit the draft",
+      "choose": "Choose…",
+      "save": "Save draft",
+      "saved": "Draft saved.",
+      "dateHint": "DD/MM/YYYY",
+      "invalidDate": "Enter dates as DD/MM/YYYY."
+    },
+    "upload": {
+      "upload": "Upload the signed DPIA",
+      "replace": "Replace the signed DPIA",
+      "file": "PDF file",
+      "hint": "One PDF of at most 25 MB, signed by the DPO and the controller.",
+      "submit": "Upload"
+    },
+    "approve": {
+      "button": "Approve",
+      "title": "Approve DPIA v{version}",
+      "description": "Biometric capture can then be switched on for the sites and methods it covers, until the review date. You will be asked to verify with MFA.",
+      "document": "You are approving the signed document {name} (SHA-256 {hash}).",
+      "reviewDue": "Next review by",
+      "reviewHint": "Between {earliest} and {latest} (DD/MM/YYYY).",
+      "conditions": "Confirm each condition before go-live",
+      "submit": "Approve DPIA"
+    },
+    "conditions": {
+      "fallback_ready": "The card, photo and supervisor method works on every site in scope.",
+      "accuracy_tested": "Accuracy results by demographic group are acceptable.",
+      "vendor_assessed": "Vendor due diligence is complete and the SDK cannot send data out.",
+      "notices_reviewed": "The English and Kiswahili notices passed legal and Kiswahili review.",
+      "staff_trained": "Enrolment officers and supervisors are trained.",
+      "retention_set": "Retention periods are set and approved.",
+      "hosting_recorded": "The hosting and cross-border transfer decision is recorded.",
+      "odpc_registered": "The controller's and processor's ODPC registrations are current."
+    },
+    "reject": {
+      "button": "Close as not approved",
+      "title": "Close DPIA v{version} as not approved",
+      "description": "The draft is kept as a record and can no longer change.",
+      "reason": "Reason",
+      "submit": "Close as not approved"
+    },
+    "withdraw": {
+      "button": "Withdraw",
+      "title": "Withdraw DPIA v{version}",
+      "description": "Biometric capture stops on every site at once. A new version must be approved and sites switched on again.",
+      "reason": "Reason",
+      "submit": "Withdraw DPIA"
     }
   },
   "bqNav": {

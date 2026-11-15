@@ -102,6 +102,23 @@ export {
   type RateScope,
 } from "./labour.js";
 export * from "./attendance/index.js";
+export {
+  biometricGate,
+  carriedForwardSwitches,
+  dpiaApprovalContent,
+  dpiaApprovalGaps,
+  dpiaCovers,
+  dpiaReviewDueRange,
+  dpiaState,
+  isDpiaReviewDueValid,
+  switchedOnUnder,
+  type ApprovedDpia,
+  type BiometricGate,
+  type BiometricGateInput,
+  type BiometricSwitchFact,
+  type DpiaDraftFacts,
+  type SwitchCandidate,
+} from "./biometrics.js";
 export * from "./payroll/index.js";
 export * from "./site-diary.js";
 export { PIN_LENGTH, pinProblem, PIN_PROBLEMS, type PinProblem } from "./pin.js";

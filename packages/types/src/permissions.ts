@@ -31,6 +31,8 @@ export const PERMISSIONS = [
   "timesheets.submit",
   "timesheets.approve",
   "timesheets.manage_rules",
+  "biometrics.manage",
+  "biometrics.approve",
   "payroll.view",
   "payroll.prepare",
   "payroll.review",
@@ -92,7 +94,10 @@ export const TENANT_PERMISSIONS: readonly Permission[] = PERMISSIONS.filter(
 
 /**
  * Company-level permissions. They are never project-scoped: a project assignment cannot carry
- * them. Every other tenant permission is project-scoped (ARCHITECTURE §8).
+ * them. Every other tenant permission is project-scoped (ARCHITECTURE §8). The DPIA for biometric
+ * attendance belongs to the company as data controller (D3.4): `biometrics.manage` prepares it and
+ * can switch biometric capture off; `biometrics.approve` approves, rejects or withdraws it and
+ * switches capture on per site and method.
  */
 export const TENANT_LEVEL_PERMISSIONS = [
   "tenancy.manage",
@@ -106,6 +111,8 @@ export const TENANT_LEVEL_PERMISSIONS = [
   "payroll.manage_rules",
   "payroll.verify_rules",
   "payroll.export",
+  "biometrics.manage",
+  "biometrics.approve",
 ] as const satisfies readonly Permission[];
 
 /** Permissions that a project assignment may carry; effective = role ∩ assignment. */
@@ -180,9 +187,11 @@ export const isProjectAssignablePermission = (
 /**
  * Holding any of these makes enrolled and verified MFA mandatory (brief §7: Owner, Finance and
  * Admin). The database guard app.permissions_require_mfa() lists the same keys. D4.1 added
- * statutory rule verification and statutory exports (both also need step-up when used).
+ * statutory rule verification and statutory exports (both also need step-up when used); D3.4
+ * added DPIA approval, which switches the processing of sensitive personal data on.
  */
 export const MFA_REQUIRED_PERMISSIONS = [
+  "biometrics.approve",
   "payroll.approve",
   "payroll.verify_rules",
   "payroll.export",

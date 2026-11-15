@@ -139,6 +139,12 @@ import {
   type DocumentsDeps,
   type DocumentsState,
 } from "./mock-documents.mts";
+import {
+  handleBiometrics,
+  initialBiometrics,
+  type BiometricsDeps,
+  type BiometricsState,
+} from "./mock-biometrics.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -244,6 +250,8 @@ type State = {
   reports: ReportsState;
   /** D8.4 documents, compliance, instructions and approvals (mock-documents.mts). */
   documents: DocumentsState;
+  /** D3.4 DPIA versions and biometric switches (mock-biometrics.mts). */
+  biometrics: BiometricsState;
   /** D7.1 client payments, client terms, Paybill instructions and FX rates (mock-client-portal.mts). */
   clientPortal: ClientPortalStaffState;
 };
@@ -446,6 +454,7 @@ function fixture(persona: Persona): State {
   return {
     persona,
     stepUpAt: new Map(),
+    biometrics: initialBiometrics(),
     schedule: new Map([
       [
         RUIRU_ID,
@@ -705,6 +714,27 @@ function documentsDeps(state: State): DocumentsDeps {
   };
 }
 
+/** Every site with its project, the company's permissions and the actor, for the DPIA gate. */
+function biometricsDeps(state: State): BiometricsDeps {
+  return {
+    sites: state.projects.flatMap(({ project, sites }) =>
+      sites.map(({ site }) => ({
+        id: site.id,
+        name: site.name,
+        projectId: project.id,
+        projectCode: project.code,
+        projectName: project.name,
+        projectStatus: project.status,
+      })),
+    ),
+    companyPermissions: rolePermissions(state),
+    actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+    stepUpFresh: () => Date.now() - (state.stepUpAt.get(state.persona) ?? 0) <= 5 * 60_000,
+    fail: (status: number, code: string) => new HttpError(status, code),
+    parse,
+  };
+}
+
 /** Projects with their sites, as the spending and stores mocks see them. */
 function projectInfo(projects: ProjectState[]) {
   return projects.map(({ project, sites }) => ({
@@ -945,6 +975,15 @@ async function handle(
       },
       schema: tenantsResponseSchema,
     };
+  const biometrics = handleBiometrics(
+    biometricsDeps(state),
+    state.biometrics,
+    method,
+    path,
+    body,
+    raw,
+  );
+  if (biometrics) return biometrics;
   if (path === "/dashboard" || path === "/reports" || path.startsWith("/reports/")) {
     const reports = handleReports(reportsDeps(state), state.reports, method, path, query, body);
     if (reports) return reports;

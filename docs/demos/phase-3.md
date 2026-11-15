@@ -151,3 +151,52 @@ Accounts: the owner (`owner@jenga-bora.example.test`, TOTP), the project manager
 - Overtime multipliers are recorded, not applied: pay comes with D4.1. Weekly periods only (Q-C4); daily, fortnightly or monthly periods are reserved.
 - Notifications (for example "a day waits for your confirmation") and an outbox relay are not built; the queues are on the overview.
 - Casual-to-term conversion warnings (CR-PAY-10) are not computed yet.
+
+## D3.4 (first slice): The DPIA gate for biometric attendance
+
+This walkthrough takes about 15 minutes. **Attendance → Biometrics** shows the company's DPIA for biometric attendance and, for every site, whether each biometric method (face kiosk, fingerprint scanner, biometric terminal) may run. Nothing biometric is captured in this slice: it builds the gate that every later biometric path (enrolment, kiosk matching, terminals) must pass. The card, photo and supervisor method is never affected.
+
+### 1. Run it
+
+As for [D3.1](#1-run-it):
+
+```bash
+git checkout phase-3/d3.4-dpia-gate
+npx pnpm@12.17.0 install
+npx pnpm@12.17.0 services:up
+npx pnpm@12.17.0 db:migrate      # includes 20261206090000_dpia_gate
+npx pnpm@12.17.0 dev             # API on :4000, web on :3000
+```
+
+The seed is unchanged: no company has a DPIA yet, so the walkthrough starts from "off everywhere". Keep any PDF at hand to act as the signed DPIA (synthetic only). `BIOMETRICS_CAPTURE` is unset, so biometrics are available on a development machine; set it to `off` to see the platform notice.
+
+Accounts: the owner (`owner@jenga-bora.example.test`, TOTP) holds both new permissions; the project manager Brian (`pm@…`) holds neither.
+
+### 2. Walkthrough
+
+| #   | What | Where | Try this |
+| --- | --- | --- | --- |
+| 1 | Off until approved | **Attendance → Biometrics** as the owner | "No DPIA has been approved"; every site and method shows **No approved DPIA** and has no **Switch on** button. |
+| 2 | Start a DPIA | **Start a DPIA** | Version 1 opens as a draft with **Before it can be approved**: the signed PDF, a method, a site, the DPO's and the controller's sign-offs, the residual risk. |
+| 3 | Prepare it | The draft form | Tick **Face kiosk** and a site; record the DPO (name, opinion, date) and the controller (name, role, decision, date); set the residual risk; **Save draft**. Try **Approve with conditions** without writing them, a date in the future, or **High** without an ODPC reference: each stays on the list. A DPO **Reject** or **Do not proceed** can be saved but never approved. |
+| 4 | Signed document | **Upload the signed DPIA** | A JPEG is refused ("Upload the signed DPIA as a PDF"); a PDF is accepted, with its SHA-256; uploading again replaces it (counted). **Download** streams it back. |
+| 5 | Approve | **Approve** | Tick all eight go-live conditions and keep or change the review date (at most 12 months ahead); confirm with your authenticator code. The version is **In force** and frozen; the approval shows the conditions and the approval digest. |
+| 6 | Switch on per site | Back on **Biometrics** | The covered site and method shows **Switched off** with **Switch on**; methods outside the DPIA show **Not covered by the DPIA**. Switch it on: **On**, "Switched on by …". |
+| 7 | Renewal | **Start a renewal** | The new draft starts with the methods, sites and names of the DPIA in force, but no sign-offs or document. Approve it covering fewer sites: the sites it still covers stay **On** ("Kept on by the renewal"), the others show **Not covered by the DPIA**; version 1 is **Superseded**. |
+| 8 | Withdraw | The DPIA in force → **Withdraw** with a reason | Every site shows **No approved DPIA** at once; switching on is refused until a new version is approved. A draft can instead be **Closed as not approved**. |
+| 9 | Others | Sign in as Brian | "You do not have access". |
+| 10 | Languages and themes | Language switch and theme toggle | Both pages work in Kiswahili and dark mode and fit a 360 px phone. |
+
+### 3. What changed under the hood
+
+- Migration `20261206090000_dpia_gate`: `dpia_records`, `dpia_record_sites`, `dpia_documents` and `biometric_switches` with forced RLS, composite tenant keys and narrowed `pmb_app` grants; guard triggers for every transition, `app.biometric_capture_allowed` and a trigger that refuses biometric attendance records where the gate is closed; permissions `biometrics.manage` and `biometrics.approve` (MFA).
+- `packages/domain/src/biometrics.ts`: lapse dates, approval gaps, the gate and the carry-forward rule (unit-tested); `packages/validation/src/biometrics.ts`: every request and response; `BIOMETRICS_CAPTURE` in the environment schema.
+- API module `biometrics` (10 operations, [ARCHITECTURE §4.17](../ARCHITECTURE.md#417-biometric-attendance-gate-d34-first-slice)) with step-up, audit and hashed documents.
+- Web: `/attendance/biometrics` and `/attendance/biometrics/dpias/[dpiaId]`.
+
+### 4. Known limitations
+
+- No biometric consent, enrolment, template storage, matching, kiosk or terminal yet, and no retention or deletion jobs (next D3.4 slices; the kiosk needs the D3.2 site app and the SDK choice, Q-B2).
+- Production keeps `BIOMETRICS_CAPTURE` off until the go-live gates pass (separately deployed biometrics worker with its own key, owner's go-ahead).
+- The review interval is fixed at 12 months for every company; there is no reminder before the review date (the DPIA simply lapses and biometrics stop).
+- The go-live conditions are the approver's attestations; the app does not verify them. The DPIA rules (no override of a DPO rejection, ODPC reference for a high residual risk, no grace period) await an adviser's review (CR-DP-02).

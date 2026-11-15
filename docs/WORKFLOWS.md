@@ -324,6 +324,30 @@ Variance compares the current schedule with the chosen baseline in working days 
 
 The claim flag (`not_assessed`, `non_excusable`, `excusable`, `compensable`) records the company's position to support a later claim; PM-Buddy makes no legal determination and does not change the schedule from it. Delays do not move dates by themselves: the actual dates and progress do.
 
+## Biometric attendance DPIA gate (D3.4 first slice)
+
+Implemented for the web app ([ARCHITECTURE §4.17](./ARCHITECTURE.md#417-biometric-attendance-gate-d34-first-slice)). Company-level: preparing needs `biometrics.manage`; deciding needs `biometrics.approve` (MFA) with MFA verified within five minutes. One person may do both. Every timestamp is the database clock; the database repeats every rule below.
+
+**DPIA versions.** `draft → approved → superseded | withdrawn`, or `draft → rejected`; `rejected`, `superseded` and `withdrawn` are final. One draft and one approved version per company. An approved version is *in force* through its review date (Africa/Nairobi) and *lapsed* after it (computed on read).
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| start | `biometrics.manage`; no open draft (409 `dpia-draft-exists`); sites of the company only | Version `n + 1` as a draft (a renewal is prefilled from the DPIA in force without its sign-offs); `dpia.created` (version, methods, site count) |
+| save | `biometrics.manage`; draft; expected version | Every field and the site scope replaced; `dpia.updated` (field names) |
+| upload signed document | `biometrics.manage`; draft; one PDF by content (no scripts, launch actions or embedded files), ≤ 25 MB, malware hook | Becomes the current document (earlier uploads kept, counted); `dpia.document_uploaded` (document ID, SHA-256, size) |
+| approve | `biometrics.approve` + step-up; draft; expected version; nothing missing (`dpiaApprovalGaps`: document, method, site, DPO and controller sign-offs, no DPO rejection, no "do not proceed", conditions written down, no future signature dates, residual risk, ODPC reference when high); the reviewed document's SHA-256; review date after today and ≤ 12 months ahead; all eight go-live conditions | Approved, frozen, `approved_digest` bound to the content; the approved version (in force or lapsed) is superseded and its switches carried forward where the new scope covers them; `dpia.approved` (version, methods, site count, review date, document SHA-256, digest, superseded version, carried count) |
+| close as not approved | `biometrics.approve` + step-up; draft; expected version; reason 10–500 characters | `rejected` (final); `dpia.rejected` (version) |
+| withdraw | `biometrics.approve` + step-up; the approved version (in force or lapsed); expected version; reason 10–500 characters | `withdrawn` (final): biometric capture stops on every site at once; `dpia.withdrawn` (version, switches stopped) |
+
+**Site switches** (append-only; the latest per site and method is the position).
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| switch on | `biometrics.approve` + step-up; `BIOMETRICS_CAPTURE` on (409 `biometrics-unavailable`); project open (409 `project-read-only`); an approved DPIA (409 `dpia-required`) in force (409 `dpia-lapsed`) covering the site and method (409 `dpia-scope`) | On under the DPIA in force; `biometrics.switched_on` (site, project, method, DPIA version). Already on: nothing recorded |
+| switch off | `biometrics.manage` or `biometrics.approve`; never refused, no step-up | Off; `biometrics.switched_off` (site, project, method). Already off: nothing recorded |
+
+Biometric capture for a site and method runs only while the platform switch is on, the project is open, the approved DPIA is in force and covers it, and its switch is on under that DPIA (`biometricGate`). The card, photo and supervisor method is never gated.
+
 ## Payroll
 
 ```mermaid

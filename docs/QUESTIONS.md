@@ -39,7 +39,7 @@ Defaults are design assumptions only, not owner approval. Under [brief §15](./P
 |---|---|---|---|
 | Q-B1 | Which **biometric method first** in D3.4: face recognition on a kiosk tablet, a USB fingerprint scanner, or ZKTeco-style terminals? Do you already own hardware? Is on-device matching against the site's roster (D-17) acceptable? | Face on an Android kiosk tablet with on-device matching | D3.4 |
 | Q-B2 | What is the **budget for a commercial face/liveness SDK** (per-device licence) vs an open-source model? | Short spike in D3.4 comparing 2 vendors and 1 open-source option | D3.4 |
-| Q-B3 | Will tenants appoint a **DPO** (or adviser) to sign off DPIAs? | Each tenant names one before enabling biometrics | D3.4 |
+| Q-B3 | Will tenants appoint a **DPO** (or adviser) to sign off DPIAs? | Each tenant names one before enabling biometrics. Partly answered (owner's choice, 15/11/2026): in the app one person may prepare and approve the DPIA (`biometrics.approve` with step-up); the DPO's name, opinion and signature date are recorded from the signed document, and a DPO rejection blocks approval. A lapsed or withdrawn DPIA fails closed (no grace period), and a renewal keeps covered sites on | D3.4 |
 
 ## Site devices
 

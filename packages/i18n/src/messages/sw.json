@@ -141,6 +141,7 @@
       "bq": "BQ",
       "labour": "Wafanyakazi",
       "attendance": "Mahudhurio",
+      "biometrics": "Bayometriki",
       "payroll": "Mishahara",
       "advances": "Malipo ya awali",
       "payments": "Malipo",
@@ -264,6 +265,10 @@
         "submit": "Kuwasilisha vipindi vya saa za kazi",
         "approve": "Kuidhinisha vipindi vya saa za kazi",
         "manage_rules": "Kusimamia kanuni za saa za kazi"
+      },
+      "biometrics": {
+        "manage": "Kuandaa DPIA ya bayometriki",
+        "approve": "Kuidhinisha DPIA na kuwasha bayometriki"
       }
     },
     "notices": {
@@ -1827,7 +1832,21 @@
     "fxRateInvalid": "Weka kiwango zaidi ya sifuri chenye hadi nafasi nne za desimali, cha leo au kabla.",
     "receiptMethodRequired": "Taja jinsi pesa zilivyopokelewa: mstari unakuwa risiti ya mteja.",
     "cashFlowItemNotLinkable": "Mstari huu tayari umeunganishwa au ulifutwa. Pakia upya na ukague.",
-    "cashFlowItemLinked": "Mstari huu umeunganishwa na cheti: rekodi pesa kama risiti ya mteja kwenye ukurasa wa Malipo ya mteja."
+    "cashFlowItemLinked": "Mstari huu umeunganishwa na cheti: rekodi pesa kama risiti ya mteja kwenye ukurasa wa Malipo ya mteja.",
+    "dpiaDraftExists": "Tayari kuna rasimu ya DPIA iliyo wazi. Imalize au uifunge kwanza.",
+    "dpiaNotDraft": "Ni rasimu ya DPIA pekee inayoweza kubadilika. Pakia ukurasa upya.",
+    "dpiaNotApproved": "Ni DPIA iliyoidhinishwa pekee inayoweza kuondolewa.",
+    "dpiaIncomplete": "DPIA haijakamilika vya kutosha kuidhinishwa. Angalia kinachokosekana.",
+    "conditionsUnconfirmed": "Thibitisha kila sharti kabla ya kuanza.",
+    "reviewDateInvalid": "Chagua tarehe ya kukagua iliyo baada ya leo na isiyozidi miezi 12 mbele.",
+    "documentChanged": "Hati iliyotiwa saini imebadilika tangu ulipoifungua. Pitia faili mpya kabla ya kuidhinisha.",
+    "unknownSite": "Mojawapo ya maeneo uliyochagua si eneo la kampuni hii.",
+    "pdfRequired": "Pakia DPIA iliyotiwa saini kama PDF.",
+    "biometricsUnavailable": "Ukusanyaji wa kibayometriki haupatikani kwenye mfumo huu wa PM-Buddy.",
+    "dpiaRequired": "Idhinisha DPIA ya kampuni kabla ya kuwasha ukusanyaji wa kibayometriki.",
+    "dpiaLapsed": "Tarehe ya kukagua DPIA imepita. Idhinisha toleo jipya kwanza.",
+    "dpiaScope": "DPIA inayotumika haijumuishi eneo hili na njia hii.",
+    "biometricsRule": "Badiliko hili linavunja kanuni ya DPIA au ya bayometriki. Pakia upya na uangalie."
   },
   "projectStatus": {
     "planning": "Mipango",
@@ -3924,6 +3943,7 @@
       "muster": "Orodha ya mahudhurio",
       "periods": "Saa za kazi",
       "anomalies": "Hitilafu",
+      "biometrics": "Bayometriki",
       "settings": "Kanuni na sikukuu"
     },
     "common": {
@@ -4341,6 +4361,184 @@
       "lastWorked": "Alifanya kazi mwisho",
       "totals": "Siku {days} · saa {hours} · ziada saa {overtime}",
       "anomalies": "{count, plural, one {Hitilafu # iliyo wazi} other {Hitilafu # zilizo wazi}}"
+    }
+  },
+  "biometrics": {
+    "title": "Mahudhurio ya kibayometriki",
+    "description": "Ukusanyaji wa kibayometriki unabaki umezimwa hadi DPIA ya kampuni iidhinishwe hapa, kisha unafanya kazi tu kwenye maeneo na njia zilizowashwa chini yake. Njia ya kadi, picha na msimamizi hufanya kazi kila wakati.",
+    "platformOff": "Ukusanyaji wa kibayometriki bado haupatikani kwenye mfumo huu wa PM-Buddy. Unaweza kuandaa na kuidhinisha DPIA; hakuna kinachokusanywa hadi PM-Buddy iwashe bayometriki.",
+    "methods": {
+      "face": "Kioski cha uso",
+      "fingerprint": "Kisomaji cha alama za vidole",
+      "terminal": "Kifaa cha kibayometriki"
+    },
+    "states": {
+      "draft": "Rasimu",
+      "in_force": "Inatumika",
+      "lapsed": "Muda umepita",
+      "rejected": "Haijaidhinishwa",
+      "superseded": "Imebadilishwa",
+      "withdrawn": "Imeondolewa"
+    },
+    "reasons": {
+      "platform_off": "Haipatikani kwenye mfumo huu",
+      "project_closed": "Mradi umefungwa au umeghairiwa",
+      "no_dpia": "Hakuna DPIA iliyoidhinishwa",
+      "dpia_lapsed": "Tarehe ya kukagua DPIA imepita",
+      "not_in_scope": "Haijajumuishwa kwenye DPIA",
+      "switched_off": "Imezimwa"
+    },
+    "on": "Imewashwa",
+    "dpia": {
+      "title": "DPIA",
+      "version": "DPIA toleo {version}",
+      "none": "Hakuna DPIA iliyoidhinishwa. Ukusanyaji wa kibayometriki umezimwa kwenye maeneo yote.",
+      "inForce": "Inatumika hadi {date}. Inajumuisha {methods} kwenye {count, plural, one {eneo #} other {maeneo #}}.",
+      "lapsed": "Tarehe ya kukagua DPIA hii ilipita tarehe {date}. Ukusanyaji wa kibayometriki umesimama kwenye maeneo yote. Idhinisha toleo jipya ili kuanza tena.",
+      "draft": "Rasimu ya toleo {version} inaandaliwa.",
+      "open": "Fungua toleo {version}",
+      "continue": "Endelea na rasimu",
+      "start": "Anzisha DPIA",
+      "renew": "Anzisha toleo jipya",
+      "startHint": "Toleo jipya huanza na njia, maeneo na majina ya DPIA inayotumika; maoni, uamuzi na hati iliyotiwa saini lazima ziwe mpya."
+    },
+    "sites": {
+      "title": "Maeneo ya kazi",
+      "description": "Washa ukusanyaji wa kibayometriki kwa kila eneo na njia. Unafanya kazi tu wakati DPIA inayotumika inaijumuisha; kuzima kunawezekana kila wakati.",
+      "none": "Kampuni bado haina maeneo ya kazi.",
+      "switchOn": "Washa",
+      "switchOff": "Zima",
+      "switchOnLabel": "Washa {method} kwenye {site}",
+      "switchOffLabel": "Zima {method} kwenye {site}",
+      "lastOn": "Iliwashwa na {name}, {at}",
+      "lastOff": "Ilizimwa na {name}, {at}",
+      "carried": "Imeendelezwa na toleo jipya"
+    },
+    "history": {
+      "title": "Matoleo",
+      "none": "Bado hakuna matoleo.",
+      "columns": {
+        "version": "Toleo",
+        "status": "Hali",
+        "methods": "Njia",
+        "sites": "Maeneo",
+        "reviewDue": "Kagua kabla ya",
+        "approved": "Imeidhinishwa"
+      }
+    },
+    "detail": {
+      "back": "Mahudhurio ya kibayometriki",
+      "scope": "Wigo",
+      "methods": "Njia za kukusanya",
+      "sites": "Maeneo yaliyojumuishwa",
+      "noSites": "Hakuna eneo lililochaguliwa.",
+      "dpo": "Afisa wa Ulinzi wa Data",
+      "controller": "Uamuzi wa mdhibiti wa data",
+      "name": "Jina",
+      "role": "Wadhifa",
+      "opinion": "Maoni",
+      "decision": "Uamuzi",
+      "date": "Tarehe ya kutia saini",
+      "note": "Masharti au sababu",
+      "residualRisk": "Hatari iliyobaki",
+      "odpcReference": "Kumbukumbu ya mashauriano ya awali na ODPC",
+      "notRecorded": "Haijarekodiwa",
+      "document": "DPIA iliyotiwa saini",
+      "noDocument": "Bado hakuna hati iliyotiwa saini iliyopakiwa.",
+      "download": "Pakua",
+      "replaced": "{count, plural, one {Upakiaji # wa awali umebadilishwa} other {Upakiaji # wa awali umebadilishwa}}",
+      "uploadedBy": "Imepakiwa na {name}, {at}",
+      "sha256": "SHA-256",
+      "notScanned": "Haijakaguliwa kwa programu hasidi (kwa uundaji tu)",
+      "approval": "Idhini",
+      "approvedBy": "Imeidhinishwa na {name}, {at}",
+      "reviewDue": "Kagua kabla ya {date}",
+      "digest": "Alama ya idhini",
+      "conditionsConfirmed": "Masharti yaliyothibitishwa kabla ya kuanza",
+      "rejectedBy": "Imefungwa bila kuidhinishwa na {name}, {at}",
+      "withdrawnBy": "Imeondolewa na {name}, {at}",
+      "supersededBy": "Imebadilishwa na toleo {version}, {at}",
+      "gapsTitle": "Kabla ya kuidhinishwa",
+      "ready": "Iko tayari kuidhinishwa.",
+      "createdBy": "Ilianzishwa na {name}, {at}"
+    },
+    "opinions": {
+      "approve": "Idhinisha",
+      "approve_with_conditions": "Idhinisha kwa masharti",
+      "reject": "Kataa"
+    },
+    "decisions": {
+      "proceed": "Endelea",
+      "proceed_with_conditions": "Endelea kwa masharti",
+      "do_not_proceed": "Usiendelee"
+    },
+    "risks": {
+      "low": "Ndogo",
+      "medium": "Wastani",
+      "high": "Kubwa"
+    },
+    "gaps": {
+      "document": "Pakia DPIA iliyotiwa saini (PDF).",
+      "methods": "Chagua angalau njia moja ya kukusanya.",
+      "sites": "Chagua angalau eneo moja.",
+      "dpo": "Rekodi jina, maoni na tarehe ya Afisa wa Ulinzi wa Data.",
+      "dpo_rejected": "Afisa wa Ulinzi wa Data alishauri isiendelee, kwa hivyo haiwezi kuidhinishwa.",
+      "dpo_conditions": "Andika masharti ya Afisa wa Ulinzi wa Data.",
+      "controller": "Rekodi jina, uamuzi na tarehe ya mdhibiti wa data.",
+      "controller_declined": "Mdhibiti wa data aliamua kutoendelea: ifunge bila kuidhinishwa.",
+      "controller_conditions": "Andika masharti ya mdhibiti wa data.",
+      "signature_dates": "Tarehe za kutia saini haziwezi kuwa za baadaye.",
+      "residual_risk": "Rekodi hatari iliyobaki.",
+      "odpc_consultation": "Hatari kubwa iliyobaki inahitaji kumbukumbu ya mashauriano ya awali na ODPC."
+    },
+    "form": {
+      "title": "Hariri rasimu",
+      "choose": "Chagua…",
+      "save": "Hifadhi rasimu",
+      "saved": "Rasimu imehifadhiwa.",
+      "dateHint": "DD/MM/YYYY",
+      "invalidDate": "Andika tarehe kama DD/MM/YYYY."
+    },
+    "upload": {
+      "upload": "Pakia DPIA iliyotiwa saini",
+      "replace": "Badilisha DPIA iliyotiwa saini",
+      "file": "Faili ya PDF",
+      "hint": "PDF moja isiyozidi MB 25, iliyotiwa saini na Afisa wa Ulinzi wa Data na mdhibiti wa data.",
+      "submit": "Pakia"
+    },
+    "approve": {
+      "button": "Idhinisha",
+      "title": "Idhinisha DPIA toleo {version}",
+      "description": "Kisha ukusanyaji wa kibayometriki unaweza kuwashwa kwa maeneo na njia zilizojumuishwa, hadi tarehe ya kukagua. Utaombwa uthibitishe kwa MFA.",
+      "document": "Unaidhinisha hati iliyotiwa saini {name} (SHA-256 {hash}).",
+      "reviewDue": "Kagua tena kabla ya",
+      "reviewHint": "Kati ya {earliest} na {latest} (DD/MM/YYYY).",
+      "conditions": "Thibitisha kila sharti kabla ya kuanza",
+      "submit": "Idhinisha DPIA"
+    },
+    "conditions": {
+      "fallback_ready": "Njia ya kadi, picha na msimamizi inafanya kazi kwenye kila eneo lililojumuishwa.",
+      "accuracy_tested": "Matokeo ya usahihi kwa makundi ya watu yanakubalika.",
+      "vendor_assessed": "Uchunguzi wa msambazaji umekamilika na SDK haiwezi kutuma data nje.",
+      "notices_reviewed": "Matangazo ya Kiingereza na Kiswahili yamepitiwa kisheria na kwa Kiswahili.",
+      "staff_trained": "Maafisa wa usajili na wasimamizi wamepewa mafunzo.",
+      "retention_set": "Vipindi vya kuhifadhi vimewekwa na kuidhinishwa.",
+      "hosting_recorded": "Uamuzi wa mahali pa kuhifadhi data na uhamishaji nje ya nchi umerekodiwa.",
+      "odpc_registered": "Usajili wa ODPC wa mdhibiti na mchakataji wa data bado ni halali."
+    },
+    "reject": {
+      "button": "Funga bila kuidhinisha",
+      "title": "Funga DPIA toleo {version} bila kuidhinisha",
+      "description": "Rasimu inahifadhiwa kama kumbukumbu na haiwezi kubadilika tena.",
+      "reason": "Sababu",
+      "submit": "Funga bila kuidhinisha"
+    },
+    "withdraw": {
+      "button": "Ondoa",
+      "title": "Ondoa DPIA toleo {version}",
+      "description": "Ukusanyaji wa kibayometriki unasimama kwenye maeneo yote mara moja. Toleo jipya lazima liidhinishwe na maeneo yawashwe tena.",
+      "reason": "Sababu",
+      "submit": "Ondoa DPIA"
     }
   },
   "bqNav": {

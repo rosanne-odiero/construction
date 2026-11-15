@@ -5,6 +5,7 @@ import { AppConfig, envFilePaths, validateEnv } from "./config/app-config.js";
 import { loggerOptions } from "./common/logging.js";
 import { InfraModule } from "./infra/infra.module.js";
 import { AttendanceModule } from "./modules/attendance/attendance.module.js";
+import { BiometricsModule } from "./modules/biometrics/biometrics.module.js";
 import { BqModule } from "./modules/bq/bq.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
@@ -41,6 +42,7 @@ import { SubcontractsModule } from "./modules/subcontracts/subcontracts.module.j
     FinanceModule,
     LabourModule,
     AttendanceModule,
+    BiometricsModule,
     PayrollModule,
     ProgressModule,
     SubcontractsModule,

@@ -461,6 +461,20 @@ const codes: Record<string, ProblemKey> = {
   "nothing-outstanding": "nothingOutstanding",
   "amount-exceeds-outstanding": "amountExceedsOutstanding",
   "fx-rate-invalid": "fxRateInvalid",
+  "dpia-draft-exists": "dpiaDraftExists",
+  "dpia-not-draft": "dpiaNotDraft",
+  "dpia-not-approved": "dpiaNotApproved",
+  "dpia-incomplete": "dpiaIncomplete",
+  "conditions-unconfirmed": "conditionsUnconfirmed",
+  "review-date-invalid": "reviewDateInvalid",
+  "document-changed": "documentChanged",
+  "unknown-site": "unknownSite",
+  "pdf-required": "pdfRequired",
+  "biometrics-unavailable": "biometricsUnavailable",
+  "dpia-required": "dpiaRequired",
+  "dpia-lapsed": "dpiaLapsed",
+  "dpia-scope": "dpiaScope",
+  "biometrics-rule": "biometricsRule",
 };
 
 /** EN/SW text for an API problem code; anything unknown is "unexpected" (never a success). */

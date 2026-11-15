@@ -834,6 +834,32 @@ D4.1 payroll reads **approved** periods only, and never recomputes them:
   becoming normal time, or a half day becoming a full day). Payroll treats them like any other
   signed delta; the original period is never reopened.
 
+## Biometric attendance DPIA gate (D3.4, first slice)
+
+All routes are under `/api/v1/biometrics`, follow the conventions above and use the shared schemas
+in `packages/validation/src/biometrics.ts`. Dates are `YYYY-MM-DD` in Africa/Nairobi. Biometric
+capture is switched on per site and method only under the company's approved DPIA in force; a
+lapsed, withdrawn or superseded DPIA stops it at once. `BIOMETRICS_CAPTURE` (unset = on outside
+production; production keeps it off) gates the whole installation. Reading needs
+`biometrics.manage` or `biometrics.approve` (company-level); preparing needs `biometrics.manage`;
+deciding and switching on need `biometrics.approve` with MFA verified within five minutes
+(403 `step-up-required`). Design notes:
+[ARCHITECTURE §4.17](../../docs/ARCHITECTURE.md#417-biometric-attendance-gate-d34-first-slice).
+
+| Method/path                          | Body / query                                                                                                                                                                            | Notes                                                                                                                                                                                                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET `/`                              | —                                                                                                                                                                                       | DPIA versions, `platformAvailable`, every site's gate per method (`on`, first `reason`, `switchedOn`, `inScope`, last change)                                                                                                                              |
+| POST `dpias`                         | `{methods, siteIds, dpoName, dpoOpinion, dpoOpinionOn, dpoNote, controllerName, controllerRole, controllerDecision, controllerDecisionOn, controllerNote, residualRisk, odpcReference}` | 201; one draft at a time (409 `dpia-draft-exists`); 422 `unknown-site`                                                                                                                                                                                     |
+| GET · PUT `dpias/:id`                | — · the same fields + `version`                                                                                                                                                         | Detail with `approvalGaps` and `reviewDueRange`; PUT replaces every field (drafts only: 409 `dpia-not-draft`, `version-conflict`)                                                                                                                          |
+| POST · GET `dpias/:id/document`      | multipart `file` · —                                                                                                                                                                    | One PDF (415 `pdf-required`; 422 `pdf-active-content`, `malware-detected`); the download is audited, `private, no-store`, hash-verified (409 `file-integrity`)                                                                                             |
+| POST `dpias/:id/approve`             | `{version, documentSha256, reviewDue, confirmations[]}`                                                                                                                                 | Step-up; 422 `dpia-incomplete`, `conditions-unconfirmed`, `review-date-invalid`; 409 `document-changed`. Supersedes the approved version and carries covered switches forward                                                                              |
+| POST `dpias/:id/reject` · `withdraw` | `{version, reason}`                                                                                                                                                                     | Step-up; reject a draft (final) · withdraw the approved version (409 `dpia-not-approved`): capture stops everywhere                                                                                                                                        |
+| PUT `sites/:siteId/methods/:method`  | `{enabled, reason?}`                                                                                                                                                                    | `method` is `face`, `fingerprint` or `terminal`. On: step-up; 409 `biometrics-unavailable`, `project-read-only`, `dpia-required`, `dpia-lapsed`, `dpia-scope`. Off: `biometrics.manage` or `.approve`, never refused. The current position records nothing |
+
+The database repeats the gate: `app.biometric_capture_allowed(tenant, site, method, date)` and a
+trigger refusing any `face`, `fingerprint` or `terminal` row in `attendance_records` that is not
+dated today (Nairobi) or where the gate is closed for that day. Audit metadata carries IDs, codes, counts and hashes only.
+
 ## Health and safety (D8.2)
 
 Project paths are relative to `/api/v1/projects/:projectId/safety`; company paths start with

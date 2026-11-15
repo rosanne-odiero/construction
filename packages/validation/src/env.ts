@@ -102,6 +102,13 @@ export const apiEnvSchema = z.object({
   // leaves them for an administrator's "run due now". Unset: on, except under NODE_ENV=test.
   REPORT_SCHEDULER: z.enum(["on", "off"]).optional(),
 
+  // Biometric attendance on this installation (D3.4, decision D-163, RELEASE_PLAN "Feature
+  // gates"). Unset: on outside production. Production always treats it as off (an `on` is logged
+  // and ignored) until the go-live gates pass: the separately deployed biometrics worker with its
+  // own KMS-held key (THREAT_MODEL OR-01) and the owner's go-ahead. Each company also needs an
+  // approved DPIA and must switch capture on per site and method.
+  BIOMETRICS_CAPTURE: z.enum(["on", "off"]).optional(),
+
   API_DOCS_ENABLED: z.stringbool().default(true),
   HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
 });

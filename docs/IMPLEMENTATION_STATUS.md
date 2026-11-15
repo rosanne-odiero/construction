@@ -2406,6 +2406,14 @@ needed D4.2 to fit:
 The CSP sweep (`security-headers.spec.ts`) also renders the payments console and a request's
 timeline without violations.
 
+**CodeQL on PR #48** flagged `js/request-forgery` (critical) in the mock Daraja server: it posted
+callbacks to whatever URL a request named. The mock now delivers only to loopback HTTP URLs. A
+target is rebuilt on `127.0.0.1` (only the port, path and query come from the request); any other
+host or scheme is recorded as refused and never requested (`loopbackCallbackTarget`, mock unit
+test). CodeQL still raised the rebuilt request, because the port comes from the request, so that
+alert was dismissed as test-only code with this justification. The mock is never deployed and
+binds to loopback.
+
 **Verification on the merged branch** (test database rebuilt empty first: drop, create and the
 repository's bootstrap grants, then migrations):
 

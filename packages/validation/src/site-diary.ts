@@ -1,4 +1,5 @@
 import { DIARY_ACTIONS, DIARY_STATUSES } from "@pm-buddy/domain";
+import { WORKFORCE_MUSTER_STATES, WORKFORCE_SOURCES } from "@pm-buddy/types";
 import { z } from "zod";
 
 const version = z.number().int().min(1).max(2_147_483_647);
@@ -9,11 +10,69 @@ const content = {
   delays: optionalNote(2000),
   workforceCount: z.number().int().min(0).max(100_000).nullable(),
 };
+/**
+ * `manual`: the count typed in (null when unknown). `attendance`: the server takes a snapshot of
+ * attendance on the site and date (by trade, with the muster state and time); the count is never
+ * sent by the client, so it must be null.
+ */
+const workforceSource = z.enum(WORKFORCE_SOURCES);
+const requestContent = {
+  ...content,
+  workforceSource: workforceSource.optional().default("manual"),
+};
+const attendanceHasNoCount = (
+  value: { workforceSource: string; workforceCount: number | null },
+  ctx: z.RefinementCtx,
+) => {
+  if (value.workforceSource === "attendance" && value.workforceCount !== null)
+    ctx.addIssue({
+      code: "custom",
+      path: ["workforceCount"],
+      message: "attendance_count_from_server",
+    });
+};
 
 export const createDiaryRequestSchema = z
-  .object({ siteId: z.uuid(), date: z.iso.date(), ...content })
+  .object({ siteId: z.uuid(), date: z.iso.date(), ...requestContent })
+  .strict()
+  .superRefine(attendanceHasNoCount);
+export const updateDiaryRequestSchema = z
+  .object({ version, ...requestContent })
+  .strict()
+  .superRefine(attendanceHasNoCount);
+
+export const workforceTradeSchema = z
+  .object({
+    tradeId: z.uuid(),
+    key: z.string(),
+    nameEn: z.string(),
+    nameSw: z.string(),
+    headcount: z.number().int().min(1),
+    halfDays: z.number().int().min(0),
+  })
   .strict();
-export const updateDiaryRequestSchema = z.object({ version, ...content }).strict();
+/** A diary's attendance snapshot: who was on site by trade, the muster state and when. */
+export const diaryWorkforceSchema = z
+  .object({
+    snapshotAt: z.iso.datetime({ offset: true }),
+    musterStatus: z.enum(WORKFORCE_MUSTER_STATES),
+    trades: z.array(workforceTradeSchema),
+  })
+  .strict();
+/** Live attendance on a site and date, offered before a diary takes its snapshot. */
+export const diaryAttendanceQuerySchema = z
+  .object({ siteId: z.uuid(), date: z.iso.date() })
+  .strict();
+export const diaryAttendanceResponseSchema = z
+  .object({
+    siteId: z.uuid(),
+    date: z.iso.date(),
+    musterStatus: z.enum(WORKFORCE_MUSTER_STATES),
+    total: z.number().int().min(0),
+    trades: z.array(workforceTradeSchema),
+    countedAt: z.iso.datetime({ offset: true }),
+  })
+  .strict();
 export const diaryActionRequestSchema = z
   .object({
     version,
@@ -35,7 +94,8 @@ export const diarySchema = z
     siteId: z.uuid(),
     date: z.iso.date(),
     ...content,
-    workforceSource: z.literal("manual"),
+    workforceSource,
+    workforce: diaryWorkforceSchema.nullable(),
     status: z.enum(DIARY_STATUSES),
     version,
     createdBy: z.uuid(),
@@ -53,6 +113,14 @@ export const diarySchema = z
     const reviewed = value.reviewedBy !== null && value.reviewedAt !== null;
     const independent =
       value.reviewedBy !== value.createdBy && value.reviewedBy !== value.submittedBy;
+    const snapshot = value.workforce;
+    if (
+      value.workforceSource === "attendance"
+        ? !snapshot ||
+          value.workforceCount !== snapshot.trades.reduce((sum, trade) => sum + trade.headcount, 0)
+        : snapshot !== null
+    )
+      ctx.addIssue({ code: "custom", path: ["workforce"], message: "inconsistent_workforce" });
     if (
       (value.status === "draft"
         ? value.submittedBy !== null || value.submittedAt !== null
@@ -82,3 +150,6 @@ export type CreateDiaryRequest = z.infer<typeof createDiaryRequestSchema>;
 export type UpdateDiaryRequest = z.infer<typeof updateDiaryRequestSchema>;
 export type DiaryActionRequest = z.infer<typeof diaryActionRequestSchema>;
 export type DiaryListQuery = z.infer<typeof diaryListQuerySchema>;
+export type DiaryWorkforce = z.infer<typeof diaryWorkforceSchema>;
+export type WorkforceTradeWire = z.infer<typeof workforceTradeSchema>;
+export type DiaryAttendanceResponse = z.infer<typeof diaryAttendanceResponseSchema>;

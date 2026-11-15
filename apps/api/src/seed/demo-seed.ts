@@ -29,6 +29,21 @@ import { seedAttendance, type AttendanceSeedSummary } from "./attendance-seed.js
 import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
 import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
 import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
+import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
+import { seedQuality, type QualitySeedSummary } from "./quality-seed.js";
+import { seedSafety, type SafetySeedSummary } from "./safety-seed.js";
+import { seedPlant, type PlantSeedSummary } from "./plant-seed.js";
+import { seedDocuments, type DocumentsSeedSummary } from "./documents-seed.js";
+import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
+import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
+import { seedValuations, type ValuationsSeedSummary } from "./demo-valuations.js";
+import { seedClientPortal, type ClientPortalSeedSummary } from "./demo-client-portal.js";
+import {
+  DEMO_SUPPLIER_PORTAL_USER,
+  seedSupplierPortal,
+  type SupplierPortalSeedSummary,
+} from "./demo-supplier-portal.js";
+import { seedReports, type ReportsSeedSummary } from "./reports-seed.js";
 
 /**
  * Development seed (brief §11): a synthetic demo company matching the prototype, with an owner
@@ -37,12 +52,37 @@ import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-t
  * synthetic labourers with consent, gangs and NCA cards (labour-seed.ts), (D3.3) nine weeks of
  * synthetic attendance with timesheet periods, anomalies and an adjustment (attendance-seed.ts),
  * and (D5.1) the starter catalogue with synthetic suppliers, prices and payout details
- * (demo-procurement.ts). Idempotent: existing records are kept as they are. Never runs in
+ * (demo-procurement.ts), and (D6.2) the RUI-HTS schedule with a baseline, slipped actuals and
+ * delays (schedule-seed.ts), and (D5.4) an approved RUI-HTS budget, cost codes, a petty-cash float
+ * with expenses, a count, a journal and forecast lines (demo-spending.ts), and (D6.3) approved
+ * measurements with photos, certified payment certificates on RUI-HTS and JUJ-DPX with a
+ * practical-completion retention release, and earned value inputs (demo-valuations.ts), and
+ * (D7.2) a supplier portal user for the quarry with an acknowledged LPO, a delivery and invoices
+ * it submitted on the Kitengela project (demo-supplier-portal.ts), and (D8.1) report subscriptions
+ * for the owner and finance (reports-seed.ts).
+ * Idempotent: existing records are kept as they are. Never runs in
  * production. All identities are synthetic (example.test addresses; the only phone number is in
  * Ofcom's 07700 900xxx range reserved for fiction).
  */
 
 export const DEMO_COMPANY = "Jenga Bora Builders Ltd";
+
+/**
+ * A copy of the demo company under its own name and accounts (`owner+<namespace>@…`), so a test
+ * can seed a whole company without touching the shared demo one. Lower-case letters, digits and
+ * hyphens only.
+ */
+export type SeedNamespace = string;
+const NAMESPACE = /^[a-z0-9-]{1,30}$/;
+const namespaced = (identifier: string, namespace: SeedNamespace | undefined) =>
+  namespace ? identifier.replace("@", `+${namespace}@`) : identifier;
+export const demoCompanyName = (namespace?: SeedNamespace) =>
+  namespace ? `${DEMO_COMPANY} (${namespace})` : DEMO_COMPANY;
+export const demoAccounts = (namespace?: SeedNamespace): readonly DemoAccount[] =>
+  DEMO_ACCOUNTS.map((account) => ({
+    ...account,
+    identifier: namespaced(account.identifier, namespace),
+  }));
 const SOURCE = { source: "seed" } as const;
 
 type Tx = Prisma.TransactionClient;
@@ -54,7 +94,7 @@ type Audit = (
 ) => Promise<unknown>;
 
 type DemoAccount = {
-  key: "owner" | "projectManager" | "siteAgent" | "finance";
+  key: "owner" | "projectManager" | "siteAgent" | "finance" | "storekeeper";
   role: TenantSystemRole;
   identifier: string;
   displayName: string;
@@ -90,6 +130,14 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     displayName: "Daniel Mwangi",
     totp: true,
   },
+  {
+    // D5.3: keeps the site stores (issues, returns, wastage, transfers, counts).
+    key: "storekeeper",
+    role: "storekeeper",
+    identifier: "storekeeper@jenga-bora.example.test",
+    displayName: "Grace Wambui",
+    totp: false,
+  },
 ];
 
 type DemoSite = { name: string; address: string; geofence: Geofence };
@@ -118,6 +166,8 @@ type DemoProject = {
   latitude: number | null;
   longitude: number | null;
   activate: boolean;
+  /** D6.1: practically complete (active → completed); quality-seed.ts certifies completion. */
+  complete?: boolean;
   sites: DemoSite[];
   wbs: DemoWbs[];
   milestones: DemoMilestone[];
@@ -198,7 +248,7 @@ export const DEMO_PROJECTS: readonly DemoProject[] = [
       { name: "Roof covered", dueDate: "2027-01-31", wbs: "3.4" },
       { name: "Practical completion", dueDate: "2027-04-30" },
     ],
-    team: ["projectManager", "siteAgent"],
+    team: ["projectManager", "siteAgent", "storekeeper"],
   },
   {
     code: "KIT-BNG",
@@ -241,7 +291,7 @@ export const DEMO_PROJECTS: readonly DemoProject[] = [
       { name: "Plastering complete", dueDate: "2026-12-15", wbs: "4" },
       { name: "Handover", dueDate: "2027-02-15" },
     ],
-    team: ["projectManager"],
+    team: ["projectManager", "storekeeper"],
   },
   {
     code: "SYO-TWN",
@@ -263,6 +313,49 @@ export const DEMO_PROJECTS: readonly DemoProject[] = [
     wbs: [],
     milestones: [],
     team: [],
+  },
+  {
+    // D6.1: handed over; practical completion certified and the defects liability period running
+    // (quality-seed.ts, dates relative to the seed day).
+    code: "JUJ-DPX",
+    name: "Juja Road Duplex",
+    description: "Two-storey 4-bedroom duplex, handed over; defects liability period running",
+    clientName: "Wairimu Family Trust (synthetic)",
+    clientEmail: "wairimu.trust@example.test",
+    clientPhone: null,
+    contractSumMinor: 2_150_000_000,
+    contractType: "lump_sum",
+    startDate: "2025-10-06",
+    endDate: "2026-08-31",
+    county: "kiambu",
+    town: "Juja",
+    latitude: -1.1012,
+    longitude: 37.0144,
+    activate: true,
+    complete: true,
+    sites: [
+      {
+        name: "Duplex plot",
+        address: "Off Juja Farm Road",
+        geofence: { kind: "radius", center: { lat: -1.1012, lng: 37.0144 }, radiusM: 45 },
+      },
+    ],
+    wbs: [
+      { code: "1", name: "Substructure", weight: 2_000 },
+      { code: "2", name: "Superstructure and roof", weight: 4_500 },
+      { code: "3", name: "Finishes and services", weight: 3_500 },
+    ],
+    milestones: [
+      {
+        name: "Roof covered",
+        dueDate: "2026-04-30",
+        wbs: "2",
+        status: "achieved",
+        actualDate: "2026-05-08",
+      },
+      { name: "Handover", dueDate: "2026-08-31", status: "achieved", actualDate: "2026-08-28" },
+    ],
+    team: ["projectManager", "siteAgent"],
   },
 ];
 
@@ -340,6 +433,17 @@ export type SeedSummary = {
   attendance: AttendanceSeedSummary;
   payroll: PayrollSeedSummary;
   procureToPay: ProcureToPaySeedSummary;
+  stores: StoresSeedSummary;
+  schedule: ScheduleSeedSummary;
+  spending: SpendingSeedSummary;
+  quality: QualitySeedSummary;
+  valuations: ValuationsSeedSummary;
+  safety: SafetySeedSummary;
+  supplierPortal: SupplierPortalSeedSummary;
+  clientPortal: ClientPortalSeedSummary;
+  plant: PlantSeedSummary;
+  reports: ReportsSeedSummary;
+  documents: DocumentsSeedSummary;
 };
 
 /** Refuses production: demo accounts and data must never reach a live environment. */
@@ -354,16 +458,19 @@ const calendar = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
 export async function seedDemo(
   app: INestApplicationContext,
-  options: { resetCredentials?: boolean } = {},
+  options: { resetCredentials?: boolean; namespace?: SeedNamespace } = {},
 ): Promise<SeedSummary> {
   assertSeedAllowed(process.env["NODE_ENV"]);
+  if (options.namespace !== undefined && !NAMESPACE.test(options.namespace))
+    throw new Error("A seed namespace is 1–30 lower-case letters, digits or hyphens");
+  const companyName = demoCompanyName(options.namespace);
   assertSeedAllowed(app.get(AppConfig).get("NODE_ENV"));
   const prisma = app.get(PrismaService);
   const security = app.get(AuthSecurity);
   const db = app.get(TenantDatabase);
 
   const accounts: (SeededAccount & { id: string; key: DemoAccount["key"] })[] = [];
-  for (const demo of DEMO_ACCOUNTS) {
+  for (const demo of demoAccounts(options.namespace)) {
     const existing = await prisma.user.findUnique({ where: { identifier: demo.identifier } });
     const reset = !existing || options.resetCredentials === true;
     const password = reset ? newPassword() : null;
@@ -443,7 +550,7 @@ export async function seedDemo(
       select: { tenant: { select: { id: true, name: true } } },
     }),
   );
-  const found = memberships.find((membership) => membership.tenant.name === DEMO_COMPANY);
+  const found = memberships.find((membership) => membership.tenant.name === companyName);
   const tenantId = found?.tenant.id ?? randomUUID();
   const audit: Audit = (tx, action, resourceId, metadata = {}) =>
     tx.auditEvent.create({
@@ -454,7 +561,7 @@ export async function seedDemo(
   const buildups: SeedSummary["buildups"] = [];
   await db.run({ userId: owner.id, tenantId, requestId: "seed" }, async (tx) => {
     if (!found) {
-      await tx.tenant.create({ data: { id: tenantId, name: DEMO_COMPANY, createdBy: owner.id } });
+      await tx.tenant.create({ data: { id: tenantId, name: companyName, createdBy: owner.id } });
       await tx.membership.create({ data: { tenantId, userId: owner.id, role: "owner" } });
       await audit(tx, "tenant.created", tenantId, SOURCE);
     }
@@ -521,9 +628,93 @@ export async function seedDemo(
     pmId: userOf("projectManager").id,
     agentId: userOf("siteAgent").id,
   });
+  const stores = await seedStores(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    storekeeperId: userOf("storekeeper").id,
+  });
+  // After the attendance seed, so the company's public holidays shape the working calendar.
+  const schedule = await seedSchedule(app, tenantId, owner.id);
+  // After procure-to-pay and stores: the ledger already holds the invoice and its settlement, and
+  // the budget starts from the approved BQ.
+  const spending = await seedSpending(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    financeId: userOf("finance").id,
+  });
+  // After attendance (diary snapshots) and the schedule.
+  const quality = await seedQuality(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+  });
+  // After attendance (induction flags read it) and the labour gangs.
+  const safety = await seedSafety(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+  });
+  // After safety and the labour seed (the excavator's operator is a registered machine operator).
+  const plant = await seedPlant(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+  });
+
+  // After spending (budgets, the ledger) and quality (JUJ-DPX's certified practical completion).
+  const valuations = await seedValuations(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+    financeId: userOf("finance").id,
+  });
+  // After the schedule and valuations: instructions link the schedule's delay and a verified site
+  // photo from the valuations.
+  const documents = await seedDocuments(app, tenantId, {
+    ownerId: owner.id,
+    projectManagerId: userOf("projectManager").id,
+    siteAgentId: userOf("siteAgent").id,
+  });
+  // Last: it adds an LPO, a delivery, invoices and a part payment on KIT-BNG (no budget there),
+  // with documents and distinct amounts, so the earlier summaries and alerts do not change.
+  const supplierPortal = await seedSupplierPortal(
+    app,
+    tenantId,
+    {
+      ownerId: owner.id,
+      projectManagerId: userOf("projectManager").id,
+      storekeeperId: userOf("storekeeper").id,
+      financeId: userOf("finance").id,
+    },
+    {
+      resetCredentials: options.resetCredentials,
+      identifier: namespaced(DEMO_SUPPLIER_PORTAL_USER.identifier, options.namespace),
+    },
+  );
+  // After valuations (certified certificates to pay) and documents (an open instruction): the
+  // client's account on RUI-HTS, Paybill and FX settings, a part payment and a variation sent to
+  // the client. It adds nothing the earlier summaries count.
+  const clientPortal = await seedClientPortal(
+    app,
+    tenantId,
+    {
+      ownerId: owner.id,
+      projectManagerId: userOf("projectManager").id,
+      siteAgentId: userOf("siteAgent").id,
+      financeId: userOf("finance").id,
+    },
+    { resetCredentials: options.resetCredentials },
+  );
+  // Last: subscriptions to reports over everything above.
+  const reports = await seedReports(app, tenantId, {
+    ownerId: owner.id,
+    financeId: userOf("finance").id,
+  });
 
   return {
-    company: { id: tenantId, name: DEMO_COMPANY, created: !found },
+    company: { id: tenantId, name: companyName, created: !found },
     accounts: accounts.map(({ id: _id, key: _key, ...account }) => account),
     projects,
     buildups,
@@ -532,6 +723,17 @@ export async function seedDemo(
     attendance,
     payroll,
     procureToPay,
+    stores,
+    schedule,
+    spending,
+    quality,
+    valuations,
+    safety,
+    supplierPortal,
+    clientPortal,
+    plant,
+    reports,
+    documents,
   };
 }
 
@@ -607,6 +809,36 @@ async function seedBuildup(
   };
 }
 
+/** Assigns the demo team to a project: each member without an assignment gets their role's. */
+async function assignTeam(
+  tx: Tx,
+  tenantId: string,
+  projectId: string,
+  demo: DemoProject,
+  userOf: (key: DemoAccount["key"]) => { id: string; role: TenantSystemRole },
+  audit: Audit,
+) {
+  for (const key of demo.team) {
+    const member = userOf(key);
+    const assigned = await tx.projectMembership.findFirst({
+      where: { tenantId, projectId, userId: member.id },
+      select: { userId: true },
+    });
+    if (assigned) continue;
+    const permissions = PROJECT_ASSIGNABLE_PERMISSIONS.filter((permission) =>
+      SYSTEM_ROLE_PERMISSIONS[member.role].includes(permission),
+    );
+    await tx.projectMembership.create({
+      data: { tenantId, projectId, userId: member.id, permissions },
+    });
+    await audit(tx, "project.permissions.changed", projectId, {
+      ...SOURCE,
+      userId: member.id,
+      permissions,
+    });
+  }
+}
+
 async function seedProject(
   tx: Tx,
   tenantId: string,
@@ -618,8 +850,12 @@ async function seedProject(
   const existing = await tx.project.findUnique({
     where: { tenantId_code: { tenantId, code: demo.code } },
   });
-  if (existing)
+  if (existing) {
+    // A database seeded before a team member was added (the storekeeper in D5.3) gets the new
+    // assignment; existing assignments are left as they are.
+    await assignTeam(tx, tenantId, existing.id, demo, userOf, audit);
     return { code: demo.code, name: existing.name, status: existing.status, created: false };
+  }
 
   const project = await tx.project.create({
     data: {
@@ -725,20 +961,7 @@ async function seedProject(
       });
   }
 
-  for (const key of demo.team) {
-    const member = userOf(key);
-    const permissions = PROJECT_ASSIGNABLE_PERMISSIONS.filter((permission) =>
-      SYSTEM_ROLE_PERMISSIONS[member.role].includes(permission),
-    );
-    await tx.projectMembership.create({
-      data: { tenantId, projectId: project.id, userId: member.id, permissions },
-    });
-    await audit(tx, "project.permissions.changed", project.id, {
-      ...SOURCE,
-      userId: member.id,
-      permissions,
-    });
-  }
+  await assignTeam(tx, tenantId, project.id, demo, userOf, audit);
 
   if (!demo.activate)
     return { code: demo.code, name: demo.name, status: project.status, created: true };
@@ -763,5 +986,27 @@ async function seedProject(
     action: "activate",
     reasonGiven: true,
   });
-  return { code: demo.code, name: demo.name, status: "active", created: true };
+  if (!demo.complete) return { code: demo.code, name: demo.name, status: "active", created: true };
+  await tx.project.update({
+    where: { tenantId_id: { tenantId, id: project.id } },
+    data: { status: "completed", version: { increment: 1 } },
+  });
+  await tx.projectStatusChange.create({
+    data: {
+      tenantId,
+      projectId: project.id,
+      fromStatus: "active",
+      toStatus: "completed",
+      reason: null,
+      changedBy: ownerId,
+    },
+  });
+  await audit(tx, "project.status_changed", project.id, {
+    ...SOURCE,
+    from: "active",
+    to: "completed",
+    action: "complete",
+    reasonGiven: false,
+  });
+  return { code: demo.code, name: demo.name, status: "completed", created: true };
 }

@@ -5,12 +5,13 @@ import { PORTAL_HOME, portalFor } from "@pm-buddy/types";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { StatusBadge } from "@/components/status-badge";
+import { PortalName } from "@/components/supplier-portal/portal-name";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getSessionState } from "@/lib/server-api";
 
 /**
- * The live client and labourer portals: a light, mobile-first shell (no office sidebar). Pages
- * check access themselves; the PIN set-up and reset pages work signed out.
+ * The live client, labourer and supplier portals: a light, mobile-first shell (no office
+ * sidebar). Pages check access themselves; the PIN set-up, reset and join pages work signed out.
  */
 export default async function PortalsLayout({ children }: { children: React.ReactNode }) {
   const t = await getTranslations("portals");
@@ -35,11 +36,15 @@ export default async function PortalsLayout({ children }: { children: React.Reac
             <span className="leading-tight">
               <span className="block text-sm font-semibold">PM-Buddy</span>
               <span className="block text-xs text-muted-foreground">
-                {portal === "client"
-                  ? t("clientName")
-                  : portal === "office"
-                    ? t("officeName")
-                    : t("workerName")}
+                <PortalName
+                  portal={portal}
+                  names={{
+                    client: t("clientName"),
+                    office: t("officeName"),
+                    worker: t("workerName"),
+                    supplier: t("supplierName"),
+                  }}
+                />
               </span>
             </span>
           </Link>

@@ -35,7 +35,8 @@ const selectClass =
 
 /**
  * WBS tree editor (D2.1). Sibling weights must add up to exactly 100 % before progress can be
- * computed; until then (and until measurements exist, D6.3) % complete is shown as unavailable.
+ * computed; until then (and until WBS nodes are linked to measured BQ items) % complete is shown
+ * as unavailable.
  * Reordering uses buttons, so the tree is fully keyboard-operable.
  */
 export function WbsPanel({

@@ -61,7 +61,9 @@ jobs:
   web-e2e:
     name: Web accessibility and foundation
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # About 150 browser tests on two workers take 12–18 minutes on a hosted runner; the limit
+    # leaves room for slower runners and retries without letting a hung run go on for long.
+    timeout-minutes: 30
     # Browser system libraries and fonts come from the official image, so the
     # job no longer depends on the runner's apt mirror. Keep the tag in step
     # with @playwright/test; a mismatch still works because the install step

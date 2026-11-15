@@ -14,6 +14,7 @@ import {
 } from "./identity.controller.js";
 import { PasskeyService } from "./passkey.service.js";
 import { PinAuthController } from "./pin-auth.controller.js";
+import { PinHasher } from "./pin-pepper.js";
 import { PinService } from "./pin.service.js";
 import { breachCheckerFor, PasswordBreachChecker, PasswordPolicy } from "./password-policy.js";
 import { RolesService } from "./roles.service.js";
@@ -38,6 +39,7 @@ import { TenantScope } from "./tenant-scope.service.js";
     GoogleSignIn,
     PasskeyService,
     PasswordPolicy,
+    PinHasher,
     PinService,
     { provide: PasswordBreachChecker, inject: [AppConfig], useFactory: breachCheckerFor },
     RolesService,

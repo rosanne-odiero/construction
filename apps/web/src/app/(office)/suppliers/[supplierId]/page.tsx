@@ -3,11 +3,16 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Pencil } from "lucide-react";
 import type { StandardUnitCode } from "@pm-buddy/types";
-import { supplierDetailResponseSchema, unitsResponseSchema } from "@pm-buddy/validation";
+import {
+  supplierDetailResponseSchema,
+  supplierPortalUsersResponseSchema,
+  unitsResponseSchema,
+} from "@pm-buddy/validation";
 import { PageHeader } from "@/components/page-header";
 import { CatalogueSubnav } from "@/components/procurement/catalogue-subnav";
 import { PayoutPanel } from "@/components/procurement/payout-panel";
 import { RevealValue } from "@/components/procurement/reveal-value";
+import { SupplierPortalUsersPanel } from "@/components/procurement/supplier-portal-users-panel";
 import { alertTone, etimsTone, supplierStatusTone } from "@/components/procurement/tones";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { StatusBadge } from "@/components/status-badge";
@@ -27,7 +32,8 @@ export async function generateMetadata() {
 
 /**
  * A supplier profile (D5.1): masked identifiers with reveal, eTIMS status as recorded, contacts,
- * terms, maker-checker payout details and recent prices.
+ * terms, maker-checker payout details, supplier portal users (D7.2, managers only) and recent
+ * prices.
  */
 export default async function SupplierPage({
   params,
@@ -39,9 +45,10 @@ export default async function SupplierPage({
   const path = `/suppliers/${supplierId}`;
   const session = await requireSession(path);
   if (!session) return <LiveUnavailable retryHref={path} />;
-  const [result, unitsResult] = await Promise.all([
+  const [result, unitsResult, portalUsers] = await Promise.all([
     serverApi(path, supplierDetailResponseSchema),
     serverApi("/units", unitsResponseSchema),
+    serverApi(`${path}/portal-users`, supplierPortalUsersResponseSchema),
   ]);
   if (!result.ok) {
     if (result.status === 401) redirect(signInHref(path));
@@ -204,6 +211,9 @@ export default async function SupplierPage({
         </CardContent>
       </Card>
       <PayoutPanel detail={detail} />
+      {portalUsers.ok ? (
+        <SupplierPortalUsersPanel data={portalUsers.data} supplierStatus={supplier.status} />
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>

@@ -8,6 +8,7 @@ import { AttendanceModule } from "./modules/attendance/attendance.module.js";
 import { BqModule } from "./modules/bq/bq.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
+import { FinanceModule } from "./modules/finance/finance.module.js";
 import { ProcurementModule } from "./modules/procurement/procurement.module.js";
 import { LabourModule } from "./modules/labour/labour.module.js";
 import { PaymentsModule } from "./modules/payments/payments.module.js";
@@ -15,6 +16,12 @@ import { PayrollModule } from "./modules/payroll/payroll.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
 import { PortalsModule } from "./modules/portals/portals.module.js";
 import { ProgressModule } from "./modules/progress/progress.module.js";
+import { QualityModule } from "./modules/quality/quality.module.js";
+import { SafetyModule } from "./modules/safety/safety.module.js";
+import { PlantModule } from "./modules/plant/plant.module.js";
+import { DocumentsModule } from "./modules/documents/documents.module.js";
+import { ScheduleModule } from "./modules/schedule/schedule.module.js";
+import { ReportsModule } from "./modules/reports/reports.module.js";
 
 @Module({
   imports: [
@@ -31,12 +38,19 @@ import { ProgressModule } from "./modules/progress/progress.module.js";
     ProjectsModule,
     BqModule,
     ProcurementModule,
+    FinanceModule,
     LabourModule,
     AttendanceModule,
     PaymentsModule,
     PayrollModule,
     ProgressModule,
+    ScheduleModule,
+    QualityModule,
+    SafetyModule,
+    PlantModule,
+    DocumentsModule,
     PortalsModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}

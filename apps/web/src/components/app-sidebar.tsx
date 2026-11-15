@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl";
 import {
   Activity,
   HardHat,
-  MonitorSmartphone,
   Palette,
   Settings,
   ShieldCheck,
@@ -105,18 +104,6 @@ export function AppSidebar({ companyName }: { companyName?: string }) {
           <SidebarGroupLabel>{t("groups.previews")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === "/prototype/portal"}
-                  tooltip={t("items.clientPortal")}
-                >
-                  <Link href="/prototype/portal">
-                    <MonitorSmartphone aria-hidden />
-                    <span>{t("items.clientPortal")}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip={t("items.siteApp")}>
                   <Link href="/site">

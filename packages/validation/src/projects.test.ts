@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   changeGeofenceRequestSchema,
+  createMilestoneRequestSchema,
   createProjectRequestSchema,
   createSiteRequestSchema,
   createWbsNodeRequestSchema,
@@ -10,6 +11,7 @@ import {
   projectStatusRequestSchema,
   reorderWbsRequestSchema,
   siteResponseSchema,
+  updateMilestoneRequestSchema,
   updateProjectRequestSchema,
   updateWbsNodeRequestSchema,
   wbsResponseSchema,
@@ -189,6 +191,23 @@ describe("WBS, milestone and team requests", () => {
         progress: null,
       }).progress,
     ).toBeNull();
+  });
+
+  it("keeps planning dates within 2000–2099, so one typo cannot break a schedule", () => {
+    const due = (dueDate: string) =>
+      createMilestoneRequestSchema.safeParse({ name: "Roof", dueDate }).success;
+    expect([due("2000-01-01"), due("2099-12-31")]).toEqual([true, true]);
+    expect([due("1999-12-31"), due("2100-01-01"), due("20260-01-01")]).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    expect(
+      updateMilestoneRequestSchema.safeParse({ dueDate: "2100-01-01", version: 1 }).success,
+    ).toBe(false);
+    expect(
+      createProjectRequestSchema.safeParse({ name: "Ruiru", startDate: "1990-01-01" }).success,
+    ).toBe(false);
   });
 
   it("validates milestone status requests", () => {

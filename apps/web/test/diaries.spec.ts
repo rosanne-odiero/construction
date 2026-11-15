@@ -14,20 +14,21 @@ test("records and edits a manual diary, submits and independently locks a submit
     .getByRole("navigation", { name: "Project sections" })
     .getByRole("link", { name: "Site diary", exact: true })
     .click();
-  await expect(page.getByText(/workforce is manually recorded/)).toBeVisible();
+  await expect(page.getByText(/Workforce comes from attendance/)).toBeVisible();
   await page.getByRole("button", { name: "New diary", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Date (DD/MM/YYYY, Nairobi)", { exact: true }).fill("01/10/2026");
   await dialog.getByLabel("Work performed").fill("Browser fixture: trench excavation");
+  await dialog.getByRole("radio", { name: "Typed in" }).check();
   await dialog.getByRole("button", { name: "Save draft" }).click();
   await expect(dialog).toHaveCount(0);
   const entry = page.getByRole("article").filter({ hasText: "Browser fixture: trench excavation" });
   await expect(entry).toContainText("Not recorded");
   await entry.getByRole("button", { name: "Edit draft" }).click();
-  await dialog.getByLabel("Workforce (manual)", { exact: true }).fill("0");
+  await dialog.getByLabel("Workforce count", { exact: true }).fill(" 0 ");
   await dialog.getByRole("button", { name: "Save draft" }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(entry.getByText("0", { exact: true })).toBeVisible();
+  await expect(entry.getByText("0 (typed in)", { exact: true })).toBeVisible();
   await entry.getByRole("button", { name: "Submit for review" }).click();
   await dialog.getByRole("button", { name: "Confirm" }).click();
   await expect(entry).toContainText("Awaiting review");
@@ -98,5 +99,34 @@ test("diary supports Kiswahili and a narrow viewport without horizontal scrollin
   );
   await page.getByRole("button", { name: "Shajara mpya" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  expect(await axeViolations(page)).toEqual([]);
+});
+
+test("takes the workforce from attendance by trade, with its provenance, and refreshes it on submission", async ({
+  page,
+  context,
+}) => {
+  await signInAs(context, "owner");
+  await page.goto(`/projects/${RUIRU_ID}?tab=diary`);
+  await page.getByRole("button", { name: "New diary", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Date (DD/MM/YYYY, Nairobi)", { exact: true }).fill("02/10/2026");
+  await dialog.getByLabel("Work performed").fill("Browser fixture: blockwork to gridline C");
+  await expect(dialog.getByRole("radio", { name: "From attendance" })).toBeChecked();
+  await dialog.getByRole("button", { name: "Show attendance for this day" }).click();
+  const offer = dialog.getByRole("status");
+  await expect(offer).toContainText("9 people on site from attendance (muster submitted).");
+  await expect(offer).toContainText("Mason: 5 (1 half day)");
+  await expect(offer).toContainText("General labourer: 4");
+  await dialog.getByRole("button", { name: "Save draft" }).click();
+  await expect(dialog).toHaveCount(0);
+  const entry = page.getByRole("article").filter({ hasText: "Browser fixture: blockwork" });
+  await expect(entry).toContainText("9 from attendance");
+  await expect(entry).toContainText("Mason: 5 (1 half day)");
+  await expect(entry).toContainText(/Snapshot: muster submitted, \d{2}\/\d{2}\/\d{4}/);
+  await entry.getByRole("button", { name: "Submit for review" }).click();
+  await dialog.getByRole("button", { name: "Confirm" }).click();
+  await expect(entry).toContainText("Awaiting review");
+  await expect(entry).toContainText("9 from attendance");
   expect(await axeViolations(page)).toEqual([]);
 });

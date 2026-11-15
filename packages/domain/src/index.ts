@@ -107,16 +107,39 @@ export * from "./payroll/index.js";
 export * from "./site-diary.js";
 export { PIN_LENGTH, pinProblem, PIN_PROBLEMS, type PinProblem } from "./pin.js";
 export {
+  differenceHash,
+  hammingDistance,
+  isVerifiedPhoto,
+  PHOTO_CAPTURE_METHODS,
+  PHOTO_CONTENT_TYPES,
   PHOTO_LIMITS,
   PHOTO_LOCATION_CHECKS,
+  PHOTO_PURPOSES,
+  PHOTO_SIMILARITY_CHECKS,
   PHOTO_TIME_CHECKS,
   PHOTO_TIME_SOURCES,
   PHOTO_VERIFICATION_DEFAULTS,
+  sniffPhotoType,
   verifyPhotoEvidence,
+  type PhotoCapture,
+  type PhotoCaptureMethod,
+  type PhotoContentType,
   type PhotoEvidence,
   type PhotoEvidenceInput,
   type PhotoLocationCheck,
+  type PhotoPurpose,
+  type PhotoSimilarityCheck,
   type PhotoTimeCheck,
   type PhotoTimeSource,
 } from "./photo-evidence.js";
 export * from "./procurement/index.js";
+export * from "./stores/index.js";
+export * from "./schedule/index.js";
+export * from "./spending/index.js";
+export * from "./quality/index.js";
+export * from "./valuations/index.js";
+export * from "./safety/index.js";
+export * from "./plant/index.js";
+export * from "./reports/index.js";
+export * from "./documents/index.js";
+export * from "./client-portal/index.js";

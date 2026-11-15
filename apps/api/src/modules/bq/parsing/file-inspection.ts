@@ -1,4 +1,5 @@
 import { BQ_IMPORT_LIMITS, type BqFileType, type BqImportLimits } from "@pm-buddy/types";
+import { readZipDirectory, UnsafeArchive, type ZipSummary } from "../../../common/zip-directory.js";
 
 /** Why an upload is refused before anything is stored (stable problem codes). */
 export type UploadRefusal =
@@ -45,15 +46,7 @@ export function sniffWorkbook(content: Buffer, fileName: string): BqFileType {
   );
 }
 
-export type ZipSummary = {
-  entries: number;
-  compressedBytes: number;
-  uncompressedBytes: number;
-  names: string[];
-};
-
-const EOCD = 0x06054b50;
-const CENTRAL = 0x02014b50;
+export type { ZipSummary };
 
 /**
  * Reads the zip central directory (no decompression) and refuses archives that could exhaust
@@ -62,55 +55,27 @@ const CENTRAL = 0x02014b50;
  * workbook must contain `[Content_Types].xml` and `xl/workbook.xml`; macro projects are refused.
  */
 export function inspectZip(content: Buffer, limits: BqImportLimits = BQ_IMPORT_LIMITS): ZipSummary {
-  const unsafe = (message: string) => new UploadRefused("unsafe-archive", message);
-  const searchFrom = Math.max(0, content.length - 22 - 0xffff);
-  let end = -1;
-  for (let position = content.length - 22; position >= searchFrom; position -= 1) {
-    if (content.readUInt32LE(position) === EOCD) {
-      end = position;
-      break;
-    }
+  let summary: ZipSummary;
+  try {
+    summary = readZipDirectory(content, limits);
+  } catch (error) {
+    if (error instanceof UnsafeArchive)
+      throw new UploadRefused(
+        "unsafe-archive",
+        error.message
+          .replace("The file is not a valid zip package", "The workbook is not a valid zip package")
+          .replace("ZIP64 packages", "ZIP64 workbooks")
+          .replace("The package has too many parts", "The workbook has too many parts")
+          .replace("Encrypted parts", "Encrypted workbook parts")
+          .replace("The package expands", "The workbook expands")
+          .replace("The package is compressed", "The workbook is compressed"),
+      );
+    throw error;
   }
-  if (end < 0) throw unsafe("The workbook is not a valid zip package");
-  const entries = content.readUInt16LE(end + 10);
-  const directorySize = content.readUInt32LE(end + 12);
-  const directoryOffset = content.readUInt32LE(end + 16);
-  if (entries === 0xffff || directorySize === 0xffffffff || directoryOffset === 0xffffffff)
-    throw unsafe("ZIP64 workbooks are not accepted");
-  if (entries > limits.maxArchiveEntries) throw unsafe("The workbook has too many parts");
-  if (directoryOffset + directorySize > end) throw unsafe("The zip directory is inconsistent");
-
-  let position = directoryOffset;
-  let compressedBytes = 0;
-  let uncompressedBytes = 0;
-  const names: string[] = [];
-  for (let index = 0; index < entries; index += 1) {
-    if (position + 46 > end || content.readUInt32LE(position) !== CENTRAL)
-      throw unsafe("The zip directory is inconsistent");
-    const flags = content.readUInt16LE(position + 8);
-    const compressed = content.readUInt32LE(position + 20);
-    const uncompressed = content.readUInt32LE(position + 24);
-    const nameLength = content.readUInt16LE(position + 28);
-    const extraLength = content.readUInt16LE(position + 30);
-    const commentLength = content.readUInt16LE(position + 32);
-    if (compressed === 0xffffffff || uncompressed === 0xffffffff)
-      throw unsafe("ZIP64 workbooks are not accepted");
-    if (flags & 0x1) throw unsafe("Encrypted workbook parts are not accepted");
-    const nameEnd = position + 46 + nameLength;
-    if (nameEnd > end) throw unsafe("The zip directory is inconsistent");
-    names.push(content.toString("utf8", position + 46, nameEnd));
-    compressedBytes += compressed;
-    uncompressedBytes += uncompressed;
-    if (uncompressedBytes > limits.maxUncompressedBytes)
-      throw unsafe("The workbook expands to more than 100 MB");
-    position = nameEnd + extraLength + commentLength;
-  }
-  if (uncompressedBytes / Math.max(content.length, 1) > limits.maxCompressionRatio)
-    throw unsafe("The workbook is compressed more than 100:1");
-  const lower = names.map((name) => name.toLowerCase());
+  const lower = summary.names.map((name) => name.toLowerCase());
   if (!lower.includes("[content_types].xml") || !lower.includes("xl/workbook.xml"))
     throw new UploadRefused("unsupported-file-type", "This is not an Excel workbook (.xlsx)");
   if (lower.some((name) => name.endsWith("vbaproject.bin")))
     throw new UploadRefused("macro-workbook", "Macro-enabled workbooks are not accepted");
-  return { entries, compressedBytes, uncompressedBytes, names };
+  return summary;
 }

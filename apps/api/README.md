@@ -200,8 +200,8 @@ serialized tenant transactions.
 Assignable project permissions are the shared catalogue's project-scoped permissions
 (`PROJECT_ASSIGNABLE_PERMISSIONS` in `packages/types`: `projects.*`, `bq.*`, `labour.*`,
 `attendance.*`, `payroll.prepare`/`review`, `procurement.requisition`/`approve`,
-`stores.manage`, `finance.view`, `site.diary`/`photos`, `quality`/`safety`/`plant`/
-`documents.manage`, `reports.view`).
+`stores.manage`, `finance.view`, `finance.petty_cash` (D5.4), `site.diary`/`photos`,
+`quality`/`safety`/`plant`/`documents.manage`, `reports.view`).
 Company-wide roles (`owner`, `finance`, custom roles marked company-wide) act on every
 project; other roles act only on assigned projects with role ∩ assignment. Self-membership
 discovery (including the custom role the user holds) and verified-recipient invitation
@@ -279,8 +279,6 @@ which also gives existing client assignments `portal.client`).
 
 | Method/path                             | Body                                    | Response / access                                                                                                               |
 | --------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| GET portal/client/projects              | —                                       | `{company, projects}`: assigned projects with milestone counts; `portal.client`                                                 |
-| GET portal/client/projects/:id          | —                                       | `{project, milestones, diaries}`: **approved** diaries only (30 newest); `portal.client` on the project, otherwise 403/404      |
 | GET portal/worker                       | —                                       | `{displayName, company, assignments:[{project, sites}], attendance:null, pay:null}`; `portal.worker`                            |
 | POST projects/:id/labourers/invitations | `{identifier}` (Kenyan mobile)          | 201 `{invitation}`; `labour.manage` on the project; 409 `already-member`                                                        |
 | POST auth/pin/login                     | `{identifier, pin}`                     | authentication response (PIN session)                                                                                           |
@@ -304,40 +302,224 @@ companies or accept staff invitations. Sessions record `auth_method` (`password`
 Site-diary lists now need `site.diary`, `quality.manage`, `projects.manage` or `reports.view`
 in addition to `projects.view`, so clients (who hold `projects.view`) see diaries only through
 their portal, approved ones only. Production SMS delivery still waits for D7.3 (Africa's
-Talking); in development, invitation and PIN-reset SMS go to Mailpit.
+Talking); in development, invitation and PIN-reset SMS go to Mailpit. The client portal's
+endpoints (`/portal/client/*`) are listed under "Client portal (D7.1)" below.
+
+## Client portal (D7.1)
+
+Paths are relative to `/api/v1`. Client endpoints need permissions that route to the client
+portal (`portal.client` and no staff permission; otherwise 403 `client-portal-only`) and answer
+only for projects assigned with `portal.client` (any other project ID is 404). Office endpoints of
+variations, instructions and rate build-ups refuse client members (403 `client-portal-only`).
+Database refusals are 409 `client-portal-rule` or 403 `client-portal-forbidden`, never 500.
+`?currency=KES|USD|GBP|EUR` on the client's JSON views overrides the stored display currency.
+Details: ARCHITECTURE §4.15.
+
+| Method/path                                                                                    | Body / query                                                                              | Response / access                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET portal/client/projects                                                                     | `currency`                                                                                | `{company, projects, display}`: per project outstanding/overdue, milestones, variations awaiting a decision                                                                                    |
+| GET portal/client/projects/:id                                                                 | `currency`                                                                                | `{project, progress, milestones, diaries, nextDue, photos, display}` (progress = EV ÷ BAC; `null` = not available)                                                                             |
+| GET portal/client/projects/:id/progress                                                        | `asOf`, `currency`                                                                        | `{figures, curve, baseline, bqVersion, milestones, display}`: planned vs earned value, no costs                                                                                                |
+| GET portal/client/projects/:id/photos                                                          | `cursor`, `limit`                                                                         | general photos with their checks, newest first; `GET …/photos/:photoId/image` is the metadata-free thumbnail                                                                                   |
+| GET portal/client/projects/:id/diaries                                                         | `cursor`, `limit`                                                                         | approved diaries; workforce by trade (counts)                                                                                                                                                  |
+| GET portal/client/projects/:id/statement                                                       | `currency`                                                                                | certified certificates, receipts and reversals, entries with running balance, totals                                                                                                           |
+| GET portal/client/projects/:id/statement/export/pdf\|xlsx, GET …/certificates/:valuationId/pdf | `locale` (`en`/`sw`)                                                                      | files; 30 per 10 minutes; audited; PDF ≤ 5,000 lines (422 `export-too-large`)                                                                                                                  |
+| GET portal/client/projects/:id/pay                                                             | `currency`                                                                                | `{instructions, certificates, totals, stk}` (Paybill and account reference per certificate)                                                                                                    |
+| POST portal/client/projects/:id/certificates/:valuationId/stk-push                             | `{amountMinor, phone}`                                                                    | **503 `stk-push-unavailable`** until D4.2 (after 404, 409 `nothing-outstanding`, 422 `amount-exceeds-outstanding`)                                                                             |
+| GET portal/client/projects/:id/variations[/:requestId]                                         | `currency`                                                                                | sendings with state and outcome; detail with the frozen view and `clientDigest`                                                                                                                |
+| POST portal/client/projects/:id/variations/:requestId/decision                                 | `{decision, comment, clientDigest}`                                                       | 201 detail; once (409 `already-decided`, `request-closed`, `variation-stale`); a rejection needs a comment                                                                                     |
+| GET\|PUT portal/client/preferences                                                             | `{displayCurrency}`                                                                       | `{displayCurrency, rates}`                                                                                                                                                                     |
+| GET projects/:id/client-payments                                                               | —                                                                                         | the client ledger for staff (`bq.edit`, `finance.view` or `finance.manage`)                                                                                                                    |
+| POST projects/:id/client-payments                                                              | `{id, valuationId, amountMinor, receivedOn, method, reference, note}` + `Idempotency-Key` | 201; `finance.manage`; 409 `certificate-not-certified`, `receipt-exceeds-outstanding`, `idempotency-key-reused`, `payment-id-conflict`, `too-many-client-payments`; 422 `receipt-date-invalid` |
+| POST projects/:id/client-payments/:paymentId/reverse                                           | `{id, reason}` + `Idempotency-Key`                                                        | 201; `finance.manage`; 409 `receipt-already-reversed`, `receipt-not-reversible`                                                                                                                |
+| GET projects/:id/client-payments/statement/pdf\|xlsx                                           | `locale`                                                                                  | the statement for staff                                                                                                                                                                        |
+| PUT projects/:id/client-settings                                                               | `{version, clientApprovalRequired, paymentTermsDays}`                                     | new version; `projects.manage`; 409 `version-conflict`                                                                                                                                         |
+| GET\|POST projects/:id/bq/variations/:variationId/client                                       | `{version, snapshotDigest, message}`                                                      | sendings and decisions (`bq.view`); send (`bq.edit`; 409 `already-sent`, `no-client-assigned`, `variation-stale`, `invalid-transition`)                                                        |
+| GET\|PUT client-portal/payment-instructions                                                    | `{version, paybillNumber, tillNumber, accountName, accountFormat, bankInstructions}`      | read: `config.manage`/`finance.view`/`finance.manage`; change: `config.manage` + step-up                                                                                                       |
+| GET\|POST client-portal/fx-rates                                                               | `{currency, kesPerUnit, rateDate, source}`                                                | read as above; enter: company-wide `finance.manage` or `config.manage`; 422 `fx-rate-invalid`                                                                                                  |
+
+`POST projects/:id/bq/variations/:id/approve` answers 409 `client-approval-required` when the
+project's client terms require the client's approval of the current submission first.
+
+## Supplier portal (D7.2)
+
+Paths are relative to `/api/v1`. Supplier endpoints need the `supplier` system role with
+`portal.supplier` **and an active binding** to one supplier (`supplier_portal_users`); otherwise
+403 `supplier-portal-not-linked`. They answer only for that supplier's records (any other ID is
+404); every office endpoint is 403 for a supplier member. Staff endpoints need
+`procurement.manage_suppliers` or company-wide `finance.manage`. Details: ARCHITECTURE §4.12.
+
+| Method/path                                        | Body / query                                                                                                                         | Response / access                                                                                                                                                                                                                   |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET suppliers/:supplierId/portal-users             | —                                                                                                                                    | `{supplier, users, permissions}`: invited, active and revoked contacts (history kept)                                                                                                                                               |
+| POST suppliers/:supplierId/portal-users            | `{identifier, contactName}` (email or Kenyan mobile)                                                                                 | 201 `{user}`; step-up; email/SMS link to `/supplier/join?token=…` (48 h); 409 `portal-user-exists`, `already-member`, `supplier-blocked`                                                                                            |
+| POST suppliers/:supplierId/portal-users/:id/revoke | `{version, reason}`                                                                                                                  | `{user}`; an invitation stops working, an active user loses the membership and sessions at once                                                                                                                                     |
+| GET portal/supplier                                | —                                                                                                                                    | `{company, supplier, displayName, projects, counts, outstandingMinor, permissions}`                                                                                                                                                 |
+| GET portal/supplier/lpos[/:id]                     | `projectId`, `status`, `cursor`, `limit`                                                                                             | approved LPOs (and later cancellations); detail with lines, terms, deliveries, invoices and invoiceable quantities                                                                                                                  |
+| POST portal/supplier/lpos/:id/acknowledge          | —                                                                                                                                    | the LPO detail; once per approved LPO (409 `lpo-already-acknowledged`, `lpo-not-approved`)                                                                                                                                          |
+| GET portal/supplier/deliveries                     | `projectId`, `lpoId`, `cursor`, `limit`                                                                                              | GRNs: received, rejected (with reasons) and accepted quantities; no internal notes, GPS, photos or receiver names                                                                                                                   |
+| GET portal/supplier/invoices[/:id]                 | `projectId`, `lpoId`, `status`, `cursor`, `limit`                                                                                    | supplier-facing status, totals, recorded payments, dispute reason codes, documents                                                                                                                                                  |
+| POST portal/supplier/invoices                      | `{id, lpoId, invoiceNumber, invoiceDate, etimsInvoiceNumber, lines, subtotalMinor, vatMinor, totalMinor, notes}` + `Idempotency-Key` | 201 invoice detail (`replayed`; header `Idempotency-Replayed: true` on a replay); matched at once; 409 `invoice-number-taken`, `idempotency-key-reused`, `invoice-id-conflict`, `lpo-not-approved`; 422 `invoice-date-invalid`; 429 |
+| POST portal/supplier/invoices/:id/document         | multipart `file` (PDF/JPEG/PNG/WebP, ≤ 10 MB)                                                                                        | 201 `{document}`; own open invoices, ≤ 3 from the supplier (409 `invoice-not-attachable`, `too-many-documents`)                                                                                                                     |
+| GET portal/supplier/documents/:id                  | —                                                                                                                                    | the file (own invoices' documents only)                                                                                                                                                                                             |
+| GET portal/supplier/statement                      | `projectId`, `from`, `to`                                                                                                            | opening, entries with running balance, closing, outstanding and not-yet-accepted invoices; 422 `statement-period-invalid`                                                                                                           |
+| GET portal/supplier/statement/export/pdf\|xlsx     | `projectId`, `from`, `to`, `locale` (`en`/`sw`)                                                                                      | the statement file; 30 per 10 minutes; audited                                                                                                                                                                                      |
+
+Staff see portal invoices in `GET procurement/invoices` with `source: "supplier_portal"`
+(filter `?source=supplier_portal`); `POST procurement/invoices/:id/reopen` answers 409
+`supplier-invoice-locked` for them. Database refusals on these paths are 409 `supplier-portal-rule`
+or 403 `supplier-portal-forbidden`, never 500.
+
+## Quality (D6.1)
+
+Project paths are relative to `/api/v1/projects/:projectId/quality`; company paths start with
+`/api/v1/quality`. Authentication, the selected company and the CSRF guard apply; permissions
+are the project's (role ∩ assignment). Reads need `projects.view` plus one of `quality.manage`,
+`site.diary`, `site.photos`, `projects.manage`, `reports.view` or `safety.manage` (clients and
+suppliers get 403). Every change sends the `version` it read (409 `version-conflict`); closed and
+cancelled projects are read-only (409 `project-read-only`). Lists take `cursor`, `limit` (1–100,
+default 30) and `search` (a number such as `12` or `SNG-0012`, or text).
+
+| Method / path                                                      | Input                                                                                                                                                                                        | Result / permission                                                                                                           |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| GET `/summary`                                                     | —                                                                                                                                                                                            | Counts: inspections, overdue and failed cube sets, failed slump tests, snags, completion state and DLP end                    |
+| GET / POST `/inspections`                                          | `status?`, `result?` / `{siteId, templateId, location, inspectorType, inspectorName?, inspectedOn, notes?, wbsNodeId?, scheduleActivityId?, bqItemLineageId?}`                               | `{inspections, nextCursor, permissions}` / 201 `{inspection, items, snags}`; create: `site.diary` or `quality.manage`         |
+| GET / PATCH `/inspections/:id`                                     | — / `{version, location?, inspectorType?, inspectorName?, inspectedOn?, notes?, wbsNodeId?, scheduleActivityId?, bqItemLineageId?, items?: [{id, result, note, photoIds}]}`                  | `{inspection, items, snags}`; PATCH by the author, draft only                                                                 |
+| POST `/inspections/:id/actions`                                    | `{action: submit / sign_off / return, version, reason?}`                                                                                                                                     | Submit: the author; sign-off and return (reason): `quality.manage`, not the creator or submitter                              |
+| GET / POST `/snags`                                                | `status?` (`open`, `fixed`, `closed`, `active`), `severity?`, `phase?` / `{siteId, location, description, severity, responsibleKind, responsibleName, dueOn?, inspectionItemId?, photoIds?}` | `{snags, nextCursor, counts, permissions}` / 201 `{snag}`; create: `site.diary` or `quality.manage`                           |
+| GET / PATCH `/snags/:id`                                           | — / `{version, location?, description?, severity?, responsibleKind?, responsibleName?, dueOn?}`                                                                                              | `{snag}`; PATCH: `quality.manage`, open snags only                                                                            |
+| POST `/snags/:id/actions`                                          | `{action: fix / close / reopen, version, note?, photoIds?, reason?}`                                                                                                                         | `{snag}`; fix (note and photos): `site.diary` or `quality.manage`; close and reopen (reason): `quality.manage`, not the fixer |
+| GET / POST `/cubes`                                                | `filter?` (`all`, `overdue`, `failed`) / `{siteId, element, concreteClass, castOn, cubesPerAge?, batchReference?, notes?}`                                                                   | `{cubeSets, nextCursor, counts, permissions}` / 201 `{cubeSet, history}`                                                      |
+| GET `/cubes/:id`; POST `/cubes/:id/results`                        | — / `{ageDays: 7 or 28, testedOn, strengths: ["25.5", …], laboratory?, reportReference?}`                                                                                                    | `{cubeSet, history}`; one original result per age                                                                             |
+| POST `/cubes/:id/results/:resultId/corrections`                    | `{testedOn, strengths, laboratory?, reportReference?, reason}`                                                                                                                               | `{cubeSet, history}`; `quality.manage`; supersedes the original once                                                          |
+| POST `/cubes/:id/void`                                             | `{version, reason}`                                                                                                                                                                          | `{cubeSet, history}`; `quality.manage`                                                                                        |
+| GET / POST `/slump-tests`; GET `/slump-tests/:id`                  | `outcome?` / `{siteId, testedOn, element, concreteClass?, cubeSetId?, targetMm, toleranceMm, measuredMm, notes?}`                                                                            | `{slumpTests, nextCursor, permissions}` / 201 `{slumpTest, history}`                                                          |
+| POST `/slump-tests/:id/corrections`                                | the test fields plus `reason`                                                                                                                                                                | `{slumpTest, history}`; `quality.manage`                                                                                      |
+| GET / POST `/completion`                                           | — / `{kind: practical / final, completionDate, dlpMonths? (practical), exceptionReason?, notes?}`                                                                                            | `{practical, final, history, dlp, readiness, defaultDlpMonths, permissions}`; propose: `projects.manage`                      |
+| POST `/completion/:id/actions`                                     | `{action: certify / withdraw, version, reason?}`                                                                                                                                             | Certify: `quality.manage`, not the proposer; withdraw (reason): `projects.manage`                                             |
+| GET / POST `/api/v1/quality/templates`                             | `includeRetired?` / `{name, category, description?, items: [{text}]}`                                                                                                                        | `{templates, permissions}` / 201 `{template, history}`; read: any quality reader; create: `quality.manage` on some project    |
+| POST `/api/v1/quality/templates/starter`                           | `{language: en / sw}`                                                                                                                                                                        | `{created}`: the seven starter templates (existing names skipped)                                                             |
+| GET `/api/v1/quality/templates/:id`; POST `…/versions`, `…/retire` | — / template content plus `expectedVersion` / `{expectedVersion}`                                                                                                                            | `{template, history}`; a revision or retirement appends the next version                                                      |
+| GET / PUT `/api/v1/quality/settings`                               | — / `{dlpMonths, cubeOverdueGraceDays, version}`                                                                                                                                             | `{settings}`; read: any quality reader; change: `config.manage`                                                               |
+
+Diary workforce: `GET /api/v1/projects/:projectId/diaries/attendance?siteId=&date=` previews the
+attendance snapshot (by trade, total, muster state); diaries created or edited with
+`workforceSource: "attendance"` store it, and submitting refreshes it (the version advances by
+two). The database recomputes the snapshot and refuses a forged one.
+
+Rules: cube results follow `KE-CUBE-1` and slump tests `KE-SLUMP-1` (COMPLIANCE-REVIEW
+CR-QA-01/02, ARCHITECTURE §4.7); the defects liability period defaults to 6 months (1–24,
+CR-QA-03). Results, template versions and certified, signed-off or closed records are immutable
+in the database. Problem codes are listed in ARCHITECTURE §4.7.
+
+## Schedule (D6.2)
+
+All paths are relative to `/api/v1/projects/:projectId/schedule`; authentication, the selected company and the CSRF guard apply. Reads need `projects.view` and every change `projects.manage` on the project (role ∩ assignment); closed and cancelled projects are read-only (409 `project-read-only`). Design: [ARCHITECTURE §4.6](../../docs/ARCHITECTURE.md#46-schedule-d62).
+
+| Method / path                                | Input                                                                                                                       | Result                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET                                          | `baselineId?`                                                                                                               | The computed schedule: calendar, start, data date, items (tasks and milestones with planned, late and actual dates, float, critical flag, baseline dates, variance, progress, `permissions`), dependencies (driving, critical), finish, compared baseline, project variance, items removed since the baseline, duration-weighted progress, schedule `permissions` |
+| PUT `/calendar`                              | `{workingWeekdays, includePublicHolidays, version}` (version 0 the first time)                                              | `{calendar}`                                                                                                                                                                                                                                                                                                                                                      |
+| POST `/activities`                           | `{code, name, durationDays, wbsNodeId?, bqItemLineageId?, startNoEarlierThan?}`                                             | 201 `{item}`                                                                                                                                                                                                                                                                                                                                                      |
+| PATCH `/activities/:activityId`              | any of the above plus `version`                                                                                             | `{item}`                                                                                                                                                                                                                                                                                                                                                          |
+| PUT `/activities/:activityId/progress`       | `{version, actualStart, actualFinish, basis, percentComplete?}` or quantities `{quantityDone, quantityTotal, quantityUnit}` | `{item}`                                                                                                                                                                                                                                                                                                                                                          |
+| DELETE `/activities/:activityId?version=`    | —                                                                                                                           | `{message}`; unstarted and not in the delay log only                                                                                                                                                                                                                                                                                                              |
+| POST `/dependencies`                         | `{predecessor: {kind, id}, successor: {kind, id}, type, lagDays}` (`kind` `task` or `milestone`)                            | 201 `{dependency}`; 409 `schedule-cycle`, `dependency-exists`, `milestone-cancelled`                                                                                                                                                                                                                                                                              |
+| PATCH / DELETE `/dependencies/:dependencyId` | `{type?, lagDays?, version}` / `?version=`                                                                                  | `{dependency}` / `{message}`                                                                                                                                                                                                                                                                                                                                      |
+| GET / POST `/baselines`                      | — / `{name, reason}`                                                                                                        | `{baselines, permissions}` / 201 `{baseline, items}`                                                                                                                                                                                                                                                                                                              |
+| GET `/baselines/:baselineId`                 | —                                                                                                                           | `{baseline, items}`                                                                                                                                                                                                                                                                                                                                               |
+| GET / POST `/delays`                         | — / `{cause, startDate, endDate, workingDaysLost, description, activityIds, siteDiaryId?, claimFlag?}`                      | `{delays, totals, permissions}` / 201 `{delay, history}`                                                                                                                                                                                                                                                                                                          |
+| GET `/delays/:delayId`                       | —                                                                                                                           | `{delay, history}` (every version, newest first)                                                                                                                                                                                                                                                                                                                  |
+| POST `/delays/:delayId/amend`, `/withdraw`   | the delay content plus `{version, reason}` / `{version, reason}`                                                            | `{delay, history}`                                                                                                                                                                                                                                                                                                                                                |
+
+Planned dates are computed on every read (CPM at today's Nairobi date) and never stored. Baselines and delay versions are append-only in the database. Problem codes are listed in ARCHITECTURE §4.6.
+
+## Measurement and valuations (D6.3 part A)
+
+Authentication, the selected company and the CSRF guard apply; permissions are the project's
+(role ∩ assignment; company-wide roles hold their role everywhere). Lists of who may do what are
+in ARCHITECTURE §4.10; money is integer KES minor units, quantities decimal strings.
+
+| Method / path                                                               | Input                                                                                                                                                             | Result and permission                                                                                                                                                                      |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET `/api/v1/projects/:projectId/measurements`                              | `bqItemLineageId?`, `state?`                                                                                                                                      | `{measurements, permissions}`; `MEASUREMENT_READ_PERMISSIONS`                                                                                                                              |
+| GET `…/measurements/items`                                                  | `search?`, `billLineageId?`, `cursor?`, `limit?`                                                                                                                  | The measurement sheet: `{project, bqVersion, bills, items, page, totals, permissions}`                                                                                                     |
+| POST `…/measurements`                                                       | `{id?, bqItemLineageId, measuredOn, quantityToDate, note?, overMeasureReason?, correctsMeasurementId?, correctionReason?, photoIds?}`; optional `Idempotency-Key` | 201 `{measurement, replayed}` (200 + `Idempotency-Replayed: true` on a replay); `site.diary` or `bq.edit`                                                                                  |
+| GET `…/measurements/:measurementId`                                         | —                                                                                                                                                                 | `{measurement, project, history}`                                                                                                                                                          |
+| POST `…/measurements/:measurementId/photos`                                 | `{photoIds}`                                                                                                                                                      | `{measurement, replayed}`; a recorder, pending only, ≤ 6 photos                                                                                                                            |
+| POST `…/measurements/:measurementId/approve`, `/reject`                     | `{}` / `{reason}`                                                                                                                                                 | `{measurement, replayed}`; `bq.edit`, not the measurer; approval needs a photo                                                                                                             |
+| GET `/api/v1/measurements/pending`                                          | `projectId?`                                                                                                                                                      | `{entries, truncated}`: measurements the caller may review                                                                                                                                 |
+| GET / POST `/api/v1/projects/:projectId/valuations`                         | — / `{kind, releaseStage?, valuationDate, notes?, materialsFromStores?}`                                                                                          | `{project, contractSum, settings, valuations, retention, certified, completions, permissions}` / 201 `{valuation}`; read: `bq.edit`, `finance.view` or `finance.manage`; create: `bq.edit` |
+| PUT `/api/v1/projects/:projectId/contract-settings`                         | `{version, retentionPercent, retentionCapPercent, vatPercent, materialsPercent, practicalReleasePercent}`                                                         | `{project, settings}`; `finance.manage`                                                                                                                                                    |
+| GET `/api/v1/projects/:projectId/earned-value`                              | `asOf?`                                                                                                                                                           | `{project, dataDate, bqVersion, baseline, figures, curve, curveTruncated, values, notes}`; `finance.view` or `finance.manage`                                                              |
+| GET `/api/v1/projects/:projectId/cost-to-complete`                          | `billLineageId?`, `search?`, `cursor?`, `limit?`                                                                                                                  | `{project, bqVersion, budget, totals, bills, bill, items, page, notOnBqItems}`; `finance.view` or `finance.manage`                                                                         |
+| GET `/api/v1/valuations`                                                    | —                                                                                                                                                                 | `{projects, approvalQueue}` (the projects the caller measures or values on)                                                                                                                |
+| GET / PATCH `/api/v1/valuations/:id`                                        | — / `{version, valuationDate?, notes?, materialsFromStores?}`                                                                                                     | `{valuation}` (a draft's figures are a preview); PATCH: `bq.edit`, drafts only                                                                                                             |
+| POST / DELETE `/api/v1/valuations/:id/materials[/:lineId?version=]`         | `{version, bqItemLineageId, description, unit?, quantity, amountMinor, reference?}`                                                                               | `{valuation}`; `bq.edit`, interim drafts; 409 `materials-exceed-remaining`                                                                                                                 |
+| POST / DELETE `/api/v1/valuations/:id/adjustments[/:adjustmentId?version=]` | `{version, kind, description, amountMinor}` (signed by kind)                                                                                                      | `{valuation}`; `bq.edit`, interim drafts; 409 `recovery-exceeds-advance`                                                                                                                   |
+| POST `/api/v1/valuations/:id/submit`                                        | `{version}`                                                                                                                                                       | `{valuation}` with the frozen figures, lines and `digest`; `bq.edit`                                                                                                                       |
+| POST `/api/v1/valuations/:id/certify`                                       | `{version, digest}`                                                                                                                                               | `{valuation}` (`IPC-NNNN`); `finance.manage` + step-up, not a contributor; 409 `valuation-stale`                                                                                           |
+| POST `/api/v1/valuations/:id/return`, `/cancel`                             | `{version, reason}`                                                                                                                                               | `{valuation}`; return: `finance.manage`; cancel: a preparer or certifier; certified valuations never change                                                                                |
+| GET `/api/v1/valuations/:id/export/pdf?locale=en\|sw`, `/export/xlsx`       | —                                                                                                                                                                 | A4 PDF or Excel generated on demand ("NOT CERTIFIED" until certified); certificate readers; rate-limited and audited                                                                       |
+
+Rule `KE-VAL-1` (COMPLIANCE-REVIEW CR-VAL-01–05), retention release, materials on site, EVM
+formulas and problem codes: ARCHITECTURE §4.10.
 
 ## Site photos (D6.1, Phase 6 increment 2)
 
-| Method / path                                       | Input                                                              | Result / permission                                                                                                             |
-| --------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| GET `projects/:projectId/photos`                    | `siteId?`, `diaryId?`, `cursor?`, `limit?` (1–60, default 24)      | `{photos, nextCursor}`; `projects.view` plus `site.photos`, `site.diary`, `quality.manage`, `projects.manage` or `reports.view` |
-| POST `projects/:projectId/photos`                   | multipart: `file` (JPEG ≤ 15 MB), `siteId`, `diaryId?`, `caption?` | 201 `{photo}`; `site.photos`; closed/cancelled projects read-only                                                               |
-| GET `projects/:projectId/photos/:photoId/thumbnail` | —                                                                  | JPEG ≤ 960 px, no metadata; same read access                                                                                    |
-| GET `projects/:projectId/photos/:photoId/original`  | —                                                                  | The uploaded JPEG, byte for byte; same read access                                                                              |
+| Method / path                                       | Input                                                                                                                                                                | Result / permission                                                                                                             |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| GET `projects/:projectId/photos`                    | `siteId?`, `diaryId?`, `cursor?`, `limit?` (1–60, default 24)                                                                                                        | `{photos, nextCursor}`; `projects.view` plus `site.photos`, `site.diary`, `quality.manage`, `projects.manage` or `reports.view` |
+| POST `projects/:projectId/photos/capture-tickets`   | `{siteId}`                                                                                                                                                           | 201 `{ticket: {id, siteId, issuedAt, useBy}}`; `site.photos`; 600 per user per hour                                             |
+| POST `projects/:projectId/photos`                   | multipart: `file` (JPEG or HEIC ≤ 15 MB), `siteId`, `diaryId?`, `caption?`, `purpose?`; in-app: `captureTicketId`, `capturedAt`, `latitude`/`longitude`/`accuracyM`? | 201 `{photo}`; `site.photos`; closed/cancelled projects read-only                                                               |
+| GET `projects/:projectId/photos/:photoId/thumbnail` | —                                                                                                                                                                    | JPEG ≤ 960 px, no metadata; same read access                                                                                    |
+| GET `projects/:projectId/photos/:photoId/original`  | —                                                                                                                                                                    | The uploaded JPEG or HEIC, byte for byte, with its own content type; same read access                                           |
 
-The position and capture time come **only from the photo's EXIF** (`photo-metadata.ts`,
-`exif-reader@2.0.3` on the EXIF block extracted by `sharp@0.35.5`): capture time prefers the
-camera time with its offset, then the GPS clock, then camera time assumed to be Nairobi
-(`timeSource: assumed_nairobi`). `verifyPhotoEvidence` (`packages/domain`) checks the location
+**Only an in-app capture can be verified** (THREAT_MODEL A-13). The web camera screen opens a
+capture ticket (`photo_capture_tickets`; the database sets the owner and `issued_at`), grabs a
+frame from the live camera and sends the ticket, the phone's shutter time (`timeSource: device`)
+and the browser's GPS fix with its accuracy. The ticket must be the uploader's own for that site
+and unused (422 `capture-ticket-invalid`, 409 `capture-ticket-used`). An **imported** file sends
+none of these: its position and time come only from its EXIF (`photo-metadata.ts`,
+`exif-reader@2.0.3` on the EXIF block extracted by `sharp@0.35.5`; capture time prefers the
+camera time with its offset, then the GPS clock, then camera time assumed to be Nairobi,
+`timeSource: assumed_nairobi`). `verifyPhotoEvidence` (`packages/domain`) checks the location
 against the site's geofence version in force at capture (30 m tolerance; distance recorded when
-outside) and the time against the upload (≤ 10 minutes ahead, ≤ 72 hours old, and the diary's
-Nairobi date when attached). `verified` = location inside and time ok; otherwise the reasons are
-stored (`missing`, `outside`, `no_geofence`, `future`, `stale`, `diary_mismatch`).
+outside; an in-app fix coarser than 50 m is `low_accuracy`) and the time: in-app, the shutter
+time must fall after the ticket (`outside_window`, 10 minutes' allowance) and the upload within
+30 minutes of it (`stale`); imported, ≤ 10 minutes ahead and ≤ 72 hours old; either way the
+diary's Nairobi date when attached. Every photo also gets a 64-bit **difference hash** of its
+upright thumbnail: within 6 bits of an earlier company photo uploaded to another project or on
+another day, it is `similar` (the match and the distance are stored; its ID is shown only for a
+general photo of the same project). `verified` = in-app, location inside, time ok and unique;
+an imported photo is never verified, whatever its EXIF says.
 
-Uploads are refused unless they are JPEG by signature (415 `unsupported-file-type`) and decode
-within 50 megapixels (422 `invalid-image`); the guard refuses bodies over 15 MB before reading
-(413 `payload-too-large`) and limits 240 uploads per user per hour. The malware hook runs. The
-original is stored privately with its SHA-256 and a fresh, rotated, metadata-free thumbnail
-beside it (`tenants/:tenant/projects/:project/photos/:id/…`); the same file twice in a project
-is 409 `photo-duplicate`. Photos attach only to a **draft** diary of the same site (409
+Uploads are refused unless they are JPEG or HEVC-coded HEIF (HEIC) by signature (415
+`unsupported-file-type`) and decode within 50 megapixels (422 `invalid-image`). sharp's libvips
+has no HEVC decoder, so HEIC is decoded in a worker thread (`heic.worker.ts`, `libheif-js@1.23.5`,
+WebAssembly, LGPL-3.0) with a time limit and at most two at once (503 `photo-decoder-busy` when
+eight more wait). The worker's heap cap does not cover WebAssembly memory and this libheif build
+has its own size limits switched off, so before decoding the worker checks **every** image size
+the file declares (`ispe`: main image, alpha layer, grid tiles, overlays) against the 50-megapixel
+limit and refuses images with an alpha layer (camera photos have none). The guard refuses
+bodies over 15 MB before reading (413 `payload-too-large`) and limits 240 uploads per user per
+hour. The malware hook runs. The original is stored privately as uploaded (`original.jpg` or
+`original.heic`) with its SHA-256 and a fresh, upright, metadata-free JPEG thumbnail beside it
+(`tenants/:tenant/projects/:project/photos/:id/…`); the same file twice in a project is 409
+`photo-duplicate`. Photos attach only to a **draft** diary of the same site (409
 `diary-not-draft`), so approved diaries stay locked. Rows are append-only (database CHECKs bind
-`verified` to the checks, keys to the tenant/project/photo, and the runtime role cannot update
-or delete). Audit `photo.uploaded` records outcomes only, never coordinates, captions or names.
-Images are served with `nosniff` and a sandboxing CSP.
+`verified` to the capture method and checks, a ticket to an in-app photo, the similar photo to
+`similar`, keys to the tenant/project/photo and content type; the guard trigger requires the
+reuse check and the ticket owner; the runtime role cannot update or delete). Migration
+`20261203090000_photo_capture_evidence` reclassified earlier photos as imported and not
+checked, so none of them stays verified. Audit `photo.uploaded` records outcomes only, never
+coordinates, captions or names. Images are served with `nosniff` and a sandboxing CSP.
 
-Limits: a web upload cannot prove in-app capture, and EXIF can be edited, so the badge means
-"metadata consistent", not proof (THREAT_MODEL A-13 also wants site-app capture and perceptual
-reuse detection, both later). Thumbnails are generated in the API process; HEIC is not accepted.
+Limits: a browser cannot attest the device, so a crafted client could send any picture and
+position with a valid ticket; the badge is strong evidence for review, not proof (the Android
+site app adds device keys and attestation). The reuse check only finds photos already in
+PM-Buddy. HEVC is a patented codec: decoding HEIC in a commercial service needs a licence review
+before go-live. Thumbnails are generated in the API process.
 
 ## Site diary foundation (D6.1, Phase 6 increment 1)
 
@@ -355,8 +537,10 @@ through `AccessPolicy` (role ∩ project assignment), not role names.
 Dates are valid `YYYY-MM-DD` Nairobi calendar days and may not be future-dated.
 `workPerformed` is required (1–6,000 trimmed characters); weather/delays are nullable
 strings (250/2,000 characters); workforce is a nullable integer from 0 to 100,000.
-Null means unknown, not zero. `workforceSource` is always `manual`: there is no
-attendance integration yet. `reason` is required only for rejection (3–500 characters).
+Null means unknown, not zero. Since D6.1 (quality) `workforceSource` is `manual` (the
+count as sent) or `attendance` (the count is not sent: the server stores a snapshot of attendance
+on the diary's site and date by trade, with the muster state and time; see "Quality" below).
+`reason` is required only for rejection (3–500 characters).
 Create/update/action schemas are strict and exported from `@pm-buddy/validation`.
 
 The lifecycle is `draft → submitted → approved` or `submitted → rejected → draft`.
@@ -375,8 +559,9 @@ Problem codes: 409 `diary-date-taken`, `diary-future-date`, `diary-not-draft`,
 
 Web entry points: `/diary` (accessible project picker) and
 `/projects/:projectId?tab=diary`; legacy `/soon/diary` redirects to `/diary`.
-Offline/site-app capture, photo verification, inspections, tests, snags, practical
-completion, schedules and valuations are not implemented by this increment.
+Photo verification (increment 2), the schedule (D6.2), quality with the attendance
+workforce (D6.1 quality) and measurement and valuations (D6.3 part A) were added later;
+offline/site-app capture remains.
 
 ## BQ import, viewer and exports (D2.2)
 
@@ -427,22 +612,22 @@ Paths under `projects/:id/bq` need `bq.view` to read, `bq.edit` to change (close
 projects are read-only) and `bq.approve_variation` plus MFA verified within five minutes to
 approve. Changes send the record's `version` (409 `version-conflict`).
 
-| Method/path                                    | Body                                     | Response / notes                                                                   |
-| ---------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------- |
-| GET versions                                   | —                                        | `{versions}` newest first (source, parent, variation, approval, totals)            |
-| GET versions/compare?from=&to=                 | —                                        | items added/removed/changed, bill subtotals, overall difference                    |
-| GET versions/:versionId/bills/:billId          | —                                        | `{bill, items}` of any version of this BQ (a variation's base)                     |
-| POST versions/:versionId/approve               | `{version}`                              | approves the imported draft as the baseline; not the importer (403)                |
-| GET contract-sum                               | —                                        | original, approved variations, revised, pending (with VAT)                         |
-| GET/POST instructions, GET/PATCH …/:id         | instruction fields (`status` on PATCH)   | the AI/EI register; 409 `instruction-number-taken`                                 |
-| GET variations?status=, POST variations        | `{instructionId, title, description?}`   | 409 `baseline-not-approved`, `instruction-closed`                                  |
-| GET/PATCH variations/:id                       | `{title?, description?, instructionId?}` | detail: lines, totals, projection, snapshot, decision, history, actions            |
-| PUT variations/:id/lines                       | `{lines, version}`                       | adjust / omit / add lines priced against the base; 400 `variation-line-invalid`    |
-| POST variations/:id/submit                     | `{version}`                              | freezes the snapshot digest; 409 `variation-empty`, `variation-stale`              |
-| POST variations/:id/approve                    | `{version, snapshotDigest}`              | creates the next BQ version atomically; 409 `variation-stale`; 403 `maker-checker` |
-| POST variations/:id/reject                     | `{version, snapshotDigest, reason}`      | `bq.approve_variation`, not the maker                                              |
-| POST variations/:id/reopen, …/cancel, …/rebase | `{version}` (`reason` to cancel)         | rejected → draft; draft → cancelled; stale → draft on the newest version           |
-| GET/PUT/DELETE items/:lineageId/rate-buildup   | `{buildupVersionId}` on PUT              | link a current-version item to a build-up version; 422 `unit-mismatch`             |
+| Method/path                                    | Body                                     | Response / notes                                                                             |
+| ---------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| GET versions                                   | —                                        | `{versions}` newest first (source, parent, variation, approval, totals)                      |
+| GET versions/compare?from=&to=                 | —                                        | items added/removed/changed, bill subtotals, overall difference                              |
+| GET versions/:versionId/bills/:billId          | —                                        | `{bill, items}` of any version of this BQ (a variation's base)                               |
+| POST versions/:versionId/approve               | `{version}`                              | approves the imported draft as the baseline; not the importer (403)                          |
+| GET contract-sum                               | —                                        | original, approved variations, revised, pending (with VAT)                                   |
+| GET/POST instructions, GET/PATCH …/:id         | instruction fields (`status` on PATCH)   | the AI/EI register (D8.4: the same log; `open` = not closed); 409 `instruction-number-taken` |
+| GET variations?status=, POST variations        | `{instructionId, title, description?}`   | 409 `baseline-not-approved`, `instruction-closed`                                            |
+| GET/PATCH variations/:id                       | `{title?, description?, instructionId?}` | detail: lines, totals, projection, snapshot, decision, history, actions                      |
+| PUT variations/:id/lines                       | `{lines, version}`                       | adjust / omit / add lines priced against the base; 400 `variation-line-invalid`              |
+| POST variations/:id/submit                     | `{version}`                              | freezes the snapshot digest; 409 `variation-empty`, `variation-stale`                        |
+| POST variations/:id/approve                    | `{version, snapshotDigest}`              | creates the next BQ version atomically; 409 `variation-stale`; 403 `maker-checker`           |
+| POST variations/:id/reject                     | `{version, snapshotDigest, reason}`      | `bq.approve_variation`, not the maker                                                        |
+| POST variations/:id/reopen, …/cancel, …/rebase | `{version}` (`reason` to cancel)         | rejected → draft; draft → cancelled; stale → draft on the newest version                     |
+| GET/PUT/DELETE items/:lineageId/rate-buildup   | `{buildupVersionId}` on PUT              | link a current-version item to a build-up version; 422 `unit-mismatch`                       |
 
 The company library is at `rate-buildups` (`GET`, `POST`), `rate-buildups/:id` (`GET`, `PUT`
 appends a version) and `rate-buildups/:id/versions/:n`. Reading needs `bq.view` and changing
@@ -612,6 +797,148 @@ D4.1 payroll reads **approved** periods only, and never recomputes them:
   becoming normal time, or a half day becoming a full day). Payroll treats them like any other
   signed delta; the original period is never reopened.
 
+## Health and safety (D8.2)
+
+Project paths are relative to `/api/v1/projects/:projectId/safety`; company paths start with
+`/api/v1/safety`. Authentication, the selected company and the CSRF guard apply; permissions are
+the project's (role ∩ assignment). Reads need `projects.view` plus one of `safety.manage`,
+`site.diary` or `projects.manage` (clients, suppliers, labourers, QS, finance and consultants get
+403). "Recorder" = `site.diary` or `safety.manage`; "manager" = `safety.manage`. Names of people
+in incidents, injury codes and who was treated are returned only to managers (others get counts,
+`restricted` or `null`). Every change sends the `version` it read (409 `version-conflict`);
+closed and cancelled projects are read-only (409 `project-read-only`). Lists take `limit` (1–100)
+and `cursor`; most take `search` (a number such as `12` or `INC-0012`, or text). Design:
+[ARCHITECTURE §4.9](../../docs/ARCHITECTURE.md#49-health-and-safety-d82).
+
+| Method / path                                                                | Input                                                                                                                                                                                                                   | Result / permission                                                                                                                                       |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET `/summary`, GET `/options`                                               | —                                                                                                                                                                                                                       | Counts (incidents, actions, flagged labourers, talks, PPE due, first-aid attention) and permission flags; staff, gangs and induction topics for the forms |
+| GET / POST `/inductions`; POST `/inductions/:id/void`                        | `siteId?`, `personKind?`, `status?` / `{siteId, personKind, labourerId? \| userId? \| visitorName?, visitorOrganisation?, inductedOn, inductorId, topics, acknowledgement, notes?}` / `{version, reason}`               | `{inductions, nextCursor, permissions}` / 201 `{induction}`; record: recorder; void: manager                                                              |
+| GET `/induction-status`                                                      | `siteId`, `filter?` (`all`, `not_inducted`, `flagged`), `search?`                                                                                                                                                       | `{siteId, lookbackDays, from, rows (labourer, gang, state, inductedOn, validUntil, flagged, uninductedDays), counts, nextCursor}`                         |
+| GET / POST `/talks`; GET / PUT `/talks/:id`                                  | `siteId?`, `status?` / `{siteId, heldOn, topic, presenterId, durationMinutes?, notes?, photoId?, otherAttendees?, gangIds?, labourerIds?, confirm?}`                                                                    | `{talks, nextCursor, permissions}` / 201 `{talk}`; recorder; PUT on drafts only                                                                           |
+| POST `/talks/:id/actions`                                                    | `{version, action: confirm / cancel, reason?}`                                                                                                                                                                          | `{talk}`; confirm locks it (needs attendees); cancel needs a reason                                                                                       |
+| GET / POST `/ppe`; POST `/ppe/:id/return`, `/ppe/:id/void`                   | `status?` (incl. `due`), `item?`, `siteId?`, `labourerId?` / `{siteId, labourerId, item, size?, quantity, issuedOn, replacesIssueId?}` / `{version, returnedOn, condition}` / `{version, reason}`                       | `{issues, nextCursor, counts, permissions}` / 201 `{issue}`; issue and return: recorder; void: manager                                                    |
+| GET / POST `/incidents`                                                      | `status?` (incl. `open`), `kind?`, `siteId?` / `{siteId, kind, severity, occurredAt, location, description, immediateActions?, firstAidGiven, people, photoIds?, followUpOfId?}`                                        | `{incidents, nextCursor, counts, permissions}` / 201 `{incident}`; report: recorder                                                                       |
+| GET / PATCH `/incidents/:id`                                                 | — / `{version, kind?, severity?, occurredAt?, location?, description?, immediateActions?, firstAidGiven?, people?}`                                                                                                     | `{incident}` with people (or restricted counts), photos, actions, treatments, `closeBlockers` and `permissions`; PATCH: manager, open incidents           |
+| POST `/incidents/:id/investigation`, `/regulator`, `/close`, `/void`         | `{version, rootCauseCategory, rootCause, contributingFactors?}` / `{version, decision: notified / not_notifiable, notifiedOn?, reference?, reason?}` / `{version, closureNote?, noActionReason?}` / `{version, reason}` | `{incident}`; manager. Close: 409 `incident-close-blocked` until no blocker remains; then locked                                                          |
+| POST `/incidents/:id/photos`                                                 | `{version, photoIds}` (site photos of the incident's site)                                                                                                                                                              | `{incident}`; recorder, open incidents                                                                                                                    |
+| GET / POST `/corrective-actions`; GET / PATCH `/corrective-actions/:id`      | `status?` (incl. `active`, `overdue`), `incidentId?`, `mine?` / `{source, incidentId? \| inspectionId? \| toolboxTalkId?, description, ownerId, dueOn}` / `{version, description?, ownerId?, dueOn?}`                   | `{actions, nextCursor, counts, permissions}` (overdue first) / 201 `{action}`; raise and change: manager                                                  |
+| POST `/corrective-actions/:id/actions`                                       | `{version, action: done / verify / reject / cancel, note?, reason?}`                                                                                                                                                    | `{action}`; done: the owner; verify and reject (reason): manager, not the owner nor who marked it done; cancel (reason): manager                          |
+| GET `/first-aid`                                                             | `siteId?`                                                                                                                                                                                                               | `{kits, firstAiders, treatments, nextCursor, kitCheckIntervalDays, counts, permissions}`                                                                  |
+| POST `/first-aid/kits`, `/kits/:id/checks`, `/kits/:id/retire`               | `{siteId, label, location?}` / `{checkedOn, outcome, expiresOn, notes?}` / `{version, reason}`                                                                                                                          | Kits: manager; checks: recorder                                                                                                                           |
+| POST `/first-aid/first-aiders`, `/first-aiders/:id/remove`                   | `{siteId, labourerId? \| userId?, certificateExpiresOn, certificateReference?}` / `{version, reason}`                                                                                                                   | manager                                                                                                                                                   |
+| POST `/first-aid/treatments`, `/treatments/:id/void`, `/treatments/:id/link` | `{siteId, treatedAt, labourerId? \| personName?, injuryType, treatment, referral, firstAiderId?, incidentId?}` / `{version, reason}` / `{version, incidentId}`                                                          | Record: recorder; void and link: manager                                                                                                                  |
+| GET `/api/v1/safety/overview`                                                | —                                                                                                                                                                                                                       | The caller's readable projects with their counts                                                                                                          |
+| GET / PUT `/api/v1/safety/settings`                                          | — / `{inductionTopics, inductionValidityDays, inductionLookbackDays, kitCheckIntervalDays, ppeReplacementDays, version}`                                                                                                | `{settings}`; read: any safety reader; change: `config.manage`                                                                                            |
+
+Rules: induction flags are read from attendance and never block it; PPE is a register (no stores
+movement); a regulator decision is required before closing serious or fatal injuries and dangerous
+occurrences (COMPLIANCE-REVIEW CR-HS-01). Closed incidents, confirmed talks, recorded inductions and
+kit checks are immutable in the database. Problem codes are listed in ARCHITECTURE §4.9.
+
+## Plant and equipment (D8.3)
+
+Company paths start with `/api/v1/plant`; the project tab with `/api/v1/projects/:projectId/plant`.
+Authentication, the selected company and the CSRF guard apply; permissions are per project (role ∩
+assignment). Reads need `projects.view` plus one of `plant.manage`, `site.diary`,
+`projects.manage`, `stores.manage`, `finance.view` or `finance.manage` (clients, suppliers,
+consultants and labourers get 403); records on projects the caller cannot read are left out.
+"Recorder" = `site.diary` or `plant.manage` on the site's project (fuel also `stores.manage`);
+"manager" = `plant.manage` on the item's project (anywhere while it is in the yard). Hire rates and
+estimates are `null` without `plant.manage`, `finance.view` or `finance.manage`. Readings and litres
+are decimal strings with one decimal place, the standard consumption with two. Usage and fuel
+creates and corrections need an `Idempotency-Key` header and a client `id` (offline-ready). Design:
+[ARCHITECTURE §4.11](../../docs/ARCHITECTURE.md#411-plant-and-equipment-d83).
+
+| Method / path                                                          | Input                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET `/plant`, GET `/plant/alerts`                                      | `status?` (incl. `active`), `category?`, `ownership?`, `projectId?`, `attention?`, `search?`, `cursor?`, `limit?` / `kind?`, `projectId?`                                                                                                                                                       |
+| GET / PUT `/plant/settings`                                            | — / `{fuelVariancePercent, fuelMinHours, fuelMinKm, idleHireDays, hireEndingDays, serviceDueSoonPercent, certificateCategories, version}` (`config.manage`)                                                                                                                                     |
+| GET `/plant/options`, POST `/plant`                                    | — / `{code, name, category, quantity?, makeModel?, registration?, ownership, supplierId?, lpoId?, hireRateMinor?, hireRateUnit?, hireStartOn?, hireEndOn?, meterType, fuelType, standardConsumption?, openingOn, openingReading?, serviceEvery?, serviceEveryDays?, notes?, siteId?}` (manager) |
+| GET / PATCH `/plant/:id`                                               | — / the editable fields + `version` (manager)                                                                                                                                                                                                                                                   |
+| POST `/plant/:id/moves`, `/plant/:id/close`                            | `{version, siteId \| null, movedOn, reason?}` / `{version, action: off_hire / dispose, closedOn, reason}` (manager)                                                                                                                                                                             |
+| POST `/plant/:id/operators`, `/operators/:assignmentId/end`            | `{projectId, kind, labourerId? \| userId?, fromOn, toOn?, certificateRef?, certificateExpiresOn?}` / `{version, toOn}` (manager)                                                                                                                                                                |
+| GET / POST `/plant/:id/usage`                                          | `cursor?`, `limit?` / `{id, usedOn, siteId, dayStatus, startReading?, endReading?, operatorLabourerId? \| operatorUserId?, bqItemLineageId? \| costCodeId?, notes?, capturedAt}` (recorder)                                                                                                     |
+| POST `/plant/:id/usage/:logId/corrections`                             | `{action: correct, id, reason, capturedAt, …usage values}` or `{action: void, id, reason, capturedAt}` (recorder and manager or the original recorder)                                                                                                                                          |
+| GET / POST `/plant/:id/fuel`                                           | `cursor?`, `limit?` / `{id, siteId, issuedAt, litres, meterReading?, tankFilled, source, reference?, receivedByLabourerId? \| receivedByUserId?, notes?, capturedAt}` (recorder or `stores.manage`)                                                                                             |
+| POST `/plant/:id/fuel/:issueId/corrections`                            | as for usage                                                                                                                                                                                                                                                                                    |
+| POST `/plant/:id/meter-resets`                                         | `{resetAt, oldReading, newReading, reason, note}` (manager)                                                                                                                                                                                                                                     |
+| POST `/plant/:id/breakdowns`, `/breakdowns/:breakdownId/resolve`       | `{siteId, reportedAt, severity, description}` (recorder) / `{version, resolution: repaired / off_hire / written_off, resolvedOn, note?, repairedBy?, costReference?}`                                                                                                                           |
+| POST `/plant/:id/services`, `/services/:serviceId/void`                | `{servicedAt, kind, meterReading?, description, doneBy?, costReference?}` (recorder) / `{version, reason}` (manager)                                                                                                                                                                            |
+| GET `/projects/:projectId/plant`, `/projects/:projectId/plant/options` | — / `search?`, `bqSearch?`                                                                                                                                                                                                                                                                      |
+
+Rules: meter readings never go backwards in time unless a meter reset lies between (409
+`meter-out-of-order`); usage and fuel are append-only (corrections are new rows); the fuel variance
+(full-tank windows against the standard, company tolerance and minimum sample) is an estimate,
+never proof of theft; nothing posts to the cost or stores ledgers. Problem codes are listed in
+ARCHITECTURE §4.11.
+
+## Dashboards and reports (D8.1)
+
+Paths are relative to `/api/v1`. Authentication, the selected company and the CSRF guard apply.
+Every report needs `reports.view` **and** the permission of the screen its data comes from, both on
+the same project (role ∩ assignment); company reports need their company permission (the audit log:
+`audit.view` with a recent MFA check). A section of the dashboard the caller may not see is absent.
+Money is KES minor units, quantities and percentages decimal strings, dates `YYYY-MM-DD`. Design:
+[ARCHITECTURE §4.14](../../docs/ARCHITECTURE.md#414-dashboards-and-reports-d81).
+
+| Method / path                                                                | Input                                                                                                                                                                             |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET `/dashboard`                                                             | — (sections per permission; ratios `null` when undefined)                                                                                                                         |
+| GET `/reports`                                                               | `locale?` (403 `report-forbidden` without `reports.view` anywhere)                                                                                                                |
+| GET `/reports/:reportId/options`                                             | `projectId?` (sites, stores, payroll batches or people)                                                                                                                           |
+| GET `/reports/:reportId`                                                     | the report's parameters (`projectId`, `siteId`, `storeId`, `batchId`, `actorId`, `action`, `from`, `to`, `asAt`), `locale?`; at most 200 rows per section; 60 per user per minute |
+| GET `/reports/:reportId/export/pdf`, `/export/xlsx`                          | the same; PDF ≤ 5,000 rows (422 `use-excel`), any report ≤ 20,000 rows (422 `report-too-large`); 60 per user per 10 minutes                                                       |
+| GET `/reports/subscriptions`                                                 | `scope?` (`mine`, or `company` with `config.manage`), `locale?`                                                                                                                   |
+| POST `/reports/subscriptions`                                                | `{reportId, parameters, frequency: weekly / monthly, weekday? / dayOfMonth?, locale}` (for yourself only)                                                                         |
+| PATCH `/reports/subscriptions/:id`, POST `/reports/subscriptions/:id/delete` | `{version, status: active / paused}` / `{version}` (the subscriber only)                                                                                                          |
+| POST `/reports/subscriptions/run-due`                                        | — (`config.manage`; the scheduler's cycle for the company)                                                                                                                        |
+
+Reports: `muster-roll`, `payroll-register`, `cost-ledger`, `budget-vs-actual`, `stock`,
+`valuations-register`, `lpo-register`, `invoice-ageing`, `supplier-payments`, `petty-cash`,
+`safety-actions`, `audit-log`; `mpesa-reconciliation` answers 409 `report-not-available` until
+D4.3. Views and exports are audited (`report.viewed`, `report.exported`) with the report, format
+and parameter IDs only. Scheduled emails (`REPORT_SCHEDULER`, on by default outside tests) carry a
+sign-in link, never report data.
+
+## Documents, compliance register and instructions (D8.4)
+
+Project paths start with `/api/v1/projects/:projectId` (`documents`, `compliance`, `instructions`,
+`approvals`); company paths with `/api/v1/documents`. Authentication, the selected company and the
+CSRF guard apply; permissions are per project (role ∩ assignment). Reads need `projects.view` plus
+one of `documents.manage`, `projects.manage`, `site.diary`, `quality.manage`, `safety.manage`,
+`bq.edit`, `finance.view` or `finance.manage` (clients, suppliers, storekeepers and labourers get
+403). Contracts, BQs and insurance documents also need `finance.view` or `finance.manage`: for
+everyone else they are 404 and left out of lists. "Manager" = `documents.manage`; "recorder" (of
+instructions) = `documents.manage`, `bq.edit` or `site.diary`; closing and reopening instructions
+need `documents.manage` or `bq.edit`; item types and company items need `config.manage`. Closed and
+cancelled projects are read-only. Recording an instruction needs an `Idempotency-Key` header and a
+client `id` (offline-ready). Design: [ARCHITECTURE §4.13](../../docs/ARCHITECTURE.md#413-documents-compliance-register-and-instructions-d84).
+
+| Method / path                                                                       | Input                                                                                                                                                                                           |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET `…/documents`, GET `…/documents/drawings`, GET `…/documents/summary`            | `category?`, `discipline?`, `status?` (`active`, `withdrawn`, `all`), `search?`, `cursor?`, `limit?` / `discipline?`, `search?` / —                                                             |
+| POST `…/documents` (multipart)                                                      | `file`, `category`, `title`, `drawingNumber?` + `discipline?` (drawings), `reference?`, `revision`, `issuePurpose?`, `changeNote?` (manager)                                                    |
+| GET / PATCH `…/documents/:id`, POST `…/documents/:id/withdraw`                      | — / `{title?, drawingNumber?, discipline?, reference?, version}` / `{reason, version}` (manager)                                                                                                |
+| POST `…/documents/:id/versions` (multipart)                                         | `file`, `revision`, `issuePurpose?`, `changeNote`, `basedOnVersionId` (manager)                                                                                                                 |
+| GET `…/documents/:id/versions/:versionId/content`                                   | — (attachment; superseded names end `_SUPERSEDED`; audited)                                                                                                                                     |
+| GET / POST `…/compliance`, GET `…/compliance/items/:typeId`                         | — / `{typeId, kind: record \| not_applicable, referenceNo?, issuer?, issuedOn?, expiresOn?, evidenceVersionId?, notes?, reason?, supersedesId}` (manager)                                       |
+| GET `…/compliance/export/pdf`, `…/compliance/export/xlsx`                           | `locale?` (`en`, `sw`)                                                                                                                                                                          |
+| GET `…/instructions`, GET `…/instructions/options`                                  | `status?` (incl. `open`), `kind?`, `flag?` (`cost`, `time`), `search?`, `cursor?`, `limit?` / —                                                                                                 |
+| POST `…/instructions`                                                               | `{id, capturedAt?, number, kind, issuerName, issuerRole, issuerFirm?, issuedOn, receivedOn, subject, description?, costImplication, timeImplication, delayId?, issuedByMe}` (recorder)          |
+| GET / PATCH `…/instructions/:id`                                                    | — / the fields + `version` (`documents.manage` or `bq.edit`)                                                                                                                                    |
+| POST `…/instructions/:id/responses`, `…/attachments`                                | `{kind: note \| acknowledge \| action \| close \| reopen, body?, version}` / `{documentVersionId} \| {photoId}` (recorder)                                                                      |
+| GET / POST `…/approvals`, GET `…/approvals/:id`                                     | `status?` (`pending`, `overdue`, `decided`, `cancelled`, `all`), `kind?`, `search?` / `{kind, title, description?, documentVersionId, addressedTo, sentOn, dueOn, resubmissionOfId?}` (manager) |
+| POST `…/approvals/:id/response`, `…/approvals/:id/cancel`                           | `{decision, comments?, respondedOn, channel: in_app \| paper, responderName?, responderFirm?, evidenceVersionId?, documentSha256, version}` / `{reason, version}` (manager; cancel: the raiser) |
+| GET `/documents`, GET `/documents/compliance/:typeId`, POST `/documents/compliance` | — / — / as for project items (`config.manage`)                                                                                                                                                  |
+| GET / POST `/documents/compliance-types`, PATCH `/documents/compliance-types/:id`   | — / `{label, scope, expires, reminderDays?}` / `{label?, expires?, reminderDays?, active?, version}` (`config.manage`)                                                                          |
+
+Rules: exactly one current version per document (a superseded version is never listed as current);
+files are accepted by content (PDF, JPEG, PNG, WebP, DOCX, XLSX up to 25 MB; DWG/DXF refused);
+compliance statuses are derived on read in Nairobi dates; instruction statuses move only through
+responses; an approval is answered once, on the version's SHA-256, never in the app by its raiser
+or the uploader. Problem codes are listed in ARCHITECTURE §4.13.
+
 ## Development seed
 
 `npx pnpm@12.17.0 db:seed` (root; it builds the API first) creates the synthetic company
@@ -627,7 +954,33 @@ holidays, the unverified demonstration timesheet rule and nine weeks of syntheti
 on Ruiru Heights and Kitengela (past weeks approved with their timesheet lines, the last
 complete week submitted, the current week open, open two-site and excessive-hours anomalies,
 one approved adjustment); this part is one transaction and is skipped when the company already
-has a timesheet period. It prints each account's identifier and, when it
+has a timesheet period. Since D6.2 it also adds the Ruiru Heights schedule: 22 activities across
+the WBS with 30 dependencies (including a lead and start-to-start links), the milestones linked
+into the network, the contract programme frozen as baseline 1 (as planned on 02/03/2026), actual
+dates and progress that slipped, and three delays (weather, late reinforcement, a client
+instruction); skipped when the project already has schedule activities. Since D6.1 (quality) it
+also adds a fourth project, **Juja Road Duplex (JUJ-DPX)**, status completed, and quality data
+written through the real services: the seven starter checklist templates; on Ruiru Heights a
+signed-off slab inspection, a failed walling inspection (county inspector) with snags from its
+failed items, a roofing inspection awaiting sign-off, four cube sets (one failing at 28 days, one
+with an overdue 7-day result), three slump tests (one outside tolerance) and two diaries whose
+workforce is an attendance snapshot (one approved, one draft); on Juja Road a pre-handover
+inspection, closed construction snags, practical completion certified 75 days before the seed
+day with a six-month defects liability period, and two DLP defects; skipped when Ruiru Heights
+already has an inspection. Since D8.2 it also adds health and safety on Ruiru Heights through the
+real services: inductions for the labourers on site except two who attended without one (so the
+flags show), the site agent and a visitor; three toolbox talks (two confirmed, one draft); PPE
+issues (some due for replacement, one returned); a closed near miss with a verified action and an
+investigated injury with one verified and one overdue corrective action; two first-aid kits (one
+with its check overdue), a first-aider and a treatment linked to the injury; skipped when Ruiru
+Heights already has a safety incident. Since D8.4 it also adds documents on Ruiru Heights (drawing
+revisions with superseded ones, the contract, BQ and insurance documents, permits and submittals as
+tiny generated files), a compliance register covering every status (and the county approval on
+Kitengela), three instructions and three approval requests (one answered on paper, one overdue);
+each step is skipped when what it creates is already there. Since D8.1 it also adds two report
+subscriptions through the real service (the owner's weekly cost ledger for Ruiru Heights on Mondays;
+the finance officer's monthly supplier invoice ageing on the 1st, in Kiswahili); skipped when the
+owner already has one. It prints each account's identifier and, when it
 creates the account, a generated password; for the owner also the TOTP secret and
 `otpauth://` URI. It is idempotent: a second run reports "already present" and leaves
 passwords unchanged. `npx pnpm@12.17.0 --filter @pm-buddy/api db:seed --reset-credentials`

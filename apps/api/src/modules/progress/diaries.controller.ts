@@ -21,6 +21,8 @@ import {
 import {
   createDiaryRequestSchema,
   diariesResponseSchema,
+  diaryAttendanceQuerySchema,
+  diaryAttendanceResponseSchema,
   diaryActionRequestSchema,
   diaryListQuerySchema,
   diaryResponseSchema,
@@ -61,11 +63,35 @@ export class DiariesController {
     );
   }
 
+  @Get("attendance")
+  @ApiOperation({
+    operationId: "getDiaryAttendance",
+    summary:
+      "Attendance on a site and date by trade (present or half day), with the muster sheet's state: what a diary's attendance snapshot would store",
+    description:
+      "Requires projects.view plus site.diary, quality.manage, projects.manage or reports.view on the project.",
+  })
+  @ApiQuery({ name: "siteId", required: true })
+  @ApiQuery({ name: "date", required: true, description: "YYYY-MM-DD (Africa/Nairobi)" })
+  @ApiOkResponse({ schema: openApi(diaryAttendanceResponseSchema) })
+  async attendance(
+    @Param("projectId") projectId: string,
+    @Query() query: unknown,
+    @Req() req: Request,
+  ) {
+    return this.diaries.attendance(
+      await this.auth.principal(req),
+      uuidSchema.parse(projectId),
+      diaryAttendanceQuerySchema.parse(query),
+      req,
+    );
+  }
+
   @Post()
   @ApiOperation({
     operationId: "createSiteDiary",
     summary:
-      "Create a daily site draft; site.diary required. Workforce is manually recorded, not attendance-verified.",
+      "Create a daily site draft; site.diary required. Workforce is a manual count (workforceSource manual) or a server snapshot of attendance by trade (workforceSource attendance; the count is not sent).",
   })
   @ApiBody({ schema: openApi(createDiaryRequestSchema) })
   @ApiCreatedResponse({ schema: openApi(diaryResponseSchema) })
@@ -81,7 +107,8 @@ export class DiariesController {
   @Patch(":id")
   @ApiOperation({
     operationId: "updateSiteDiary",
-    summary: "Replace draft content with an expected version; author and site.diary required",
+    summary:
+      "Replace draft content with an expected version; author and site.diary required. workforceSource attendance takes a fresh attendance snapshot.",
   })
   @ApiBody({ schema: openApi(updateDiaryRequestSchema) })
   @ApiOkResponse({ schema: openApi(diaryResponseSchema) })
@@ -105,7 +132,7 @@ export class DiariesController {
   @ApiOperation({
     operationId: "transitionSiteDiary",
     summary:
-      "Submit/reopen as author (site.diary), or independently approve/reject (quality.manage). Approval locks the diary.",
+      "Submit/reopen as author (site.diary), or independently approve/reject (quality.manage). Submitting an attendance-sourced diary refreshes its snapshot first (the version advances by two). Approval locks the diary and its workforce snapshot.",
   })
   @ApiBody({ schema: openApi(diaryActionRequestSchema) })
   @ApiOkResponse({ schema: openApi(diaryResponseSchema) })

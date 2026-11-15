@@ -19,12 +19,31 @@ export function unitLabel(
 }
 
 /** "10102.40625" minor units → "KES 101.02" (rounded half-up to the cent for display). */
-export function formatMinorDecimal(minor: string): string {
+export function formatMinorDecimal(minor: string, places = 2): string {
   const negative = minor.startsWith("-");
   const value = Ratio.fromDecimal(minor.replace(/^-/, ""))
     .dividedBy(Ratio.of(100))
-    .toDecimal(2, true).value;
+    .toDecimal(places, true).value;
   return `${negative ? "\u2212" : ""}KES ${formatDecimalString(value)}`;
+}
+
+/**
+ * Prices the server compares exactly (six-place minor units), all with the fewest decimal places,
+ * two at least, that keep different values apart: a failed price check never shows equal prices.
+ */
+export function formatComparedPrices(minors: readonly string[]): string[] {
+  const exact = new Set(
+    minors.map(
+      (minor) =>
+        (minor.startsWith("-") ? "-" : "") +
+        Ratio.fromDecimal(minor.replace(/^-/, "")).toDecimal(6).value,
+    ),
+  );
+  for (let places = 2; places < 8; places++) {
+    const shown = minors.map((minor) => formatMinorDecimal(minor, places));
+    if (new Set(shown).size === exact.size) return shown;
+  }
+  return minors.map((minor) => formatMinorDecimal(minor, 8));
 }
 
 /** The same value as a number of shillings, for charts only (never for arithmetic). */

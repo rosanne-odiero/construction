@@ -6,7 +6,8 @@
  *
  * Each test signs in with its own `pmb_at=<persona>.<id>` cookie and gets its own copy of the
  * fixture data; cookies with the same <id> share that copy, so a test can switch between the
- * owner, the project manager and the site agent on the same data. Requests are validated with the shared request schemas and every response is
+ * owner, the project manager and the site agent on the same data (the client, labourer and
+ * supplier personas have their own). Requests are validated with the shared request schemas and every response is
  * validated with the shared response schema before it is sent, so the suite also checks the wire
  * contract. Synthetic data only.
  */
@@ -28,6 +29,7 @@ import {
   isProjectPermission,
   PROJECT_ASSIGNABLE_PERMISSIONS,
   PROJECT_PERMISSIONS,
+  SAFETY_READ_PERMISSIONS,
   SYSTEM_ROLE_PERMISSIONS,
   TENANT_PERMISSIONS,
   type Permission,
@@ -83,7 +85,54 @@ import { attendanceFixture, handleAttendance, type AttendanceState } from "./moc
 import { handleLabour, labourFixture, type LabourState } from "./mock-labour.mts";
 import { handleDiaries, initialDiaries } from "./mock-diaries.mts";
 import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
-import { handlePhotos, initialPhotos } from "./mock-photos.mts";
+import { handleCaptureTicket, handlePhotos, initialPhotos } from "./mock-photos.mts";
+import { latestApproved } from "./mock-bq-model.mts";
+import { handleP2p, initialP2p, p2pDocument, type P2pDeps, type P2pState } from "./mock-p2p.mts";
+import {
+  handleSupplierPersona,
+  handleSupplierPortalUsers,
+  initialSupplierPortalUsers,
+  isSupplierPersona,
+  supplierPortalFile,
+  type SupplierPortalStaffState,
+} from "./mock-supplier-portal.mts";
+import { handleStores, initialStores, type StoresState } from "./mock-stores.mts";
+import {
+  handleSpending,
+  initialSpending,
+  spendingReceipt,
+  type SpendingState,
+} from "./mock-spending.mts";
+import { handleSchedule, initialSchedule, type ScheduleState } from "./mock-schedule.mts";
+import { handleQuality, initialQuality, type QualityState } from "./mock-quality.mts";
+import {
+  handleValuations,
+  initialValuations,
+  valuationExport,
+  type ValuationsState,
+} from "./mock-valuations.mts";
+import { handleSafety, initialSafety, type SafetyState } from "./mock-safety.mts";
+import { handlePlant, initialPlant, type PlantState } from "./mock-plant.mts";
+import {
+  clientPortalFile,
+  handleClientPortalStaff,
+  initialClientPortalStaff,
+  type ClientPortalStaffState,
+} from "./mock-client-portal.mts";
+import {
+  handleReports,
+  initialReports,
+  reportExport,
+  type ReportsDeps,
+  type ReportsState,
+} from "./mock-reports.mts";
+import {
+  documentDownload,
+  handleDocuments,
+  initialDocuments,
+  type DocumentsDeps,
+  type DocumentsState,
+} from "./mock-documents.mts";
 
 export const MOCK_CSRF = "mock-csrf-token";
 export const MOCK_STEP_UP_CODE = "246810";
@@ -161,10 +210,34 @@ type State = {
   team: Map<string, TeamEntry[]>;
   bq: BqState;
   procurement: ProcurementState;
+  /** D5.2 procure-to-pay records (mock-p2p.mts). */
+  p2p: P2pState;
+  /** D5.3 stores, ledger, transfers, stock takes and variance (mock-stores.mts). */
+  stores: StoresState;
+  /** D5.4 budgets, cost ledger, petty cash, forecast and alerts (mock-spending.mts). */
+  spending: SpendingState;
   labour: LabourState;
   attendance: AttendanceState;
   diaries: SiteDiary[];
   photos: SitePhoto[];
+  /** D6.2 schedules by project (mock-schedule.mts). */
+  schedule: ScheduleState;
+  /** D6.1 quality: templates, inspections, tests, snags, completion (mock-quality.mts). */
+  quality: QualityState;
+  /** D6.3 measurements, valuations, certificates and earned value (mock-valuations.mts). */
+  valuations: ValuationsState;
+  /** D8.2 health and safety (mock-safety.mts). */
+  safety: SafetyState;
+  /** D7.2 each supplier's portal users (mock-supplier-portal.mts). */
+  supplierPortal: SupplierPortalStaffState;
+  /** D8.3 plant and equipment (mock-plant.mts). */
+  plant: PlantState;
+  /** D8.1 report subscriptions and their runs (mock-reports.mts). */
+  reports: ReportsState;
+  /** D8.4 documents, compliance, instructions and approvals (mock-documents.mts). */
+  documents: DocumentsState;
+  /** D7.1 client payments, client terms, Paybill instructions and FX rates (mock-client-portal.mts). */
+  clientPortal: ClientPortalStaffState;
 };
 
 const states = new Map<string, State>();
@@ -351,21 +424,86 @@ function fixture(persona: Persona): State {
   const pmAssignment = PROJECT_ASSIGNABLE_PERMISSIONS.filter((key) =>
     SYSTEM_ROLE_PERMISSIONS.project_manager.includes(key),
   );
+  const procurement = initialProcurement();
+  const bq: BqState = {
+    projects: new Map([
+      [RUIRU_ID, initialProjectBq(true, ruiru.project.contractSumMinor)],
+      [SYOKIMAU_ID, initialProjectBq(false, null)],
+    ]),
+    templates: [],
+    buildups: initialBuildups(),
+  };
+  const projects = [ruiru, syokimau];
+  const photos = initialPhotos(RUIRU_ID, MAIN_PLOT_ID);
   return {
     persona,
     stepUpAt: new Map(),
+    schedule: new Map([
+      [
+        RUIRU_ID,
+        initialSchedule(
+          {
+            id: RUIRU_ID,
+            status: ruiru.project.status,
+            startDate: ruiru.project.startDate,
+          },
+          ruiru.milestones,
+          wbs,
+          { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+        ),
+      ],
+    ]),
     diaries: initialDiaries(RUIRU_ID, MAIN_PLOT_ID, OWNER_ID, AGENT_ID),
-    photos: initialPhotos(RUIRU_ID, MAIN_PLOT_ID),
-    bq: {
-      projects: new Map([
-        [RUIRU_ID, initialProjectBq(true, ruiru.project.contractSumMinor)],
-        [SYOKIMAU_ID, initialProjectBq(false, null)],
-      ]),
-      templates: [],
-      buildups: initialBuildups(),
-    },
-    procurement: initialProcurement(),
-    projects: [ruiru, syokimau],
+    quality: initialQuality(
+      { projectId: RUIRU_ID, siteId: MAIN_PLOT_ID },
+      {
+        owner: { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+        pm: { id: PM_ID, displayName: "Brian Otieno" },
+        agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
+      },
+    ),
+    safety: initialSafety(
+      { projectId: RUIRU_ID, siteId: MAIN_PLOT_ID },
+      {
+        owner: { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+        pm: { id: PM_ID, displayName: "Brian Otieno" },
+        agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
+      },
+      labour.labourers.map(({ id: labourerId, workerNo, fullName }) => ({
+        id: labourerId,
+        workerNo,
+        fullName,
+      })),
+    ),
+    plant: initialPlant(
+      { projectId: RUIRU_ID, siteId: MAIN_PLOT_ID },
+      {
+        id: procurement.suppliers[0]!.supplier.id,
+        name:
+          procurement.suppliers[0]!.supplier.tradingName ??
+          procurement.suppliers[0]!.supplier.legalName,
+      },
+      {
+        owner: { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+        agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
+      },
+    ),
+    reports: initialReports({ id: OWNER_ID, displayName: "Wanjiru Kamau" }, RUIRU_ID),
+    documents: initialDocuments(RUIRU_ID, {
+      owner: { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+      pm: { id: PM_ID, displayName: "Brian Otieno" },
+      agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
+    }),
+    photos,
+    valuations: initialValuations(RUIRU_ID, [photos[0]!.id]),
+    bq,
+    procurement,
+    p2p: initialP2p(p2pBase(projects, procurement, bq)),
+    stores: initialStores(procurement, bq.buildups),
+    spending: initialSpending(projectInfo(projects)),
+    supplierPortal: initialSupplierPortalUsers(),
+    clientPortal: initialClientPortalStaff(),
+    projects,
     labour,
     attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
     team: new Map([
@@ -383,7 +521,7 @@ function fixture(persona: Persona): State {
             userId: AGENT_ID,
             displayName: "Kevin Kiprono",
             role: "site_agent",
-            assignment: ["projects.view", "site.diary", "bq.view"],
+            assignment: ["projects.view", "site.diary", "site.photos", "bq.view"],
           },
           {
             userId: QS_ID,
@@ -408,6 +546,45 @@ function fixture(persona: Persona): State {
         ],
       ],
     ]),
+  };
+}
+
+/** What the procure-to-pay mock needs from the rest of the fixture (projects, catalogue, BQ). */
+function p2pBase(
+  projects: ProjectState[],
+  procurement: ProcurementState,
+  bq: BqState,
+): Omit<P2pDeps, "persona"> {
+  return {
+    fail: (status, code) => new HttpError(status, code),
+    parse,
+    requireStepUp: () => undefined,
+    projects: projects.map(({ project, sites }) => ({
+      id: project.id,
+      code: project.code,
+      name: project.name,
+      status: project.status,
+      sites: sites.map(({ site, versions }) => ({
+        id: site.id,
+        name: site.name,
+        geofence: versions[0]?.geofence ?? null,
+        geofenceVersion: versions[0]?.version ?? null,
+      })),
+    })),
+    catalogue: procurement,
+    // The fixture is seeded as if the agent could raise requisitions on Ruiru Heights.
+    projectPermissions: (projectId) => (projectId === RUIRU_ID ? PROJECT_PERMISSIONS : []),
+    bqItem: (projectId, lineageId) => {
+      const entry = bq.projects.get(projectId);
+      const version = entry ? latestApproved(entry) : null;
+      const item = version?.content.items.find((candidate) => candidate.lineageId === lineageId);
+      return version && item
+        ? { versionId: version.id, lineageId, ref: item.ref, description: item.description }
+        : null;
+    },
+    idempotencyKey: undefined,
+    contentType: undefined,
+    raw: Buffer.alloc(0),
   };
 }
 
@@ -479,6 +656,50 @@ function projectPermissions(state: State, entry: ProjectState): Permission[] {
   const assignment =
     state.team.get(entry.project.id)?.find((member) => member.userId === user.id)?.assignment ?? [];
   return SYSTEM_ROLE_PERMISSIONS[user.role].filter((key) => assignment.includes(key));
+}
+
+/** Company-wide members (owner, finance) hold their role on every project, as in the API. */
+function valuationPermissions(state: State, projectId: string): readonly Permission[] {
+  const entry = state.projects.find((candidate) => candidate.project.id === projectId);
+  if (!entry) return [];
+  return isTenantWide(state.persona) ? rolePermissions(state) : projectPermissions(state, entry);
+}
+
+/** Projects with the caller's permissions and photos, as the documents mock sees them. */
+function documentsDeps(state: State): DocumentsDeps {
+  return {
+    projects: state.projects.map((entry) => ({
+      id: entry.project.id,
+      code: entry.project.code,
+      name: entry.project.name,
+      status: entry.project.status,
+      permissions: valuationPermissions(state, entry.project.id),
+    })),
+    companyPermissions: rolePermissions(state),
+    actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+    photos: (projectId) =>
+      state.photos
+        .filter((photo) => photo.projectId === projectId)
+        .map((photo) => ({
+          id: photo.id,
+          caption: photo.caption,
+          verified: photo.verified,
+          capturedAt: photo.capturedAt,
+        })),
+    fail: (status: number, code: string) => new HttpError(status, code),
+    parse,
+  };
+}
+
+/** Projects with their sites, as the spending and stores mocks see them. */
+function projectInfo(projects: ProjectState[]) {
+  return projects.map(({ project, sites }) => ({
+    id: project.id,
+    code: project.code,
+    name: project.name,
+    status: project.status,
+    sites: sites.map(({ site }) => ({ id: site.id, name: site.name })),
+  }));
 }
 
 function find(state: State, projectId: string, permission: Permission): ProjectState {
@@ -588,6 +809,48 @@ function teamView(state: State, entry: ProjectState) {
 
 type Reply = { status?: number; body: unknown; schema: z.ZodType<unknown> };
 
+/** What the reports mock needs to know about the caller and the fixture (D8.1). */
+function reportsDeps(state: State): ReportsDeps {
+  const user = PERSONAS[state.persona];
+  return {
+    companyName: "Jenga Bora Builders Ltd",
+    actor: {
+      id: user.id,
+      displayName: user.displayName,
+      email: user.identifier.includes("@") ? user.identifier : null,
+    },
+    tenantWide: isTenantWide(state.persona),
+    companyPermissions: rolePermissions(state),
+    projects: state.projects.map((entry) => ({
+      id: entry.project.id,
+      code: entry.project.code,
+      name: entry.project.name,
+      status: entry.project.status,
+      contractSumMinor: entry.project.contractSumMinor,
+      sites: entry.sites.map(({ site }) => ({ id: site.id, name: site.name })),
+      permissions: valuationPermissions(state, entry.project.id),
+    })),
+    stores: state.stores.stores.map((store) => ({
+      id: store.id,
+      name: store.name,
+      projectId: store.projectId,
+    })),
+    labourers: (projectId) =>
+      state.labour.labourers
+        .filter((labourer) =>
+          labourer.engagements.some((engagement) => engagement.projectId === projectId),
+        )
+        .map(({ workerNo, fullName }) => ({ workerNo, fullName })),
+    people: Object.values(PERSONAS).map(({ id: personId, displayName }) => ({
+      id: personId,
+      displayName,
+    })),
+    stepUp: () => requireStepUp(state),
+    fail: (status: number, code: string) => new HttpError(status, code),
+    parse,
+  };
+}
+
 async function handle(
   method: string,
   path: string,
@@ -606,15 +869,40 @@ async function handle(
   if (path === "/auth/refresh") throw new HttpError(401, "unauthorized");
   if (path === "/auth/logout")
     return { body: { message: "Signed out." }, schema: messageResponseSchema };
-  const persona = cookie(req, "pmb_at")?.split(".")[0];
+  const [persona, session = ""] = cookie(req, "pmb_at")?.split(".") ?? [];
+  if (isSupplierPersona(persona)) {
+    if (method !== "GET" && req.headers["x-csrf-token"] !== MOCK_CSRF)
+      throw new HttpError(403, "forbidden");
+    return handleSupplierPersona(
+      session,
+      method,
+      path,
+      query,
+      body,
+      {
+        idempotencyKey:
+          typeof req.headers["idempotency-key"] === "string"
+            ? req.headers["idempotency-key"]
+            : undefined,
+        contentType: req.headers["content-type"],
+        raw,
+      },
+      (status, code) => new HttpError(status, code),
+      parse,
+    );
+  }
   if (isPortalPersona(persona)) {
     if (method !== "GET" && req.headers["x-csrf-token"] !== MOCK_CSRF)
       throw new HttpError(403, "forbidden");
     return handlePortalPersona(
       persona,
+      session,
       method,
       path,
+      query,
+      body,
       (status, code) => new HttpError(status, code),
+      parse,
     );
   }
   const state = stateFor(req);
@@ -643,6 +931,11 @@ async function handle(
       },
       schema: tenantsResponseSchema,
     };
+  if (path === "/dashboard" || path === "/reports" || path.startsWith("/reports/")) {
+    const reports = handleReports(reportsDeps(state), state.reports, method, path, query, body);
+    if (reports) return reports;
+    throw new HttpError(404, "not-found");
+  }
   // The labour and attendance mocks know two personas; anyone but the owner acts as the agent.
   const labour = handleLabour(
     {
@@ -733,6 +1026,192 @@ async function handle(
     ]);
     return { status: 201, body: { project }, schema: projectResponseSchema };
   }
+  const documents = handleDocuments(
+    documentsDeps(state),
+    state.documents,
+    method,
+    path,
+    query,
+    body,
+    raw,
+  );
+  if (documents) return documents;
+  const clientPortal = handleClientPortalStaff(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      project: (projectId) =>
+        state.projects.find((entry) => entry.project.id === projectId)?.project ?? null,
+      projectPermissions: (projectId) => valuationPermissions(state, projectId),
+      companyPermissions: rolePermissions(state),
+      tenantWide: isTenantWide(state.persona),
+      requireStepUp: () => requireStepUp(state),
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+    },
+    state.clientPortal,
+    method,
+    path,
+    body,
+  );
+  if (clientPortal) return clientPortal;
+  const valuations = handleValuations(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      projects: projectInfo(state.projects),
+      projectPermissions: (projectId) => valuationPermissions(state, projectId),
+      photo: (projectId, photoId) => {
+        const found = state.photos.find(
+          (candidate) => candidate.id === photoId && candidate.projectId === projectId,
+        );
+        return found ? { id: found.id, verified: found.verified, caption: found.caption } : null;
+      },
+      requireStepUp: () => requireStepUp(state),
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+    },
+    state.valuations,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (valuations) return valuations;
+  const stores = handleStores(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      projects: state.projects.map(({ project, sites }) => ({
+        id: project.id,
+        code: project.code,
+        name: project.name,
+        status: project.status,
+        sites: sites.map(({ site }) => ({ id: site.id, name: site.name })),
+      })),
+      projectPermissions: (projectId) => {
+        const entry = state.projects.find((candidate) => candidate.project.id === projectId);
+        return entry ? projectPermissions(state, entry) : [];
+      },
+      companyPermissions: rolePermissions(state),
+      somewhere: () => [
+        ...new Set([
+          ...(isTenantWide(state.persona) ? rolePermissions(state) : []),
+          ...state.projects.flatMap((entry) => projectPermissions(state, entry)),
+        ]),
+      ],
+      catalogue: state.procurement,
+      buildups: state.bq.buildups,
+      gangs: state.labour.gangs.map((gang) => ({
+        id: gang.id,
+        projectId: gang.projectId,
+        name: gang.name,
+        status: gang.status,
+      })),
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+    },
+    state.stores,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (stores) return stores;
+  const spending = handleSpending(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      projects: projectInfo(state.projects),
+      projectPermissions: (projectId) => {
+        const entry = state.projects.find((candidate) => candidate.project.id === projectId);
+        return entry ? projectPermissions(state, entry) : [];
+      },
+      // Company-wide members (owner, finance) hold their role on every project, as in the API.
+      companyPermissions: isTenantWide(state.persona) ? rolePermissions(state) : null,
+      holders: (projectId, permission) =>
+        (state.team.get(projectId) ?? [])
+          .filter((member) =>
+            member.role === "owner"
+              ? true
+              : SYSTEM_ROLE_PERMISSIONS[member.role].includes(permission) &&
+                (member.assignment ?? []).includes(permission),
+          )
+          .map((member) => ({ id: member.userId, displayName: member.displayName })),
+      requireStepUp: () => requireStepUp(state),
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+      contentType: req.headers["content-type"],
+      raw,
+    },
+    state.spending,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (spending) return spending;
+  const p2p = handleP2p(
+    {
+      ...p2pBase(state.projects, state.procurement, state.bq),
+      persona: state.persona,
+      requireStepUp: () => requireStepUp(state),
+      projectPermissions: (projectId) => {
+        const entry = state.projects.find((candidate) => candidate.project.id === projectId);
+        return entry ? projectPermissions(state, entry) : [];
+      },
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+      contentType: req.headers["content-type"],
+      raw,
+    },
+    state.p2p,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (p2p) return p2p;
+  const supplierPortalUsers = handleSupplierPortalUsers(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      canManage:
+        rolePermissions(state).includes("procurement.manage_suppliers") ||
+        (isTenantWide(state.persona) && rolePermissions(state).includes("finance.manage")),
+      requireStepUp: () => requireStepUp(state),
+      supplier: (id) => {
+        const found = state.procurement.suppliers.find((entry) => entry.supplier.id === id);
+        return found
+          ? {
+              id: found.supplier.id,
+              code: found.supplier.code,
+              name: found.supplier.tradingName ?? found.supplier.legalName,
+            }
+          : null;
+      },
+    },
+    state.supplierPortal,
+    method,
+    path,
+    body,
+  );
+  if (supplierPortalUsers) return supplierPortalUsers;
   const procurement = handleProcurement(
     {
       fail: (status, code) => new HttpError(status, code),
@@ -773,9 +1252,180 @@ async function handle(
     body,
   );
   if (buildups) return buildups;
+  const actor = {
+    id: PERSONAS[state.persona].id,
+    displayName: PERSONAS[state.persona].displayName,
+  };
+  const somewhere = [
+    ...new Set(state.projects.flatMap((entry) => projectPermissions(state, entry))),
+  ];
+  const qualityDeps = (entry: ProjectState | null) => ({
+    project: entry ? { id: entry.project.id, status: entry.project.status } : null,
+    sites: entry ? entry.sites.map(({ site }) => ({ id: site.id, name: site.name })) : [],
+    wbs: entry ? entry.wbs.map(({ id: nodeId, code, name }) => ({ id: nodeId, code, name })) : [],
+    permissions: entry ? projectPermissions(state, entry) : [],
+    somewhere,
+    companyPermissions: rolePermissions(state),
+    actor,
+    photo: (photoId: string) => {
+      const found = state.photos.find(
+        (photo) => photo.id === photoId && photo.projectId === entry?.project.id,
+      );
+      return found ? { id: found.id, verified: found.verified, caption: found.caption } : null;
+    },
+    fail: (status: number, code: string) => new HttpError(status, code),
+    parse,
+  });
+  if (path.startsWith("/quality/"))
+    return handleQuality(qualityDeps(null), state.quality, method, path, query, body)!;
+  const safetyDeps = (entry: ProjectState | null) => ({
+    project: entry
+      ? {
+          id: entry.project.id,
+          code: entry.project.code,
+          name: entry.project.name,
+          status: entry.project.status,
+        }
+      : null,
+    sites: entry ? entry.sites.map(({ site }) => ({ id: site.id, name: site.name })) : [],
+    permissions: entry ? projectPermissions(state, entry) : [],
+    somewhere,
+    companyPermissions: rolePermissions(state),
+    actor,
+    // Members who can read safety records, with their effective permissions on the project:
+    // role ∩ assignment (owner: all), as projectStaff() in the API.
+    staff: entry
+      ? (state.team.get(entry.project.id) ?? [])
+          .map((member) => ({
+            id: member.userId,
+            displayName: member.displayName,
+            permissions:
+              member.role === "owner"
+                ? PROJECT_PERMISSIONS
+                : SYSTEM_ROLE_PERMISSIONS[member.role].filter(
+                    (key) => isProjectPermission(key) && (member.assignment ?? []).includes(key),
+                  ),
+          }))
+          .filter(
+            (member) =>
+              member.permissions.includes("projects.view") &&
+              SAFETY_READ_PERMISSIONS.some((key) => member.permissions.includes(key)),
+          )
+          .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      : [],
+    labourers: entry
+      ? state.labour.labourers
+          .filter((labourer) =>
+            labourer.engagements.some((engagement) => engagement.projectId === entry.project.id),
+          )
+          .map((labourer) => ({
+            id: labourer.id,
+            workerNo: labourer.workerNo,
+            fullName: labourer.fullName,
+            gangId:
+              state.labour.gangs.find((gang) =>
+                gang.members.some(
+                  (member) => member.labourerId === labourer.id && member.leftOn === null,
+                ),
+              )?.id ?? null,
+          }))
+      : [],
+    gangs: entry
+      ? state.labour.gangs
+          .filter((gang) => gang.projectId === entry.project.id && gang.status === "active")
+          .map((gang) => ({
+            id: gang.id,
+            name: gang.name,
+            siteId: gang.siteId,
+            members: gang.members
+              .filter((member) => member.leftOn === null)
+              .map((member) => member.labourerId),
+          }))
+      : [],
+    photo: (photoId: string) => {
+      const found = state.photos.find(
+        (photo) => photo.id === photoId && photo.projectId === entry?.project.id,
+      );
+      return found
+        ? { id: found.id, verified: found.verified, caption: found.caption, siteId: found.siteId }
+        : null;
+    },
+    projects: state.projects.map((candidate) => {
+      const permissions = projectPermissions(state, candidate);
+      return {
+        id: candidate.project.id,
+        code: candidate.project.code,
+        name: candidate.project.name,
+        status: candidate.project.status,
+        readable:
+          permissions.includes("projects.view") &&
+          SAFETY_READ_PERMISSIONS.some((key) => permissions.includes(key)),
+      };
+    }),
+    fail: (status: number, code: string) => new HttpError(status, code),
+    parse,
+  });
+  if (path.startsWith("/safety/"))
+    return handleSafety(safetyDeps(null), state.safety, method, path, query, body)!;
+  if (
+    path === "/plant" ||
+    path.startsWith("/plant/") ||
+    /^\/projects\/[^/]+\/plant(\/options)?$/.test(path)
+  ) {
+    const plant = handlePlant(
+      {
+        projects: state.projects.map((entry) => ({
+          id: entry.project.id,
+          code: entry.project.code,
+          name: entry.project.name,
+          status: entry.project.status,
+          sites: entry.sites.map(({ site }) => ({ id: site.id, name: site.name })),
+          permissions: projectPermissions(state, entry),
+        })),
+        companyPermissions: rolePermissions(state),
+        actor,
+        suppliers: state.procurement.suppliers.map(({ supplier }) => ({
+          id: supplier.id,
+          code: supplier.code,
+          name: supplier.tradingName ?? supplier.legalName,
+        })),
+        labourers: (projectId) =>
+          state.labour.labourers
+            .filter((labourer) =>
+              labourer.engagements.some((engagement) => engagement.projectId === projectId),
+            )
+            .map(({ id: labourerId, workerNo, fullName }) => ({
+              id: labourerId,
+              workerNo,
+              fullName,
+            })),
+        staff: [
+          { id: PM_ID, displayName: "Brian Otieno" },
+          { id: AGENT_ID, displayName: "Kevin Kiprono" },
+        ],
+        fail: (status: number, code: string) => new HttpError(status, code),
+        parse,
+      },
+      state.plant,
+      method,
+      path,
+      query,
+      body,
+    );
+    if (plant) return plant;
+    throw new HttpError(404, "not-found");
+  }
   const match = /^\/projects\/([^/]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw new HttpError(404, "not-found");
   const [, projectId, rest = ""] = match;
+  if (rest === "photos/capture-tickets") {
+    const entry = find(state, projectId!, "site.photos");
+    return handleCaptureTicket(
+      entry.sites.map((site) => site.site.id),
+      raw,
+      (status, code) => new HttpError(status, code),
+    );
+  }
   if (rest === "photos") {
     const entry = find(state, projectId!, method === "GET" ? "projects.view" : "site.photos");
     return handlePhotos(
@@ -786,6 +1436,37 @@ async function handle(
       raw,
       (status, code) => new HttpError(status, code),
     );
+  }
+  if (rest === "schedule" || rest.startsWith("schedule/")) {
+    const entry = find(state, projectId!, "projects.view");
+    const { project } = entry;
+    return handleSchedule(
+      {
+        project: { id: project.id, status: project.status, startDate: project.startDate },
+        milestones: entry.milestones,
+        wbs: entry.wbs,
+        canEdit:
+          projectPermissions(state, entry).includes("projects.manage") &&
+          project.status !== "closed" &&
+          project.status !== "cancelled",
+        actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+        fail: (status, code) => new HttpError(status, code),
+        parse,
+      },
+      state.schedule,
+      method,
+      rest,
+      query,
+      body,
+    )!;
+  }
+  if (rest === "quality" || rest.startsWith("quality/")) {
+    const entry = find(state, projectId!, "projects.view");
+    return handleQuality(qualityDeps(entry), state.quality, method, path, query, body)!;
+  }
+  if (rest === "safety" || rest.startsWith("safety/")) {
+    const entry = find(state, projectId!, "projects.view");
+    return handleSafety(safetyDeps(entry), state.safety, method, path, query, body)!;
   }
   if (rest === "diaries" || rest.startsWith("diaries/")) {
     const entry = find(state, projectId!, method === "GET" ? "projects.view" : "site.diary");
@@ -1093,6 +1774,159 @@ const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://mock.invalid");
     if (url.pathname === "/health") return send(res, 200, { status: "ok" });
     const path = url.pathname.replace(/^\/api\/v1/, "");
+    // The supplier's invoice documents and statement exports are bytes.
+    const [persona, session = ""] = cookie(req, "pmb_at")?.split(".") ?? [];
+    if (
+      isSupplierPersona(persona) &&
+      req.method === "GET" &&
+      /^\/portal\/supplier\/(documents|statement\/export)\//.test(path)
+    ) {
+      const file = supplierPortalFile(session, path);
+      if (!file) return send(res, 404, { code: "not-found" }, true);
+      res.writeHead(200, {
+        "Content-Type": file.contentType,
+        ...(file.filename
+          ? { "Content-Disposition": `attachment; filename="${file.filename}"` }
+          : {}),
+        "Cache-Control": "no-store",
+      });
+      return res.end(file.content);
+    }
+    // The client's photo images, statements and certificate PDFs are bytes.
+    if (
+      persona === "client" &&
+      req.method === "GET" &&
+      /^\/portal\/client\/projects\/[^/]+\/(photos\/[^/]+\/image|statement\/export\/|certificates\/)/.test(
+        path,
+      )
+    ) {
+      const file = clientPortalFile(path);
+      if (!file) return send(res, 404, { code: "not-found" }, true);
+      res.writeHead(200, {
+        "Content-Type": file.contentType,
+        ...(file.filename
+          ? { "Content-Disposition": `attachment; filename="${file.filename}"` }
+          : {}),
+        "Cache-Control": "no-store",
+      });
+      return res.end(file.content);
+    }
+    // Staff statement exports are bytes too.
+    const staffStatement = /^\/projects\/([^/]+)\/client-payments\/statement\/(pdf|xlsx)$/.exec(
+      path,
+    );
+    if (staffStatement && req.method === "GET") {
+      try {
+        const state = stateFor(req);
+        const permissions = valuationPermissions(state, staffStatement[1]!);
+        if (
+          !["bq.edit", "finance.view", "finance.manage"].some((p) =>
+            permissions.includes(p as Permission),
+          )
+        )
+          return send(res, 403, { code: "forbidden" }, true);
+        const pdf = staffStatement[2] === "pdf";
+        res.writeHead(200, {
+          "Content-Type": pdf
+            ? "application/pdf"
+            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="client-statement.${staffStatement[2]}"`,
+          "Cache-Control": "no-store",
+        });
+        return res.end(Buffer.from(pdf ? "%PDF-1.4\n% mock client statement\n%%EOF\n" : "PK mock"));
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
+    // Procurement documents and GRN photos are downloaded as bytes, not JSON.
+    const download = /^\/procurement\/documents\/([^/]+)$/.exec(path);
+    if (download && req.method === "GET") {
+      try {
+        const file = p2pDocument(stateFor(req).p2p, download[1]!);
+        if (!file) return send(res, 404, { code: "not-found" }, true);
+        res.writeHead(200, { "Content-Type": file.contentType, "Cache-Control": "no-store" });
+        return res.end(file.content);
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
+    // Certificate PDF and Excel files are bytes too.
+    const certificate = /^\/valuations\/([^/]+)\/export\/(pdf|xlsx)$/.exec(path);
+    if (certificate && req.method === "GET") {
+      try {
+        const state = stateFor(req);
+        const file = valuationExport(
+          { projectPermissions: (projectId) => valuationPermissions(state, projectId) },
+          state.valuations,
+          certificate[1]!,
+          certificate[2]!,
+        );
+        if (!file) return send(res, 404, { code: "not-found" }, true);
+        res.writeHead(200, {
+          "Content-Type": file.contentType,
+          "Content-Disposition": `attachment; filename="certificate.${certificate[2]}"`,
+          "Cache-Control": "no-store",
+        });
+        return res.end(file.content);
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
+    // Report PDF and Excel files (D8.1) are bytes too.
+    if (/^\/reports\/[^/]+\/export\/(pdf|xlsx)$/.test(path) && req.method === "GET") {
+      try {
+        const state = stateFor(req);
+        const file = reportExport(reportsDeps(state), state.reports, path, url.searchParams);
+        res.writeHead(200, {
+          "Content-Type": file.contentType,
+          "Content-Disposition": `attachment; filename="${file.filename}"`,
+          "Cache-Control": "no-store",
+        });
+        return res.end(file.content);
+      } catch (error) {
+        if (error instanceof HttpError)
+          return send(res, error.status, { status: error.status, code: error.code }, true);
+        return send(res, 500, { code: "internal-error" }, true);
+      }
+    }
+    // Document versions are downloaded as bytes, with the version state in a header.
+    const documentFile =
+      /^\/projects\/([^/]+)\/documents\/([^/]+)\/versions\/([^/]+)\/content$/.exec(path);
+    if (documentFile && req.method === "GET") {
+      try {
+        const state = stateFor(req);
+        const file = documentDownload(
+          documentsDeps(state),
+          state.documents,
+          documentFile[1]!,
+          documentFile[2]!,
+          documentFile[3]!,
+        );
+        if (!file) return send(res, 404, { code: "not-found" }, true);
+        res.writeHead(200, {
+          "Content-Type": file.contentType,
+          "Content-Disposition": `attachment; filename="${file.fileName}"`,
+          "X-Content-Type-Options": "nosniff",
+          "X-Document-Version-State": file.state,
+          "Cache-Control": "no-store",
+        });
+        return res.end(file.content);
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
+    // Petty-cash receipt photos are downloaded as bytes too.
+    const receipt = /^\/petty-cash\/receipts\/([^/]+)$/.exec(path);
+    if (receipt && req.method === "GET") {
+      try {
+        const file = spendingReceipt(stateFor(req).spending, receipt[1]!);
+        if (!file) return send(res, 404, { code: "not-found" }, true);
+        res.writeHead(200, { "Content-Type": file.contentType, "Cache-Control": "no-store" });
+        return res.end(file.content);
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
     try {
       const { json, raw } = await readBody(req);
       const reply = await handle(req.method ?? "GET", path, url.searchParams, req, json, raw);

@@ -2,15 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { nairobiDate, type DiaryAction } from "@pm-buddy/domain";
+import type { WorkforceSource } from "@pm-buddy/types";
 import {
   createDiaryRequestSchema,
   diaryActionRequestSchema,
+  diaryAttendanceResponseSchema,
   diaryResponseSchema,
   updateDiaryRequestSchema,
+  type DiaryAttendanceResponse,
   type Site,
   type SiteDiary,
+  type WorkforceTradeWire,
 } from "@pm-buddy/validation";
 import { StatusBadge, type Tone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +30,7 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCalendarDate } from "@/lib/format";
+import { formatCalendarDate, formatDateTime } from "@/lib/format";
 import { liveRequest, LiveApiError } from "@/lib/live-api";
 import { calendarInput, parseCalendarInput } from "@/lib/project-input";
 import { useProblemMessage } from "./use-problem-message";
@@ -46,6 +50,25 @@ const errors = {
   "diary-author-required": "author",
 } as const;
 
+/** "Mason 5 (1 half day) · Helper 3" in the reader's language. */
+function TradeList({ trades, locale }: { trades: WorkforceTradeWire[]; locale: string }) {
+  const t = useTranslations("liveDiary");
+  if (!trades.length) return <span>{t("workforceNobody")}</span>;
+  return (
+    <ul className="flex flex-wrap gap-x-3 gap-y-1">
+      {trades.map((trade) => (
+        <li key={trade.tradeId}>
+          {t("workforceTrade", {
+            name: locale === "sw" ? trade.nameSw : trade.nameEn,
+            count: trade.headcount,
+            half: trade.halfDays,
+          })}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function DiariesPanel({
   projectId,
   userId,
@@ -62,9 +85,44 @@ export function DiariesPanel({
   canReview: boolean;
 }) {
   const t = useTranslations("liveDiary");
+  const locale = useLocale();
   const problem = useProblemMessage();
   const router = useRouter();
   const [editor, setEditor] = useState<{ diary: SiteDiary | null } | null>(null);
+  const [source, setSource] = useState<WorkforceSource>("attendance");
+  const [offer, setOffer] = useState<DiaryAttendanceResponse | null>(null);
+  const [checking, setChecking] = useState(false);
+  const openEditor = (diary: SiteDiary | null) => {
+    setMessage(null);
+    setOffer(null);
+    setSource(diary?.workforceSource ?? "attendance");
+    setEditor({ diary });
+  };
+
+  async function checkAttendance(form: HTMLFormElement | null) {
+    if (!form || !editor) return;
+    const data = new FormData(form);
+    const siteId = editor.diary?.siteId ?? String(data.get("siteId") ?? "");
+    const date = editor.diary?.date ?? parseCalendarInput(String(data.get("date") ?? ""));
+    if (!siteId || !date) {
+      setMessage({ error: true, text: t("invalid") });
+      return;
+    }
+    setChecking(true);
+    setMessage(null);
+    try {
+      setOffer(
+        await liveRequest(
+          `/projects/${projectId}/diaries/attendance?siteId=${siteId}&date=${date}`,
+          diaryAttendanceResponseSchema,
+        ),
+      );
+    } catch (error) {
+      setMessage({ error: true, text: problem(error) });
+    } finally {
+      setChecking(false);
+    }
+  }
   const [review, setReview] = useState<{ diary: SiteDiary; action: DiaryAction } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null);
@@ -91,11 +149,13 @@ export function DiariesPanel({
   function save(form: FormData) {
     if (!editor) return;
     const workforce = String(form.get("workforceCount") ?? "").trim();
+    const count = /^\d{1,6}$/.test(workforce) ? Number(workforce) : Number.NaN;
     const content = {
       workPerformed: form.get("workPerformed"),
       weather: String(form.get("weather") ?? "").trim() || null,
       delays: String(form.get("delays") ?? "").trim() || null,
-      workforceCount: workforce === "" ? null : Number(workforce),
+      workforceSource: source,
+      workforceCount: source === "attendance" || workforce === "" ? null : count,
     };
     const parsed = editor.diary
       ? updateDiaryRequestSchema.safeParse({ ...content, version: editor.diary.version })
@@ -154,14 +214,7 @@ export function DiariesPanel({
       <CardContent className="space-y-4">
         {!editor && !review ? notice() : null}
         {canWrite && sites.length ? (
-          <Button
-            onClick={() => {
-              setMessage(null);
-              setEditor({ diary: null });
-            }}
-          >
-            {t("add")}
-          </Button>
+          <Button onClick={() => openEditor(null)}>{t("add")}</Button>
         ) : null}
         {!sites.length ? <p>{t("noSites")}</p> : null}
         {!diaries.length ? <p className="text-sm text-muted-foreground">{t("empty")}</p> : null}
@@ -196,7 +249,26 @@ export function DiariesPanel({
                 <dl className="grid gap-3 text-sm sm:grid-cols-3">
                   <div>
                     <dt className="text-muted-foreground">{t("workforce")}</dt>
-                    <dd>{diary.workforceCount ?? t("unknown")}</dd>
+                    <dd className="space-y-1">
+                      {diary.workforceSource === "attendance" && diary.workforce ? (
+                        <>
+                          <span className="block">
+                            {t("workforceFromAttendance", { count: diary.workforceCount ?? 0 })}
+                          </span>
+                          <TradeList trades={diary.workforce.trades} locale={locale} />
+                          <span className="block text-xs text-muted-foreground">
+                            {t("workforceProvenance", {
+                              muster: t(`muster.${diary.workforce.musterStatus}`),
+                              at: formatDateTime(diary.workforce.snapshotAt),
+                            })}
+                          </span>
+                        </>
+                      ) : diary.workforceCount === null ? (
+                        t("unknown")
+                      ) : (
+                        t("workforceManualValue", { count: diary.workforceCount })
+                      )}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-muted-foreground">{t("weather")}</dt>
@@ -221,14 +293,7 @@ export function DiariesPanel({
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   {canWrite && author && diary.status === "draft" ? (
-                    <Button
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => {
-                        setMessage(null);
-                        setEditor({ diary });
-                      }}
-                    >
+                    <Button variant="outline" disabled={busy} onClick={() => openEditor(diary)}>
                       {t("edit")}
                     </Button>
                   ) : null}
@@ -257,7 +322,7 @@ export function DiariesPanel({
           if (!open && !busy) setEditor(null);
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editor?.diary ? t("edit") : t("add")}</DialogTitle>
             <DialogDescription>{t("manual")}</DialogDescription>
@@ -316,23 +381,66 @@ export function DiariesPanel({
                 disabled={busy}
               />
             </Field>
-            <Field>
-              <FieldLabel htmlFor="diary-workforce">{t("workforce")}</FieldLabel>
-              <Input
-                id="diary-workforce"
-                name="workforceCount"
-                type="number"
-                min={0}
-                max={100000}
-                step={1}
-                defaultValue={editor?.diary?.workforceCount ?? ""}
-                disabled={busy}
-                aria-describedby="diary-workforce-hint"
-              />
-              <p id="diary-workforce-hint" className="text-sm text-muted-foreground">
-                {t("workforceHint")}
-              </p>
-            </Field>
+            <fieldset className="space-y-3 rounded-md border p-3" disabled={busy}>
+              <legend className="px-1 text-sm font-medium">{t("workforce")}</legend>
+              <div className="flex flex-wrap gap-4">
+                {(["attendance", "manual"] as const).map((value) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="workforceSource"
+                      value={value}
+                      checked={source === value}
+                      onChange={() => setSource(value)}
+                    />
+                    {t(`workforceSource.${value}`)}
+                  </label>
+                ))}
+              </div>
+              {source === "attendance" ? (
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground">{t("workforceAttendanceHint")}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={checking}
+                    onClick={(event) => void checkAttendance(event.currentTarget.form)}
+                  >
+                    {t("workforceCheck")}
+                  </Button>
+                  {offer ? (
+                    <div role="status" className="space-y-1 rounded-md bg-muted p-2">
+                      <p>
+                        {t("workforceOffer", {
+                          count: offer.total,
+                          muster: t(`muster.${offer.musterStatus}`),
+                        })}
+                      </p>
+                      <TradeList trades={offer.trades} locale={locale} />
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <Field>
+                  <FieldLabel htmlFor="diary-workforce">{t("workforceManual")}</FieldLabel>
+                  <Input
+                    id="diary-workforce"
+                    name="workforceCount"
+                    inputMode="numeric"
+                    defaultValue={
+                      editor?.diary?.workforceSource === "manual"
+                        ? (editor.diary.workforceCount ?? "")
+                        : ""
+                    }
+                    aria-describedby="diary-workforce-hint"
+                  />
+                  <p id="diary-workforce-hint" className="text-sm text-muted-foreground">
+                    {t("workforceHint")}
+                  </p>
+                </Field>
+              )}
+            </fieldset>
             <Field>
               <FieldLabel htmlFor="diary-weather">{t("weather")}</FieldLabel>
               <Input

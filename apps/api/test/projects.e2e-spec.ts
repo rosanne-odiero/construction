@@ -3,6 +3,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { addCalendarDays, nairobiDate } from "@pm-buddy/domain";
 import { KENYA_STATUTORY_SEED, PROJECT_ASSIGNABLE_PERMISSIONS } from "@pm-buddy/types";
 import {
   auditEventsResponseSchema,
@@ -746,7 +747,9 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       if (status === 200) current = milestoneResponseSchema.parse(res.body).milestone;
     };
     await move({ to: "achieved" }, 400, "actual-date-required");
-    await move({ to: "achieved", actualDate: "2999-01-01" }, 400, "actual-date-future");
+    // A future date within the planning range (2000–2099; later years are a validation error).
+    await move({ to: "achieved", actualDate: "2098-01-01" }, 400, "actual-date-future");
+    await move({ to: "achieved", actualDate: "2999-01-01" }, 400, "validation-error");
     await move({ to: "achieved", actualDate: "2026-06-26" });
     expect(current).toMatchObject({ status: "achieved", actualDate: "2026-06-26" });
     await move({ to: "cancelled", reason: "Not allowed" }, 409, "invalid-transition");
@@ -1220,6 +1223,129 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         }),
         payables: await tx.invoicePayable.count({ where: { tenantId } }),
         settlements: await tx.invoiceSettlement.count({ where: { tenantId } }),
+        stores: await tx.store.count({ where: { tenantId } }),
+        stockEntries: await tx.stockLedgerEntry.count({ where: { tenantId } }),
+        movements: await tx.stockMovement.count({ where: { tenantId } }),
+        transfers: await tx.stockTransfer.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        stockTakes: await tx.stockTake.findMany({ where: { tenantId }, select: { status: true } }),
+        measurements: await tx.progressMeasurement.count({ where: { tenantId } }),
+        mappings: await tx.buildupLineMaterial.count({ where: { tenantId } }),
+        costCodes: await tx.costCode.count({ where: { tenantId } }),
+        budgets: await tx.budget.findMany({ where: { tenantId }, select: { status: true } }),
+        budgetLines: await tx.budgetLine.count({ where: { tenantId } }),
+        costEntries: await tx.costEntry.count({ where: { tenantId } }),
+        floats: await tx.pettyCashFloat.count({ where: { tenantId } }),
+        floatEntries: await tx.pettyCashEntry.count({ where: { tenantId } }),
+        expenses: await tx.pettyCashExpense.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        receipts: await tx.pettyCashReceipt.count({ where: { tenantId } }),
+        topUps: await tx.pettyCashTopUp.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        counts: await tx.pettyCashCount.findMany({ where: { tenantId }, select: { status: true } }),
+        journals: await tx.costJournal.findMany({ where: { tenantId }, select: { status: true } }),
+        cashFlowItems: await tx.cashFlowItem.count({ where: { tenantId } }),
+        templates: await tx.checklistTemplate.count({ where: { tenantId } }),
+        inspections: await tx.inspection.findMany({
+          where: { tenantId },
+          select: { status: true, result: true },
+          orderBy: [{ status: "asc" }, { result: "asc" }],
+        }),
+        snags: await tx.snag.findMany({
+          where: { tenantId },
+          select: { status: true, phase: true },
+          orderBy: [{ phase: "asc" }, { status: "asc" }],
+        }),
+        cubeResults: await tx.cubeResult.count({ where: { tenantId } }),
+        slumpTests: await tx.slumpTest.count({ where: { tenantId } }),
+        completions: await tx.projectCompletion.findMany({
+          where: { tenantId },
+          select: { kind: true, status: true, dlpMonths: true },
+        }),
+        measurementReviews: await tx.progressMeasurementReview.count({ where: { tenantId } }),
+        measurementPhotos: await tx.progressMeasurementPhoto.count({ where: { tenantId } }),
+        contractSettings: await tx.contractSettings.count({ where: { tenantId } }),
+        valuations: await tx.valuation.findMany({
+          where: { tenantId },
+          select: { kind: true, status: true, certificateNumber: true },
+          orderBy: [{ projectId: "asc" }, { number: "asc" }],
+        }),
+        incidents: await tx.safetyIncident.findMany({
+          where: { tenantId },
+          select: { kind: true, status: true },
+          orderBy: { number: "asc" },
+        }),
+        correctiveActions: await tx.correctiveAction.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        toolboxTalks: await tx.toolboxTalk.findMany({
+          where: { tenantId },
+          select: { status: true },
+          orderBy: { number: "asc" },
+        }),
+        firstAidKits: await tx.firstAidKit.count({ where: { tenantId } }),
+        treatments: await tx.firstAidTreatment.count({ where: { tenantId } }),
+        supplierPortalUsers: await tx.supplierPortalUser.findMany({
+          where: { tenantId },
+          select: { status: true },
+        }),
+        invoiceSubmissions: await tx.supplierInvoiceSubmission.count({ where: { tenantId } }),
+        lpoAcknowledgements: await tx.lpoAcknowledgement.count({ where: { tenantId } }),
+        plantItems: await tx.plantItem.findMany({
+          where: { tenantId },
+          select: { code: true, status: true },
+          orderBy: { code: "asc" },
+        }),
+        plantUsage: await tx.plantUsageLog.count({ where: { tenantId } }),
+        plantFuel: await tx.plantFuelIssue.count({ where: { tenantId } }),
+        plantBreakdowns: await tx.plantBreakdown.count({ where: { tenantId, status: "open" } }),
+        reportSubscriptions: await tx.reportSubscription.findMany({
+          where: { tenantId },
+          select: { reportId: true, frequency: true, status: true },
+          orderBy: { reportId: "asc" },
+        }),
+        documents: await tx.document.count({ where: { tenantId } }),
+        documentVersions: await tx.documentVersion.count({ where: { tenantId } }),
+        supersededVersions: await tx.documentVersion.count({
+          where: { tenantId, isCurrent: false },
+        }),
+        complianceTypes: await tx.complianceType.count({ where: { tenantId } }),
+        complianceRecords: await tx.complianceRecord.count({ where: { tenantId } }),
+        instructions: await tx.instruction.findMany({
+          where: { tenantId },
+          select: { number: true, status: true },
+          orderBy: { number: "asc" },
+        }),
+        instructionResponses: await tx.instructionResponse.count({ where: { tenantId } }),
+        approvalRequests: await tx.approvalRequest.findMany({
+          where: { tenantId },
+          select: { number: true, status: true },
+          orderBy: { number: "asc" },
+        }),
+        variations: await tx.variationOrder.findMany({
+          where: { tenantId },
+          select: { number: true, status: true },
+        }),
+        clientTerms: await tx.projectClientSettings.count({ where: { tenantId } }),
+        paymentInstructions: await tx.clientPaymentInstructions.count({ where: { tenantId } }),
+        fxRates: await tx.fxRate.count({ where: { tenantId } }),
+        clientPayments: await tx.clientPayment.findMany({
+          where: { tenantId },
+          select: { kind: true, method: true },
+        }),
+        variationClientRequests: await tx.variationClientRequest.count({ where: { tenantId } }),
+        variationClientDecisions: await tx.variationClientDecision.count({ where: { tenantId } }),
       }));
     const first = await seedDemo(app);
     expect(first.company.name).toBe(DEMO_COMPANY);
@@ -1230,14 +1356,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     const { attendanceDays, attendanceRecords, periods, timesheetLines, anomalies, ...registry } =
       afterFirst;
     expect(registry).toEqual({
-      members: 4,
-      projects: 3,
-      sites: 3,
-      geofences: 3,
-      wbs: 13,
-      milestones: 9,
-      history: 2,
-      assignments: 3,
+      // D5.3 adds the storekeeper, assigned to Ruiru Heights and Kitengela; D7.2 the quarry's
+      // supplier portal user (no project assignment); D7.1 Mavuno Homes' client (RUI-HTS).
+      members: 7,
+      // D6.1 adds JUJ-DPX (handed over: activated and completed), assigned to the PM and agent.
+      projects: 4,
+      sites: 4,
+      geofences: 4,
+      wbs: 16,
+      milestones: 11,
+      history: 4,
+      assignments: 8,
       buildups: 1,
       buildupLines: 5,
       // D5.1: the starter catalogue (21 materials, 6 factors) plus 2 supplier trip factors; three
@@ -1245,9 +1374,11 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       // verified by the finance user and one Till/bank proposal pending.
       materials: 21,
       conversions: 8,
-      suppliers: 3,
-      // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold.
-      prices: 14,
+      // D8.3 adds the plant hire company.
+      suppliers: 4,
+      // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold;
+      // D5.3 three cement quotations; D7.2 six more at the D5.2 prices (no new alert).
+      prices: 23,
       alerts: 1,
       payouts: [{ status: "pending" }, { status: "verified" }],
       labourers: 40,
@@ -1263,17 +1394,216 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       holidays: 23,
       // D5.2: REQ → RFQ (3 quotations) → approved LPO → partial GRN → one invoice matched,
       // approved and settled, one blocked by the three-way match (ballast not yet delivered).
-      requisitions: 1,
-      quotations: 3,
-      lpos: [{ status: "approved" }],
-      grns: 1,
+      // D5.3: a second REQ → RFQ → LPO → GRN for 120 bags of cement. D7.2 on Kitengela: REQ →
+      // RFQ (3 quotations) → LPO acknowledged by the supplier → GRN, and two invoices the
+      // supplier submitted: one approved and partly paid, one waiting for review.
+      requisitions: 3,
+      quotations: 9,
+      lpos: [{ status: "approved" }, { status: "approved" }, { status: "approved" }],
+      grns: 3,
       invoices: [
         { invoiceNumber: "MQ-INV-1001", status: "settled" },
         { invoiceNumber: "MQ-INV-1002", status: "disputed" },
+        { invoiceNumber: "MQ-INV-2001", status: "partly_settled" },
+        { invoiceNumber: "MQ-INV-2002", status: "matched" },
       ],
-      payables: 1,
-      settlements: 1,
+      payables: 2,
+      settlements: 2,
+      // D5.3: two stores; 3 receipts, 3 issue lines, a return, wastage and two transfers (out,
+      // in, out); a disputed and an in-transit transfer; a submitted stock take; one measurement
+      // and the build-up's three material lines mapped.
+      // D7.2 receives sand and ballast into the Kitengela store (two receipt entries).
+      stores: 2,
+      stockEntries: 13,
+      movements: 3,
+      transfers: [{ status: "disputed" }, { status: "dispatched" }],
+      stockTakes: [{ status: "submitted" }],
+      // D5.3's one measurement plus D6.3's: RUI-HTS 3 + 2 approved and 1 pending, JUJ-DPX 3 + 5.
+      measurements: 15,
+      mappings: 3,
+      // D5.4: the default cost codes; an approved budget (3 BQ items + 4 cost-code lines); a float
+      // with a paid and a requested top-up, five approved expenses (one with an M-Pesa charge)
+      // and two waiting, an approved count and journal, three forecast lines. Cost entries: the
+      // invoice accrual and settlement payment, 5 × 2 expense entries + 2 for the charge, 2 for
+      // the count shortage and 2 journal lines.
+      costCodes: 11,
+      budgets: [{ status: "approved" }],
+      budgetLines: 7,
+      // D6.3 adds the three lines of the substructure labour journal; D7.2 the accrual of the
+      // approved supplier invoice and the cost part of its part payment.
+      costEntries: 23,
+      floats: 1,
+      floatEntries: 9,
+      expenses: [
+        ...Array.from({ length: 5 }, () => ({ status: "approved" })),
+        { status: "submitted" },
+        { status: "submitted" },
+      ],
+      receipts: 6,
+      topUps: [{ status: "paid" }, { status: "requested" }],
+      counts: [{ status: "approved" }],
+      journals: [{ status: "approved" }, { status: "approved" }],
+      cashFlowItems: 3,
+      // D6.1: the seven starter templates; on RUI-HTS a signed-off and a failed (signed-off)
+      // inspection and one awaiting sign-off, on JUJ-DPX a signed-off pre-handover inspection;
+      // snags in every state, two reported in the DLP; four cube sets with six results; three
+      // slump tests; JUJ-DPX's practical completion certified with a six-month DLP.
+      templates: 7,
+      inspections: [
+        { status: "signed_off", result: "fail" },
+        { status: "signed_off", result: "pass" },
+        { status: "signed_off", result: "pass" },
+        { status: "submitted", result: "pass" },
+      ],
+      snags: [
+        { status: "closed", phase: "construction" },
+        { status: "closed", phase: "construction" },
+        { status: "closed", phase: "construction" },
+        { status: "fixed", phase: "construction" },
+        { status: "open", phase: "construction" },
+        { status: "open", phase: "construction" },
+        { status: "fixed", phase: "dlp" },
+        { status: "open", phase: "dlp" },
+      ],
+      cubeResults: 5,
+      slumpTests: 3,
+      completions: [{ kind: "practical", status: "certified", dlpMonths: 6 }],
+      // D6.3: every measurement but the pending one approved, one photo each; RUI-HTS contract
+      // settings; two certified interims on RUI-HTS and on JUJ-DPX plus JUJ-DPX's
+      // practical-completion retention release.
+      measurementReviews: 14,
+      measurementPhotos: 15,
+      contractSettings: 1,
+      valuations: expect.arrayContaining([
+        { kind: "interim", status: "certified", certificateNumber: 1 },
+        { kind: "interim", status: "certified", certificateNumber: 2 },
+        { kind: "retention_release", status: "certified", certificateNumber: 3 },
+      ]),
+      // D8.2: on RUI-HTS a closed near miss and an investigated injury; three corrective actions
+      // (two verified, one overdue); two confirmed toolbox talks and a draft; two kits; a treatment.
+      incidents: [
+        { kind: "near_miss", status: "closed" },
+        { kind: "injury", status: "investigated" },
+      ],
+      correctiveActions: [{ status: "verified" }, { status: "verified" }, { status: "open" }],
+      toolboxTalks: [{ status: "confirmed" }, { status: "confirmed" }, { status: "draft" }],
+      firstAidKits: 2,
+      treatments: 1,
+      supplierPortalUsers: [{ status: "active" }],
+      invoiceSubmissions: 2,
+      lpoAcknowledgements: 1,
+      plantItems: [
+        { code: "EX-01", status: "on_site" },
+        { code: "GN-01", status: "available" },
+        { code: "MX-01", status: "on_site" },
+        { code: "RL-01", status: "on_site" },
+        { code: "SCF-01", status: "on_site" },
+        { code: "VB-01", status: "under_repair" },
+      ],
+      plantUsage: 7,
+      plantFuel: 3,
+      plantBreakdowns: 1,
+      // D8.1: the owner's weekly cost ledger and the finance officer's monthly invoice ageing.
+      reportSubscriptions: [
+        { reportId: "cost-ledger", frequency: "weekly", status: "active" },
+        { reportId: "invoice-ageing", frequency: "monthly", status: "active" },
+      ],
+      // D8.4: 13 documents on RUI-HTS (A-101 in three revisions, S-201 in two) and KIT-BNG's
+      // county approval; the nine starter item types; ten compliance records (the CAR policy
+      // renewed once, two company items); three instructions with five responses; three approval
+      // requests (one answered on paper, one overdue, one pending).
+      documents: 14,
+      documentVersions: 17,
+      supersededVersions: 3,
+      complianceTypes: 9,
+      complianceRecords: 10,
+      instructions: [
+        { number: "AI-001", status: "closed" },
+        { number: "EI-001", status: "acknowledged" },
+        { number: "SI-001", status: "received" },
+      ],
+      instructionResponses: 5,
+      approvalRequests: [
+        { number: 1, status: "approved_with_comments" },
+        { number: 2, status: "pending" },
+        { number: 3, status: "pending" },
+      ],
+      // D7.1 on RUI-HTS: client terms, the company's Paybill instructions and three indicative
+      // rates, a part payment of IPC-0001 by M-Pesa Paybill, and a submitted variation sent to
+      // the client and awaiting their decision.
+      variations: [{ number: "VO-001", status: "submitted" }],
+      clientTerms: 1,
+      paymentInstructions: 1,
+      fxRates: 3,
+      clientPayments: [{ kind: "receipt", method: "mpesa_paybill" }],
+      variationClientRequests: 1,
+      variationClientDecisions: 0,
     });
+    expect(first.clientPortal).toMatchObject({
+      project: "RUI-HTS",
+      displayCurrency: "GBP",
+      paybill: "174379",
+      receipts: 1,
+      variation: { number: "VO-001", state: "awaiting_decision" },
+    });
+    expect(first.documents).toMatchObject({
+      documents: 13,
+      drawings: [
+        { number: "A-101", current: "A", superseded: ["P1", "P2"] },
+        { number: "E-301", current: "A", superseded: [] },
+        { number: "S-201", current: "B", superseded: ["A"] },
+      ],
+      // Every status shows on the demo register (company items included).
+      compliance: { valid: 4, expiring: 2, expired: 1, missing: 1, not_applicable: 1 },
+      approvals: [
+        { code: "APR-0001", status: "approved_with_comments", overdue: false },
+        { code: "APR-0002", status: "pending", overdue: true },
+        { code: "APR-0003", status: "pending", overdue: false },
+      ],
+    });
+    expect(first.documents.reminders).toBeGreaterThanOrEqual(5);
+    // One fuel variance alert, one service due, one open breakdown and one idle hired item.
+    const plantAlerts = Object.fromEntries(
+      first.plant.items.map((item) => [item.code, item.alerts]),
+    );
+    expect(plantAlerts).toEqual({
+      "EX-01": ["fuel_over_standard"],
+      "GN-01": [],
+      "MX-01": ["service_due"],
+      "RL-01": ["idle_on_hire", "hire_ending"],
+      "SCF-01": [],
+      "VB-01": ["breakdown_open"],
+    });
+    expect(first.plant.fuelVarianceAlerts).toBe(1);
+    expect(afterFirst.valuations).toHaveLength(5);
+    expect(first.valuations).toMatchObject({
+      measurements: { approved: 14, pending: 1 },
+      certificates: [
+        "RUI-HTS IPC-0001 (interim)",
+        "RUI-HTS IPC-0002 (interim)",
+        "JUJ-DPX IPC-0001 (interim)",
+        "JUJ-DPX IPC-0002 (interim)",
+        "JUJ-DPX IPC-0003 (practical retention release)",
+      ],
+    });
+    expect(first.safety).toMatchObject({
+      flaggedLabourers: 2,
+      actions: { total: 3, verified: 2, overdue: 1 },
+    });
+    expect(first.safety.ppeDue).toBeGreaterThan(0);
+    expect(first.quality).toMatchObject({
+      failedCubeSets: 1,
+      overdueCubeSets: 1,
+      practicalCompletion: addCalendarDays(nairobiDate(), -75),
+    });
+    // Every spend-alert kind shows on the demo.
+    expect(
+      Object.entries(first.spending.alerts)
+        .filter(([, total]) => total > 0)
+        .map(([kind]) => kind)
+        .sort(),
+    ).toEqual(["budget_threshold", "duplicate_payment", "missing_documents", "unusual_spend"]);
+    expect(first.stores).toMatchObject({ varianceAlerts: 1, lowStock: 2 });
     // Nine weeks of muster rolls on two projects: past periods approved (with their snapshot
     // lines), the last complete one awaiting approval and the current one open.
     // The test database is reused between runs, so the first call may find the data already there.
@@ -1319,7 +1649,21 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     );
     expect(states.adjustment.status).toBe("approved");
     expect(states.adjustment.decidedBy).not.toBe(states.adjustment.requestedBy);
+    // A database seeded before the storekeeper joined the team: the next seed assigns them.
+    const keeperId = (
+      await prisma.user.findUniqueOrThrow({
+        where: {
+          identifier: DEMO_ACCOUNTS.find((account) => account.key === "storekeeper")!.identifier,
+        },
+      })
+    ).id;
+    const unassigned = await db.run(
+      { tenantId: first.company.id, userId: ownerId, requestId: "seed-older-db" },
+      (tx) => tx.projectMembership.deleteMany({ where: { userId: keeperId } }),
+    );
+    expect(unassigned.count).toBe(2);
     const second = await seedDemo(app);
+    expect((await counts(first.company.id, ownerId)).assignments).toBe(afterFirst.assignments);
     expect(second.company).toEqual({ ...first.company, created: false });
     expect(second.accounts.every((account) => !account.created && account.password === null)).toBe(
       true,
@@ -1331,6 +1675,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       ["RUI-HTS", "active", false],
       ["KIT-BNG", "active", false],
       ["SYO-TWN", "planning", false],
+      ["JUJ-DPX", "completed", false],
     ]);
     expect(second.buildups).toEqual([
       {
@@ -1380,6 +1725,7 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         expect(stored.digest).toBe(submitted.digest);
       },
     );
+    expect(second.spending).toEqual({ ...first.spending, created: false });
     expect(second.procureToPay).toEqual({
       created: false,
       requisition: "REQ-0001",
@@ -1391,6 +1737,29 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         { number: "MQ-INV-1002", status: "disputed" },
       ],
     });
+    expect(second.quality).toEqual({ ...first.quality, created: false });
+    expect(second.safety).toEqual({ ...first.safety, created: false });
+    expect(second.supplierPortal).toEqual({
+      ...first.supplierPortal,
+      created: false,
+      account: { ...first.supplierPortal.account, password: null, created: false },
+    });
+    expect(second.supplierPortal).toMatchObject({
+      supplier: "SUP-0001 Mlolongo Quarry (synthetic)",
+      invoices: [
+        { number: "MQ-INV-2001", status: "partly_settled" },
+        { number: "MQ-INV-2002", status: "matched" },
+      ],
+    });
+    expect(second.plant).toEqual({ ...first.plant, created: false });
+    expect(second.reports).toEqual({ ...first.reports, created: false });
+    expect(second.documents).toEqual({ ...first.documents, created: false });
+    expect(second.clientPortal).toEqual({
+      ...first.clientPortal,
+      created: false,
+      account: { ...first.clientPortal.account, password: null, created: false },
+    });
     expect(await counts(first.company.id, ownerId)).toEqual(afterFirst);
-  });
+    // Seeds a whole company twice (about 7 s alone); parallel e2e files can triple that.
+  }, 90_000);
 });

@@ -25,6 +25,7 @@ import { TenantScope } from "../identity/tenant-scope.service.js";
 import { BqAccess, bqConflict, bqProblem, recordConflict } from "./bq-access.js";
 import { peopleOf, personOf, safeMinor } from "./bq-mappers.js";
 import { currentVersion, linksOf } from "./bq-viewer.service.js";
+import { refuseClientPortalMember } from "../portals/client/client-portal-access.js";
 
 type Tx = Prisma.TransactionClient;
 type VersionRow = Prisma.RateBuildupVersionGetPayload<{ include: { lines: true } }>;
@@ -120,6 +121,7 @@ export class BuildupsService {
   list(principal: Principal, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       await this.policy.requireSomewhere(scope, "bq.view");
+      refuseClientPortalMember(scope);
       const rows = await scope.tx.rateBuildup.findMany({
         where: { tenantId: scope.access.tenantId },
         orderBy: { code: "asc" },
@@ -171,6 +173,7 @@ export class BuildupsService {
   get(principal: Principal, buildupId: string, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       await this.policy.requireSomewhere(scope, "bq.view");
+      refuseClientPortalMember(scope);
       return this.detail(scope, buildupId);
     });
   }
@@ -178,6 +181,7 @@ export class BuildupsService {
   version(principal: Principal, buildupId: string, versionNo: number, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       await this.policy.requireSomewhere(scope, "bq.view");
+      refuseClientPortalMember(scope);
       await this.header(scope, buildupId);
       const row = await scope.tx.rateBuildupVersion.findUnique({
         where: {
@@ -431,6 +435,7 @@ export class BuildupsService {
   getLink(principal: Principal, projectId: string, lineageId: string, req: Request) {
     return this.scope.run(principal, req, async (scope) => {
       await this.access.load(scope, projectId, "bq.view");
+      refuseClientPortalMember(scope);
       const { bq } = await this.itemOf(scope, projectId, lineageId, false);
       return this.linkResponse(scope, bq.id, lineageId);
     });

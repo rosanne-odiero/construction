@@ -9,6 +9,7 @@ import {
 } from "@pm-buddy/validation";
 import { BqEyebrow, BqSubnav } from "@/components/bq/bq-subnav";
 import { VariationEditor } from "@/components/bq/variation-editor";
+import { VariationClientPanel } from "@/components/client-portal/variation-client-panel";
 import { VariationStatusBadge } from "@/components/bq/variation-status-badge";
 import { PageHeader } from "@/components/page-header";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
@@ -95,6 +96,11 @@ export default async function VariationPage({
       {variation.permissions.approvalBlocker === "maker" ? (
         <p role="status" className="rounded-md border bg-muted p-3 text-sm">
           {t("makerNote")}
+        </p>
+      ) : null}
+      {variation.permissions.approvalBlocker === "client" ? (
+        <p role="status" className="rounded-md border bg-muted p-3 text-sm">
+          {t("clientNote")}
         </p>
       ) : null}
       <div className="grid gap-4 xl:grid-cols-3">
@@ -220,6 +226,7 @@ export default async function VariationPage({
         variation={variation}
         bills={bills}
       />
+      <VariationClientPanel projectId={project.id} variation={variation} />
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

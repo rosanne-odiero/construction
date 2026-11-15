@@ -49,6 +49,7 @@ type ErrorKey =
   | "invalidCode"
   | "rateLimited"
   | "pinResetRequired"
+  | "pinTemporarilyLimited"
   | "network"
   | "invalidResponse"
   | "passkeyCancelled"
@@ -64,6 +65,7 @@ function errorKey(error: unknown, credentials: boolean | "pin"): ErrorKey {
         ? "invalidCredentials"
         : "invalidCode";
   if (error.code === "pin-reset-required") return "pinResetRequired";
+  if (error.code === "pin-temporarily-limited") return "pinTemporarilyLimited";
   if (error.status === 429) return "rateLimited";
   if (error.code === "network") return "network";
   if (error.code === "invalidResponse") return "invalidResponse";
@@ -159,6 +161,12 @@ export function SignInForm({
         setStep(current.user.mfaEnabled ? "mfa" : "enrol");
         return;
       }
+      // Back to an invitation link (supplier or labourer): it accepts, then returns here.
+      if (/^\/(supplier|worker)\/join\?/.test(next)) {
+        setStep("done");
+        router.replace(next);
+        return;
+      }
       const { tenants } = await foundationRequest("/tenants", tenantsResponseSchema);
       setCompanies(tenants);
       const selected = tenants.find((tenant) => tenant.id === current.session.tenantId);
@@ -170,7 +178,7 @@ export function SignInForm({
         setStep(tenants.length ? "company" : "noCompany");
       }
     },
-    [finish, selectCompany],
+    [finish, next, router, selectCompany],
   );
 
   useEffect(() => {

@@ -85,7 +85,7 @@ export class P2pUploadGuard implements CanActivate {
   }
 }
 
-type Target =
+export type Target =
   | { kind: "quotation"; rfqId: string; quotationId: string }
   | { kind: GrnPhotoKind; grnId: string }
   | { kind: "invoice"; invoiceId: string };
@@ -147,16 +147,20 @@ export class P2pDocumentsService {
     return grn.projectId;
   }
 
+  /**
+   * `authorise` checks who may attach to the record and returns its project; the supplier portal
+   * (D7.2) passes its own check (a portal user's own submitted invoice).
+   */
   async upload(
     principal: Principal,
     target: Target,
     file: UploadedDocument | undefined,
     req: Request,
+    authorise: (scope: Scope, target: Target) => Promise<string> = (scope, value) =>
+      this.authorise(scope, value),
   ) {
     if (!file?.buffer?.length) throw p2pBadRequest("file-required", "Attach the file as `file`");
-    const projectId = await this.scope.run(principal, req, (scope) =>
-      this.authorise(scope, target),
-    );
+    const projectId = await this.scope.run(principal, req, (scope) => authorise(scope, target));
     const contentType = sniffDocument(file.buffer);
     const photo = target.kind === "delivery_note" || target.kind === "goods";
     if (!contentType || (photo && contentType === "application/pdf"))
@@ -188,7 +192,7 @@ export class P2pDocumentsService {
         principal,
         req,
         async (scope) => {
-          await this.authorise(scope, target);
+          await authorise(scope, target);
           const row = await scope.tx.procurementDocument.create({
             data: {
               id,
@@ -243,6 +247,11 @@ export class P2pDocumentsService {
         throw new ForbiddenException("No procurement permission on this project");
       return document;
     });
+    return this.content(row);
+  }
+
+  /** A stored document's bytes, checked against the SHA-256 kept with it. */
+  async content(row: DocumentRow) {
     const content = await this.storage.get(row.objectKey, P2P_LIMITS.documentMaxBytes);
     if (createHash("sha256").update(content).digest("hex") !== row.sha256)
       throw p2pConflict("invalid-transition", "The stored file does not match its checksum");

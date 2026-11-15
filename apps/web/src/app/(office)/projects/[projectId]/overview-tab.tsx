@@ -1,8 +1,14 @@
+import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { Banknote, ChartPie, HardHat, TriangleAlert, Wallet } from "lucide-react";
 import { countyName, type County } from "@pm-buddy/types";
-import type { BqContractSumResponse, ProjectDetailResponse } from "@pm-buddy/validation";
+import type {
+  BqContractSumResponse,
+  ProjectDetailResponse,
+  ProjectDocumentsSummary,
+} from "@pm-buddy/validation";
 import { ContractSumCard } from "@/components/bq/contract-sum-card";
+import { ReminderList } from "@/components/documents/reminder-list";
 import { KpiCard } from "@/components/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCalendarDate, formatDateTime, formatKES } from "@/lib/format";
@@ -14,12 +20,16 @@ import { formatCalendarDate, formatDateTime, formatKES } from "@/lib/format";
 export async function OverviewTab({
   detail,
   contractSums,
+  documents,
 }: {
   detail: ProjectDetailResponse;
   /** Undefined without bq.view (the card is hidden); null when the sums could not be loaded. */
   contractSums?: BqContractSumResponse | null;
+  /** D8.4 summary: undefined without document access (hidden); null when it could not load. */
+  documents?: ProjectDocumentsSummary | null;
 }) {
   const t = await getTranslations("projectDetail");
+  const tDocs = await getTranslations("documents");
   const tStatus = await getTranslations("projectStatus");
   const tTypes = await getTranslations("contractTypes");
   const { project } = detail;
@@ -121,6 +131,45 @@ export async function OverviewTab({
         <div className="space-y-4">
           {contractSums !== undefined ? (
             <ContractSumCard sums={contractSums} projectId={project.id} />
+          ) : null}
+          {documents !== undefined ? (
+            <Card data-testid="documents-summary">
+              <CardHeader>
+                <CardTitle>
+                  <h2>{tDocs("summary.title")}</h2>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {documents ? (
+                  <>
+                    <ul className="space-y-1 tabular-nums">
+                      <li>{tDocs("summary.documents", documents.documents)}</li>
+                      <li>{tDocs("summary.compliance", documents.compliance)}</li>
+                      <li>
+                        {tDocs("summary.instructions", {
+                          open: documents.instructions.open,
+                          flagged: documents.instructions.costOrTime,
+                        })}
+                      </li>
+                      <li>{tDocs("summary.approvals", documents.approvals)}</li>
+                    </ul>
+                    <ReminderList
+                      reminders={documents.reminders.slice(0, 5)}
+                      showProject={false}
+                      emptyText={tDocs("compliance.remindersEmpty")}
+                    />
+                    <Link
+                      className="inline-block underline"
+                      href={`/projects/${project.id}?tab=compliance`}
+                    >
+                      {tDocs("summary.open")}
+                    </Link>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground">{t("kpi.unavailable")}</p>
+                )}
+              </CardContent>
+            </Card>
           ) : null}
           {project.status === "planning" ? (
             <Card>

@@ -65,12 +65,15 @@ test("lists live projects, filters them and opens every detail tab", async ({ pa
   const team = page.getByRole("table", { name: "Project members" });
   await expect(team.getByRole("row")).toHaveCount(4);
   await expect(team.getByRole("row", { name: /Wanjiru Kamau/ })).toContainText("Company-wide");
-  await expect(team.getByRole("row", { name: /Kevin Kiprono/ })).toContainText("3 permissions");
+  // D6.1: the site agent also takes site photos (inspection and snag evidence).
+  await expect(team.getByRole("row", { name: /Kevin Kiprono/ })).toContainText("4 permissions");
   expect(await axeViolations(page)).toEqual([]);
 
   await page.getByRole("link", { name: "WBS & milestones", exact: true }).click();
   await expect(page.getByText("Every group adds up to 100%")).toBeVisible();
-  await expect(page.getByText("(progress measurements arrive in D6.3)")).toBeVisible();
+  await expect(
+    page.getByText("(WBS progress from measurements is not available yet)"),
+  ).toBeVisible();
   await expect(page.getByRole("table", { name: "Milestones" }).getByRole("row")).toHaveCount(3);
   expect(await axeViolations(page)).toEqual([]);
 });

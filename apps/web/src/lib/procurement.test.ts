@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectPages,
   formatChange,
+  formatComparedPrices,
   formatFactor,
   formatMinorDecimal,
   unitLabel,
@@ -13,6 +14,24 @@ describe("procurement display helpers", () => {
     expect(formatMinorDecimal("400000")).toBe("KES 4,000.00");
     expect(formatMinorDecimal("428571.428571")).toBe("KES 4,285.71");
     expect(formatMinorDecimal("0.001")).toBe("KES 0.00");
+  });
+
+  it("shows compared prices precisely enough that different ones never look equal", () => {
+    // KES 100 incl. 16% VAT is 8620.689655 minor net; an invoice at KES 86.21 net is above it.
+    expect(formatComparedPrices(["8620.689655", "8620.689655", "8621"])).toEqual([
+      "KES 86.207",
+      "KES 86.207",
+      "KES 86.210",
+    ]);
+    expect(formatComparedPrices(["8620.689655", "8620.689656"])).toEqual([
+      "KES 86.20689655",
+      "KES 86.20689656",
+    ]);
+    // Equal prices keep the usual two places.
+    expect(formatComparedPrices(["400000", "400000.000000"])).toEqual([
+      "KES 4,000.00",
+      "KES 4,000.00",
+    ]);
   });
 
   it("formats changes, factors and unit labels", () => {

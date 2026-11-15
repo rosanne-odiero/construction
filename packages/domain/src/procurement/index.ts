@@ -34,3 +34,12 @@ export {
   type ThreeWayMatchInput,
   type ThreeWayMatchResult,
 } from "./match.js";
+export {
+  STATEMENT_INVOICE_STATUSES,
+  supplierInvoiceStatus,
+  supplierStatement,
+  type StatementEntry,
+  type StatementInvoice,
+  type StatementPayment,
+  type SupplierStatement,
+} from "./supplier-portal.js";

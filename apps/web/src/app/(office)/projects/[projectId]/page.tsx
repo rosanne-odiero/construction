@@ -3,24 +3,59 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { FileSpreadsheet } from "lucide-react";
 import { isProjectReadOnly } from "@pm-buddy/domain";
-import { bqContractSumResponseSchema, projectDetailResponseSchema } from "@pm-buddy/validation";
+import {
+  bqContractSumResponseSchema,
+  projectDetailResponseSchema,
+  projectDocumentsSummaryResponseSchema,
+} from "@pm-buddy/validation";
 import { PageHeader } from "@/components/page-header";
 import { EditProjectButton } from "@/components/projects/project-form";
 import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { StatusChangeButton } from "@/components/projects/status-change";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  DOCUMENT_VIEWS,
+  INSTRUCTION_VIEWS,
+  documentsAccess,
+  projectTabHref,
+} from "@/lib/documents";
+import { QUALITY_VIEWS, qualityAccess, qualityHref } from "@/lib/quality";
+import { plantAccess } from "@/lib/plant";
+import { SAFETY_VIEWS, safetyAccess, safetyHref } from "@/lib/safety";
+import { scheduleAccess } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { serverApi, requireSession } from "@/lib/server-api";
 import { signInHref } from "@/lib/safe-next";
+import { ComplianceTab } from "./compliance-tab";
+import { DocumentsTab } from "./documents-tab";
+import { InstructionsTab } from "./instructions-tab";
 import { OverviewTab } from "./overview-tab";
 import { SitesTab } from "./sites-tab";
 import { TeamTab } from "./team-tab";
 import { WbsTab } from "./wbs-tab";
 import { DiaryTab } from "./diary-tab";
 import { PhotosTab } from "./photos-tab";
+import { QualityTab } from "./quality-tab";
+import { PlantTab } from "./plant-tab";
+import { SafetyTab } from "./safety-tab";
+import { SCHEDULE_VIEWS, ScheduleTab } from "./schedule-tab";
 
-const TABS = ["overview", "sites", "team", "wbs", "diary", "photos"] as const;
+const TABS = [
+  "overview",
+  "sites",
+  "team",
+  "wbs",
+  "schedule",
+  "diary",
+  "quality",
+  "safety",
+  "plant",
+  "documents",
+  "compliance",
+  "instructions",
+  "photos",
+] as const;
 type Tab = (typeof TABS)[number];
 const PROTOTYPE_IDS = new Set(["ruiru-heights", "kitengela-bungalow"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -44,9 +79,27 @@ export default async function ProjectPage({
   // The D0 prototype detail moved to /prototype/projects/…; keep its old links working.
   if (PROTOTYPE_IDS.has(projectId)) redirect(`/prototype/projects/${projectId}`);
   if (!UUID.test(projectId)) notFound();
-  const { tab: rawTab, cursor } = await searchParams;
+  const query = await searchParams;
+  const { tab: rawTab, cursor, view: rawView, baseline, saved } = query;
   const tab: Tab = TABS.find((candidate) => candidate === rawTab) ?? "overview";
-  const path = `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}`;
+  const view = SCHEDULE_VIEWS.find((candidate) => candidate === rawView) ?? "gantt";
+  const qualityView = QUALITY_VIEWS.find((candidate) => candidate === rawView) ?? "inspections";
+  const safetyView = SAFETY_VIEWS.find((candidate) => candidate === rawView) ?? "incidents";
+  const documentView = DOCUMENT_VIEWS.find((candidate) => candidate === rawView) ?? "all";
+  const instructionView =
+    INSTRUCTION_VIEWS.find((candidate) => candidate === rawView) ?? "instructions";
+  const path =
+    tab === "quality"
+      ? qualityHref(projectId, qualityView)
+      : tab === "safety"
+        ? safetyHref(projectId, safetyView)
+        : tab === "documents" && documentView !== "all"
+          ? projectTabHref(projectId, "documents", { view: documentView })
+          : tab === "instructions" && instructionView !== "instructions"
+            ? projectTabHref(projectId, "instructions", { view: instructionView })
+            : `/projects/${projectId}${tab === "overview" ? "" : `?tab=${tab}`}${
+                tab === "schedule" && view !== "gantt" ? `&view=${view}` : ""
+              }`;
 
   const session = await requireSession(path);
   if (!session) return <LiveUnavailable retryHref={path} />;
@@ -62,11 +115,28 @@ export default async function ProjectPage({
   const t = await getTranslations("projectDetail");
   const canManage = detail.permissions.includes("projects.manage");
   const canViewBq = detail.permissions.includes("bq.view");
+  // The same rules the API applies: portal-only roles see no schedule; the delay log is staff-only.
+  const { schedule: canReadSchedule, delays: canReadDelays } = scheduleAccess(detail.permissions);
+  // Internal quality records: never for portal-only roles (decision D-60).
+  const canReadQuality = qualityAccess(detail.permissions).read;
+  // Health and safety records: site and project staff only (decision D-70).
+  const canReadSafety = safetyAccess(detail.permissions).read;
+  // Plant records: site, stores, finance and project staff (decision D-90).
+  const canReadPlant = plantAccess(detail.permissions).read;
+  // Documents, compliance and instructions: project staff and consultants (decision D-110).
+  const canReadDocuments = documentsAccess(detail.permissions).read;
   const readOnly = isProjectReadOnly(project.status);
   // Original vs revised contract sum on the overview, for people who can see the BQ.
   const sums =
     tab === "overview" && canViewBq
       ? await serverApi(`/projects/${project.id}/bq/contract-sum`, bqContractSumResponseSchema)
+      : null;
+  const documentsSummary =
+    tab === "overview" && canReadDocuments
+      ? await serverApi(
+          `/projects/${project.id}/documents/summary`,
+          projectDocumentsSummaryResponseSchema,
+        )
       : null;
 
   return (
@@ -99,7 +169,15 @@ export default async function ProjectPage({
       ) : null}
       <nav aria-label={t("sectionsLabel")} className="relative -mx-1 overflow-x-auto">
         <ul className="flex min-w-max gap-1 border-b px-1">
-          {TABS.map((key) => (
+          {TABS.filter(
+            (key) =>
+              (key !== "schedule" || canReadSchedule) &&
+              (key !== "quality" || canReadQuality) &&
+              (key !== "safety" || canReadSafety) &&
+              (key !== "plant" || canReadPlant) &&
+              ((key !== "documents" && key !== "compliance" && key !== "instructions") ||
+                canReadDocuments),
+          ).map((key) => (
             <li key={key}>
               <Link
                 href={`/projects/${project.id}${key === "overview" ? "" : `?tab=${key}`}`}
@@ -132,6 +210,13 @@ export default async function ProjectPage({
         <OverviewTab
           detail={detail}
           contractSums={canViewBq ? (sums?.ok ? sums.data : null) : undefined}
+          documents={
+            canReadDocuments
+              ? documentsSummary?.ok
+                ? documentsSummary.data.summary
+                : null
+              : undefined
+          }
         />
       ) : null}
       {tab === "sites" ? (
@@ -147,6 +232,17 @@ export default async function ProjectPage({
       {tab === "wbs" ? (
         <WbsTab project={project} canManage={canManage && !readOnly} returnTo={path} />
       ) : null}
+      {tab === "schedule" && !canReadSchedule ? <LiveForbidden /> : null}
+      {tab === "schedule" && canReadSchedule ? (
+        <ScheduleTab
+          project={project}
+          view={view === "delays" && !canReadDelays ? "gantt" : view}
+          canReadDelays={canReadDelays}
+          baselineId={typeof baseline === "string" ? baseline : undefined}
+          canPickBq={canViewBq}
+          returnTo={path}
+        />
+      ) : null}
       {tab === "diary" ? (
         <DiaryTab
           projectId={project.id}
@@ -156,6 +252,47 @@ export default async function ProjectPage({
           returnTo={path}
           cursor={cursor}
         />
+      ) : null}
+      {tab === "quality" && !canReadQuality ? <LiveForbidden /> : null}
+      {tab === "quality" && canReadQuality ? (
+        <QualityTab
+          project={project}
+          view={qualityView}
+          params={query}
+          canReadSchedule={canReadSchedule}
+          returnTo={path}
+        />
+      ) : null}
+      {tab === "safety" && !canReadSafety ? <LiveForbidden /> : null}
+      {tab === "safety" && canReadSafety ? (
+        <SafetyTab
+          project={project}
+          view={safetyView}
+          params={query}
+          userId={session.user.id}
+          returnTo={path}
+        />
+      ) : null}
+      {tab === "plant" && !canReadPlant ? <LiveForbidden /> : null}
+      {tab === "plant" && canReadPlant ? (
+        <PlantTab
+          project={project}
+          saved={typeof saved === "string" ? saved : undefined}
+          returnTo={path}
+        />
+      ) : null}
+      {(tab === "documents" || tab === "compliance" || tab === "instructions") &&
+      !canReadDocuments ? (
+        <LiveForbidden />
+      ) : null}
+      {tab === "documents" && canReadDocuments ? (
+        <DocumentsTab project={project} view={documentView} params={query} returnTo={path} />
+      ) : null}
+      {tab === "compliance" && canReadDocuments ? (
+        <ComplianceTab project={project} returnTo={path} />
+      ) : null}
+      {tab === "instructions" && canReadDocuments ? (
+        <InstructionsTab project={project} view={instructionView} params={query} returnTo={path} />
       ) : null}
       {tab === "photos" ? (
         <PhotosTab

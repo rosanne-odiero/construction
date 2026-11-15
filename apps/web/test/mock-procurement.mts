@@ -114,7 +114,15 @@ export type ProcurementState = {
   conversions: MockConversion[];
   prices: Price[];
   suppliers: MockSupplier[];
-  settings: { percent: string; version: number };
+  settings: {
+    percent: string;
+    version: number;
+    /** D5.2 rules (procurement.min_quotes and the three-way match settings). */
+    minQuotes: number;
+    qtyTolerancePercent: string;
+    priceTolerancePercent: string;
+    blockPaymentWithoutEtims: boolean;
+  };
 };
 
 export type ProcurementDeps = {
@@ -242,13 +250,42 @@ export function initialProcurement(): ProcurementState {
     contacts: [],
     payouts: [],
   };
+  const hardware: MockSupplier = {
+    supplier: {
+      id: "60000000-0000-4000-8000-000000000003",
+      code: "SUP-0003",
+      legalName: "Kitengela Hardware Stores (synthetic)",
+      tradingName: "Kitengela Hardware (synthetic)",
+      kraPinMasked: null,
+      etimsStatus: "unknown",
+      etimsCheckedOn: null,
+      status: "active",
+      statusReason: null,
+      creditDays: 7,
+      creditLimitMinor: null,
+      notes: null,
+      version: 1,
+      createdAt: NOW,
+      updatedAt: NOW,
+    },
+    kraPin: null,
+    contacts: [],
+    payouts: [],
+  };
   const state: ProcurementState = {
     materials: [cement, sand, y12, brc],
     units: [],
     conversions: [],
     prices: [],
-    suppliers: [quarry, steel],
-    settings: { percent: DEFAULT_PRICE_CHANGE_ALERT_PERCENT, version: 0 },
+    suppliers: [quarry, steel, hardware],
+    settings: {
+      percent: DEFAULT_PRICE_CHANGE_ALERT_PERCENT,
+      version: 0,
+      minQuotes: DEFAULT_MIN_QUOTES,
+      qtyTolerancePercent: DEFAULT_QTY_TOLERANCE_PERCENT,
+      priceTolerancePercent: DEFAULT_PRICE_TOLERANCE_PERCENT,
+      blockPaymentWithoutEtims: DEFAULT_BLOCK_PAYMENT_WITHOUT_ETIMS,
+    },
   };
   quarry.payouts.push(
     payout(
@@ -443,7 +480,7 @@ function conversionRow(
   };
 }
 
-const customDefinitions = (state: ProcurementState): UnitDefinition[] =>
+export const customDefinitions = (state: ProcurementState): UnitDefinition[] =>
   state.units.flatMap((unit) => {
     const result = defineCustomUnit({
       code: unit.code,
@@ -465,7 +502,7 @@ const toRule = (conversion: MockConversion): ConversionRule => ({
   effectiveTo: conversion.effectiveTo,
 });
 
-function context(
+export function context(
   state: ProcurementState,
   target: MockMaterial | null,
   supplierId: string | null,
@@ -938,11 +975,10 @@ export function handleProcurement(
       body: {
         settings: {
           priceChangeAlertPercent: state.settings.percent,
-          // D5.2 settings at their defaults (the screens to change them come with D5.2's web).
-          minQuotes: DEFAULT_MIN_QUOTES,
-          qtyTolerancePercent: DEFAULT_QTY_TOLERANCE_PERCENT,
-          priceTolerancePercent: DEFAULT_PRICE_TOLERANCE_PERCENT,
-          blockPaymentWithoutEtims: DEFAULT_BLOCK_PAYMENT_WITHOUT_ETIMS,
+          minQuotes: state.settings.minQuotes,
+          qtyTolerancePercent: state.settings.qtyTolerancePercent,
+          priceTolerancePercent: state.settings.priceTolerancePercent,
+          blockPaymentWithoutEtims: state.settings.blockPaymentWithoutEtims,
           version: state.settings.version,
           updatedAt: state.settings.version ? NOW : null,
           updatedBy: state.settings.version ? OWNER : null,
@@ -958,9 +994,15 @@ export function handleProcurement(
     if (!has("config.manage")) throw fail(403, "forbidden");
     const input = parse(updateProcurementSettingsRequestSchema, body);
     if (input.version !== state.settings.version) throw fail(409, "version-conflict");
+    // D5.2 settings left out of the request keep their value (as the API does).
     state.settings = {
       percent: input.priceChangeAlertPercent,
       version: state.settings.version + 1,
+      minQuotes: input.minQuotes ?? state.settings.minQuotes,
+      qtyTolerancePercent: input.qtyTolerancePercent ?? state.settings.qtyTolerancePercent,
+      priceTolerancePercent: input.priceTolerancePercent ?? state.settings.priceTolerancePercent,
+      blockPaymentWithoutEtims:
+        input.blockPaymentWithoutEtims ?? state.settings.blockPaymentWithoutEtims,
     };
     return view();
   }

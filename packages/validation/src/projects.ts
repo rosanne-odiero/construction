@@ -10,6 +10,7 @@ import {
 } from "@pm-buddy/domain";
 import { CONTRACT_TYPES, COUNTY_KEYS, MILESTONE_STATUSES, PROJECT_STATUSES } from "@pm-buddy/types";
 import { z } from "zod";
+import { planningDateSchema } from "./primitives.js";
 import { permissionSchema, projectPermissionSchema, roleReferenceSchema } from "./roles.js";
 
 /**
@@ -83,8 +84,8 @@ const projectFields = {
   /** Contract sum in KES minor units (cents). */
   contractSumMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().optional(),
   contractType: contractTypeSchema.nullable().optional(),
-  startDate: calendarDate.nullable().optional(),
-  endDate: calendarDate.nullable().optional(),
+  startDate: planningDateSchema.nullable().optional(),
+  endDate: planningDateSchema.nullable().optional(),
   county: countySchema.nullable().optional(),
   town: optionalText(100),
   latitude: latitudeSchema.nullable().optional(),
@@ -369,12 +370,16 @@ export const milestoneResponseSchema = z.object({ milestone: milestoneSchema }).
 
 const milestoneName = z.string().trim().min(1).max(150);
 export const createMilestoneRequestSchema = z
-  .object({ name: milestoneName, dueDate: calendarDate, wbsNodeId: uuid.nullable().optional() })
+  .object({
+    name: milestoneName,
+    dueDate: planningDateSchema,
+    wbsNodeId: uuid.nullable().optional(),
+  })
   .strict();
 export const updateMilestoneRequestSchema = z
   .object({
     name: milestoneName.optional(),
-    dueDate: calendarDate.optional(),
+    dueDate: planningDateSchema.optional(),
     wbsNodeId: uuid.nullable().optional(),
     version,
   })
@@ -388,7 +393,7 @@ export const milestoneStatusRequestSchema = z
   .object({
     to: milestoneStatusSchema,
     reason: reasonSchema.optional(),
-    actualDate: calendarDate.optional(),
+    actualDate: planningDateSchema.optional(),
     version,
   })
   .strict();

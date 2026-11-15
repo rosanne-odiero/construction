@@ -1,5 +1,5 @@
 import { normalizeKenyanPhone } from "@pm-buddy/domain";
-import { CURRENCIES } from "@pm-buddy/types";
+import { CURRENCIES, PLANNING_DATE_RANGE } from "@pm-buddy/types";
 import { z } from "zod";
 
 /** Integer minor units, safe for JSON numbers (|n| ≤ 2^53 − 1). */
@@ -27,3 +27,11 @@ export const kenyanPhoneSchema = z.string().transform((value, ctx) => {
 });
 
 export const isoDateSchema = z.iso.date();
+
+/** A date people plan with (project, milestone and schedule dates): years 2000–2099. */
+export const planningDateSchema = z.iso
+  .date()
+  .refine(
+    (value) => value >= PLANNING_DATE_RANGE.min && value <= PLANNING_DATE_RANGE.max,
+    "date_out_of_range",
+  );

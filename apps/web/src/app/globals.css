@@ -184,3 +184,16 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Printing a document (an LPO): only the page content, without the app's navigation chrome. */
+@media print {
+  [data-slot="sidebar"],
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-container"],
+  [data-print="hide"] {
+    display: none !important;
+  }
+  [data-slot="sidebar-inset"] {
+    margin: 0 !important;
+  }
+}

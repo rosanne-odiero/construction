@@ -97,7 +97,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           </Link>
         </Button>
         <Button asChild size="sm" variant="outline">
-          <Link href="/payroll">
+          <Link href="/prototype/payroll">
             <Wallet aria-hidden /> {t("tabs.payroll")}
           </Link>
         </Button>
@@ -170,7 +170,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
             </CardHeader>
             <CardContent>
               <Button asChild variant="outline">
-                <Link href="/prototype/portal">{t("openPortal")}</Link>
+                <Link href="/portal">{t("openPortal")}</Link>
               </Button>
             </CardContent>
           </Card>

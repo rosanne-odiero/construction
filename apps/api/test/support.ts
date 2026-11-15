@@ -30,8 +30,20 @@ import {
   auditEventsResponseSchema,
   authProvidersResponseSchema,
   authResponseSchema,
-  clientProjectResponseSchema,
-  clientProjectsResponseSchema,
+  clientDiariesResponseSchema,
+  clientPaymentsResponseSchema,
+  clientPayResponseSchema,
+  clientPhotosResponseSchema,
+  clientPortalOverviewResponseSchema,
+  clientPortalProjectsResponseSchema,
+  clientPreferencesResponseSchema,
+  clientProgressResponseSchema,
+  clientStatementResponseSchema,
+  clientVariationDetailResponseSchema,
+  clientVariationsResponseSchema,
+  fxRatesResponseSchema,
+  paymentInstructionsResponseSchema,
+  variationClientResponseSchema,
   csrfResponseSchema,
   diariesResponseSchema,
   diaryResponseSchema,
@@ -146,7 +158,148 @@ import {
   projectPayrollResponseSchema,
   statutoryRuleResponseSchema,
   workerPortalResponseSchema,
+  scheduleActivityResponseSchema,
+  correctiveActionResponseSchema,
+  correctiveActionsResponseSchema,
+  firstAiderResponseSchema,
+  firstAidKitResponseSchema,
+  firstAidResponseSchema,
+  incidentDetailResponseSchema,
+  incidentsResponseSchema,
+  inductionResponseSchema,
+  inductionsResponseSchema,
+  inductionStatusResponseSchema,
+  ppeIssueResponseSchema,
+  ppeIssuesResponseSchema,
+  approvalListResponseSchema,
+  approvalResponseSchema,
+  complianceHistoryResponseSchema,
+  complianceRegisterResponseSchema,
+  complianceTypeResponseSchema,
+  complianceTypesResponseSchema,
+  documentListResponseSchema,
+  documentResponseSchema,
+  documentsOverviewResponseSchema,
+  drawingRegisterResponseSchema,
+  instructionLogListResponseSchema,
+  instructionLogResponseSchema,
+  instructionOptionsResponseSchema,
+  projectDocumentsSummaryResponseSchema,
+  plantAlertsResponseSchema,
+  plantDetailResponseSchema,
+  plantFuelListResponseSchema,
+  plantFuelResponseSchema,
+  plantListResponseSchema,
+  plantOptionsResponseSchema,
+  plantSettingsResponseSchema,
+  plantUsageListResponseSchema,
+  plantUsageResponseSchema,
+  projectPlantOptionsResponseSchema,
+  projectPlantResponseSchema,
+  safetyOptionsResponseSchema,
+  safetyOverviewResponseSchema,
+  safetySettingsResponseSchema,
+  safetySummaryResponseSchema,
+  toolboxTalkResponseSchema,
+  toolboxTalksResponseSchema,
+  treatmentResponseSchema,
+  scheduleBaselineResponseSchema,
+  scheduleBaselinesResponseSchema,
+  scheduleCalendarResponseSchema,
+  scheduleDelayResponseSchema,
+  scheduleDelaysResponseSchema,
+  scheduleDependencyResponseSchema,
+  scheduleResponseSchema,
+  sitePhotoResponseSchema,
   sitePhotosResponseSchema,
+  photoCaptureTicketResponseSchema,
+  checklistTemplateResponseSchema,
+  checklistTemplatesResponseSchema,
+  completionResponseSchema,
+  cubeSetResponseSchema,
+  cubeSetsResponseSchema,
+  diaryAttendanceResponseSchema,
+  inspectionDetailResponseSchema,
+  inspectionsResponseSchema,
+  loadStarterTemplatesResponseSchema,
+  qualitySettingsResponseSchema,
+  qualitySummaryResponseSchema,
+  slumpTestResponseSchema,
+  slumpTestsResponseSchema,
+  snagResponseSchema,
+  snagsResponseSchema,
+  buildupMaterialsResponseSchema,
+  issueOptionsResponseSchema,
+  ledgerResponseSchema,
+  measurementResponseSchema,
+  measurementsResponseSchema,
+  measurementItemsResponseSchema,
+  measurementDetailResponseSchema,
+  approvalQueueResponseSchema,
+  projectValuationsResponseSchema,
+  valuationResponseSchema,
+  contractSettingsResponseSchema,
+  earnedValueResponseSchema,
+  costToCompleteResponseSchema,
+  valuationsOverviewResponseSchema,
+  movementResponseSchema,
+  movementsResponseSchema,
+  stockTakeResponseSchema,
+  stockTakesResponseSchema,
+  storeDetailResponseSchema,
+  storesResponseSchema,
+  storesSettingsResponseSchema,
+  transferResponseSchema,
+  transfersResponseSchema,
+  transferTargetsResponseSchema,
+  varianceResponseSchema,
+  billItemsResponseSchema,
+  bqItemSearchResponseSchema,
+  budgetDetailResponseSchema,
+  budgetLinesResponseSchema,
+  budgetsResponseSchema,
+  cashFlowItemResponseSchema,
+  cashFlowItemsResponseSchema,
+  costCodeResponseSchema,
+  costCodesResponseSchema,
+  costLedgerResponseSchema,
+  countResponseSchema,
+  countsResponseSchema,
+  custodiansResponseSchema,
+  expenseResponseSchema,
+  expensesResponseSchema,
+  floatLedgerResponseSchema,
+  floatResponseSchema,
+  floatsResponseSchema,
+  forecastResponseSchema,
+  journalResponseSchema,
+  journalsResponseSchema,
+  loadCostCodeDefaultsResponseSchema,
+  projectSpendingResponseSchema,
+  receiptResponseSchema,
+  smsParseResponseSchema,
+  spendAlertsResponseSchema,
+  spendingSettingsResponseSchema,
+  spendingSummaryResponseSchema,
+  topUpResponseSchema,
+  topUpsResponseSchema,
+  portalDeliveriesResponseSchema,
+  portalDocumentResponseSchema,
+  portalInvoiceDetailResponseSchema,
+  portalInvoicesResponseSchema,
+  portalLpoDetailResponseSchema,
+  portalLposResponseSchema,
+  supplierPortalOverviewResponseSchema,
+  supplierPortalUserResponseSchema,
+  supplierPortalUsersResponseSchema,
+  supplierStatementResponseSchema,
+  dashboardResponseSchema,
+  reportModelSchema,
+  reportOptionsResponseSchema,
+  reportsResponseSchema,
+  reportSubscriptionResponseSchema,
+  reportSubscriptionsResponseSchema,
+  runDueResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
 } from "@pm-buddy/validation";
@@ -194,13 +347,18 @@ export function responseContract(method: string, target: string) {
     return method === "get" ? rolesResponseSchema : roleResponseSchema;
   if (/^tenants\/current\/roles\/[^/]+$/.test(path) && method === "patch")
     return roleResponseSchema;
-  if (path === "portal/client/projects") return clientProjectsResponseSchema;
-  if (/^portal\/client\/projects\/[^/]+$/.test(path)) return clientProjectResponseSchema;
+  const clientPortal = clientPortalContract(path);
+  if (clientPortal) return clientPortal;
   if (path === "portal/worker") return workerPortalResponseSchema;
+  const supplierPortal = supplierPortalContract(method, path);
+  if (supplierPortal) return supplierPortal;
   if (/^projects\/[^/]+\/labourers\/invitations$/.test(path)) return invitationResponseSchema;
   if (path === "projects") return method === "get" ? projectsResponseSchema : projectResponseSchema;
-  if (/^projects\/[^/]+\/photos(\?.*)?$/.test(path) && method === "get")
-    return sitePhotosResponseSchema;
+  if (/^projects\/[^/]+\/photos(\?.*)?$/.test(path))
+    return method === "get" ? sitePhotosResponseSchema : sitePhotoResponseSchema;
+  if (/^projects\/[^/]+\/photos\/capture-tickets$/.test(path))
+    return photoCaptureTicketResponseSchema;
+  if (/^projects\/[^/]+\/diaries\/attendance$/.test(path)) return diaryAttendanceResponseSchema;
   if (/^projects\/[^/]+\/diaries$/.test(path))
     return method === "get" ? diariesResponseSchema : diaryResponseSchema;
   if (/^projects\/[^/]+\/diaries\/[^/]+(\/actions)?$/.test(path)) return diaryResponseSchema;
@@ -254,6 +412,12 @@ export function responseContract(method: string, target: string) {
       return variationResponseSchema;
     if (/^\/items\/[^/]+\/rate-buildup$/.test(bq)) return bqItemLinkResponseSchema;
   }
+  if (/^rate-buildups\/[^/]+\/versions\/\d+\/materials(\/[^/]+)?$/.test(path))
+    return buildupMaterialsResponseSchema;
+  const valuations = valuationsContract(method, path);
+  if (valuations) return valuations;
+  const stores = storesContract(method, path);
+  if (stores) return stores;
   if (path === "rate-buildups")
     return method === "get" ? buildupsResponseSchema : buildupResponseSchema;
   if (/^rate-buildups\/[^/]+$/.test(path)) return buildupResponseSchema;
@@ -270,6 +434,20 @@ export function responseContract(method: string, target: string) {
   if (payroll) return payroll;
   const p2p = procureToPayContract(method, path);
   if (p2p) return p2p;
+  const schedule = scheduleContract(method, path);
+  if (schedule) return schedule;
+  const spending = spendingContract(method, path);
+  if (spending) return spending;
+  const quality = qualityContract(method, path);
+  if (quality) return quality;
+  const safety = safetyContract(method, path);
+  if (safety) return safety;
+  const plant = plantContract(method, path);
+  if (plant) return plant;
+  const reports = reportsContract(method, path);
+  if (reports) return reports;
+  const documents = documentsContract(method, path);
+  if (documents) return documents;
   return messageResponseSchema;
 }
 
@@ -288,6 +466,258 @@ function paymentsContract(method: string, path: string) {
   if (/^payments\/callbacks\/[^/]+(\/review)?$/.test(path)) return paymentCallbackResponseSchema;
   if (path === "payments/cases") return reconciliationCasesResponseSchema;
   if (/^payments\/cases\/[^/]+(\/resolve)?$/.test(path)) return reconciliationCaseResponseSchema;
+  return null;
+}
+
+/** The D8.1 dashboard, reports and subscription endpoints' success contracts. */
+function reportsContract(method: string, path: string) {
+  if (path === "dashboard") return dashboardResponseSchema;
+  if (!path.startsWith("reports")) return null;
+  if (path === "reports") return reportsResponseSchema;
+  if (path === "reports/subscriptions")
+    return method === "get" ? reportSubscriptionsResponseSchema : reportSubscriptionResponseSchema;
+  if (path === "reports/subscriptions/run-due") return runDueResponseSchema;
+  if (/^reports\/subscriptions\/[^/]+(\/delete)?$/.test(path))
+    return reportSubscriptionResponseSchema;
+  if (/^reports\/[^/]+\/options$/.test(path)) return reportOptionsResponseSchema;
+  if (/^reports\/[^/]+$/.test(path)) return reportModelSchema;
+  return null;
+}
+
+/** The D8.4 documents, compliance, instructions log and approvals endpoints' success contracts. */
+function documentsContract(method: string, path: string) {
+  const get = method === "get";
+  if (path === "documents") return documentsOverviewResponseSchema;
+  if (path === "documents/compliance-types")
+    return get ? complianceTypesResponseSchema : complianceTypeResponseSchema;
+  if (/^documents\/compliance-types\/[^/]+$/.test(path)) return complianceTypeResponseSchema;
+  if (/^documents\/compliance(\/[^/]+)?$/.test(path)) return complianceHistoryResponseSchema;
+  const project = /^projects\/[^/]+\/(documents|compliance|instructions|approvals)(\/.*)?$/.exec(
+    path,
+  );
+  if (!project) return null;
+  const [, area, rest = ""] = project;
+  if (area === "documents") {
+    if (rest === "") return get ? documentListResponseSchema : documentResponseSchema;
+    if (rest === "/drawings") return drawingRegisterResponseSchema;
+    if (rest === "/summary") return projectDocumentsSummaryResponseSchema;
+    return documentResponseSchema;
+  }
+  if (area === "compliance")
+    return rest === "" && get ? complianceRegisterResponseSchema : complianceHistoryResponseSchema;
+  if (area === "instructions") {
+    if (rest === "") return get ? instructionLogListResponseSchema : instructionLogResponseSchema;
+    if (rest === "/options") return instructionOptionsResponseSchema;
+    return instructionLogResponseSchema;
+  }
+  if (rest === "") return get ? approvalListResponseSchema : approvalResponseSchema;
+  return approvalResponseSchema;
+}
+
+/** The D7.1 client portal endpoints' success contracts (client and staff sides). */
+function clientPortalContract(full: string) {
+  const path = full.split("?")[0]!;
+  if (
+    /^projects\/[^/]+\/(client-payments(\/[^/]+\/reverse|\/cash-flow-items\/[^/]+\/link)?|client-settings)$/.test(
+      path,
+    )
+  )
+    return clientPaymentsResponseSchema;
+  if (/^projects\/[^/]+\/bq\/variations\/[^/]+\/client$/.test(path))
+    return variationClientResponseSchema;
+  if (path === "client-portal/payment-instructions") return paymentInstructionsResponseSchema;
+  if (path === "client-portal/fx-rates") return fxRatesResponseSchema;
+  if (!path.startsWith("portal/client")) return null;
+  if (path === "portal/client/projects") return clientPortalProjectsResponseSchema;
+  if (path === "portal/client/preferences") return clientPreferencesResponseSchema;
+  const rest = path.replace(/^portal\/client\/projects\/[^/]+/, "");
+  if (rest === "") return clientPortalOverviewResponseSchema;
+  if (rest === "/progress") return clientProgressResponseSchema;
+  if (rest === "/photos") return clientPhotosResponseSchema;
+  if (rest === "/diaries") return clientDiariesResponseSchema;
+  if (rest === "/statement") return clientStatementResponseSchema;
+  if (rest === "/pay") return clientPayResponseSchema;
+  if (rest === "/variations") return clientVariationsResponseSchema;
+  if (/^\/variations\/[^/]+(\/decision)?$/.test(rest)) return clientVariationDetailResponseSchema;
+  return z.unknown();
+}
+
+/** The D7.2 supplier portal endpoints' success contracts (supplier and staff sides). */
+function supplierPortalContract(method: string, path: string) {
+  if (/^suppliers\/[^/]+\/portal-users$/.test(path))
+    return method === "get" ? supplierPortalUsersResponseSchema : supplierPortalUserResponseSchema;
+  if (/^suppliers\/[^/]+\/portal-users\/[^/]+\/revoke$/.test(path))
+    return supplierPortalUserResponseSchema;
+  if (!path.startsWith("portal/supplier")) return null;
+  if (path === "portal/supplier") return supplierPortalOverviewResponseSchema;
+  if (path === "portal/supplier/lpos") return portalLposResponseSchema;
+  if (/^portal\/supplier\/lpos\/[^/]+(\/acknowledge)?$/.test(path))
+    return portalLpoDetailResponseSchema;
+  if (path === "portal/supplier/deliveries") return portalDeliveriesResponseSchema;
+  if (path === "portal/supplier/invoices")
+    return method === "get" ? portalInvoicesResponseSchema : portalInvoiceDetailResponseSchema;
+  if (/^portal\/supplier\/invoices\/[^/]+\/document$/.test(path))
+    return portalDocumentResponseSchema;
+  if (/^portal\/supplier\/invoices\/[^/]+$/.test(path)) return portalInvoiceDetailResponseSchema;
+  if (path === "portal/supplier/statement") return supplierStatementResponseSchema;
+  return z.unknown();
+}
+
+/** The D8.3 plant endpoints' success contracts. */
+function plantContract(method: string, path: string) {
+  const get = method === "get";
+  if (/^projects\/[^/]+\/plant$/.test(path)) return projectPlantResponseSchema;
+  if (/^projects\/[^/]+\/plant\/options$/.test(path)) return projectPlantOptionsResponseSchema;
+  if (!path.startsWith("plant")) return null;
+  if (path === "plant") return get ? plantListResponseSchema : plantDetailResponseSchema;
+  if (path === "plant/alerts") return plantAlertsResponseSchema;
+  if (path === "plant/settings") return plantSettingsResponseSchema;
+  if (path === "plant/options") return plantOptionsResponseSchema;
+  if (/^plant\/[^/]+\/usage$/.test(path))
+    return get ? plantUsageListResponseSchema : plantUsageResponseSchema;
+  if (/^plant\/[^/]+\/usage\/[^/]+\/corrections$/.test(path)) return plantUsageResponseSchema;
+  if (/^plant\/[^/]+\/fuel$/.test(path))
+    return get ? plantFuelListResponseSchema : plantFuelResponseSchema;
+  if (/^plant\/[^/]+\/fuel\/[^/]+\/corrections$/.test(path)) return plantFuelResponseSchema;
+  return plantDetailResponseSchema;
+}
+
+/** The D6.3 measurement, valuation and earned-value endpoints' success contracts. */
+function valuationsContract(method: string, path: string) {
+  if (/^projects\/[^/]+\/measurements$/.test(path))
+    return method === "get" ? measurementsResponseSchema : measurementResponseSchema;
+  if (/^projects\/[^/]+\/measurements\/items$/.test(path)) return measurementItemsResponseSchema;
+  if (/^projects\/[^/]+\/measurements\/[^/]+$/.test(path)) return measurementDetailResponseSchema;
+  if (/^projects\/[^/]+\/measurements\/[^/]+\/(photos|approve|reject)$/.test(path))
+    return measurementResponseSchema;
+  if (path === "measurements/pending") return approvalQueueResponseSchema;
+  if (/^projects\/[^/]+\/valuations$/.test(path))
+    return method === "get" ? projectValuationsResponseSchema : valuationResponseSchema;
+  if (/^projects\/[^/]+\/contract-settings$/.test(path)) return contractSettingsResponseSchema;
+  if (/^projects\/[^/]+\/earned-value$/.test(path)) return earnedValueResponseSchema;
+  if (/^projects\/[^/]+\/cost-to-complete$/.test(path)) return costToCompleteResponseSchema;
+  if (path === "valuations") return valuationsOverviewResponseSchema;
+  if (
+    /^valuations\/[^/]+(\/(materials|adjustments)(\/[^/]+)?|\/(submit|certify|return|cancel))?$/.test(
+      path,
+    )
+  )
+    return valuationResponseSchema;
+  return null;
+}
+
+/** The D8.2 health and safety endpoints' success contracts. */
+function safetyContract(method: string, path: string) {
+  if (path === "safety/settings") return safetySettingsResponseSchema;
+  if (path === "safety/overview") return safetyOverviewResponseSchema;
+  const match = /^projects\/[^/]+\/safety(\/.*)?$/.exec(path);
+  if (!match) return null;
+  const rest = match[1] ?? "";
+  const get = method === "get";
+  if (rest === "/summary") return safetySummaryResponseSchema;
+  if (rest === "/options") return safetyOptionsResponseSchema;
+  if (rest === "/induction-status") return inductionStatusResponseSchema;
+  if (rest === "/inductions") return get ? inductionsResponseSchema : inductionResponseSchema;
+  if (/^\/inductions\/[^/]+\/void$/.test(rest)) return inductionResponseSchema;
+  if (rest === "/talks") return get ? toolboxTalksResponseSchema : toolboxTalkResponseSchema;
+  if (/^\/talks\/[^/]+(\/actions)?$/.test(rest)) return toolboxTalkResponseSchema;
+  if (rest === "/ppe") return get ? ppeIssuesResponseSchema : ppeIssueResponseSchema;
+  if (/^\/ppe\/[^/]+\/(return|void)$/.test(rest)) return ppeIssueResponseSchema;
+  if (rest === "/incidents") return get ? incidentsResponseSchema : incidentDetailResponseSchema;
+  if (/^\/incidents\/[^/]+(\/(investigation|regulator|close|void|photos))?$/.test(rest))
+    return incidentDetailResponseSchema;
+  if (rest === "/corrective-actions")
+    return get ? correctiveActionsResponseSchema : correctiveActionResponseSchema;
+  if (/^\/corrective-actions\/[^/]+(\/actions)?$/.test(rest)) return correctiveActionResponseSchema;
+  if (rest === "/first-aid") return firstAidResponseSchema;
+  if (/^\/first-aid\/kits(\/[^/]+\/(checks|retire))?$/.test(rest)) return firstAidKitResponseSchema;
+  if (/^\/first-aid\/first-aiders(\/[^/]+\/remove)?$/.test(rest)) return firstAiderResponseSchema;
+  if (/^\/first-aid\/treatments(\/[^/]+\/(void|link))?$/.test(rest)) return treatmentResponseSchema;
+  return null;
+}
+
+/** The D5.4 spending endpoints' success contracts. */
+function spendingContract(method: string, path: string) {
+  const get = method === "get";
+  if (path === "spending/summary") return spendingSummaryResponseSchema;
+  if (path === "spending/settings") return spendingSettingsResponseSchema;
+  if (path === "spending/ledger") return costLedgerResponseSchema;
+  if (path === "spending/forecast") return forecastResponseSchema;
+  if (path === "spending/alerts") return spendAlertsResponseSchema;
+  if (/^spending\/projects\/[^/]+$/.test(path)) return projectSpendingResponseSchema;
+  if (/^spending\/projects\/[^/]+\/bills\/[^/]+\/items$/.test(path)) return billItemsResponseSchema;
+  if (/^spending\/projects\/[^/]+\/bq-items$/.test(path)) return bqItemSearchResponseSchema;
+  if (path === "cost-codes") return get ? costCodesResponseSchema : costCodeResponseSchema;
+  if (path === "cost-codes/defaults") return loadCostCodeDefaultsResponseSchema;
+  if (/^cost-codes\/[^/]+$/.test(path)) return costCodeResponseSchema;
+  if (path === "budgets") return get ? budgetsResponseSchema : budgetDetailResponseSchema;
+  if (/^budgets\/[^/]+\/lines$/.test(path))
+    return get ? budgetLinesResponseSchema : budgetDetailResponseSchema;
+  if (/^budgets\/.+$/.test(path)) return budgetDetailResponseSchema;
+  if (path === "cost-journals") return get ? journalsResponseSchema : journalResponseSchema;
+  if (/^cost-journals\/.+$/.test(path)) return journalResponseSchema;
+  if (path === "petty-cash/floats") return get ? floatsResponseSchema : floatResponseSchema;
+  if (path === "petty-cash/floats/custodians") return custodiansResponseSchema;
+  if (/^petty-cash\/floats\/[^/]+\/ledger$/.test(path)) return floatLedgerResponseSchema;
+  if (/^petty-cash\/floats\/[^/]+$/.test(path)) return floatResponseSchema;
+  if (path === "petty-cash/sms/parse") return smsParseResponseSchema;
+  if (path === "petty-cash/expenses") return get ? expensesResponseSchema : expenseResponseSchema;
+  if (/^petty-cash\/expenses\/[^/]+\/receipts$/.test(path)) return receiptResponseSchema;
+  if (/^petty-cash\/expenses\/.+$/.test(path)) return expenseResponseSchema;
+  if (/^petty-cash\/receipts\/[^/]+$/.test(path)) return z.unknown();
+  if (path === "petty-cash/top-ups") return get ? topUpsResponseSchema : topUpResponseSchema;
+  if (/^petty-cash\/top-ups\/.+$/.test(path)) return topUpResponseSchema;
+  if (path === "petty-cash/counts") return get ? countsResponseSchema : countResponseSchema;
+  if (/^petty-cash\/counts\/.+$/.test(path)) return countResponseSchema;
+  if (path === "cash-flow-items")
+    return get ? cashFlowItemsResponseSchema : cashFlowItemResponseSchema;
+  if (/^cash-flow-items\/.+$/.test(path)) return cashFlowItemResponseSchema;
+  return null;
+}
+
+/** The D6.1 quality endpoints' success contracts. */
+function qualityContract(method: string, path: string) {
+  if (path === "quality/templates")
+    return method === "get" ? checklistTemplatesResponseSchema : checklistTemplateResponseSchema;
+  if (path === "quality/templates/starter") return loadStarterTemplatesResponseSchema;
+  if (/^quality\/templates\/[^/]+(\/(versions|retire))?$/.test(path))
+    return checklistTemplateResponseSchema;
+  if (path === "quality/settings") return qualitySettingsResponseSchema;
+  const match = /^projects\/[^/]+\/quality(\/.*)?$/.exec(path);
+  if (!match) return null;
+  const rest = match[1] ?? "";
+  if (rest === "/summary") return qualitySummaryResponseSchema;
+  if (rest === "/inspections")
+    return method === "get" ? inspectionsResponseSchema : inspectionDetailResponseSchema;
+  if (/^\/inspections\/[^/]+(\/actions)?$/.test(rest)) return inspectionDetailResponseSchema;
+  if (rest === "/snags") return method === "get" ? snagsResponseSchema : snagResponseSchema;
+  if (/^\/snags\/[^/]+(\/actions)?$/.test(rest)) return snagResponseSchema;
+  if (rest === "/cubes") return method === "get" ? cubeSetsResponseSchema : cubeSetResponseSchema;
+  if (/^\/cubes\/[^/]+(\/(results|void)|\/results\/[^/]+\/corrections)?$/.test(rest))
+    return cubeSetResponseSchema;
+  if (rest === "/slump-tests")
+    return method === "get" ? slumpTestsResponseSchema : slumpTestResponseSchema;
+  if (/^\/slump-tests\/[^/]+(\/corrections)?$/.test(rest)) return slumpTestResponseSchema;
+  if (/^\/completion(\/[^/]+\/actions)?$/.test(rest)) return completionResponseSchema;
+  return null;
+}
+
+/** The D6.2 schedule endpoints' success contracts. */
+function scheduleContract(method: string, path: string) {
+  const match = /^projects\/[^/]+\/schedule(\/.*)?$/.exec(path);
+  if (!match) return null;
+  const rest = match[1] ?? "";
+  if (rest === "") return scheduleResponseSchema;
+  if (rest === "/calendar") return scheduleCalendarResponseSchema;
+  if (method === "delete") return messageResponseSchema;
+  if (/^\/activities(\/[^/]+(\/progress)?)?$/.test(rest)) return scheduleActivityResponseSchema;
+  if (/^\/dependencies(\/[^/]+)?$/.test(rest)) return scheduleDependencyResponseSchema;
+  if (rest === "/baselines")
+    return method === "get" ? scheduleBaselinesResponseSchema : scheduleBaselineResponseSchema;
+  if (/^\/baselines\/[^/]+$/.test(rest)) return scheduleBaselineResponseSchema;
+  if (rest === "/delays")
+    return method === "get" ? scheduleDelaysResponseSchema : scheduleDelayResponseSchema;
+  if (/^\/delays\/[^/]+(\/(amend|withdraw))?$/.test(rest)) return scheduleDelayResponseSchema;
   return null;
 }
 
@@ -314,6 +744,25 @@ function procureToPayContract(method: string, path: string) {
     return rest === "" && method === "get" ? grnsResponseSchema : grnResponseSchema;
   }
   return rest === "" && method === "get" ? invoicesResponseSchema : invoiceDetailResponseSchema;
+}
+
+/** The D5.3 stores endpoints' success contracts. */
+function storesContract(method: string, path: string) {
+  const get = method === "get";
+  if (path === "stores") return get ? storesResponseSchema : storeDetailResponseSchema;
+  if (path === "stores/settings") return storesSettingsResponseSchema;
+  if (path === "stores/variance") return varianceResponseSchema;
+  if (/^stores\/[^/]+\/ledger$/.test(path)) return ledgerResponseSchema;
+  if (/^stores\/[^/]+\/issue-options$/.test(path)) return issueOptionsResponseSchema;
+  if (/^stores\/[^/]+\/transfer-targets$/.test(path)) return transferTargetsResponseSchema;
+  if (/^stores\/[^/]+(\/reorder-levels)?$/.test(path)) return storeDetailResponseSchema;
+  if (path === "stock-movements") return movementsResponseSchema;
+  if (/^stock-movements\/.+$/.test(path)) return movementResponseSchema;
+  if (path === "stock-transfers") return get ? transfersResponseSchema : transferResponseSchema;
+  if (/^stock-transfers\/.+$/.test(path)) return transferResponseSchema;
+  if (path === "stock-takes") return get ? stockTakesResponseSchema : stockTakeResponseSchema;
+  if (/^stock-takes\/.+$/.test(path)) return stockTakeResponseSchema;
+  return null;
 }
 
 /** The D5.1 catalogue and supplier endpoints' success contracts. */
@@ -469,12 +918,21 @@ export class Browser {
     return res;
   }
 
-  /** A multipart upload of one file as the `file` field (as the web app sends it). */
-  async upload(path: string, content: Buffer, fileName: string): Promise<request.Response> {
+  /**
+   * A multipart upload of one file as the `file` field, after any text `fields` (as the web app
+   * sends it).
+   */
+  async upload(
+    path: string,
+    content: Buffer,
+    fileName: string,
+    fields: Record<string, string> = {},
+  ): Promise<request.Response> {
     const operation = request(this.app.getHttpServer()).post(`/api/v1/${path}`);
     operation.set("Cookie", [...this.cookies].map(([key, value]) => `${key}=${value}`).join("; "));
     operation.set("Origin", origin);
     operation.set("X-CSRF-Token", this.csrf);
+    for (const [name, value] of Object.entries(fields)) operation.field(name, value);
     const res = await operation.attach("file", content, fileName);
     if (res.status >= 200 && res.status < 300)
       expect(

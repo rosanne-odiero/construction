@@ -4,11 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { diaryTransition, nairobiDate } from "@pm-buddy/domain";
+import { diaryTransition, nairobiDate, summariseWorkforce } from "@pm-buddy/domain";
+import type { AttendanceStatus, WorkforceMusterState } from "@pm-buddy/types";
 import {
   diariesResponseSchema,
+  diaryAttendanceResponseSchema,
   diaryResponseSchema,
   diarySchema,
+  workforceTradeSchema,
   type CreateDiaryRequest,
   type DiaryActionRequest,
   type DiaryListQuery,
@@ -16,7 +19,7 @@ import {
 } from "@pm-buddy/validation";
 import type { Request } from "express";
 import { isUniqueViolation } from "../../common/database-errors.js";
-import type { Prisma } from "../../generated/prisma/client.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import { AccessPolicy, type Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
@@ -37,7 +40,15 @@ const toDiary = (row: DiaryRow) =>
     weather: row.weather,
     delays: row.delays,
     workforceCount: row.workforceCount,
-    workforceSource: "manual",
+    workforceSource: row.workforceSource,
+    workforce:
+      row.workforceSource === "attendance"
+        ? {
+            snapshotAt: row.workforceSnapshotAt!.toISOString(),
+            musterStatus: row.workforceMusterStatus,
+            trades: workforceTradeSchema.array().parse(row.workforceByTrade),
+          }
+        : null,
     status: row.status,
     version: row.version,
     createdBy: row.createdBy,
@@ -94,9 +105,17 @@ export class DiariesService {
             select: { id: true },
           });
           if (!site) throw new NotFoundException("Site not found in this project");
+          const { workforceSource, workforceCount, ...content } = input;
           const diary = await scope.tx.siteDiary.create({
             data: {
-              ...input,
+              ...content,
+              ...(await this.workforceColumns(
+                scope,
+                input.siteId,
+                input.date,
+                workforceSource,
+                workforceCount,
+              )),
               date: fromCalendarDate(input.date),
               tenantId: scope.access.tenantId,
               projectId,
@@ -108,6 +127,7 @@ export class DiariesService {
             siteId: diary.siteId,
             date: input.date,
             version: diary.version,
+            workforceSource,
           });
           return diaryResponseSchema.parse({ diary: toDiary(diary) });
         },
@@ -136,15 +156,26 @@ export class DiariesService {
         this.author(scope, diary);
         if (diary.status !== "draft")
           throw problem("diary-not-draft", "Only a draft diary can be edited");
-        const { version, ...content } = input;
+        const { version, workforceSource, workforceCount, ...content } = input;
         const changed = await scope.tx.siteDiary.updateMany({
           where: { id: diaryId, tenantId: scope.access.tenantId, projectId, version },
-          data: { ...content, version: { increment: 1 } },
+          data: {
+            ...content,
+            ...(await this.workforceColumns(
+              scope,
+              diary.siteId,
+              toCalendarDate(diary.date),
+              workforceSource,
+              workforceCount,
+            )),
+            version: { increment: 1 },
+          },
         });
         if (changed.count !== 1) throw versionConflict();
         await this.scope.audit(scope.tx, "diary.updated", diary.id, {
           projectId,
           version: version + 1,
+          workforceSource,
         });
         return this.response(scope, projectId, diaryId);
       },
@@ -194,12 +225,33 @@ export class DiariesService {
                 reviewedAt: null,
                 reviewReason: null,
               };
+        // Submitting an attendance-sourced diary takes a fresh snapshot first (a draft edit), so the
+        // submitted record shows attendance as it stood at submission.
+        let expected = input.version;
+        const refresh = input.action === "submit" && row.workforceSource === "attendance";
+        if (refresh) {
+          const refreshed = await scope.tx.siteDiary.updateMany({
+            where: { tenantId: scope.access.tenantId, projectId, id: diaryId, version: expected },
+            data: {
+              ...(await this.workforceColumns(
+                scope,
+                row.siteId,
+                toCalendarDate(row.date),
+                "attendance",
+                null,
+              )),
+              version: { increment: 1 },
+            },
+          });
+          if (refreshed.count !== 1) throw versionConflict();
+          expected += 1;
+        }
         const changed = await scope.tx.siteDiary.updateMany({
           where: {
             tenantId: scope.access.tenantId,
             projectId,
             id: diaryId,
-            version: input.version,
+            version: expected,
           },
           data: { status, ...metadata, version: { increment: 1 } },
         });
@@ -212,13 +264,106 @@ export class DiariesService {
             projectId,
             from: diary.status,
             to: status,
-            version: input.version + 1,
+            version: expected + 1,
+            ...(refresh ? { workforceRefreshed: true } : {}),
           },
         );
         return this.response(scope, projectId, diaryId);
       },
       true,
     );
+  }
+
+  /** Live attendance on a site and date by trade: what an attendance snapshot would store. */
+  attendance(
+    principal: Principal,
+    projectId: string,
+    query: { siteId: string; date: string },
+    req: Request,
+  ) {
+    return this.scope.run(principal, req, async (scope) => {
+      await this.access.load(scope, projectId, "projects.view");
+      await this.policy.requireAny(scope, DIARY_READERS, { projectId });
+      const site = await scope.tx.site.findFirst({
+        where: { tenantId: scope.access.tenantId, projectId, id: query.siteId },
+        select: { id: true },
+      });
+      if (!site) throw new NotFoundException("Site not found in this project");
+      const summary = await this.workforce(scope, query.siteId, query.date);
+      return diaryAttendanceResponseSchema.parse({
+        siteId: query.siteId,
+        date: query.date,
+        musterStatus: summary.musterStatus,
+        total: summary.total,
+        trades: summary.trades,
+        countedAt: new Date().toISOString(),
+      });
+    });
+  }
+
+  /**
+   * Attendance on the site and date by trade (packages/domain summariseWorkforce); the database
+   * recomputes the same summary when a diary stores it (app.diary_attendance_workforce).
+   */
+  private async workforce(scope: Scope, siteId: string, date: string) {
+    const { tenantId } = scope.access;
+    const workDate = fromCalendarDate(date);
+    const [records, day] = await Promise.all([
+      scope.tx.attendanceRecord.findMany({
+        where: { tenantId, siteId, workDate, status: { in: ["present", "half_day"] } },
+        select: {
+          status: true,
+          labourer: {
+            select: {
+              trade: {
+                select: { id: true, key: true, nameEn: true, nameSw: true, sortOrder: true },
+              },
+            },
+          },
+        },
+      }),
+      scope.tx.attendanceDay.findFirst({
+        where: { tenantId, siteId, workDate },
+        select: { status: true },
+      }),
+    ]);
+    const summary = summariseWorkforce(
+      records.map(({ status, labourer: { trade } }) => ({
+        tradeId: trade.id,
+        tradeKey: trade.key,
+        nameEn: trade.nameEn,
+        nameSw: trade.nameSw,
+        sortOrder: trade.sortOrder,
+        status: status as AttendanceStatus,
+      })),
+    );
+    return { ...summary, musterStatus: (day?.status ?? "none") as WorkforceMusterState };
+  }
+
+  /** The diary's workforce columns: a manual count, or an attendance snapshot taken now. */
+  private async workforceColumns(
+    scope: Scope,
+    siteId: string,
+    date: string,
+    source: "manual" | "attendance",
+    count: number | null,
+  ) {
+    if (source === "manual")
+      return {
+        workforceSource: "manual",
+        workforceCount: count,
+        workforceSnapshotAt: null,
+        workforceMusterStatus: null,
+        workforceByTrade: Prisma.DbNull,
+      };
+    const summary = await this.workforce(scope, siteId, date);
+    return {
+      workforceSource: "attendance",
+      workforceCount: summary.total,
+      workforceSnapshotAt: new Date(),
+      workforceMusterStatus: summary.musterStatus,
+      workforceByTrade: summary.trades,
+    };
   }
 
   private async editable(

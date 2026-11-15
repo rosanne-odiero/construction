@@ -17,9 +17,12 @@ export default defineConfig({
       AUTH_MFA_ENCRYPTION_KEY: randomBytes(32).toString("hex"),
       FIELD_ENCRYPTION_KEYS: `1:${randomBytes(32).toString("hex")}`,
       FIELD_BLIND_INDEX_KEY: randomBytes(32).toString("hex"),
+      AUTH_PIN_PEPPER_KEYS: `1:${randomBytes(32).toString("hex")}`,
       DATABASE_URL: testDatabaseUrls().appUrl,
       // Payment workers run only where a suite starts them against its own mock Daraja server.
       PAYMENTS_WORKERS_ENABLED: "false",
+      // Tests run due report subscriptions themselves (ReportSchedulerService.runDue).
+      REPORT_SCHEDULER: "off",
     },
     testTimeout: 20_000,
     hookTimeout: 60_000,

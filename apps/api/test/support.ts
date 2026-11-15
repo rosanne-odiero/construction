@@ -202,6 +202,7 @@ import {
   scheduleResponseSchema,
   sitePhotoResponseSchema,
   sitePhotosResponseSchema,
+  photoCaptureTicketResponseSchema,
   checklistTemplateResponseSchema,
   checklistTemplatesResponseSchema,
   completionResponseSchema,
@@ -354,6 +355,8 @@ export function responseContract(method: string, target: string) {
   if (path === "projects") return method === "get" ? projectsResponseSchema : projectResponseSchema;
   if (/^projects\/[^/]+\/photos(\?.*)?$/.test(path))
     return method === "get" ? sitePhotosResponseSchema : sitePhotoResponseSchema;
+  if (/^projects\/[^/]+\/photos\/capture-tickets$/.test(path))
+    return photoCaptureTicketResponseSchema;
   if (/^projects\/[^/]+\/diaries\/attendance$/.test(path)) return diaryAttendanceResponseSchema;
   if (/^projects\/[^/]+\/diaries$/.test(path))
     return method === "get" ? diariesResponseSchema : diaryResponseSchema;

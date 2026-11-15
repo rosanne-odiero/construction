@@ -44,20 +44,28 @@ review their own. Use separate browser profiles for the two identities.
 
 ## Review: verified site photos (increment 2)
 
-1. Open a project → **Photos** (needs `site.photos` to upload). On a phone, choose **Photo
-   (JPEG)** to open the camera; keep the camera's location setting on.
-2. Upload a photo taken on site today: it shows **Verified**, "Taken inside <site> (geofence
-   version N)" and the capture time. Open the original to see the file as uploaded.
-3. Upload a photo taken elsewhere, an old photo, or a screenshot/edited image without metadata:
-   it is stored but **Not verified**, with the reason (metres outside, older than three days, no
-   GPS position or capture time). Uploading the same file again is refused.
-4. Change the site's geofence, then upload a photo taken before the change: it is checked
-   against the version in force when it was taken.
-5. Attach a photo to your **draft** diary; after submission, attaching is refused, so an
+1. Open a project → **Photos** (needs `site.photos` to upload) on a phone, on site. Allow the
+   camera and location when the browser asks.
+2. **Take a photo**: PM-Buddy's camera screen opens and shows "Location found (within N m)".
+   Take the photo, check the preview and **Use photo**: it shows **Verified**, "Taken with the
+   PM-Buddy camera", "Taken inside <site> (geofence version N)" and the time.
+3. With location off, or a coarse fix (indoors, "Location is approximate"), or outside the
+   site, the photo is stored but **Not verified**, with the reason.
+4. **Import** a file instead: a JPEG from the gallery or an iPhone **HEIC** (it keeps its HEIC
+   original, offered as "Download original (HEIC)", with a JPEG preview). Its own GPS and time are
+   checked and shown, but it is always **Not verified: imported from a file**. The same file again
+   is refused.
+5. Take a photo of the same view on another project of the company (or on another day): it is
+   **Not verified** and says it "looks like an earlier photo"; for this project there is a link to
+   the earlier photo. Several shots of one view on the same day are fine.
+6. Change the site's geofence, then take a photo: it is checked against the new version; an
+   imported photo taken before the change is checked against the version in force then.
+7. Attach a photo to your **draft** diary; after submission, attaching is refused, so an
    approved diary stays locked. A photo taken on another day shows "a different day from its
    diary".
-6. Switch EN/SW and test at 360 px. A verified badge means the photo's own metadata is
-   consistent; metadata can be edited, so it is evidence for review, not proof.
+8. Switch EN/SW and test at 360 px. A browser cannot prove which phone took a photo, so a
+   verified badge is strong evidence for review, not proof; the Android site app adds device
+   attestation later.
 
 ## D6.1 quality: workforce from attendance, inspections, tests, snags, completion and DLP
 
@@ -300,7 +308,7 @@ synthetic accounts; finance and the owner need TOTP).
 
 | # | Step (who) | What to see | Deliverable |
 |---|---|---|---|
-| 1 | **Diary** (site agent, 360 px): today's RUI-HTS diary with the workforce from attendance and a verified photo; submit | Workforce snapshot by trade with its source; verified-photo badge from EXIF inside the geofence | D6.1 |
+| 1 | **Diary** (site agent, 360 px): today's RUI-HTS diary with the workforce from attendance and a verified photo; submit | Workforce snapshot by trade with its source; verified-photo badge for an in-app capture inside the geofence | D6.1 |
 | 2 | **Diary approval** (project manager): approve the agent's diary | Independent sign-off; the approved diary is locked | D6.1 |
 | 3 | **Quality** (project manager / owner): an inspection signed off by someone else; a cube set judged at 28 days; a snag fixed and verified; JUJ-DPX practical completion certified with its DLP end | Independent sign-offs; KE-CUBE-1; DLP end date | D6.1 |
 | 4 | **Schedule** (project manager): RUI-HTS Gantt with the critical path, baseline 1 and the slip in working days; the delay log | Baseline frozen; variance in working days; physical % labelled as not earned value | D6.2 |

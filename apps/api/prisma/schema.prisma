@@ -326,50 +326,51 @@ model ProjectStatusChange {
 }
 
 model Site {
-  id                 String                @id @default(uuid(7)) @db.Uuid
-  tenantId           String                @map("tenant_id") @db.Uuid
-  projectId          String                @map("project_id") @db.Uuid
-  name               String                @db.VarChar(120)
-  address            String?               @db.VarChar(250)
-  version            Int                   @default(1)
-  createdBy          String                @map("created_by") @db.Uuid
-  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt          DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  project            Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
-  geofences          SiteGeofence[]
-  gangs              Gang[]
-  attendanceDays     AttendanceDay[]
-  attendanceRecords  AttendanceRecord[]
-  anomalies          AttendanceAnomaly[]
-  adjustments        TimesheetAdjustment[]
-  diaries            SiteDiary[]
-  photos             SitePhoto[]
-  requisitions       Requisition[]
-  lpos               Lpo[]
-  grns               Grn[]
-  stores             Store[]
-  pettyCashFloats    PettyCashFloat[]
-  pettyCashExpenses  PettyCashExpense[]
-  costEntries        CostEntry[]
-  costJournalLines   CostJournalLine[]
-  inspections        Inspection[]
-  snags              Snag[]
-  cubeSets           CubeSet[]
-  slumpTests         SlumpTest[]
-  safetyInductions   SafetyInduction[]
-  toolboxTalks       ToolboxTalk[]
-  ppeIssues          PpeIssue[]
-  safetyIncidents    SafetyIncident[]
-  firstAidKits       FirstAidKit[]
-  firstAiders        FirstAider[]
-  firstAidTreatments FirstAidTreatment[]
-  plantItems         PlantItem[]
-  plantMovesFrom     PlantMove[]           @relation("PlantMovesFrom")
-  plantMovesTo       PlantMove[]           @relation("PlantMovesTo")
-  plantUsageLogs     PlantUsageLog[]
-  plantFuelIssues    PlantFuelIssue[]
-  plantBreakdowns    PlantBreakdown[]
-  plantServices      PlantService[]
+  id                  String                @id @default(uuid(7)) @db.Uuid
+  tenantId            String                @map("tenant_id") @db.Uuid
+  projectId           String                @map("project_id") @db.Uuid
+  name                String                @db.VarChar(120)
+  address             String?               @db.VarChar(250)
+  version             Int                   @default(1)
+  createdBy           String                @map("created_by") @db.Uuid
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project             Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  geofences           SiteGeofence[]
+  gangs               Gang[]
+  attendanceDays      AttendanceDay[]
+  attendanceRecords   AttendanceRecord[]
+  anomalies           AttendanceAnomaly[]
+  adjustments         TimesheetAdjustment[]
+  diaries             SiteDiary[]
+  photos              SitePhoto[]
+  photoCaptureTickets PhotoCaptureTicket[]
+  requisitions        Requisition[]
+  lpos                Lpo[]
+  grns                Grn[]
+  stores              Store[]
+  pettyCashFloats     PettyCashFloat[]
+  pettyCashExpenses   PettyCashExpense[]
+  costEntries         CostEntry[]
+  costJournalLines    CostJournalLine[]
+  inspections         Inspection[]
+  snags               Snag[]
+  cubeSets            CubeSet[]
+  slumpTests          SlumpTest[]
+  safetyInductions    SafetyInduction[]
+  toolboxTalks        ToolboxTalk[]
+  ppeIssues           PpeIssue[]
+  safetyIncidents     SafetyIncident[]
+  firstAidKits        FirstAidKit[]
+  firstAiders         FirstAider[]
+  firstAidTreatments  FirstAidTreatment[]
+  plantItems          PlantItem[]
+  plantMovesFrom      PlantMove[]           @relation("PlantMovesFrom")
+  plantMovesTo        PlantMove[]           @relation("PlantMovesTo")
+  plantUsageLogs      PlantUsageLog[]
+  plantFuelIssues     PlantFuelIssue[]
+  plantBreakdowns     PlantBreakdown[]
+  plantServices       PlantService[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -2467,8 +2468,20 @@ model SitePhoto {
   verified             Boolean
   uploadedBy           String                     @map("uploaded_by") @db.Uuid
   uploadedAt           DateTime                   @default(now()) @map("uploaded_at") @db.Timestamptz
+  contentType          String                     @map("content_type") @db.VarChar(20)
+  captureMethod        String                     @map("capture_method") @db.VarChar(10)
+  captureTicketId      String?                    @unique @map("capture_ticket_id") @db.Uuid
+  locationAccuracyM    Decimal?                   @map("location_accuracy_m") @db.Decimal(8, 1)
+  perceptualHash       BigInt?                    @map("perceptual_hash")
+  similarityCheck      String                     @map("similarity_check") @db.VarChar(12)
+  similarPhotoId       String?                    @map("similar_photo_id") @db.Uuid
+  similarProjectId     String?                    @map("similar_project_id") @db.Uuid
+  similarityDistance   Int?                       @map("similarity_distance") @db.SmallInt
   site                 Site                       @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_site_fkey")
   diary                SiteDiary?                 @relation(fields: [tenantId, siteId, diaryId], references: [tenantId, siteId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_diary_fkey")
+  captureTicket        PhotoCaptureTicket?        @relation(fields: [tenantId, projectId, siteId, captureTicketId], references: [tenantId, projectId, siteId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_capture_ticket_fkey")
+  similarPhoto         SitePhoto?                 @relation("SimilarPhoto", fields: [tenantId, similarProjectId, similarPhotoId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "site_photos_similar_photo_fkey")
+  similarLaterPhotos   SitePhoto[]                @relation("SimilarPhoto")
   inspectionItems      InspectionItemPhoto[]
   snags                SnagPhoto[]
   measurements         ProgressMeasurementPhoto[]
@@ -2480,6 +2493,23 @@ model SitePhoto {
   @@unique([tenantId, projectId, fileSha256])
   @@index([tenantId, projectId, id])
   @@map("site_photos")
+}
+
+// D6.1 in-app capture (THREAT_MODEL A-13): issued when a user opens PM-Buddy's camera screen for a
+// site; an in-app photo uses one, so its capture time is bounded by the server clock. Owner and
+// time are set by trigger; append-only (migration 20261203090000_photo_capture_evidence).
+model PhotoCaptureTicket {
+  id        String      @id @db.Uuid
+  tenantId  String      @map("tenant_id") @db.Uuid
+  projectId String      @map("project_id") @db.Uuid
+  siteId    String      @map("site_id") @db.Uuid
+  issuedTo  String      @map("issued_to") @db.Uuid
+  issuedAt  DateTime    @default(now()) @map("issued_at") @db.Timestamptz
+  site      Site        @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict, onUpdate: NoAction, map: "photo_capture_tickets_site_fkey")
+  photos    SitePhoto[]
+
+  @@unique([tenantId, projectId, siteId, id])
+  @@map("photo_capture_tickets")
 }
 
 // D5.2 procure-to-pay (ARCHITECTURE §4.5, WORKFLOWS "Procurement and certification"). State machines,

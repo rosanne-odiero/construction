@@ -166,9 +166,12 @@ Code constants (`PHOTO_VERIFICATION_DEFAULTS`, `PHOTO_LIMITS` in `packages/domai
 | Key | Scope | Seed / default | Source | Status | Used from |
 |---|---|---|---|---|---|
 | `photos.geofence_tolerance_m` | platform | 30 | Typical phone GPS accuracy | PRODUCT | D6.1 |
-| `photos.max_age_hours` | platform | 72 | Allows upload after a day or two offline | PRODUCT | D6.1 |
-| `photos.future_skew_minutes` | platform | 10 | Phone clocks running ahead | PRODUCT | D6.1 |
-| `photos.max_file_mb` / `photos.max_pixels` | platform | 15 / 50,000,000 | Upload and decompression-bomb limits (JPEG only) | SECURITY | D6.1 |
+| `photos.max_age_hours` | platform | 72 | Imported photos' EXIF time: allows upload after a day or two offline | PRODUCT | D6.1 |
+| `photos.future_skew_minutes` | platform | 10 | Phone clocks running ahead (also the allowance before a capture ticket) | PRODUCT | D6.1 |
+| `photos.capture_window_minutes` | platform | 30 | In-app capture: upload within this long of the camera opening, else `stale` | PRODUCT | D6.1 |
+| `photos.max_accuracy_m` | platform | 50 | In-app capture: a coarser browser GPS fix is `low_accuracy` | PRODUCT | D6.1 |
+| `photos.similarity_max_distance` | platform | 6 (of 64 bits) | Difference-hash distance that counts as the same picture | SECURITY | D6.1 |
+| `photos.max_file_mb` / `photos.max_pixels` | platform | 15 / 50,000,000 | Upload and decompression-bomb limits (JPEG and HEIC; HEIC checked before decoding) | SECURITY | D6.1 |
 
 ### Quality (D6.1)
 

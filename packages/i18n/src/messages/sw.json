@@ -2917,10 +2917,10 @@
     },
     "photos": {
       "title": "Picha za eneo",
-      "summary": "{total, plural, one {Picha #} other {Picha #}}, {verified} zenye eneo na muda uliothibitishwa. Mpya kwanza.",
+      "summary": "{total, plural, one {Picha #} other {Picha #}}, {verified} zimethibitishwa. Mpya kwanza.",
       "limitationsTitle": "“Imethibitishwa” inamaanisha nini",
-      "limitations": "PM-Buddy hukagua eneo la GPS na muda wa kupigwa uliomo kwenye kila picha. Picha iliyothibitishwa ilipigwa ndani ya mpaka wa eneo (kwa uvumilivu mdogo) na kupakiwa muda mfupi baada ya kupigwa. Taarifa za picha zinaweza kubadilishwa, kwa hiyo ichukue picha iliyothibitishwa kama ushahidi, si uthibitisho kamili. “Haijathibitishwa” inamaanisha ukaguzi ulishindwa au haukuweza kufanyika; sababu inaonyeshwa kwenye picha. Maeneo hayaonyeshwi kamwe, na picha unazoziona hazina taarifa za kamera wala GPS.",
-      "verified": "Eneo na muda vimethibitishwa",
+      "limitations": "Picha zilizopigwa kwa kamera ya PM-Buddy kwenye eneo pekee ndizo zinaweza kuthibitishwa. Picha iliyothibitishwa ilipigwa ndani ya mpaka wa eneo (kwa uvumilivu mdogo), ikapakiwa mara moja, na haifanani na picha ya awali ya siku nyingine au mradi mwingine. Picha zilizoingizwa kutoka kwenye faili hazithibitishwi kamwe. Kivinjari hakiwezi kuthibitisha ni simu gani ilipiga picha, kwa hiyo ichukue picha iliyothibitishwa kama ushahidi madhubuti, si uthibitisho kamili. “Haijathibitishwa” inamaanisha ukaguzi ulishindwa au haukuweza kufanyika; sababu inaonyeshwa kwenye picha. Maeneo hayaonyeshwi kamwe, na picha unazoziona hazina taarifa za kamera wala GPS.",
+      "verified": "Imethibitishwa kwenye eneo",
       "unverified": "Haijathibitishwa",
       "noCaption": "Picha ya eneo",
       "captured": "Ilipigwa {date} ({source})",
@@ -2929,21 +2929,27 @@
       "timeSource": {
         "gps": "muda wa GPS",
         "offset": "muda wa kamera pamoja na saa za eneo lake",
-        "assumed_nairobi": "muda wa kamera, saa za Nairobi zimechukuliwa"
+        "assumed_nairobi": "muda wa kamera, saa za Nairobi zimechukuliwa",
+        "device": "saa ya simu"
       },
       "location": {
         "inside": "Ilipigwa ndani ya mpaka wa eneo",
         "outside": "Ilipigwa takriban mita {metres} nje ya mpaka wa eneo",
         "missing": "Hakuna eneo la GPS kwenye picha",
-        "no_geofence": "Eneo halina mpaka wa kulinganisha"
+        "no_geofence": "Eneo halina mpaka wa kulinganisha",
+        "low_accuracy": "Mahali pa simu hapakuwa sahihi vya kutosha"
       },
       "time": {
         "ok": "Muda wa kupigwa umekaguliwa",
         "future": "Muda wa kupigwa uko mbeleni",
         "stale": "Ilipigwa zaidi ya siku tatu kabla ya kupakiwa",
         "missing": "Hakuna muda wa kupigwa kwenye picha",
-        "diary_mismatch": "Ilipigwa siku tofauti na ya shajara yake"
+        "diary_mismatch": "Ilipigwa siku tofauti na ya shajara yake",
+        "outside_window": "Saa ya simu haikulingana na wakati kamera ilipofunguliwa",
+        "late": "Ilipakiwa muda mrefu baada ya kamera kufunguliwa"
       },
+      "imported": "Imeingizwa kutoka kwenye faili, kwa hiyo haijathibitishwa.",
+      "similar": "Inafanana na picha ya awali.",
       "empty": "Bado hakuna picha za eneo zilizoshirikishwa.",
       "older": "Picha za zamani"
     },
@@ -3271,16 +3277,18 @@
   },
   "livePhotos": {
     "title": "Picha za eneo",
-    "description": "Picha zenye eneo la GPS kutoka eneo la kazi, mpya kwanza. Piga au chagua picha ya JPEG moja kwa moja kutoka kamera ya simu ili eneo na muda wake vibaki.",
-    "evidenceNote": "PM-Buddy hukagua eneo la GPS na muda wa kupigwa uliomo kwenye picha yenyewe: picha zilizothibitishwa zilipigwa ndani ya mita {tolerance} za mpaka wa eneo (toleo lililotumika wakati huo) na kupakiwa ndani ya saa {hours}. Taarifa hizi za picha zinaweza kubadilishwa, kwa hiyo zichukue kama ushahidi wa kukaguliwa, si uthibitisho kamili.",
-    "file": "Picha (JPEG)",
-    "fileHint": "Hadi MB 15. Eneo na muda husomwa kutoka kwenye picha yenyewe.",
+    "description": "Picha za eneo, mpya kwanza. Zipige kwa kamera ya PM-Buddy ili ziweze kuthibitishwa.",
+    "evidenceNote": "Picha zilizopigwa kwa kamera ya PM-Buddy pekee ndizo zinaweza kuthibitishwa: PM-Buddy hurekodi wakati kamera ilipofunguliwa, na picha iliyothibitishwa ilipigwa ndani ya mita {tolerance} za mpaka wa eneo (toleo lililotumika wakati huo), ikapakiwa ndani ya dakika {minutes}, na haifanani na picha ya awali ya siku nyingine au mradi mwingine. Faili zilizoingizwa (kutoka kwenye galari, kompyuta au HEIC ya iPhone) huhifadhiwa na GPS na muda wake hukaguliwa, lakini hazithibitishwi kamwe. Kivinjari hakiwezi kuthibitisha ni simu gani ilipiga picha, kwa hiyo chukua “imethibitishwa” kama ushahidi madhubuti wa kukaguliwa, si uthibitisho kamili.",
+    "file": "Faili la picha (JPEG au HEIC)",
+    "fileHint": "Hadi MB 15. Picha iliyoingizwa hukaguliwa kwa GPS na muda wake yenyewe, lakini haithibitishwi kamwe.",
     "site": "Eneo",
     "diary": "Ambatisha kwenye rasimu ya shajara yangu",
     "noDiary": "Usiambatishe",
     "diaryHint": "Rasimu zako za shajara za eneo hili pekee; shajara zilizoidhinishwa hubaki zimefungwa.",
     "caption": "Maelezo (si lazima)",
-    "upload": "Pakia picha",
+    "takePhoto": "Piga picha",
+    "importTitle": "Au ingiza faili la picha",
+    "upload": "Ingiza picha",
     "uploading": "Inapakia…",
     "uploadedVerified": "Picha imepakiwa na kuthibitishwa.",
     "uploadedUnverified": "Picha imepakiwa, lakini haikuweza kuthibitishwa. Tazama sababu kwenye picha.",
@@ -3293,31 +3301,68 @@
       "inside": "Ilipigwa ndani ya {site} (toleo la mpaka {version})",
       "outside": "Ilipigwa mita {distance} nje ya {site}",
       "missing": "Hakuna eneo la GPS kwenye picha",
-      "no_geofence": "{site} haina mpaka wa kulinganisha"
+      "no_geofence": "{site} haina mpaka wa kulinganisha",
+      "low_accuracy": "Mahali pa simu hapakuwa sahihi vya kutosha (ndani ya mita {accuracy})"
     },
     "time": {
       "ok": "Ilipigwa {date}",
       "future": "Muda wa kupigwa {date} uko mbeleni",
       "stale": "Ilipigwa {date}, zaidi ya siku tatu kabla ya kupakiwa",
       "missing": "Hakuna muda wa kupigwa kwenye picha",
-      "diary_mismatch": "Ilipigwa {date}, siku tofauti na ya shajara yake"
+      "diary_mismatch": "Ilipigwa {date}, siku tofauti na ya shajara yake",
+      "outside_window": "Saa ya simu ({date}) hailingani na wakati kamera ilipofunguliwa",
+      "late": "Ilipigwa {date}, lakini ilipakiwa zaidi ya dakika {minutes} baada ya kamera kufunguliwa"
     },
     "assumedZone": "(saa za eneo zimechukuliwa kuwa za Nairobi)",
+    "capture": {
+      "in_app": "Ilipigwa kwa kamera ya PM-Buddy",
+      "imported": "Imeingizwa kutoka kwenye faili: picha zilizopigwa kwa kamera ya PM-Buddy pekee ndizo zinaweza kuthibitishwa"
+    },
+    "similarity": {
+      "sameProject": "Inafanana na picha ya awali ya mradi huu ya siku nyingine",
+      "otherProject": "Inafanana na picha ya awali ya mradi mwingine",
+      "not_checked": "Ilirekodiwa kabla picha zilizotumika tena hazijaanza kukaguliwa",
+      "open": "Fungua picha ya awali"
+    },
     "uploadedBy": "Imepakiwa na {name}, {date}",
     "camera": "Kamera: {camera}",
     "inDiary": "Imeambatishwa kwenye shajara ya eneo",
     "original": "Fungua picha asili",
+    "originalHeic": "Pakua picha asili (HEIC)",
     "newTab": "(inafunguka kwenye kichupo kipya)",
     "pages": "Kurasa za picha",
     "newest": "Picha mpya zaidi",
-    "older": "Picha za zamani",
+    "older": "Picha za zamani"
+  },
+  "photoCapture": {
+    "title": "Piga picha ya eneo",
+    "description": "Elekeza kamera kwenye kazi. PM-Buddy hurekodi wakati kamera ilipofunguliwa na mahali simu ilipo, ili picha zinazopigwa hapa ziweze kuthibitishwa.",
+    "viewfinder": "Mwonekano wa kamera",
+    "preview": "Picha uliyopiga sasa hivi",
+    "starting": "Inafungua kamera…",
+    "shutter": "Piga picha",
+    "retake": "Piga upya",
+    "use": "Tumia picha",
+    "uploading": "Inapakia…",
+    "close": "Funga",
+    "locating": "Inatafuta mahali simu ilipo…",
+    "locationFound": "Mahali pamepatikana (ndani ya mita {accuracy}).",
+    "locationCoarse": "Mahali si sahihi vya kutosha (ndani ya mita {accuracy}), kwa hiyo picha zitakazopigwa sasa hazitathibitishwa. Sogea mahali wazi na usubiri kidogo.",
+    "locationOff": "Huduma ya mahali imezimwa au haijaruhusiwa, kwa hiyo picha zitakazopigwa sasa hazitathibitishwa. Ruhusu mahali kwa PM-Buddy kwenye mipangilio ya kivinjari.",
+    "cameraUnavailable": "Kamera haikuweza kufunguliwa. Ruhusu PM-Buddy kutumia kamera, au ingiza faili la picha badala yake (picha zilizoingizwa hazithibitishwi).",
+    "captureFailed": "Picha haikuweza kupigwa. Jaribu tena.",
+    "import": "Ingiza faili",
+    "importHint": "JPEG au HEIC ya iPhone, hadi MB 15. Picha zilizoingizwa huhifadhiwa na kukaguliwa, lakini hazithibitishwi kamwe.",
     "errors": {
-      "fileRequired": "Chagua picha ya kupakia.",
-      "notJpeg": "Picha za JPEG pekee ndizo zinaweza kupakiwa.",
+      "fileRequired": "Chagua picha ya kuingiza.",
+      "duplicate": "Picha hii tayari imepakiwa kwenye mradi.",
+      "unsupported": "Picha za JPEG au HEIC pekee ndizo zinaweza kupakiwa.",
       "invalidImage": "Faili hilo halikuweza kusomwa kama picha, au ni kubwa mno kuchakatwa.",
       "tooLarge": "Picha zinaweza kuwa hadi MB 15 tu.",
-      "duplicate": "Picha hii tayari imepakiwa kwenye mradi.",
-      "diaryNotDraft": "Shajara hiyo imewasilishwa, kwa hiyo picha haziwezi tena kuambatishwa. Pakia ukurasa upya."
+      "diaryNotDraft": "Shajara hiyo imewasilishwa, kwa hiyo picha haziwezi tena kuambatishwa. Pakia ukurasa upya.",
+      "ticketUsed": "Picha hii tayari imepakiwa. Piga mpya.",
+      "ticketInvalid": "Kipindi hiki cha kamera si halali kwa eneo hili. Funga kamera na uifungue tena.",
+      "busy": "Seva ina shughuli nyingi za kuchakata picha. Jaribu tena baada ya muda mfupi."
     }
   },
   "labourConsentNotices": {
@@ -7003,11 +7048,13 @@
     },
     "photos": {
       "alt": "Picha {index}",
-      "verified": "Mahali na wakati vimethibitishwa na seva",
+      "verified": "Ilipigwa kwa kamera ya PM-Buddy na kuthibitishwa",
       "unverified": "Haijathibitishwa",
       "remove": "Ondoa picha {index}",
       "uploading": "Inapakia…",
-      "tooLarge": "Picha hii ni kubwa kuliko MB 15."
+      "tooLarge": "Picha hii ni kubwa kuliko MB 15.",
+      "import": "Ingiza faili",
+      "importLabel": "Ingiza faili (JPEG au HEIC; haithibitishwi)"
     },
     "inspections": {
       "title": "Ukaguzi",

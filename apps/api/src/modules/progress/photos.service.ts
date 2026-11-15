@@ -7,16 +7,28 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnprocessableEntityException,
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
-import { PHOTO_LIMITS, verifyPhotoEvidence, type PhotoPurpose } from "@pm-buddy/domain";
+import {
+  differenceHash,
+  nairobiDate,
+  PHOTO_LIMITS,
+  PHOTO_VERIFICATION_DEFAULTS,
+  sniffPhotoType,
+  verifyPhotoEvidence,
+  type PhotoCapture,
+  type PhotoContentType,
+  type PhotoPurpose,
+} from "@pm-buddy/domain";
 import {
   SAFETY_READ_PERMISSIONS,
   SAFETY_RECORD_PERMISSIONS,
   type Permission,
 } from "@pm-buddy/types";
 import {
+  photoCaptureTicketResponseSchema,
   sitePhotoResponseSchema,
   sitePhotoSchema,
   sitePhotosResponseSchema,
@@ -24,7 +36,7 @@ import {
   type SitePhoto,
 } from "@pm-buddy/validation";
 import type { Request } from "express";
-import sharp from "sharp";
+import sharp, { type Sharp } from "sharp";
 import { isUniqueViolation } from "../../common/database-errors.js";
 import { describeError } from "../../common/errors.js";
 import { uuidv7 } from "../../common/uuid.js";
@@ -36,9 +48,20 @@ import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import { ProjectAccess } from "../projects/project-access.js";
 import { toCalendarDate, toGeofenceVersion } from "../projects/project-mappers.js";
-import { readPhotoMetadata } from "./photo-metadata.js";
+import { decodeHeic } from "./heic-decoder.js";
+import { readPhotoMetadata, type PhotoMetadata } from "./photo-metadata.js";
 
-type PhotoRow = Prisma.SitePhotoGetPayload<object>;
+/** The similar photo's purpose decides whether its ID may be shown (incident photos stay hidden). */
+const withSimilar = { similarPhoto: { select: { purpose: true } } } as const;
+type PhotoRow = Prisma.SitePhotoGetPayload<{ include: typeof withSimilar }>;
+type DecodedPhoto = {
+  width: number;
+  height: number;
+  exif: Buffer | undefined;
+  thumbnail: Buffer;
+  /** Signed 64-bit, as PostgreSQL stores BIGINT. */
+  perceptualHash: bigint;
+};
 export type UploadedPhoto = { buffer: Buffer; originalname: string; size: number };
 /** Photos are staff evidence (site diary readers plus photographers). */
 const PHOTO_READERS = [
@@ -48,10 +71,12 @@ const PHOTO_READERS = [
   "projects.manage",
   "reports.view",
 ] as const;
-const photoKeys = (tenantId: string, projectId: string, id: string) => {
+const extension = (type: PhotoContentType) => (type === "image/heic" ? "heic" : "jpg");
+const photoKeys = (tenantId: string, projectId: string, id: string, type: PhotoContentType) => {
   const base = `tenants/${tenantId}/projects/${projectId}/photos/${id}`;
-  return { original: `${base}/original.jpg`, thumbnail: `${base}/thumbnail.jpg` };
+  return { original: `${base}/original.${extension(type)}`, thumbnail: `${base}/thumbnail.jpg` };
 };
+const round6 = (value: number) => Math.round(value * 1e6) / 1e6;
 const decimal = (value: Prisma.Decimal | null) => (value === null ? null : value.toNumber());
 const problem = (Exception: new (body: object) => HttpException, code: string, message: string) =>
   new Exception({ code, message });
@@ -63,12 +88,18 @@ const toPhoto = (row: PhotoRow, names: ReadonlyMap<string, string>): SitePhoto =
     siteId: row.siteId,
     diaryId: row.diaryId,
     caption: row.caption,
+    contentType: row.contentType,
+    captureMethod: row.captureMethod,
     capturedAt: row.capturedAt?.toISOString() ?? null,
     timeSource: row.timeSource,
     location:
       row.latitude === null || row.longitude === null
         ? null
-        : { lat: decimal(row.latitude), lng: decimal(row.longitude) },
+        : {
+            lat: decimal(row.latitude),
+            lng: decimal(row.longitude),
+            accuracyM: decimal(row.locationAccuracyM),
+          },
     camera: row.camera,
     width: row.width,
     height: row.height,
@@ -79,6 +110,18 @@ const toPhoto = (row: PhotoRow, names: ReadonlyMap<string, string>): SitePhoto =
       location: row.locationCheck,
       time: row.timeCheck,
       distanceM: decimal(row.distanceM),
+      similarity: row.similarityCheck,
+      similarTo:
+        row.similarPhotoId === null
+          ? null
+          : {
+              photoId:
+                row.similarProjectId === row.projectId && row.similarPhoto?.purpose === "general"
+                  ? row.similarPhotoId
+                  : null,
+              otherProject: row.similarProjectId !== row.projectId,
+              distance: row.similarityDistance,
+            },
     },
     verified: row.verified,
     scanStatus: row.scanStatus,
@@ -87,10 +130,13 @@ const toPhoto = (row: PhotoRow, names: ReadonlyMap<string, string>): SitePhoto =
   });
 
 /**
- * Geotagged site photos (D6.1). The server never trusts a client-supplied position or time: it
- * reads the photo's own EXIF and checks it against the site geofence version in force at capture
- * (packages/domain verifyPhotoEvidence). Rows are append-only evidence; originals and
- * metadata-free thumbnails are private objects.
+ * Geotagged site photos (D6.1, THREAT_MODEL A-13). An in-app capture opens a server ticket when
+ * the camera screen opens, so its time is bounded by the server clock; its position is the
+ * browser's, with an accuracy radius. An imported file (JPEG or HEIC) is checked on its own EXIF
+ * but never verified. Every photo gets a difference hash, and one that looks like an earlier photo
+ * of the company from another day or project is not verified (packages/domain
+ * verifyPhotoEvidence). Rows are append-only evidence; originals and metadata-free JPEG thumbnails
+ * are private objects.
  */
 @Injectable()
 export class PhotosService {
@@ -104,6 +150,37 @@ export class PhotosService {
     private readonly scanner: MalwareScanner,
   ) {}
 
+  /** Opens an in-app capture for a site: the ticket records the server time the camera opened. */
+  openCapture(principal: Principal, projectId: string, siteId: string, req: Request) {
+    return this.scope.run(
+      principal,
+      req,
+      async (scope) => {
+        await this.writable(scope, projectId, "general");
+        const { tenantId, userId } = scope.access;
+        const site = await scope.tx.site.findFirst({
+          where: { tenantId, projectId, id: siteId },
+          select: { id: true },
+        });
+        if (!site) throw new NotFoundException("Site not found in this project");
+        // The trigger sets issued_at to the database's time, whatever is sent.
+        const ticket = await scope.tx.photoCaptureTicket.create({
+          data: { id: uuidv7(), tenantId, projectId, siteId: site.id, issuedTo: userId },
+        });
+        const window = PHOTO_VERIFICATION_DEFAULTS.captureWindowMinutes * 60_000;
+        return photoCaptureTicketResponseSchema.parse({
+          ticket: {
+            id: ticket.id,
+            siteId: ticket.siteId,
+            issuedAt: ticket.issuedAt.toISOString(),
+            useBy: new Date(ticket.issuedAt.getTime() + window).toISOString(),
+          },
+        });
+      },
+      true,
+    );
+  }
+
   async upload(
     principal: Principal,
     projectId: string,
@@ -112,47 +189,36 @@ export class PhotosService {
     req: Request,
   ) {
     if (!file?.buffer?.length)
-      throw problem(BadRequestException, "file-required", "Attach a JPEG photo as `file`");
+      throw problem(BadRequestException, "file-required", "Attach a JPEG or HEIC photo as `file`");
     const purpose: PhotoPurpose = fields.purpose ?? "general";
     await this.scope.run(principal, req, (scope) => this.writable(scope, projectId, purpose));
     const { buffer } = file;
-    if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8 || buffer[2] !== 0xff)
+    const contentType = sniffPhotoType(buffer);
+    if (!contentType)
       throw problem(
         UnsupportedMediaTypeException,
         "unsupported-file-type",
-        "Photos must be JPEG images",
+        "Photos must be JPEG or HEIC images",
       );
-    const decoder = () =>
-      sharp(buffer, { limitInputPixels: PHOTO_LIMITS.maxPixels, failOn: "error" });
-    let width: number;
-    let height: number;
-    let thumbnail: Buffer;
-    let exif: Buffer | undefined;
-    try {
-      const meta = await decoder().metadata();
-      if (meta.format !== "jpeg" || !meta.width || !meta.height)
-        throw new Error("Not a JPEG image");
-      ({ width, height, exif } = meta);
-      // A fresh, small JPEG without metadata (rotated upright); the original is kept as uploaded.
-      thumbnail = await decoder()
-        .rotate()
-        .resize({
-          width: PHOTO_LIMITS.thumbnailEdgePx,
-          height: PHOTO_LIMITS.thumbnailEdgePx,
-          fit: "inside",
-          withoutEnlargement: true,
-        })
-        .jpeg({ quality: 78, mozjpeg: true })
-        .toBuffer();
-    } catch (error) {
-      this.logger.warn(`Photo refused: ${describeError(error)}`);
-      throw problem(
-        UnprocessableEntityException,
-        "invalid-image",
-        "The photo could not be read as a JPEG image (or is too large to decode)",
-      );
-    }
-    const metadata = readPhotoMetadata(exif);
+    const { width, height, exif, thumbnail, perceptualHash } = await this.decode(
+      buffer,
+      contentType,
+    );
+    const inApp = fields.captureTicketId !== undefined;
+    const metadata: PhotoMetadata = inApp
+      ? {
+          // The browser's position and the phone's clock at the shutter; a 0,0 fix is no fix.
+          location:
+            fields.latitude !== undefined &&
+            fields.longitude !== undefined &&
+            !(fields.latitude === 0 && fields.longitude === 0)
+              ? { lat: round6(fields.latitude), lng: round6(fields.longitude) }
+              : null,
+          capturedAt: fields.capturedAt ? new Date(fields.capturedAt) : null,
+          timeSource: fields.capturedAt ? "device" : null,
+          camera: null,
+        }
+      : readPhotoMetadata(exif);
     const sha256 = createHash("sha256").update(buffer).digest("hex");
     let scan;
     try {
@@ -168,8 +234,8 @@ export class PhotosService {
     }
 
     const id = uuidv7();
-    const keys = photoKeys(principal.session.activeTenantId!, projectId, id);
-    await this.storage.put(keys.original, buffer, "image/jpeg", sha256);
+    const keys = photoKeys(principal.session.activeTenantId!, projectId, id, contentType);
+    await this.storage.put(keys.original, buffer, contentType, sha256);
     await this.storage.put(keys.thumbnail, thumbnail, "image/jpeg");
     try {
       return await this.scope.run(
@@ -212,13 +278,56 @@ export class PhotosService {
               where: { tenantId, siteId: site.id },
               orderBy: { effectiveFrom: "asc" },
             }));
+          let capture: PhotoCapture = { method: "imported" };
+          if (fields.captureTicketId) {
+            const ticket = await scope.tx.photoCaptureTicket.findFirst({
+              where: {
+                tenantId,
+                projectId,
+                siteId: site.id,
+                id: fields.captureTicketId,
+                issuedTo: userId,
+              },
+              select: { id: true, issuedAt: true },
+            });
+            if (!ticket)
+              throw problem(
+                UnprocessableEntityException,
+                "capture-ticket-invalid",
+                "This capture was not opened by you for this site",
+              );
+            // Writes are serialised per company (the tenant row lock), so this check is exact.
+            const used = await scope.tx.sitePhoto.findFirst({
+              where: { tenantId, captureTicketId: ticket.id },
+              select: { id: true },
+            });
+            if (used)
+              throw problem(
+                ConflictException,
+                "capture-ticket-used",
+                "This capture has already been uploaded; open the camera again",
+              );
+            capture = {
+              method: "in_app",
+              cameraOpenedAt: ticket.issuedAt,
+              accuracyM: fields.accuracyM ?? null,
+            };
+          }
           const uploadedAt = new Date();
+          const similar = await this.similarPhoto(
+            scope,
+            projectId,
+            perceptualHash,
+            nairobiDate(uploadedAt),
+          );
           const evidence = verifyPhotoEvidence({
             location: metadata.location,
             capturedAt: metadata.capturedAt,
             uploadedAt,
             geofence: fence ? toGeofenceVersion(fence).geofence : null,
             diaryDate,
+            capture,
+            similarity: similar ? "similar" : "unique",
           });
           const checkedAgainst =
             evidence.location === "inside" || evidence.location === "outside"
@@ -233,6 +342,9 @@ export class PhotosService {
               diaryId: fields.diaryId ?? null,
               caption: fields.caption ?? null,
               purpose,
+              contentType,
+              captureMethod: evidence.captureMethod,
+              captureTicketId: fields.captureTicketId ?? null,
               objectKey: keys.original,
               thumbnailKey: keys.thumbnail,
               fileSha256: sha256,
@@ -246,15 +358,23 @@ export class PhotosService {
               timeSource: metadata.timeSource,
               latitude: metadata.location?.lat ?? null,
               longitude: metadata.location?.lng ?? null,
+              locationAccuracyM:
+                capture.method === "in_app" && metadata.location ? capture.accuracyM : null,
               camera: metadata.camera,
               geofenceVersion: checkedAgainst,
               locationCheck: evidence.location,
               timeCheck: evidence.time,
               distanceM: evidence.distanceM,
+              perceptualHash,
+              similarityCheck: evidence.similarity,
+              similarPhotoId: similar?.id ?? null,
+              similarProjectId: similar?.projectId ?? null,
+              similarityDistance: similar?.distance ?? null,
               verified: evidence.verified,
               uploadedBy: userId,
               uploadedAt,
             },
+            include: withSimilar,
           });
           // Safe summary only: no coordinates, file names or captions.
           await this.scope.audit(scope.tx, "photo.uploaded", id, {
@@ -262,8 +382,10 @@ export class PhotosService {
             siteId: site.id,
             diaryId: fields.diaryId ?? null,
             verified: evidence.verified,
+            captureMethod: evidence.captureMethod,
             location: evidence.location,
             time: evidence.time,
+            similarity: evidence.similarity,
           });
           const names = await this.names(scope, [userId]);
           return sitePhotoResponseSchema.parse({ photo: toPhoto(row, names) });
@@ -303,6 +425,7 @@ export class PhotosService {
           ...(query.diaryId ? { diaryId: query.diaryId } : {}),
           ...(query.cursor ? { id: { lt: query.cursor } } : {}),
         },
+        include: withSimilar,
         orderBy: { id: "desc" },
         take: query.limit + 1,
       });
@@ -328,21 +451,112 @@ export class PhotosService {
     photoId: string,
     variant: "original" | "thumbnail",
     req: Request,
-  ): Promise<Buffer> {
-    const key = await this.scope.run(principal, req, async (scope) => {
+  ): Promise<{ content: Buffer; contentType: PhotoContentType }> {
+    const stored = await this.scope.run(principal, req, async (scope) => {
       const { effective } = await this.access.load(scope, projectId, "projects.view");
       const row = await scope.tx.sitePhoto.findFirst({
         where: { tenantId: scope.access.tenantId, projectId, id: photoId },
-        select: { objectKey: true, thumbnailKey: true, purpose: true },
+        select: { objectKey: true, thumbnailKey: true, purpose: true, contentType: true },
       });
       const readers: readonly Permission[] =
         row?.purpose === "safety_incident" ? SAFETY_READ_PERMISSIONS : PHOTO_READERS;
       if (!readers.some((permission) => effective.has(permission)))
         throw new ForbiddenException(`One of these permissions is required: ${readers.join(", ")}`);
       if (!row) throw new NotFoundException("Photo not found");
-      return variant === "original" ? row.objectKey : row.thumbnailKey;
+      return variant === "original"
+        ? { key: row.objectKey, contentType: row.contentType as PhotoContentType }
+        : { key: row.thumbnailKey, contentType: "image/jpeg" as const };
     });
-    return this.storage.get(key, PHOTO_LIMITS.maxFileBytes);
+    return {
+      content: await this.storage.get(stored.key, PHOTO_LIMITS.maxFileBytes),
+      contentType: stored.contentType,
+    };
+  }
+
+  /**
+   * Reads the image (JPEG with sharp; HEIC through the WebAssembly decoder, since sharp's libvips
+   * has no HEVC decoder), makes an upright metadata-free JPEG thumbnail and the difference hash.
+   */
+  private async decode(buffer: Buffer, contentType: PhotoContentType): Promise<DecodedPhoto> {
+    const options = { limitInputPixels: PHOTO_LIMITS.maxPixels, failOn: "error" } as const;
+    let refusal = "The photo could not be read as a JPEG or HEIC image (or is too large to decode)";
+    try {
+      const meta = await sharp(buffer, options).metadata();
+      if (!meta.width || !meta.height) throw new Error("No image dimensions");
+      if (meta.width * meta.height > PHOTO_LIMITS.maxPixels) throw new Error("Too many pixels");
+      let width = meta.width;
+      let height = meta.height;
+      let upright: Sharp;
+      if (contentType === "image/jpeg") {
+        if (meta.format !== "jpeg") throw new Error("Not a JPEG image");
+        upright = sharp(buffer, options).rotate();
+      } else {
+        if (meta.format !== "heif" || meta.compression !== "hevc")
+          throw new Error("Not an HEVC-coded HEIF image");
+        const decoded = await decodeHeic(buffer);
+        if (!decoded.ok) {
+          if (decoded.failure === "heic-busy")
+            throw problem(
+              ServiceUnavailableException,
+              "photo-decoder-busy",
+              "Too many HEIC photos are being processed; try again shortly",
+            );
+          throw new Error(decoded.failure);
+        }
+        ({ width, height } = decoded);
+        upright = sharp(decoded.rgba, { raw: { width, height, channels: 4 } }).flatten({
+          background: "#ffffff",
+        });
+      }
+      // A fresh, small JPEG without metadata; the original is kept as uploaded.
+      const thumbnail = await upright
+        .resize({
+          width: PHOTO_LIMITS.thumbnailEdgePx,
+          height: PHOTO_LIMITS.thumbnailEdgePx,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 78, mozjpeg: true })
+        .toBuffer();
+      refusal = "The photo's preview could not be fingerprinted";
+      const grey = await sharp(thumbnail)
+        .greyscale()
+        .resize(9, 8, { fit: "fill" })
+        .raw()
+        .toBuffer();
+      return {
+        width,
+        height,
+        exif: meta.exif,
+        thumbnail,
+        perceptualHash: BigInt.asIntN(64, differenceHash(grey)),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.warn(`Photo refused: ${describeError(error)}`);
+      throw problem(UnprocessableEntityException, "invalid-image", refusal);
+    }
+  }
+
+  /**
+   * The closest earlier photo of the company (row-level security limits the scan to it) whose
+   * difference hash is within the threshold and that was uploaded to another project or on
+   * another day (Africa/Nairobi): bursts of the same view on one day are normal on site.
+   */
+  private async similarPhoto(scope: Scope, projectId: string, hash: bigint, today: string) {
+    const [match] = await scope.tx.$queryRaw<
+      { id: string; project_id: string; distance: number }[]
+    >`SELECT id, project_id, bit_count((perceptual_hash # ${hash}::bigint)::bit(64))::int AS distance
+      FROM site_photos
+      WHERE tenant_id = ${scope.access.tenantId}::uuid
+        AND perceptual_hash IS NOT NULL
+        AND (project_id <> ${projectId}::uuid
+          OR (uploaded_at AT TIME ZONE 'Africa/Nairobi')::date <> ${today}::date)
+        AND bit_count((perceptual_hash # ${hash}::bigint)::bit(64))
+          <= ${PHOTO_VERIFICATION_DEFAULTS.similarityMaxDistance}
+      ORDER BY distance, id
+      LIMIT 1`;
+    return match ? { id: match.id, projectId: match.project_id, distance: match.distance } : null;
   }
 
   private async writable(scope: Scope, projectId: string, purpose: PhotoPurpose) {

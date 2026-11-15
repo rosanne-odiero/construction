@@ -1,6 +1,5 @@
 import type { INestApplicationContext } from "@nestjs/common";
 import type { Request } from "express";
-import sharp from "sharp";
 import { addCalendarDays, nairobiDate } from "@pm-buddy/domain";
 import { BQ_ROUNDING, BQ_VAT_RULE } from "@pm-buddy/types";
 import {
@@ -20,6 +19,7 @@ import { EarnedValueService } from "../modules/progress/valuations/earned-value.
 import { settingsInForce } from "../modules/progress/valuations/valuation-common.js";
 import { ValuationsService } from "../modules/progress/valuations/valuations.service.js";
 import { seedPrincipal } from "./demo-procure-to-pay.js";
+import { captureInApp } from "./seed-photos.js";
 
 /**
  * D6.3 part A demo data (synthetic). RUI-HTS: contract settings (retention 10 % limited to 5 %,
@@ -49,36 +49,6 @@ type SeedUsers = {
 };
 
 const seedRequest = { headers: {} } as Request;
-
-const dms = (value: number) => {
-  const magnitude = Math.abs(value);
-  const degrees = Math.floor(magnitude);
-  const minutesFull = (magnitude - degrees) * 60;
-  const minutes = Math.floor(minutesFull);
-  const hundredths = Math.round((minutesFull - minutes) * 60 * 100);
-  return `${degrees}/1 ${minutes}/1 ${hundredths}/100`;
-};
-
-/** A small synthetic JPEG with GPS and capture time (Nairobi) so the server can verify it. */
-async function sitePhoto(lat: number, lng: number, caption: string): Promise<Buffer> {
-  const now = new Date(Date.now() + 3 * 3_600_000).toISOString();
-  const taken = `${now.slice(0, 10).replaceAll("-", ":")} ${now.slice(11, 19)}`;
-  return sharp({
-    create: { width: 96, height: 72, channels: 3, background: { r: 120, g: 110, b: 95 } },
-  })
-    .jpeg()
-    .withExif({
-      IFD0: { ImageDescription: `${caption} ${uuidv7()}`, Make: "Demo", Model: "Synthetic" },
-      IFD2: { DateTimeOriginal: taken, OffsetTimeOriginal: "+03:00" },
-      IFD3: {
-        GPSLatitudeRef: lat < 0 ? "S" : "N",
-        GPSLatitude: dms(lat),
-        GPSLongitudeRef: lng < 0 ? "W" : "E",
-        GPSLongitude: dms(lng),
-      },
-    })
-    .toBuffer();
-}
 
 /** JUJ-DPX's BQ (excl. VAT): 12,276,000.00, of which the provisional sum is never measured. */
 const JUJA_BQ = [
@@ -167,19 +137,7 @@ export async function seedValuations(
   const measurements = app.get(MeasurementsService);
   const valuations = app.get(ValuationsService);
   const upload = async (projectId: string, siteId: string, at: [number, number], caption: string) =>
-    (
-      await photos.upload(
-        agent,
-        projectId,
-        {
-          buffer: await sitePhoto(at[0], at[1], caption),
-          originalname: "measurement.jpg",
-          size: 1,
-        },
-        { siteId, caption },
-        seedRequest,
-      )
-    ).photo.id;
+    (await captureInApp(photos, agent, seedRequest, { projectId, siteId, at, caption })).photo.id;
   const measure = async (
     projectId: string,
     lineageId: string,

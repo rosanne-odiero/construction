@@ -2917,10 +2917,10 @@
     },
     "photos": {
       "title": "Site photos",
-      "summary": "{total, plural, one {# photo} other {# photos}}, {verified} with location and time verified. Newest first.",
+      "summary": "{total, plural, one {# photo} other {# photos}}, {verified} verified. Newest first.",
       "limitationsTitle": "What “verified” means",
-      "limitations": "PM-Buddy checks each photo's own GPS position and capture time. A verified photo was taken inside the site boundary (with a small tolerance) and uploaded soon after it was taken. Photo details can be edited, so treat a verified photo as evidence, not proof. “Not verified” means a check failed or could not be made; the reason is shown on the photo. Locations are never shown, and the images you see carry no camera details or GPS data.",
-      "verified": "Location and time verified",
+      "limitations": "Only photos taken with PM-Buddy's camera on site can be verified. A verified photo was taken inside the site boundary (with a small tolerance), uploaded straight away, and does not look like an earlier photo from another day or project. Photos imported from a file are never verified. A web browser cannot prove which phone took a photo, so treat a verified photo as strong evidence, not proof. “Not verified” means a check failed or could not be made; the reason is shown on the photo. Locations are never shown, and the images you see carry no camera details or GPS data.",
+      "verified": "Verified on site",
       "unverified": "Not verified",
       "noCaption": "Site photo",
       "captured": "Taken {date} ({source})",
@@ -2929,21 +2929,27 @@
       "timeSource": {
         "gps": "GPS time",
         "offset": "camera time with its time zone",
-        "assumed_nairobi": "camera time, Nairobi time zone assumed"
+        "assumed_nairobi": "camera time, Nairobi time zone assumed",
+        "device": "phone clock"
       },
       "location": {
         "inside": "Taken inside the site boundary",
         "outside": "Taken about {metres} m outside the site boundary",
         "missing": "No GPS position in the photo",
-        "no_geofence": "The site has no boundary to check against"
+        "no_geofence": "The site has no boundary to check against",
+        "low_accuracy": "The phone's location was too approximate"
       },
       "time": {
         "ok": "Capture time checked",
         "future": "Capture time is in the future",
         "stale": "Taken more than three days before upload",
         "missing": "No capture time in the photo",
-        "diary_mismatch": "Taken on a different day from its site diary"
+        "diary_mismatch": "Taken on a different day from its site diary",
+        "outside_window": "The phone's clock did not match when the camera was opened",
+        "late": "Uploaded long after the camera was opened"
       },
+      "imported": "Imported from a file, so not verified.",
+      "similar": "Looks like an earlier photo.",
       "empty": "No site photos have been shared yet.",
       "older": "Older photos"
     },
@@ -3271,16 +3277,18 @@
   },
   "livePhotos": {
     "title": "Site photos",
-    "description": "Geotagged photos from site, newest first. Take or choose a JPEG straight from the phone camera so its location and time are kept.",
-    "evidenceNote": "PM-Buddy checks each photo's own GPS position and capture time: verified photos were taken within {tolerance} m of the site's geofence (the version in force when taken) and uploaded within {hours} hours. Photo metadata can be edited, so treat it as evidence for review, not proof.",
-    "file": "Photo (JPEG)",
-    "fileHint": "Up to 15 MB. Location and time are read from the photo itself.",
+    "description": "Site photos, newest first. Take them with the PM-Buddy camera so they can be verified.",
+    "evidenceNote": "Only photos taken with the PM-Buddy camera can be verified: PM-Buddy records when the camera opened, and a verified photo was taken within {tolerance} m of the site's geofence (the version in force at the time), uploaded within {minutes} minutes, and does not look like an earlier photo from another day or project. Imported files (from the gallery, a computer or an iPhone HEIC) are kept and their own GPS and time are checked, but they are never verified. A web browser cannot prove which phone took a photo, so treat “verified” as strong evidence for review, not proof.",
+    "file": "Photo file (JPEG or HEIC)",
+    "fileHint": "Up to 15 MB. An imported photo is checked on its own GPS and time, but never verified.",
     "site": "Site",
     "diary": "Attach to my draft diary",
     "noDiary": "Do not attach",
     "diaryHint": "Only your draft diaries for this site; approved diaries stay locked.",
     "caption": "Caption (optional)",
-    "upload": "Upload photo",
+    "takePhoto": "Take a photo",
+    "importTitle": "Or import a photo file",
+    "upload": "Import photo",
     "uploading": "Uploading…",
     "uploadedVerified": "Photo uploaded and verified.",
     "uploadedUnverified": "Photo uploaded, but it could not be verified. See the reasons on the photo.",
@@ -3293,31 +3301,68 @@
       "inside": "Taken inside {site} (geofence version {version})",
       "outside": "Taken {distance} m outside {site}",
       "missing": "No GPS position in the photo",
-      "no_geofence": "{site} has no geofence to check against"
+      "no_geofence": "{site} has no geofence to check against",
+      "low_accuracy": "The phone's location was too approximate (within {accuracy} m)"
     },
     "time": {
       "ok": "Taken {date}",
       "future": "Capture time {date} is in the future",
       "stale": "Taken {date}, more than three days before upload",
       "missing": "No capture time in the photo",
-      "diary_mismatch": "Taken {date}, a different day from its diary"
+      "diary_mismatch": "Taken {date}, a different day from its diary",
+      "outside_window": "The phone's clock ({date}) does not match when the camera was opened",
+      "late": "Taken {date}, but uploaded more than {minutes} minutes after the camera was opened"
     },
     "assumedZone": "(time zone assumed: Nairobi)",
+    "capture": {
+      "in_app": "Taken with the PM-Buddy camera",
+      "imported": "Imported from a file: only photos taken with the PM-Buddy camera can be verified"
+    },
+    "similarity": {
+      "sameProject": "Looks like an earlier photo of this project from another day",
+      "otherProject": "Looks like an earlier photo from another project",
+      "not_checked": "Recorded before reused photos were checked",
+      "open": "Open the earlier photo"
+    },
     "uploadedBy": "Uploaded by {name}, {date}",
     "camera": "Camera: {camera}",
     "inDiary": "Attached to a site diary",
     "original": "Open original",
+    "originalHeic": "Download original (HEIC)",
     "newTab": "(opens in a new tab)",
     "pages": "Photo pages",
     "newest": "Newest photos",
-    "older": "Older photos",
+    "older": "Older photos"
+  },
+  "photoCapture": {
+    "title": "Take a site photo",
+    "description": "Point the camera at the work. PM-Buddy records when the camera opened and the phone's location, so photos taken here can be verified.",
+    "viewfinder": "Camera view",
+    "preview": "The photo you just took",
+    "starting": "Opening the camera…",
+    "shutter": "Take photo",
+    "retake": "Retake",
+    "use": "Use photo",
+    "uploading": "Uploading…",
+    "close": "Close",
+    "locating": "Finding the phone's location…",
+    "locationFound": "Location found (within {accuracy} m).",
+    "locationCoarse": "Location is approximate (within {accuracy} m), so photos taken now will not be verified. Move into the open and wait a moment.",
+    "locationOff": "Location is off or not allowed, so photos taken now will not be verified. Allow location for PM-Buddy in the browser settings.",
+    "cameraUnavailable": "The camera could not be opened. Allow camera access for PM-Buddy, or import a photo file instead (imported photos are not verified).",
+    "captureFailed": "The photo could not be taken. Try again.",
+    "import": "Import a file",
+    "importHint": "JPEG or iPhone HEIC, up to 15 MB. Imported photos are kept and checked, but never verified.",
     "errors": {
-      "fileRequired": "Choose a photo to upload.",
-      "notJpeg": "Only JPEG photos can be uploaded.",
+      "fileRequired": "Choose a photo to import.",
+      "duplicate": "This photo has already been uploaded to the project.",
+      "unsupported": "Only JPEG or HEIC photos can be uploaded.",
       "invalidImage": "That file could not be read as a photo, or it is too large to process.",
       "tooLarge": "Photos may be at most 15 MB.",
-      "duplicate": "This photo has already been uploaded to the project.",
-      "diaryNotDraft": "That diary has been submitted, so photos can no longer be attached. Reload the page."
+      "diaryNotDraft": "That diary has been submitted, so photos can no longer be attached. Reload the page.",
+      "ticketUsed": "This photo has already been uploaded. Take a new one.",
+      "ticketInvalid": "This camera session is not valid for this site. Close the camera and open it again.",
+      "busy": "The server is busy processing photos. Try again in a moment."
     }
   },
   "labourConsentNotices": {
@@ -7003,11 +7048,13 @@
     },
     "photos": {
       "alt": "Photo {index}",
-      "verified": "Location and time verified by the server",
+      "verified": "Taken with the PM-Buddy camera and verified",
       "unverified": "Not verified",
       "remove": "Remove photo {index}",
       "uploading": "Uploading…",
-      "tooLarge": "This photo is larger than 15 MB."
+      "tooLarge": "This photo is larger than 15 MB.",
+      "import": "Import a file",
+      "importLabel": "Import a file (JPEG or HEIC; not verified)"
     },
     "inspections": {
       "title": "Inspections",

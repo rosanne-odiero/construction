@@ -1,7 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { INestApplicationContext } from "@nestjs/common";
 import type { Request } from "express";
-import sharp from "sharp";
 import { nairobiDate } from "@pm-buddy/domain";
 import {
   createFxRateRequestSchema,
@@ -24,6 +23,7 @@ import { ClientPaymentsService } from "../modules/portals/client/client-payments
 import { ClientVariationsService } from "../modules/portals/client/client-variations.service.js";
 import { PhotosService } from "../modules/progress/photos.service.js";
 import { seedPrincipal } from "./demo-procure-to-pay.js";
+import { patternedJpeg } from "./seed-photos.js";
 
 /**
  * D7.1 demo data (synthetic): the client portal account of Mavuno Homes Ltd (the Ruiru Heights
@@ -73,15 +73,6 @@ const RATES = [
   { currency: "GBP", kesPerUnit: "170.10" },
   { currency: "EUR", kesPerUnit: "150.30" },
 ] as const;
-
-/** A JPEG without GPS or capture time: the server cannot verify where or when it was taken. */
-const unverifiedPhoto = () =>
-  sharp({
-    create: { width: 96, height: 72, channels: 3, background: { r: 140, g: 132, b: 120 } },
-  })
-    .jpeg()
-    .withExif({ IFD0: { ImageDescription: `Blockwork delivery ${uuidv7()}` } })
-    .toBuffer();
 
 export async function seedClientPortal(
   app: INestApplicationContext,
@@ -241,7 +232,8 @@ export async function seedClientPortal(
       );
   }
 
-  // An unverified photo beside the verified measurement photos (no GPS or capture time in it).
+  // An unverified photo beside the verified measurement photos: an imported file with no GPS or
+  // capture time in it.
   const site = rui.sites.find((row) => row.name === "Materials yard") ?? rui.sites[0]!;
   const unverified = await asOwner((tx) =>
     tx.sitePhoto.count({
@@ -254,7 +246,7 @@ export async function seedClientPortal(
       .upload(
         agent,
         rui.id,
-        { buffer: await unverifiedPhoto(), originalname: "delivery.jpg", size: 1 },
+        { buffer: await patternedJpeg(), originalname: "delivery.jpg", size: 1 },
         { siteId: site.id, caption: "Blockwork delivered to the materials yard" },
         seedRequest,
       );

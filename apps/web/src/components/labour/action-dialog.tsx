@@ -31,6 +31,7 @@ export function ActionDialog({
   onSubmit,
   children,
   destructive,
+  problemContext,
 }: {
   id: string;
   open: boolean;
@@ -42,9 +43,10 @@ export function ActionDialog({
   onSubmit: () => Promise<void>;
   children: React.ReactNode;
   destructive?: boolean;
+  problemContext?: "payroll";
 }) {
   const t = useTranslations("labourLive.common");
-  const problem = useProblemMessage();
+  const problem = useProblemMessage(problemContext);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 

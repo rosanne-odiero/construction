@@ -37,7 +37,11 @@ import { seedDocuments, type DocumentsSeedSummary } from "./documents-seed.js";
 import { seedSchedule, type ScheduleSeedSummary } from "./schedule-seed.js";
 import { seedSpending, type SpendingSeedSummary } from "./demo-spending.js";
 import { seedValuations, type ValuationsSeedSummary } from "./demo-valuations.js";
-import { seedClientPortal, type ClientPortalSeedSummary } from "./demo-client-portal.js";
+import {
+  DEMO_CLIENT_USER,
+  seedClientPortal,
+  type ClientPortalSeedSummary,
+} from "./demo-client-portal.js";
 import {
   DEMO_SUPPLIER_PORTAL_USER,
   seedSupplierPortal,
@@ -682,12 +686,20 @@ export async function seedDemo(
   // After documents (instruction AI-002 follows AI-001) and valuations (D6.3 part A): a BQ
   // variation adds the finishes let to two subcontractors, their certificates and advance, and a
   // piece-rate job on RUI-HTS (D6.3 part B).
-  const subcontracts = await seedSubcontracts(app, tenantId, {
-    ownerId: owner.id,
-    projectManagerId: userOf("projectManager").id,
-    siteAgentId: userOf("siteAgent").id,
-    financeId: userOf("finance").id,
-  });
+  // Copies of the demo company (tests, `namespace`) get their own client account, like the
+  // supplier contact, so concurrent seeds never race to create one shared user.
+  const clientIdentifier = namespaced(DEMO_CLIENT_USER.identifier, options.namespace);
+  const subcontracts = await seedSubcontracts(
+    app,
+    tenantId,
+    {
+      ownerId: owner.id,
+      projectManagerId: userOf("projectManager").id,
+      siteAgentId: userOf("siteAgent").id,
+      financeId: userOf("finance").id,
+    },
+    { clientIdentifier },
+  );
   // Last: it adds an LPO, a delivery, invoices and a part payment on KIT-BNG (no budget there),
   // with documents and distinct amounts, so the earlier summaries and alerts do not change.
   const supplierPortal = await seedSupplierPortal(
@@ -716,7 +728,7 @@ export async function seedDemo(
       siteAgentId: userOf("siteAgent").id,
       financeId: userOf("finance").id,
     },
-    { resetCredentials: options.resetCredentials },
+    { resetCredentials: options.resetCredentials, identifier: clientIdentifier },
   );
   // Last: subscriptions to reports over everything above.
   const reports = await seedReports(app, tenantId, {

@@ -18,6 +18,10 @@ export default defineConfig({
       FIELD_ENCRYPTION_KEYS: `1:${randomBytes(32).toString("hex")}`,
       FIELD_BLIND_INDEX_KEY: randomBytes(32).toString("hex"),
       AUTH_PIN_PEPPER_KEYS: `1:${randomBytes(32).toString("hex")}`,
+      // Pinned so a developer's rotated apps/api/.env (keys:rotate drill) cannot leak in.
+      AUTH_MFA_ENCRYPTION_ACTIVE_KEY_VERSION: "1",
+      FIELD_ENCRYPTION_ACTIVE_KEY_VERSION: "1",
+      AUTH_PIN_PEPPER_ACTIVE_VERSION: "1",
       DATABASE_URL: testDatabaseUrls().appUrl,
       // Tests run due report subscriptions themselves (ReportSchedulerService.runDue).
       REPORT_SCHEDULER: "off",

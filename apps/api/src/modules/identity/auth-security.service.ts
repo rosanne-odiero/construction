@@ -9,21 +9,13 @@ import {
   type OnModuleInit,
 } from "@nestjs/common";
 import { hash, verify } from "@node-rs/argon2";
-import {
-  EncryptJWT,
-  SignJWT,
-  exportJWK,
-  generateKeyPair,
-  importJWK,
-  importPKCS8,
-  jwtDecrypt,
-  jwtVerify,
-} from "jose";
+import { SignJWT, exportJWK, generateKeyPair, importJWK, importPKCS8, jwtVerify } from "jose";
 import type { Request, Response } from "express";
 import { csrfResponseSchema } from "@pm-buddy/validation";
 import { describeError } from "../../common/errors.js";
 import { AppConfig, trustProxySetting } from "../../config/app-config.js";
 import { RedisService } from "../../infra/redis.service.js";
+import { parseSealKeys, SealedSecrets } from "./sealed-secrets.js";
 import {
   channelFor,
   NotificationProvider,
@@ -56,7 +48,8 @@ export function cookie(req: Request, name: string): string | undefined {
 @Injectable()
 export class AuthSecurity implements OnModuleInit {
   private readonly logger = new Logger(AuthSecurity.name);
-  private readonly encryptionKey: Uint8Array;
+  /** AUTH_MFA_ENCRYPTION_KEY, versioned for rotation (sealed-secrets.ts). */
+  readonly sealed: SealedSecrets;
   private readonly keys: Promise<{ privateKey: CryptoKey; publicKey: CryptoKey }>;
   readonly dummyPassword = hashPassword(opaqueToken());
 
@@ -65,12 +58,16 @@ export class AuthSecurity implements OnModuleInit {
     private readonly redis: RedisService,
     private readonly notifications: NotificationProvider,
   ) {
-    const key = config.get("AUTH_MFA_ENCRYPTION_KEY");
+    const keys = parseSealKeys(
+      config.get("AUTH_MFA_ENCRYPTION_KEY"),
+      config.get("AUTH_MFA_ENCRYPTION_ACTIVE_KEY_VERSION"),
+    );
     const signingKey = config.get("AUTH_SIGNING_PRIVATE_KEY");
-    if (config.isProduction && (!key || !signingKey)) {
+    if (config.isProduction && (!keys || !signingKey)) {
       throw new Error("Production requires AUTH_MFA_ENCRYPTION_KEY and AUTH_SIGNING_PRIVATE_KEY");
     }
-    if (!key) throw new Error("AUTH_MFA_ENCRYPTION_KEY is required; generate a random 32-byte key");
+    if (!keys)
+      throw new Error("AUTH_MFA_ENCRYPTION_KEY is required; generate a random 32-byte key");
     if (config.isProduction && config.get("AUTH_NOTIFICATION_TRANSPORT") === "development") {
       throw new Error("Development notification transport is forbidden in production");
     }
@@ -86,7 +83,7 @@ export class AuthSecurity implements OnModuleInit {
     ) {
       throw new Error("Production requires TRUST_PROXY (the edge proxy that reports client IPs)");
     }
-    this.encryptionKey = Buffer.from(key, "hex");
+    this.sealed = new SealedSecrets(keys);
     this.keys = signingKey
       ? this.importSigningKey(signingKey)
       : generateKeyPair("EdDSA", { crv: "Ed25519" });
@@ -167,23 +164,12 @@ export class AuthSecurity implements OnModuleInit {
     }
   }
 
-  async encrypt(secret: string, purpose: string, expiration?: string): Promise<string> {
-    const value = new EncryptJWT({ secret, purpose })
-      .setProtectedHeader({ alg: "dir", enc: "A256GCM" })
-      .setIssuedAt();
-    if (expiration) value.setExpirationTime(expiration);
-    return value.encrypt(this.encryptionKey);
+  encrypt(secret: string, purpose: string, expiration?: string): Promise<string> {
+    return this.sealed.seal(secret, purpose, expiration);
   }
 
-  async decrypt(value: string, purpose: string): Promise<string> {
-    const { payload } = await jwtDecrypt(value, this.encryptionKey, {
-      keyManagementAlgorithms: ["dir"],
-      contentEncryptionAlgorithms: ["A256GCM"],
-    });
-    if (payload["purpose"] !== purpose || typeof payload["secret"] !== "string") {
-      throw new Error("Encrypted credential has the wrong purpose");
-    }
-    return payload["secret"];
+  decrypt(value: string, purpose: string): Promise<string> {
+    return this.sealed.open(value, purpose);
   }
 
   async accessToken(userId: string, sessionId: string, generation: number): Promise<string> {

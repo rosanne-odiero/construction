@@ -3,6 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import { Circle, CircleMarker, MapContainer, TileLayer, Tooltip } from "react-leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
+import { TILE_URL, TILES_ENABLED } from "./tiles";
 
 export interface MapSite {
   id: string;
@@ -23,10 +24,12 @@ export default function SitesMapInner({ sites, zoom }: { sites: MapSite[]; zoom?
       scrollWheelZoom={false}
       className="h-full w-full"
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      {TILES_ENABLED ? (
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url={TILE_URL}
+        />
+      ) : null}
       {sites.map((site) => (
         <Circle
           key={`${site.id}-fence`}

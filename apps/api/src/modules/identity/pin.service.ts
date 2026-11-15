@@ -21,6 +21,7 @@ import {
 } from "./auth-security.service.js";
 import { AuthService, newSessionData, requestId } from "./auth.service.js";
 import { PinHasher } from "./pin-pepper.js";
+import { securityEvent } from "./security-events.js";
 import { TenancyService } from "./tenancy.service.js";
 import { pinSessionLimited } from "./tenant-scope.service.js";
 import { TenantDatabase } from "./tenant-database.service.js";
@@ -118,13 +119,14 @@ export class PinService {
           const found = await tx.user.findUnique({ where: { identifier } });
           if (!found?.pinHash) {
             await verifyPassword(await this.security.dummyPassword, this.hasher.dummyInput(pin));
-            return null;
+            return { failed: "unknown-account" } as const;
           }
           await tx.$queryRaw`SELECT id FROM users WHERE id = ${found.id}::uuid FOR UPDATE`;
           const user = await tx.user.findUniqueOrThrow({ where: { id: found.id } });
           const stored = { pinHash: user.pinHash!, pinPepperVersion: user.pinPepperVersion };
           const matches = await this.hasher.verify(stored, pin);
-          if (user.lockedUntil && user.lockedUntil > new Date()) return null;
+          if (user.lockedUntil && user.lockedUntil > new Date())
+            return { failed: "locked", userId: user.id } as const;
           if (!matches) {
             const failures = (user.lockedUntil ? 0 : user.failedLogins) + 1;
             await tx.user.update({
@@ -134,9 +136,9 @@ export class PinService {
                 lockedUntil: failures >= 5 ? new Date(Date.now() + 15 * MINUTE) : null,
               },
             });
-            return null;
+            return { failed: "wrong-pin", userId: user.id, lockedNow: failures >= 5 } as const;
           }
-          if (!user.verifiedAt) return null;
+          if (!user.verifiedAt) return { failed: "unverified", userId: user.id } as const;
           // A correct PIN under an older (or no) pepper is re-hashed under the active key.
           const rehash = this.hasher.needsRehash(stored) ? await this.hasher.hash(pin) : {};
           await tx.user.update({
@@ -151,13 +153,26 @@ export class PinService {
         await this.releaseAll(reserved);
         throw error;
       });
-    if (!result) {
+    if ("failed" in result) {
+      securityEvent(
+        "lockedNow" in result && result.lockedNow ? "auth.login.locked" : "auth.login.failed",
+        {
+          userId: "userId" in result ? result.userId : undefined,
+          method: "pin",
+          reason: result.failed,
+        },
+      );
       // The reservations stay as failures, for unknown numbers too, so the response never
       // reveals whether a number exists.
       await this.recordGlobalFailure(globalBudget);
       throw new UnauthorizedException("Invalid phone number or PIN, or account unavailable");
     }
     await this.releaseAll(reserved);
+    securityEvent("auth.login.succeeded", {
+      userId: result.userId,
+      sessionId: result.id,
+      method: "pin",
+    });
     return this.auth.issue(result.id, res);
   }
 

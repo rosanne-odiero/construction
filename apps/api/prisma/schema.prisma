@@ -558,6 +558,28 @@ model AuditEvent {
   @@map("audit_events")
 }
 
+// One run of `keys:rotate rewrap` (D9.1, D-151): who moved which ciphertexts to which key version,
+// with counts and failures (table and row IDs only, never values). Written by the schema owner;
+// pmb_app has no access. Platform-level (tenantId only when a run was limited to one company).
+model KeyRotationRun {
+  id            String    @id @db.Uuid
+  kind          String    @db.VarChar(20)
+  targetVersion Int       @map("target_version") @db.SmallInt
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  dryRun        Boolean   @default(false) @map("dry_run")
+  operator      String    @db.VarChar(100)
+  status        String    @default("running") @db.VarChar(30)
+  rowsChecked   Int       @default(0) @map("rows_checked")
+  rowsRewrapped Int       @default(0) @map("rows_rewrapped")
+  rowsFailed    Int       @default(0) @map("rows_failed")
+  details       Json      @default("{}")
+  startedAt     DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  finishedAt    DateTime? @map("finished_at") @db.Timestamptz
+
+  @@index([startedAt])
+  @@map("key_rotation_runs")
+}
+
 // A saved BQ column mapping (D2.2), matched to a sheet by its header signature. Columns are offsets
 // from the first header cell; dataOffset is firstDataRow − headerRow.
 model BqMappingTemplate {

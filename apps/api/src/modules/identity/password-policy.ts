@@ -30,7 +30,7 @@ export abstract class PasswordBreachChecker {
   abstract isBreached(password: string): Promise<boolean>;
 }
 
-/** AUTH_BREACHED_PASSWORD_CHECK=off (the default). */
+/** AUTH_BREACHED_PASSWORD_CHECK=off (the default outside production). */
 export class NoBreachCheck extends PasswordBreachChecker {
   isBreached(): Promise<boolean> {
     return Promise.resolve(false);
@@ -89,9 +89,7 @@ export class HibpBreachChecker extends PasswordBreachChecker {
 class BreachLookupError extends Error {}
 
 export function breachCheckerFor(config: AppConfig): PasswordBreachChecker {
-  return config.get("AUTH_BREACHED_PASSWORD_CHECK") === "hibp"
-    ? new HibpBreachChecker()
-    : new NoBreachCheck();
+  return config.breachedPasswordCheck === "hibp" ? new HibpBreachChecker() : new NoBreachCheck();
 }
 
 /** Words an attacker who knows the account would try first. */

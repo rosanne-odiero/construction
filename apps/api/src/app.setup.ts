@@ -49,7 +49,7 @@ export function configureApp(app: INestApplication): void {
     req.path.startsWith(`/${DOCS_PATH}`) ? docsHeaders(req, res, next) : apiHeaders(req, res, next),
   );
 
-  if (config.get("API_DOCS_ENABLED")) {
+  if (config.apiDocsEnabled) {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder()

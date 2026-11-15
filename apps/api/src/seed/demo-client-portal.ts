@@ -78,9 +78,11 @@ export async function seedClientPortal(
   app: INestApplicationContext,
   tenantId: string,
   users: SeedUsers,
-  options: { resetCredentials?: boolean } = {},
+  /** `identifier`: the client's sign-in (namespaced for a copy of the demo company). */
+  options: { resetCredentials?: boolean; identifier?: string } = {},
 ): Promise<ClientPortalSeedSummary> {
   const prisma = app.get(PrismaService);
+  const identifier = options.identifier ?? DEMO_CLIENT_USER.identifier;
   const db = app.get(TenantDatabase);
   const asOwner = <T>(
     work: (tx: Parameters<Parameters<TenantDatabase["run"]>[1]>[0]) => Promise<T>,
@@ -88,9 +90,7 @@ export async function seedClientPortal(
   const today = nairobiDate();
 
   // The client's account (password printed once, like the other demo accounts).
-  const existing = await prisma.user.findUnique({
-    where: { identifier: DEMO_CLIENT_USER.identifier },
-  });
+  const existing = await prisma.user.findUnique({ where: { identifier } });
   const reset = !existing || options.resetCredentials === true;
   const password = reset ? newPassword() : null;
   const account =
@@ -98,7 +98,7 @@ export async function seedClientPortal(
     (await prisma.user.create({
       data: {
         id: randomUUID(),
-        identifier: DEMO_CLIENT_USER.identifier,
+        identifier,
         displayName: DEMO_CLIENT_USER.displayName,
         passwordHash: await hashPassword(password!),
         verifiedAt: new Date(),
@@ -358,7 +358,7 @@ export async function seedClientPortal(
   return {
     created: joined,
     account: {
-      identifier: DEMO_CLIENT_USER.identifier,
+      identifier,
       displayName: DEMO_CLIENT_USER.displayName,
       password,
       created: !existing,

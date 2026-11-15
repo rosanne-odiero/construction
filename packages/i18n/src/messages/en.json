@@ -223,6 +223,11 @@
     "forgot": "Forgot password",
     "requestReset": "Request reset instructions",
     "reset": "Reset password",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "changePasswordHint": "Enter your current password. With MFA on, verify a fresh code first. The new password must be at least 12 characters and hard to guess.",
+    "signOutOtherSessions": "Sign out my other sessions",
     "account": "Your account",
     "signedInAs": "Signed in as {name}",
     "mfaNeeded": "Complete MFA before accessing company records.",
@@ -468,6 +473,7 @@
       "instructions": "If the account is eligible, instructions are available through the development notification transport.",
       "verified": "Account verified. You can now sign in.",
       "passwordChanged": "Password changed and existing sessions revoked. Sign in again; MFA remains required.",
+      "passwordUpdated": "Password changed. If you chose it, your other sessions were signed out; this one stays signed in.",
       "refreshed": "Session refreshed. Load the workspace again.",
       "signedOut": "Session revoked. You are signed out.",
       "mfaVerified": "MFA verified. Load the workspace to continue.",
@@ -499,6 +505,8 @@
       "unexpected": "The request failed unexpectedly. Check system status and report the support reference; no success is assumed.",
       "passwordWeak": "This password is too easy to guess. Use a longer passphrase that does not contain your name, email address, phone number or PM-Buddy.",
       "passwordBreached": "This password appears in a known data breach. Choose a different password that you do not use anywhere else.",
+      "currentPasswordIncorrect": "The current password is not correct. Nothing was changed.",
+      "reauthenticationRequired": "To sign out another session, sign in again or verify a fresh MFA code first (within the last five minutes).",
       "passkeyInvalid": "The passkey could not be verified. Start again: each passkey prompt can be used once and expires after five minutes.",
       "passkeyCancelled": "The passkey prompt was cancelled, timed out or is not available on this device. Nothing was changed."
     }

@@ -1,5 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -17,6 +18,7 @@ import {
   sessionsResponseSchema,
 } from "@pm-buddy/validation";
 import type { Prisma, Session, User } from "../../generated/prisma/client.js";
+import { setRequestActor } from "../../common/logging.js";
 import { AppConfig } from "../../config/app-config.js";
 import { PrismaService } from "../../infra/prisma.service.js";
 import {
@@ -29,6 +31,7 @@ import {
 } from "./auth-security.service.js";
 import { PasswordPolicy } from "./password-policy.js";
 import { grantOf, requiresMfa } from "./role-grants.js";
+import { securityEvent, type AuthMethod } from "./security-events.js";
 import { TenantDatabase } from "./tenant-database.service.js";
 
 const MINUTE = 60_000;
@@ -223,12 +226,13 @@ export class AuthService {
         const found = await tx.user.findUnique({ where: { identifier } });
         if (!found) {
           await verifyPassword(await this.security.dummyPassword, password);
-          return null;
+          return { failed: "unknown-account" } as const;
         }
         await tx.$queryRaw`SELECT id FROM users WHERE id = ${found.id}::uuid FOR UPDATE`;
         const user = await tx.user.findUniqueOrThrow({ where: { id: found.id } });
         const matches = await verifyPassword(user.passwordHash, password);
-        if (user.lockedUntil && user.lockedUntil > new Date()) return null;
+        if (user.lockedUntil && user.lockedUntil > new Date())
+          return { failed: "locked", userId: user.id } as const;
         if (!matches) {
           const failures = (user.lockedUntil ? 0 : user.failedLogins) + 1;
           await tx.user.update({
@@ -238,9 +242,9 @@ export class AuthService {
               lockedUntil: failures >= 5 ? new Date(Date.now() + 15 * MINUTE) : null,
             },
           });
-          return null;
+          return { failed: "wrong-password", userId: user.id, lockedNow: failures >= 5 } as const;
         }
-        if (!user.verifiedAt) return null;
+        if (!user.verifiedAt) return { failed: "unverified", userId: user.id } as const;
         await tx.user.update({
           where: { id: user.id },
           data: { failedLogins: 0, lockedUntil: null },
@@ -250,7 +254,22 @@ export class AuthService {
       },
       { timeout: 10_000 },
     );
-    if (!result) throw new UnauthorizedException("Invalid credentials or account unavailable");
+    if ("failed" in result) {
+      securityEvent(
+        "lockedNow" in result && result.lockedNow ? "auth.login.locked" : "auth.login.failed",
+        {
+          userId: "userId" in result ? result.userId : undefined,
+          method: "password",
+          reason: result.failed,
+        },
+      );
+      throw new UnauthorizedException("Invalid credentials or account unavailable");
+    }
+    securityEvent("auth.login.succeeded", {
+      userId: result.user.id,
+      sessionId: result.session.id,
+      method: "password",
+    });
     return this.issue(result.session.id, res);
   }
 
@@ -271,6 +290,11 @@ export class AuthService {
     ) {
       throw new UnauthorizedException("Session expired or revoked");
     }
+    setRequestActor(req, {
+      userId: session.userId,
+      sessionId: session.id,
+      tenantId: session.activeTenantId,
+    });
     return this.describe(session.user, session);
   }
 
@@ -398,6 +422,7 @@ export class AuthService {
       if (current.usedAt) {
         await tx.session.update({ where: { id: session.id }, data: { revokedAt: new Date() } });
         const user = await tx.user.findUniqueOrThrow({ where: { id: session.userId } });
+        securityEvent("auth.session.refresh_reused", { userId: user.id, sessionId: session.id });
         return { replayed: user.identifier };
       }
       if (
@@ -575,7 +600,13 @@ export class AuthService {
       });
       return "ok";
     });
-    this.rejectMfaOutcome(outcome, principal, res, "Invalid, expired or reused MFA code");
+    this.rejectMfaOutcome(
+      outcome,
+      principal,
+      res,
+      "Invalid, expired or reused MFA code",
+      enroll ? "totp-enrolment" : "totp",
+    );
     const response = await this.issue(principal.session.id, res);
     return enroll ? mfaVerificationResponseSchema.parse({ ...response, recoveryCodes }) : response;
   }
@@ -599,7 +630,13 @@ export class AuthService {
       });
       return "ok";
     });
-    this.rejectMfaOutcome(outcome, principal, res, "Invalid or used recovery code");
+    this.rejectMfaOutcome(
+      outcome,
+      principal,
+      res,
+      "Invalid or used recovery code",
+      "recovery-code",
+    );
     return this.issue(principal.session.id, res);
   }
 
@@ -633,8 +670,17 @@ export class AuthService {
     principal: Principal,
     res: Response,
     invalidMessage: string,
+    method: AuthMethod,
   ): void {
-    if (outcome === "ok") return;
+    const ids = { userId: principal.user.id, sessionId: principal.session.id, method };
+    if (outcome === "ok") {
+      securityEvent("auth.mfa.succeeded", ids);
+      return;
+    }
+    securityEvent(outcome === "invalid" ? "auth.mfa.failed" : "auth.mfa.locked", {
+      ...ids,
+      reason: outcome,
+    });
     if (outcome === "invalid") throw new UnauthorizedException(invalidMessage);
     if (outcome === "locked-now") {
       this.security.clearCookies(res);
@@ -706,13 +752,13 @@ export class AuthService {
           expiresAt: { gt: new Date() },
         },
       });
-      if (!found) return false;
+      if (!found) return null;
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${found.userId}::uuid FOR UPDATE`;
       const challenge = await tx.authChallenge.updateMany({
         where: { id: found.id, consumedAt: null, expiresAt: { gt: new Date() } },
         data: { consumedAt: new Date() },
       });
-      if (!challenge.count) return false;
+      if (!challenge.count) return null;
       await tx.user.update({
         where: { id: found.userId },
         data: { passwordHash, failedLogins: 0, lockedUntil: null },
@@ -721,10 +767,70 @@ export class AuthService {
         where: { userId: found.userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
-      return true;
+      return found.userId;
     });
     if (!valid) throw new UnauthorizedException("Invalid or expired reset token");
+    securityEvent("auth.password.reset", { userId: valid, method: "password" });
     return { message: "Password changed. Sign in again." };
+  }
+
+  /**
+   * Changes the signed-in user's password (ASVS 5.0.0 V6.2.2, V6.2.3, D-152). The current password
+   * is required, and an account with MFA also needs a fresh step-up, so neither a session left open
+   * on a shared computer nor a stolen session alone can take the account over (V7.5.1). The new
+   * password meets the registration policy. Other sessions are signed out unless the user keeps
+   * them (V7.4.3); this session gets fresh credentials and the user is told by email or SMS.
+   */
+  async changePassword(
+    principal: Principal,
+    input: { currentPassword: string; newPassword: string; signOutOtherSessions: boolean },
+    req: Request,
+    res: Response,
+  ) {
+    await this.throttle(req, "password-change", principal.user.id, { maximum: 5, seconds: 900 });
+    if (principal.user.mfaEnabled) this.requireMfa(principal, true);
+    const ids = { userId: principal.user.id, sessionId: principal.session.id } as const;
+    if (!(await verifyPassword(principal.user.passwordHash, input.currentPassword))) {
+      securityEvent("auth.password.change_failed", { ...ids, reason: "wrong-password" });
+      throw new BadRequestException({
+        code: "current-password-incorrect",
+        message: "The current password is not correct",
+      });
+    }
+    await this.passwords.assertAcceptable(input.newPassword, principal.user);
+    const passwordHash = await hashPassword(input.newPassword);
+    const changed = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${principal.user.id}::uuid FOR UPDATE`;
+      const user = await tx.user.findUniqueOrThrow({ where: { id: principal.user.id } });
+      const session = await tx.session.findUniqueOrThrow({ where: { id: principal.session.id } });
+      // The password checked above must still be the stored one (no parallel change or reset).
+      if (user.passwordHash !== principal.user.passwordHash || session.revokedAt) return false;
+      await tx.user.update({
+        where: { id: user.id },
+        data: { passwordHash, failedLogins: 0, lockedUntil: null },
+      });
+      if (input.signOutOtherSessions)
+        await tx.session.updateMany({
+          where: { userId: user.id, id: { not: session.id }, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      return true;
+    });
+    if (!changed) throw new ConflictException("The password was changed meanwhile; sign in again");
+    securityEvent("auth.password.changed", { ...ids, method: "password" });
+    this.security.notifyLater(
+      principal.user.identifier,
+      "Password changed",
+      input.signOutOtherSessions
+        ? "Your PM-Buddy password was changed and your other sessions were signed out. If this wasn't you, reset your password now and contact your company administrator."
+        : "Your PM-Buddy password was changed. If this wasn't you, reset your password now and contact your company administrator.",
+    );
+    await this.issue(principal.session.id, res);
+    return messageResponseSchema.parse({
+      message: input.signOutOtherSessions
+        ? "Password changed. Your other sessions were signed out."
+        : "Password changed.",
+    });
   }
 
   async sessions(principal: Principal) {
@@ -772,17 +878,33 @@ export class AuthService {
         where: { id: sessionId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      securityEvent("auth.logout", { sessionId });
     }
     this.security.clearCookies(res);
     return messageResponseSchema.parse({ message: "Signed out." });
   }
 
+  /**
+   * Revokes one of the caller's sessions. Signing out another session needs a sign-in or MFA
+   * verification within five minutes (ASVS 5.0.0 V7.5.2), so a session left open on a shared
+   * computer cannot sign the owner out of their other devices; signing out this one never does.
+   */
   async revoke(principal: Principal, id: string, res: Response) {
+    if (
+      id !== principal.session.id &&
+      !isFresh(principal.session.authTime) &&
+      !isFresh(principal.session.mfaVerifiedAt)
+    )
+      throw new ForbiddenException({
+        code: "reauthentication-required",
+        message: "Sign in again, or verify MFA, within five minutes to sign out other sessions",
+      });
     const result = await this.prisma.session.updateMany({
       where: { id, userId: principal.user.id },
       data: { revokedAt: new Date() },
     });
     if (!result.count) throw new NotFoundException("Session not found");
+    securityEvent("auth.session.revoked", { userId: principal.user.id, sessionId: id });
     if (id === principal.session.id) this.security.clearCookies(res);
     return { message: "Session revoked." };
   }

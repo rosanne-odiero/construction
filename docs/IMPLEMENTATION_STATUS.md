@@ -13,7 +13,7 @@
 | Surface | Implementation / limitation |
 |---|---|
 | Brief and design safeguards | Workflow states/transition contracts, invariants, proposed financial model, offline protocol, operations, release plan, compliance evidence schema, pilot proposal and acceptance matrix |
-| Existing business routes | Preserved mock prototype; not working payroll, Daraja, procurement, offline sync or biometric integrations |
+| Existing business prototypes | Preserved under `/prototype`; live modules are listed below. No real Daraja payouts or production biometric integration is claimed |
 | `/status` | Existing live API/dependency readiness |
 | `/design-system` | Shared tokens/controls, KES/Nairobi formats, explicit pending/conflict/failure/loading/offline examples; EN/SW and light/dark |
 | Web manifest | Same-origin installation metadata and icon; no service worker or sensitive-data cache; no offline business-sync claim |
@@ -24,8 +24,70 @@
 | BQ versions, variations and build-ups (D2.3) | Live baseline approval and contract sums on `/projects/[id]/bq` and the project overview, `…/bq/variations` (list, editor, submit/approve/reject/reopen/cancel/rebase with step-up), `…/bq/instructions`, `…/bq/versions` (history and compare), `/rate-buildups` (company library, versions, item links) and `/bq`; browser tests run against the mock API; no approval limits by amount, no attachment upload, no theoretical consumption yet |
 | `/labour` (D3.1) | Live labourer registry (saved views, worker side panel with masked identifiers and audited reveal, registration with consent, consent screen, gangs, trades & rates, NCA alerts); the D0 labour screens moved to `/prototype/labour` and stay labelled. Built and verified locally on branch `phase-3/d3.1-labour-registry`; not pushed, not reviewed, not approved |
 | `/attendance` (D3.3, web slice) | Live attendance and timesheets: overview, daily muster roll per project/site/day (keyboard entry, bulk "present", gang filter, inline flags), submit and confirm by a different person, corrections, anomaly review, weekly timesheet periods (submit, approve with an immutable snapshot, reject, reopen), adjustments to approved periods, rules & holidays, and an attendance summary in the worker panel; the D0 attendance screens moved to `/prototype/attendance`. Web-manual capture only (no site app, QR/NFC, photos, GPS/geofence, offline or biometrics). Built and verified locally on branch `phase-3/d3.3-web-timesheets`; not pushed, not reviewed, not approved |
+| `/payroll` (D4.1) | Live project/pay-period batch builder, recalculation, immutable submission, reasoned cancellation, register and payslip preview; rule versions and independent MFA verification, calendars, allowances, piece-rate output, advances and MFA-protected CSV templates. No payout approval or money movement; see the completion evidence below |
 | `/projects/[id]?tab=schedule` (D6.2) | Live schedule: SVG Gantt chart (critical path, baseline ghosts, actual dates, milestone diamonds, dependency arrows, today's line in Nairobi time, week/month zoom, keyboard item list, table alternative), activity editor with FS/SS/FF/SF links and lags, progress with a declared basis, per-project working calendar with the company's public holidays, CPM from `packages/domain`, append-only baselines with variance in working days, and the versioned delay log. Built and verified locally on `phase-6/d6.2-schedule`; not committed, not reviewed. No resource levelling, calendars per activity, MS Project/P6 import or client-portal schedule; measured progress and EVM are D6.3 |
 | CI | Existing lint/type/test/build/API/security workflows retained; browser/a11y job added |
+
+## D4.1 payroll: live engine completion (15 November 2026)
+
+The existing calculation engine and payroll API were already present. The missing
+delivery was the live web workflow: the sidebar still opened the D0 prototype.
+It now opens `/payroll`, with:
+
+- Project pay calendars, recent periods and historical batches; build a period
+  from the list or enter an older valid period start.
+- A batch register with API-calculated earnings, statutory deductions, advance
+  recovery, net pay, employer costs, warnings, excluded sources, unapproved
+  timesheets, pending output and rule versions. Draft recalculation and submission
+  use expected versions; submitted snapshots show their integrity result.
+- Payslip previews with earning quantities/rates/multipliers, withheld and
+  unwithheld deductions, advance recoveries, separate employer costs and
+  cumulative-month figures. Nothing is recomputed in the browser.
+- Effective-dated rule versions with parameter/source inspection, new superseding
+  versions, seed installation and independent verification with fresh MFA;
+  minimum-wage comparisons remain explicitly unverified.
+- Pay-calendar and advance-limit forms; taxable/non-taxable allowances scoped
+  to a project, trade or worker; individual/gang output and independent decisions;
+  advance requests, independent decisions, external-payment recording and recovery
+  history. Output-only recorders can use the inputs page without gaining
+  allowance access. Worker lookup is project-filtered, searchable and bounded,
+  and refuses identifier-like searches before sending them in a URL. Output
+  recorded against a D6.3 part B piece-rate job shows the job's code.
+- Monthly employer-wide export summaries and PAYE/NSSF/SHIF/NITA CSV downloads
+  with fresh MFA, explicit missing identifiers and unwithheld amounts. The
+  existing production block for unverified rules remains in place. CSVs remain
+  **COMPLIANCE-REVIEW templates**, not certified filing formats.
+- EN/SW, explicit forbidden/unavailable states, schema-checked successes and
+  translated payroll refusals. Commands retain one idempotency key across an
+  MFA retry or a retry after an uncertain response.
+
+Routes: `/payroll`, `/payroll/projects/[projectId]`,
+`/payroll/projects/[projectId]/inputs`, `/payroll/batches/[batchId]`,
+`/payroll/batches/[batchId]/lines/[lineId]`, `/payroll/rules`,
+`/payroll/advances`, `/payroll/exports`, `/payroll/settings`.
+The prototype remains at `/prototype/payroll`.
+
+Executed evidence (on branch `phase-4/d4.1-payroll-ui`, built on `main` with D6.3 part B):
+
+| Check | Actual result |
+|---|---|
+| Domain payroll unit suite | **68 passed**, including statutory boundaries and cumulative-month/recovery behaviour |
+| Validation unit suites | **139 passed** (21 files), including the payroll contracts |
+| Web unit suites | **98 passed** (23 files), including the live-navigation check that every sidebar link has a page |
+| Full web browser suite | **174 of 177 passed**; the 3 failures (a quality and a safety 5 s wait, and a dropped dev-server connection in valuations, under load) **passed on rerun** together with the payroll and subcontract specs (**11 passed**) |
+| Payroll Playwright suite | **5 passed**: build → payslip → freeze/reload; stale/malformed responses; calendar/allowance/output/advance forms; rule verification/export MFA; reader/output-only permissions, EN/SW, 360px/dark and axe |
+| Format, web ESLint and typecheck | Passed (`prettier --check .`; ESLint 0 errors, 2 existing warnings in `mock-client-portal.mts`) |
+| Shared i18n build and catalogue check | Passed; EN/SW key parity and ICU compilation |
+| Production build | Passed, including all nine live payroll routes |
+| API payroll unit and real PostgreSQL integration suites | Not rerun on this branch (the API is unchanged by this work): **3** and **12 passed** before it was rebuilt on D6.3 part B; CI runs both |
+
+The browser mock answers only the payroll routes these screens use, so D6.3
+part B's piece-rate job routes still reach their own mock. Concurrent browser
+runs in one checkout can set `PLAYWRIGHT_DIST_DIR`.
+No payroll calculation, database schema or statutory seed value changed.
+No independent review, deployment, production legal verification or
+payment activation is claimed. D4.2 (Daraja) and D4.3 (approval/payout/reconciliation)
+remain separate work; recording an external advance payment does not send money.
 
 ## Executed evidence (this session)
 

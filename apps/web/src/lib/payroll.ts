@@ -18,11 +18,12 @@ export function payrollCommand<T>(
   schema: z.ZodType<T>,
   body: Record<string, unknown>,
   method: "POST" | "PUT" | "DELETE" = "POST",
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<T> {
   return liveRequest(path, schema, {
     method,
     body,
-    headers: { "Idempotency-Key": crypto.randomUUID() },
+    headers: { "Idempotency-Key": idempotencyKey },
   });
 }
 

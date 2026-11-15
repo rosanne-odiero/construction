@@ -2259,6 +2259,8 @@ After the fixes, on the merged branch: API unit **158**, domain 555, validation 
 
 Test-database note: `client-portal.e2e-spec.ts` (on `main` since D7.1) relaxes every restrictive client-portal policy in the shared test database for a moment to prove the API alone keeps clients apart, then restores it. A run killed in that window leaves policies relaxed (it happened here once; the test database was reset), and another test file checking client isolation in the database at that moment could fail by chance.
 
+D4.1's live payroll screens (PR #47) reached `main` while CI ran on PR #46, so `main` was merged in once more. Only `apps/web/next.config.ts` conflicted: it keeps both D4.1's `PLAYWRIGHT_DIST_DIR` and D9.1's `poweredByHeader: false`. The payroll screens make no inline scripts, frames or foreign requests; their CSV download is a same-page `blob:` link, which the CSP does not restrict. The CSP sweep in `security-headers.spec.ts` now also renders the payroll batch register and the exports page, and reports no violations. On the merged branch: web typecheck, lint (0 errors), unit 109; payroll, photo and header browser tests **16 passed**; then the header tests with the payroll pages **10 passed**.
+
 **Limitations**
 
 - **`style-src 'unsafe-inline'`** stays (D-150): Radix and Recharts set style attributes and Sonner, react-remove-scroll and the chart component insert `<style>` elements without a nonce. Scripts are nonce-only, so this allows CSS injection (layout defacement, attribute-selector probing), not script.

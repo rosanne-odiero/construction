@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { RUIRU_ID, signInAs } from "./live-helpers";
+import { PAYROLL_BATCH_ID } from "./mock-payroll.mts";
 
 /**
  * D9.1 browser security (ASVS 5.0.0 V3.4): every page is served with the nonce-based CSP and the
@@ -91,6 +92,12 @@ const pages: { name: string; persona?: "owner" | "client" | "supplier"; path: st
   { name: "dashboard", persona: "owner", path: "/dashboard" },
   { name: "project", persona: "owner", path: `/projects/${RUIRU_ID}` },
   { name: "project photos (upload)", persona: "owner", path: `/projects/${RUIRU_ID}?tab=photos` },
+  { name: "payroll batch", persona: "owner", path: `/payroll/batches/${PAYROLL_BATCH_ID}` },
+  {
+    name: "payroll exports (CSV download)",
+    persona: "owner",
+    path: "/payroll/exports?month=2026-11",
+  },
   { name: "client portal", persona: "client", path: "/portal" },
   { name: "supplier portal", persona: "supplier", path: "/supplier" },
 ];

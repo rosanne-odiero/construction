@@ -1033,6 +1033,7 @@ suite on this machine (load average ~170); with three workers the full suite pas
 Limitations: no in-app capture proof (web uploads can come from the gallery) and no perceptual
 reuse detection, so the badge is weaker than THREAT_MODEL A-13's target; HEIC is refused;
 thumbnails are generated in the API process; no client-portal photo timeline yet (D7.1).
+(Superseded by "D6.1 photo evidence: in-app capture, reuse detection and HEIC" below.)
 
 Remaining Phase 6 work: rest of D6.1 (inspections/checklists, cube/slump tests, snags,
 completion/DLP; attendance-backed workforce and site-app capture after Phase 3), D6.2 schedule
@@ -1973,3 +1974,45 @@ The review also noted test gaps: the photo test's metadata check now also looks 
 - Any **new table** holding project data a client must not see needs a matching restrictive policy (as for suppliers). The policies add a per-statement sub-query for client members; not measured at volume.
 - A single company admin can change the Paybill instructions with step-up alone (OR-17).
 - Kiswahili terms need a native speaker's review (CR-CLI-07), for example *lango la mteja* (client portal), *kinachodaiwa* (outstanding), *taarifa ya akaunti* (statement), *makadirio* (indicative), *mkunjo wa S* (S-curve), *kubatilisha* (reverse), *kuachiliwa kwa dhamana* (retention release).
+
+## D6.1 photo evidence: in-app capture, reuse detection and HEIC (branch `phase-6/d6.1-photo-evidence`)
+
+Owner request (15 November 2026): "merge the projects to run as one", accept iPhone HEIC photos, and close the gap between the photo "Verified" badge and THREAT_MODEL A-13 (in-app capture and near-duplicate detection). The merge was already done on `main` (PRs #22–#24 and later, through #43): one app, one database chain of migrations. Open work in other checkouts (D6.3 part B in PR #44, D4.2 Daraja, D9.1 security) belongs to their own branches and reviews and is not folded in here. Decisions taken with the owner: an in-page camera with server capture tickets (recommended option); near-duplicates flagged when the earlier photo is from another day or project; HEIC decoded on the server with libheif in WebAssembly, keeping the original.
+
+Delivered:
+
+- **Only an in-app capture is verified.** The web camera screen (`components/photos/camera-capture.tsx`) opens a capture ticket (`POST projects/:id/photos/capture-tickets`; `photo_capture_tickets`, owner and `issued_at` set by trigger, append-only, forced RLS), shows the live camera and the GPS state (found / approximate / off), grabs the frame on the shutter (never a gallery file), previews it and uploads it with the ticket, the phone's shutter time and the GPS fix with its accuracy. The server checks the ticket is the uploader's, for that site and unused (409 `capture-ticket-used`, 422 `capture-ticket-invalid`); `verifyPhotoEvidence` adds `low_accuracy` (> 50 m), `outside_window` (shutter before the ticket) and `stale` (upload > 30 minutes after it). Imported files keep their EXIF checks and are never verified. The Photos tab and the shared `PhotoUpload` (inspections, snags, measurements, valuations, incidents, toolbox talks) offer **Take a photo** first and **Import a file** second.
+- **Reuse detection.** A 64-bit difference hash of the upright thumbnail (`differenceHash`, `hammingDistance` in `packages/domain`) is stored per photo; within 6 bits of an earlier company photo uploaded to another project or on another Nairobi day, the photo is `similar`, not verified, and records the match and distance (its ID is shown only for a general photo of the same project). Same-day bursts in one project are fine.
+- **HEIC.** Accepted by signature (`sniffPhotoType`: an `ftyp` box with an HEVC brand; AVIF and others 415). sharp reads the dimensions and EXIF; the pixels are decoded by `libheif-js@1.23.5` (pinned, LGPL-3.0, WebAssembly) in `heic.worker.ts` with a time limit, two at a time (503 `photo-decoder-busy`), after every declared image size in the file (main image, alpha layer, tiles, overlays) passes the 50-megapixel check; images with an alpha layer are refused. The original is kept as `original.heic` (`content_type`), served as `image/heic`; the thumbnail is JPEG.
+- **Database** (migration `20261203090000_photo_capture_evidence`): new columns and CHECKs bind `verified` to in-app + inside + time ok + unique, a ticket to an in-app photo (unique, so single use), device time and accuracy to in-app photos, the similar photo to `similar`, and the original key to the content type; the guard trigger requires the reuse check and the ticket owner. Earlier photos (all EXIF file uploads) were reclassified as imported and not checked, so none stays verified: the stricter rule applies to every badge, including the client portal's count and instruction attachments.
+- **Client portal** shows "Verified on site", imported and "looks like an earlier photo" reasons, never which photo. Seeds take their measurement photos through the in-app path (`seed/seed-photos.ts`). EN/SW strings, THREAT_MODEL A-13 (residual risk stated), ARCHITECTURE §12.7 and §17, CONFIGURATION (`photos.capture_window_minutes`, `photos.max_accuracy_m`, `photos.similarity_max_distance`), INVARIANTS, ACCEPTANCE_MATRIX, the API README and the Phase 6 demo are updated.
+
+| Command | Actual result |
+|---|---|
+| `domain` vitest | 541 passed (12 photo-evidence tests: capture window, accuracy, imported never verified, similarity, difference hash, JPEG/HEIC signatures) |
+| `validation` vitest | 139 passed (capture fields only with a ticket, positions whole, `similarTo` consistency) |
+| `pnpm --filter @pm-buddy/api test` | 146 passed (after the review fixes; `heic-decoder.spec.ts`: the fixture decodes, a hidden 16,000 × 16,000 size behind a small image, an over-limit main image, alpha layer and malformed files refused) |
+| `pnpm --filter @pm-buddy/api test:e2e` | 28 files, 354 passed; `photos.e2e-spec.ts` 13 tests (in-app verified with original and thumbnail; imported never verified; in-app reasons; the committed iPhone HEIC fixture; near-duplicates across projects and days, bursts allowed; ticket single use, owner, site, forged, scope and DB trigger; geofence versions; diaries; refusals; permissions; SQL constraints); client-portal and documents tests use in-app photos |
+| `pnpm --filter @pm-buddy/web exec playwright test --workers=3` | 169 passed; photo tests also run twice in a row: imports (JPEG, HEIC, duplicate), the camera with Chromium's synthetic camera and a GPS fix (verified, then a 200 m fix not verified), Kiswahili at 360 px with no camera (the dialog says so), axe |
+| Web vitest, eslint (0 errors; 2 old warnings in `mock-client-portal.mts`), `tsc`; API, domain, validation `tsc` and oxlint; `i18n:check` (9,174 keys); `prettier --check` | Passed |
+| `PLAYWRIGHT_TEST=1 next build` | Passed (with the stale `.next/types` of an old local build moved aside; it lists routes no longer on `main`) |
+| Migration on an empty database, then `prisma migrate diff --exit-code` | Applied; no difference |
+| Migration on a copy of the development database (6 photos, 5 verified) | All 6 imported, not checked, unverified; forced RLS and both triggers back on |
+| API compiled with `tsconfig.build.json` | The compiled `heic.worker.js` decodes the fixture |
+| Real-API walk-through (scratch database `pmb_smoke_photos` migrated and seeded, compiled API on :4400, web on :3400, Chromium synthetic camera; then database, bucket and build removed) | Seed: 5 in-app photos verified, 1 imported unverified, a verified photo attached to an instruction. Site agent at 360 px: Take a photo → verified (`in_app`, `device`, ±6 m, inside, unique); import of the iPhone HEIC → kept as `image/heic` (thumbnail `image/jpeg`), EXIF camera and time read, not verified; no sideways scroll |
+
+**Independent review** (one code review of the whole change; both findings fixed):
+
+| # | Severity | Finding | Fix and evidence |
+|---|---|---|---|
+| 1 | High | The 50-megapixel check covered only the main image. A 53 KB HEIC with a 64 × 64 image and a 16,000 × 16,000 alpha layer passed it, and libheif decoded the alpha at full size: two concurrent decodes took the process from 53 MB to 1.4 GB. The worker heap cap does not cover WebAssembly memory, and this libheif build's own size limits are switched off (`heif_context_set_maximum_image_size_limit` had no effect in a probe) | The worker parses the file's `ispe` boxes and refuses any declared image over the limit before decoding, and refuses alpha layers; `heic-decoder.spec.ts` (a hidden 16,000 × 16,000 size behind a small image → `heic-too-large`; an alpha HEIC made with `sips` → refused) |
+| 2 | Medium | A slow ticket response from an earlier opening of the camera (another site) could replace the current ticket after the dialog was reopened, so uploads failed with `capture-ticket-invalid`; a cancelled opening still started the camera | The ticket is kept only if that opening is still current, and `getUserMedia` is not called after cancellation; the shutter fetches a new ticket when the stored one is for another site. Photo browser tests re-run: 3 passed |
+
+API unit (146), the photos, client-portal and documents e2e files (45) and the photo browser tests (3) were re-run after the fixes.
+
+**Limitations**
+
+- A browser cannot attest the device: a crafted client could send any picture and position with a valid ticket. A verified badge is strong evidence for review, not proof; the Android site app (D3.2) adds device keys and attestation.
+- The reuse check only finds pictures already in PM-Buddy, scans the company's photos linearly (fine for tens of thousands; an index is needed at much larger volumes) and may flag a fixed-viewpoint progress photo on another day where nothing visibly changed.
+- HEVC is a patented codec: decoding HEIC in a commercial service needs a licence review before go-live. HEIC decoding runs in the API process's worker threads (memory up to about four times the pixel count of the declared images while decoding); an OS-level memory limit (a separate process or container) would bound it further.
+- The development database on this machine was **not** migrated (a running API there was built from `main`); run `pnpm --filter @pm-buddy/api db:migrate` and rebuild after merging. Kiswahili strings need a native speaker's review.

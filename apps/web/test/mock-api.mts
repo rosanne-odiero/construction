@@ -85,7 +85,7 @@ import { attendanceFixture, handleAttendance, type AttendanceState } from "./moc
 import { handleLabour, labourFixture, type LabourState } from "./mock-labour.mts";
 import { handleDiaries, initialDiaries } from "./mock-diaries.mts";
 import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
-import { handlePhotos, initialPhotos } from "./mock-photos.mts";
+import { handleCaptureTicket, handlePhotos, initialPhotos } from "./mock-photos.mts";
 import { latestApproved } from "./mock-bq-model.mts";
 import { handleP2p, initialP2p, p2pDocument, type P2pDeps, type P2pState } from "./mock-p2p.mts";
 import {
@@ -1418,6 +1418,14 @@ async function handle(
   const match = /^\/projects\/([^/]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw new HttpError(404, "not-found");
   const [, projectId, rest = ""] = match;
+  if (rest === "photos/capture-tickets") {
+    const entry = find(state, projectId!, "site.photos");
+    return handleCaptureTicket(
+      entry.sites.map((site) => site.site.id),
+      raw,
+      (status, code) => new HttpError(status, code),
+    );
+  }
   if (rest === "photos") {
     const entry = find(state, projectId!, method === "GET" ? "projects.view" : "site.photos");
     return handlePhotos(

@@ -467,36 +467,59 @@ formulas and problem codes: ARCHITECTURE §4.10.
 
 ## Site photos (D6.1, Phase 6 increment 2)
 
-| Method / path                                       | Input                                                              | Result / permission                                                                                                             |
-| --------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| GET `projects/:projectId/photos`                    | `siteId?`, `diaryId?`, `cursor?`, `limit?` (1–60, default 24)      | `{photos, nextCursor}`; `projects.view` plus `site.photos`, `site.diary`, `quality.manage`, `projects.manage` or `reports.view` |
-| POST `projects/:projectId/photos`                   | multipart: `file` (JPEG ≤ 15 MB), `siteId`, `diaryId?`, `caption?` | 201 `{photo}`; `site.photos`; closed/cancelled projects read-only                                                               |
-| GET `projects/:projectId/photos/:photoId/thumbnail` | —                                                                  | JPEG ≤ 960 px, no metadata; same read access                                                                                    |
-| GET `projects/:projectId/photos/:photoId/original`  | —                                                                  | The uploaded JPEG, byte for byte; same read access                                                                              |
+| Method / path                                       | Input                                                                                                                                                                | Result / permission                                                                                                             |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| GET `projects/:projectId/photos`                    | `siteId?`, `diaryId?`, `cursor?`, `limit?` (1–60, default 24)                                                                                                        | `{photos, nextCursor}`; `projects.view` plus `site.photos`, `site.diary`, `quality.manage`, `projects.manage` or `reports.view` |
+| POST `projects/:projectId/photos/capture-tickets`   | `{siteId}`                                                                                                                                                           | 201 `{ticket: {id, siteId, issuedAt, useBy}}`; `site.photos`; 600 per user per hour                                             |
+| POST `projects/:projectId/photos`                   | multipart: `file` (JPEG or HEIC ≤ 15 MB), `siteId`, `diaryId?`, `caption?`, `purpose?`; in-app: `captureTicketId`, `capturedAt`, `latitude`/`longitude`/`accuracyM`? | 201 `{photo}`; `site.photos`; closed/cancelled projects read-only                                                               |
+| GET `projects/:projectId/photos/:photoId/thumbnail` | —                                                                                                                                                                    | JPEG ≤ 960 px, no metadata; same read access                                                                                    |
+| GET `projects/:projectId/photos/:photoId/original`  | —                                                                                                                                                                    | The uploaded JPEG or HEIC, byte for byte, with its own content type; same read access                                           |
 
-The position and capture time come **only from the photo's EXIF** (`photo-metadata.ts`,
-`exif-reader@2.0.3` on the EXIF block extracted by `sharp@0.35.5`): capture time prefers the
-camera time with its offset, then the GPS clock, then camera time assumed to be Nairobi
-(`timeSource: assumed_nairobi`). `verifyPhotoEvidence` (`packages/domain`) checks the location
+**Only an in-app capture can be verified** (THREAT_MODEL A-13). The web camera screen opens a
+capture ticket (`photo_capture_tickets`; the database sets the owner and `issued_at`), grabs a
+frame from the live camera and sends the ticket, the phone's shutter time (`timeSource: device`)
+and the browser's GPS fix with its accuracy. The ticket must be the uploader's own for that site
+and unused (422 `capture-ticket-invalid`, 409 `capture-ticket-used`). An **imported** file sends
+none of these: its position and time come only from its EXIF (`photo-metadata.ts`,
+`exif-reader@2.0.3` on the EXIF block extracted by `sharp@0.35.5`; capture time prefers the
+camera time with its offset, then the GPS clock, then camera time assumed to be Nairobi,
+`timeSource: assumed_nairobi`). `verifyPhotoEvidence` (`packages/domain`) checks the location
 against the site's geofence version in force at capture (30 m tolerance; distance recorded when
-outside) and the time against the upload (≤ 10 minutes ahead, ≤ 72 hours old, and the diary's
-Nairobi date when attached). `verified` = location inside and time ok; otherwise the reasons are
-stored (`missing`, `outside`, `no_geofence`, `future`, `stale`, `diary_mismatch`).
+outside; an in-app fix coarser than 50 m is `low_accuracy`) and the time: in-app, the shutter
+time must fall after the ticket (`outside_window`, 10 minutes' allowance) and the upload within
+30 minutes of it (`stale`); imported, ≤ 10 minutes ahead and ≤ 72 hours old; either way the
+diary's Nairobi date when attached. Every photo also gets a 64-bit **difference hash** of its
+upright thumbnail: within 6 bits of an earlier company photo uploaded to another project or on
+another day, it is `similar` (the match and the distance are stored; its ID is shown only for a
+general photo of the same project). `verified` = in-app, location inside, time ok and unique;
+an imported photo is never verified, whatever its EXIF says.
 
-Uploads are refused unless they are JPEG by signature (415 `unsupported-file-type`) and decode
-within 50 megapixels (422 `invalid-image`); the guard refuses bodies over 15 MB before reading
-(413 `payload-too-large`) and limits 240 uploads per user per hour. The malware hook runs. The
-original is stored privately with its SHA-256 and a fresh, rotated, metadata-free thumbnail
-beside it (`tenants/:tenant/projects/:project/photos/:id/…`); the same file twice in a project
-is 409 `photo-duplicate`. Photos attach only to a **draft** diary of the same site (409
+Uploads are refused unless they are JPEG or HEVC-coded HEIF (HEIC) by signature (415
+`unsupported-file-type`) and decode within 50 megapixels (422 `invalid-image`). sharp's libvips
+has no HEVC decoder, so HEIC is decoded in a worker thread (`heic.worker.ts`, `libheif-js@1.23.5`,
+WebAssembly, LGPL-3.0) with a time limit and at most two at once (503 `photo-decoder-busy` when
+eight more wait). The worker's heap cap does not cover WebAssembly memory and this libheif build
+has its own size limits switched off, so before decoding the worker checks **every** image size
+the file declares (`ispe`: main image, alpha layer, grid tiles, overlays) against the 50-megapixel
+limit and refuses images with an alpha layer (camera photos have none). The guard refuses
+bodies over 15 MB before reading (413 `payload-too-large`) and limits 240 uploads per user per
+hour. The malware hook runs. The original is stored privately as uploaded (`original.jpg` or
+`original.heic`) with its SHA-256 and a fresh, upright, metadata-free JPEG thumbnail beside it
+(`tenants/:tenant/projects/:project/photos/:id/…`); the same file twice in a project is 409
+`photo-duplicate`. Photos attach only to a **draft** diary of the same site (409
 `diary-not-draft`), so approved diaries stay locked. Rows are append-only (database CHECKs bind
-`verified` to the checks, keys to the tenant/project/photo, and the runtime role cannot update
-or delete). Audit `photo.uploaded` records outcomes only, never coordinates, captions or names.
-Images are served with `nosniff` and a sandboxing CSP.
+`verified` to the capture method and checks, a ticket to an in-app photo, the similar photo to
+`similar`, keys to the tenant/project/photo and content type; the guard trigger requires the
+reuse check and the ticket owner; the runtime role cannot update or delete). Migration
+`20261203090000_photo_capture_evidence` reclassified earlier photos as imported and not
+checked, so none of them stays verified. Audit `photo.uploaded` records outcomes only, never
+coordinates, captions or names. Images are served with `nosniff` and a sandboxing CSP.
 
-Limits: a web upload cannot prove in-app capture, and EXIF can be edited, so the badge means
-"metadata consistent", not proof (THREAT_MODEL A-13 also wants site-app capture and perceptual
-reuse detection, both later). Thumbnails are generated in the API process; HEIC is not accepted.
+Limits: a browser cannot attest the device, so a crafted client could send any picture and
+position with a valid ticket; the badge is strong evidence for review, not proof (the Android
+site app adds device keys and attestation). The reuse check only finds photos already in
+PM-Buddy. HEVC is a patented codec: decoding HEIC in a commercial service needs a licence review
+before go-live. Thumbnails are generated in the API process.
 
 ## Site diary foundation (D6.1, Phase 6 increment 1)
 

@@ -376,11 +376,13 @@ export class ClientPortalService {
           capturedAt: row.capturedAt?.toISOString() ?? null,
           timeSource: row.timeSource,
           uploadedAt: row.uploadedAt.toISOString(),
+          captureMethod: row.captureMethod,
           verified: row.verified,
           checks: {
             location: row.locationCheck,
             time: row.timeCheck,
             distanceM: row.distanceM === null ? null : row.distanceM.toNumber(),
+            similarity: row.similarityCheck,
           },
           width: row.width,
           height: row.height,

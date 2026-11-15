@@ -2,12 +2,16 @@
 
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Camera, LoaderCircle, ShieldCheck, X } from "lucide-react";
+import { Camera, FileUp, LoaderCircle, ShieldCheck, X } from "lucide-react";
 import { PHOTO_LIMITS } from "@pm-buddy/domain";
-import { sitePhotoResponseSchema, type QualityPhoto } from "@pm-buddy/validation";
-import { useProblemMessage } from "@/components/projects/use-problem-message";
+import type { QualityPhoto } from "@pm-buddy/validation";
+import { CameraCapture } from "@/components/photos/camera-capture";
+import {
+  PHOTO_IMPORT_ACCEPT,
+  uploadSitePhoto,
+  usePhotoProblem,
+} from "@/components/photos/site-photo-upload";
 import { Button } from "@/components/ui/button";
-import { liveUpload } from "@/lib/live-api";
 import { photoThumbnail } from "@/lib/quality";
 
 /** Thumbnails of linked site photos (private, served by the authenticated photos endpoint). */
@@ -71,9 +75,10 @@ export function PhotoThumbs({
 }
 
 /**
- * Takes a photo with the phone camera (or picks a JPEG) and uploads it as a site photo of the
- * site; the server reads its own EXIF to verify it (D6.1 photos). The caller links the returned
- * photo to a checklist item or a snag.
+ * Takes a photo with PM-Buddy's camera screen (the only way to a verified photo) or imports a
+ * JPEG/HEIC file (kept and checked, never verified), and uploads it as a site photo of the site
+ * (D6.1 photos). The caller links the returned photo to a checklist item, a snag, a measurement or
+ * an incident.
  */
 export function PhotoUpload({
   projectId,
@@ -94,12 +99,23 @@ export function PhotoUpload({
   onUploaded: (photo: QualityPhoto) => void;
 }) {
   const t = useTranslations("quality.photos");
-  const problem = useProblemMessage();
+  const problem = usePhotoProblem();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [camera, setCamera] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function upload(file: File | undefined) {
+  async function send(file: File, capture: Record<string, string> = {}) {
+    const photo = await uploadSitePhoto(projectId, file, {
+      siteId,
+      caption: Array.from(caption).slice(0, 200).join(""),
+      ...(purpose ? { purpose } : {}),
+      ...capture,
+    });
+    onUploaded({ id: photo.id, verified: photo.verified, caption: photo.caption });
+  }
+
+  async function importFile(file: File | undefined) {
     if (!file) return;
     if (file.size > PHOTO_LIMITS.maxFileBytes) {
       setError(t("tooLarge"));
@@ -108,17 +124,7 @@ export function PhotoUpload({
     setBusy(true);
     setError(null);
     try {
-      const { photo } = await liveUpload(
-        `/projects/${projectId}/photos`,
-        file,
-        sitePhotoResponseSchema,
-        {
-          siteId,
-          caption: Array.from(caption).slice(0, 200).join(""),
-          ...(purpose ? { purpose } : {}),
-        },
-      );
-      onUploaded({ id: photo.id, verified: photo.verified, caption: photo.caption });
+      await send(file);
     } catch (caught) {
       setError(problem(caught));
     } finally {
@@ -132,32 +138,54 @@ export function PhotoUpload({
       <input
         ref={input}
         type="file"
-        accept="image/jpeg"
-        capture="environment"
+        accept={PHOTO_IMPORT_ACCEPT}
         className="sr-only"
         tabIndex={-1}
         aria-hidden
-        onChange={(event) => void upload(event.currentTarget.files?.[0])}
+        onChange={(event) => void importFile(event.currentTarget.files?.[0])}
       />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={disabled || busy}
-        onClick={() => input.current?.click()}
-      >
-        {busy ? (
-          <LoaderCircle className="size-4 animate-spin" aria-hidden />
-        ) : (
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || busy}
+          onClick={() => {
+            setError(null);
+            setCamera(true);
+          }}
+        >
           <Camera className="size-4" aria-hidden />
-        )}
-        {busy ? t("uploading") : label}
-      </Button>
+          {label}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={disabled || busy}
+          aria-label={t("importLabel")}
+          onClick={() => input.current?.click()}
+        >
+          {busy ? (
+            <LoaderCircle className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <FileUp className="size-4" aria-hidden />
+          )}
+          {busy ? t("uploading") : t("import")}
+        </Button>
+      </div>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       ) : null}
+      <CameraCapture
+        projectId={projectId}
+        siteId={siteId}
+        open={camera}
+        onOpenChange={setCamera}
+        onCaptured={({ file, fields }) => send(file, fields)}
+      />
     </div>
   );
 }

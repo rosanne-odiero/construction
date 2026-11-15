@@ -1333,6 +1333,35 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
           select: { number: true, status: true },
           orderBy: { number: "asc" },
         }),
+        bqVariations: await tx.variationOrder.findMany({
+          where: { tenantId },
+          select: { status: true },
+        }),
+        subcontracts: await tx.subcontract.findMany({
+          where: { tenantId },
+          select: { number: true, kind: true, status: true },
+          orderBy: { number: "asc" },
+        }),
+        subcontractLines: await tx.subcontractLine.count({ where: { tenantId } }),
+        subcontractAdvances: await tx.subcontractAdvance.findMany({
+          where: { tenantId },
+          select: { status: true },
+        }),
+        subcontractCertificates: await tx.subcontractCertificate.findMany({
+          where: { tenantId },
+          select: { kind: true, status: true, certificateNumber: true },
+          orderBy: [{ subcontractId: "asc" }, { number: "asc" }],
+        }),
+        subcontractPayments: await tx.subcontractPayment.count({ where: { tenantId } }),
+        subcontractInvoices: await tx.subcontractInvoice.count({ where: { tenantId } }),
+        pieceRateJobs: await tx.pieceRateJob.findMany({
+          where: { tenantId },
+          select: { status: true },
+        }),
+        jobOutputs: await tx.pieceRateOutput.findMany({
+          where: { tenantId, jobId: { not: null } },
+          select: { status: true },
+        }),
         variations: await tx.variationOrder.findMany({
           where: { tenantId },
           select: { number: true, status: true },
@@ -1374,8 +1403,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       // verified by the finance user and one Till/bank proposal pending.
       materials: 21,
       conversions: 8,
-      // D8.3 adds the plant hire company.
-      suppliers: 4,
+      // D8.3 adds the plant hire company; D6.3 part B two subcontractors (suppliers flagged).
+      suppliers: 6,
       // D5.2 adds six quotation prices (three suppliers × two lines), none above the threshold;
       // D5.3 three cement quotations; D7.2 six more at the D5.2 prices (no new alert).
       prices: 23,
@@ -1419,7 +1448,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       transfers: [{ status: "disputed" }, { status: "dispatched" }],
       stockTakes: [{ status: "submitted" }],
       // D5.3's one measurement plus D6.3's: RUI-HTS 3 + 2 approved and 1 pending, JUJ-DPX 3 + 5.
-      measurements: 15,
+      // D6.3 part B: RUI-HTS plaster and windows, both approved.
+      measurements: 17,
       mappings: 3,
       // D5.4: the default cost codes; an approved budget (3 BQ items + 4 cost-code lines); a float
       // with a paid and a requested top-up, five approved expenses (one with an M-Pesa charge)
@@ -1431,7 +1461,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       budgetLines: 7,
       // D6.3 adds the three lines of the substructure labour journal; D7.2 the accrual of the
       // approved supplier invoice and the cost part of its part payment.
-      costEntries: 23,
+      // D6.3 part B: SCC-0001's accrual, the paid advance and the cost part of SCC-0001's payment.
+      costEntries: 26,
       floats: 1,
       floatEntries: 9,
       expenses: [
@@ -1471,8 +1502,9 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       // D6.3: every measurement but the pending one approved, one photo each; RUI-HTS contract
       // settings; two certified interims on RUI-HTS and on JUJ-DPX plus JUJ-DPX's
       // practical-completion retention release.
-      measurementReviews: 14,
-      measurementPhotos: 15,
+      // D6.3 part B adds the approved plaster and window measurements.
+      measurementReviews: 16,
+      measurementPhotos: 17,
       contractSettings: 1,
       valuations: expect.arrayContaining([
         { kind: "interim", status: "certified", certificateNumber: 1 },
@@ -1519,6 +1551,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       complianceRecords: 10,
       instructions: [
         { number: "AI-001", status: "closed" },
+        // D6.3 part B: the architect's instruction behind the plaster and windows variation.
+        { number: "AI-002", status: "received" },
         { number: "EI-001", status: "acknowledged" },
         { number: "SI-001", status: "received" },
       ],
@@ -1528,10 +1562,32 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         { number: 2, status: "pending" },
         { number: 3, status: "pending" },
       ],
+      // D6.3 part B on RUI-HTS: the BQ variation adding plaster and windows; SC-0001 labour-only
+      // plastering and SC-0002 supply-and-fix windows (one line each), active; the plasterer's paid
+      // advance; SCC-0001 certified with a part payment and the matched invoice, and a draft
+      // certificate on SC-0002; the walling piece-rate job with three approved outputs.
+      bqVariations: [{ status: "approved" }, { status: "submitted" }],
+      subcontracts: [
+        { number: 1, kind: "labour_only", status: "active" },
+        { number: 2, kind: "supply_and_fix", status: "active" },
+      ],
+      subcontractLines: 2,
+      subcontractAdvances: [{ status: "paid" }],
+      subcontractCertificates: expect.arrayContaining([
+        { kind: "interim", status: "certified", certificateNumber: 1 },
+        { kind: "interim", status: "draft", certificateNumber: null },
+      ]),
+      subcontractPayments: 1,
+      subcontractInvoices: 1,
+      pieceRateJobs: [{ status: "approved" }],
+      jobOutputs: [{ status: "approved" }, { status: "approved" }, { status: "approved" }],
       // D7.1 on RUI-HTS: client terms, the company's Paybill instructions and three indicative
       // rates, a part payment of IPC-0001 by M-Pesa Paybill, and a submitted variation sent to
-      // the client and awaiting their decision.
-      variations: [{ number: "VO-001", status: "submitted" }],
+      // the client and awaiting their decision (VO-002: D6.3 part B's VO-001 comes first).
+      variations: [
+        { number: "VO-001", status: "approved" },
+        { number: "VO-002", status: "submitted" },
+      ],
       clientTerms: 1,
       paymentInstructions: 1,
       fxRates: 3,
@@ -1539,12 +1595,23 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       variationClientRequests: 1,
       variationClientDecisions: 0,
     });
+    expect(afterFirst.subcontractCertificates).toHaveLength(2);
+    expect(first.subcontracts).toMatchObject({
+      subcontracts: [
+        { code: "SC-0001", status: "active" },
+        { code: "SC-0002", status: "active" },
+      ],
+      advances: 1,
+      pieceRateJobs: [{ code: "PRJ-0001", status: "approved" }],
+      // Walling: 96 m² of piece-rate output approved against 90 m² measured.
+      flaggedItems: 1,
+    });
     expect(first.clientPortal).toMatchObject({
       project: "RUI-HTS",
       displayCurrency: "GBP",
       paybill: "174379",
       receipts: 1,
-      variation: { number: "VO-001", state: "awaiting_decision" },
+      variation: { number: "VO-002", state: "awaiting_decision" },
     });
     expect(first.documents).toMatchObject({
       documents: 13,
@@ -1577,7 +1644,8 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     expect(first.plant.fuelVarianceAlerts).toBe(1);
     expect(afterFirst.valuations).toHaveLength(5);
     expect(first.valuations).toMatchObject({
-      measurements: { approved: 14, pending: 1 },
+      // On a reused database the summary also counts D6.3 part B's two later measurements.
+      measurements: { approved: first.valuations.created ? 14 : 16, pending: 1 },
       certificates: [
         "RUI-HTS IPC-0001 (interim)",
         "RUI-HTS IPC-0002 (interim)",
@@ -1725,7 +1793,17 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
         expect(stored.digest).toBe(submitted.digest);
       },
     );
-    expect(second.spending).toEqual({ ...first.spending, created: false });
+    // The D6.3 part B seed runs after the spending summary: its subcontract commitments on the
+    // variation items (not in the approved budget) take a bill past the alert threshold.
+    expect(second.spending).toEqual({
+      ...first.spending,
+      created: false,
+      alerts: {
+        ...first.spending.alerts,
+        budget_threshold:
+          (first.spending.alerts.budget_threshold ?? 0) + (first.subcontracts.created ? 1 : 0),
+      },
+    });
     expect(second.procureToPay).toEqual({
       created: false,
       requisition: "REQ-0001",
@@ -1753,7 +1831,16 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
     });
     expect(second.plant).toEqual({ ...first.plant, created: false });
     expect(second.reports).toEqual({ ...first.reports, created: false });
-    expect(second.documents).toEqual({ ...first.documents, created: false });
+    // D6.3 part B records instruction AI-002 (behind its BQ variation) after the documents summary.
+    expect(second.documents).toEqual({
+      ...first.documents,
+      created: false,
+      instructions: [
+        ...first.documents.instructions,
+        ...(first.subcontracts.created ? [{ number: "AI-002", status: "received" }] : []),
+      ].sort((a, b) => a.number.localeCompare(b.number)),
+    });
+    expect(second.subcontracts).toEqual({ ...first.subcontracts, created: false });
     expect(second.clientPortal).toEqual({
       ...first.clientPortal,
       created: false,

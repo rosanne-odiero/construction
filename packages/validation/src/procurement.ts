@@ -543,6 +543,8 @@ const supplierFields = {
     .nullable()
     .optional(),
   notes: optionalText(2000, true).optional(),
+  /** D6.3 part B: the supplier also takes subcontracts (decision D-140). */
+  isSubcontractor: z.boolean().default(false),
 };
 
 const reasonFor = (
@@ -572,6 +574,7 @@ export const updateSupplierRequestSchema = z
     creditDays: z.number().int().min(0).max(PROCUREMENT_LIMITS.maxCreditDays).optional(),
     creditLimitMinor: supplierFields.creditLimitMinor,
     notes: supplierFields.notes,
+    isSubcontractor: z.boolean().optional(),
     status: supplierStatusSchema.optional(),
     statusReason: optionalText(500)
       .refine((value) => value === null || characters(value) >= 3, "too_short")
@@ -588,6 +591,8 @@ export const supplierListQuerySchema = z.object({
   search: z.string().trim().max(100).optional(),
   status: supplierStatusSchema.optional(),
   etims: etimsStatusSchema.optional(),
+  /** Only suppliers flagged (or not) as subcontractors. */
+  subcontractor: z.enum(["true", "false"]).optional(),
   /** Exact-match lookups through blind indexes (rate-limited). */
   kraPin: kraPinSchema.optional(),
   phone: kenyanPhoneSchema.optional(),
@@ -689,6 +694,8 @@ export const supplierSchema = z.strictObject({
   statusReason: z.string().nullable(),
   creditDays: z.number().int(),
   creditLimitMinor: z.number().int().nullable(),
+  /** Also a subcontractor (D6.3 part B). */
+  isSubcontractor: z.boolean(),
   primaryContact: z
     .strictObject({
       name: z.string(),

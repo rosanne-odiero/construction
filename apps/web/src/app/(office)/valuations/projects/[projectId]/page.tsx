@@ -803,6 +803,11 @@ async function EarnedValue({
           <p className="text-xs text-muted-foreground">
             {tCtc("notOnItems", { amount: formatKES(cost.notOnBqItems.actualMinor) })}
           </p>
+          {cost.totals.committedMinor > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {tCtc("committed", { amount: formatKES(cost.totals.committedMinor) })}
+            </p>
+          ) : null}
           {cost.bill ? (
             <div id="cost-items" className="space-y-2">
               <h3 className="font-semibold">

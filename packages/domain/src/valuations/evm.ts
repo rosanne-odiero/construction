@@ -264,13 +264,16 @@ export type CostToComplete = {
  * the fraction done is EV ÷ contract value; the earned budget is that fraction of the budget; the
  * remaining budget (never below zero) is re-estimated at the item's cost performance
  * (ETC = remaining × actual ÷ earned budget, basis `cpi`) once both are positive, otherwise taken
- * at budget (basis `budget`). Without a budget everything is unavailable.
+ * at budget (basis `budget`). Without a budget everything is unavailable. D6.3 part B: the
+ * approved subcontracts' value not yet certified on the item (`committedMinor`) is cost that will
+ * be incurred whatever the trend says, so the ETC is never below it (basis `committed`).
  */
 export function costToComplete(input: {
   contractMinor: number;
   evMinor: number;
   budgetMinor: number | null;
   actualMinor: number;
+  committedMinor?: number;
 }): CostToComplete {
   if (input.budgetMinor === null)
     return {
@@ -289,7 +292,9 @@ export function costToComplete(input: {
       : 0n;
   const remaining = budget - earned > 0n ? budget - earned : 0n;
   const useCpi = actual > 0n && earned > 0n;
-  const etc = useCpi ? divideHalfUp(remaining * actual, earned) : remaining;
+  const estimate = useCpi ? divideHalfUp(remaining * actual, earned) : remaining;
+  const committed = BigInt(Math.max(0, input.committedMinor ?? 0));
+  const etc = committed > estimate ? committed : estimate;
   const eac = actual + etc;
   return {
     earnedBudgetMinor: safeMinor(earned),
@@ -297,6 +302,6 @@ export function costToComplete(input: {
     etcMinor: safeMinor(etc),
     eacMinor: safeMinor(eac),
     vacMinor: safeMinor(budget - eac),
-    basis: useCpi ? "cpi" : "budget",
+    basis: committed > estimate ? "committed" : useCpi ? "cpi" : "budget",
   };
 }

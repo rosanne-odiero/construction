@@ -179,6 +179,10 @@ export const EARNED_VALUE_READ_PERMISSIONS = [
   "finance.manage",
 ] as const satisfies readonly Permission[];
 
-/** How an item's estimate to complete was worked out (see packages/domain costToComplete). */
-export const ETC_BASES = ["cpi", "budget", "unavailable"] as const;
+/**
+ * How an item's estimate to complete was worked out (see packages/domain costToComplete):
+ * `committed` when the approved subcontracts' uncertified value on the item (D6.3 part B) is more
+ * than the estimate, so a known commitment is never forecast away.
+ */
+export const ETC_BASES = ["cpi", "budget", "committed", "unavailable"] as const;
 export type EtcBasis = (typeof ETC_BASES)[number];

@@ -220,6 +220,7 @@ export async function seedProcurement(
           etimsCheckedOn: demo.etimsStatus === "registered" ? "2026-11-01" : null,
           creditDays: demo.creditDays,
           creditLimitMinor: demo.creditLimitMinor,
+          isSubcontractor: false,
           notes: "Synthetic demo supplier.",
           contacts: demo.contact
             ? [

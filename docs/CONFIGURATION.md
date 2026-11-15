@@ -213,6 +213,23 @@ The contract terms of interim payment certificates are per-project, append-only 
 | `valuations.limits` | platform | 6 photos per measurement; 100 materials lines and 50 adjustments per valuation; 20,000 lines per certificate (items, materials and adjustments; the API refuses more with `valuation-too-large` and `valuations_check` holds the same bound; larger certificates export to Excel, the PDF takes 5,000); approval queue 200; S-curve 260 weeks; certificate exports 60 per user per 10 minutes. Code constants `VALUATION_LIMITS`, `CERTIFICATE_PDF_MAX_LINES` | ARCHITECTURE §4.10 | PRODUCT | D6.3 |
 | `valuations.evm_weighting` | platform | PV: each measurable item's contract value over the working days of its linked baseline tasks, else over the baseline span; the baseline's working weekdays and the company's public holidays. Not configurable | CR-VAL-05; D-87 | COMPLIANCE-REVIEW | D6.3 |
 
+### Subcontracts and piece-rate jobs (D6.3 part B)
+
+Terms are **per subcontract**, entered on the draft and frozen at submission (changes after approval are variations); a new draft starts with the defaults below (`DEFAULT_SUBCONTRACT_TERMS`). Ranges are repeated by database CHECKs.
+
+| Key | Scope | Seed / default | Source | Status | Used from |
+|---|---|---|---|---|---|
+| `subcontracts.retention_percent` | subcontract | **5 %** (0–20) of work done | Common Kenyan practice for subcontracts; CR-SCN-03 | COMPLIANCE-REVIEW | D6.3 part B |
+| `subcontracts.retention_limit_percent` | subcontract | **5 %** of the original subcontract value; empty = no limit (0–100) | CR-SCN-03 | COMPLIANCE-REVIEW | D6.3 part B |
+| `subcontracts.practical_release_percent` | subcontract | **50 %** of the retention at certified practical completion, the rest at final | As the client contract (CONFIGURATION "Valuations"); CR-SCN-03 | COMPLIANCE-REVIEW | D6.3 part B |
+| `subcontracts.vat_percent` | subcontract | **16 %** (0–30) on the standard-rated share of the amount due; lines may be zero-rated or exempt | VAT Act 2013; CR-SCN-02, CR-TAX-01 | COMPLIANCE-REVIEW | D6.3 part B |
+| `subcontracts.wht_percent` | subcontract | **0 %** (0–20) until an accountant configures it; shown separately, deducted from payable | Income Tax Act withholding on contractual fees; CR-SCN-01 | COMPLIANCE-REVIEW | D6.3 part B |
+| `subcontracts.advance_limit` / `advance_recovery_percent` | subcontract | **No advance**; when set, recovery % > 0 and limit ≤ original value × recovery % | Contract practice; CR-SCN-04 | PRODUCT DEFAULT | D6.3 part B |
+| `subcontracts.payment_terms_days` | subcontract | **30 days** (0–365) and a free note | Contract practice | PRODUCT DEFAULT | D6.3 part B |
+| `subcontracts.rule_version` | platform | `KE-SUB-1` (ARCHITECTURE §4.16, FINANCIAL_MODEL) | ARCHITECTURE §4.16 | COMPLIANCE-REVIEW | D6.3 part B |
+| `subcontracts.limits` | platform | 500 lines per subcontract; 100 changes per variation; 200 subcontracts per project list; 2,000 lines per certificate PDF (Excel unlimited); exports 60 per user per 10 minutes. Code constant `SUBCONTRACT_LIMITS` | ARCHITECTURE §4.16 | PRODUCT DEFAULT | D6.3 part B |
+| `piece_rate.job_rules` | platform | A job's unit is the BQ item's unit or one D5.1 converts to it exactly (factor stored); rate ≤ `PIECE_RATE_LIMITS.maxRateMinor`; output quantities three decimals | ARCHITECTURE §4.16 (D-147) | PRODUCT DEFAULT | D6.3 part B |
+
 ### Health and safety (D8.2)
 
 One row of `safety_settings` per company (no row means the defaults, reported as version 0), read with `GET safety/settings` (any safety reader) and changed with `PUT safety/settings` (`config.manage`, optimistic `version`; audited `safety.settings_updated` with the changed field names only). The web form is `/safety/settings`. Defaults are `DEFAULT_SAFETY_SETTINGS`, `STARTER_INDUCTION_TOPICS` and `DEFAULT_PPE_REPLACEMENT_DAYS` in `packages/types`; the limits are `SAFETY_SETTINGS_LIMITS` and CHECKs in migration `20261124090000_health_safety`. Records keep the values they were made with (D-75).

@@ -292,6 +292,8 @@ model Project {
 
   contractSettings ContractSettings[]
   valuations       Valuation[]
+  subcontracts     Subcontract[]
+  pieceRateJobs    PieceRateJob[]
 
   documents         Document[]
   complianceRecords ComplianceRecord[]
@@ -737,6 +739,8 @@ model BqItem {
   plantUsageLogs    PlantUsageLog[]
   valuationLines    ValuationLine[]
   valuationMaterial ValuationMaterial[]
+  subcontractLines  SubcontractLine[]
+  pieceRateJobs     PieceRateJob[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, versionId, lineageId])
@@ -1124,40 +1128,43 @@ model UnitConversion {
 
 // A supplier: the KRA PIN is stored encrypted with a blind index (unique per company) and a mask.
 model Supplier {
-  id                String                  @id @default(uuid(7)) @db.Uuid
-  tenantId          String                  @map("tenant_id") @db.Uuid
-  code              String                  @db.VarChar(20)
-  legalName         String                  @map("legal_name") @db.VarChar(200)
-  tradingName       String?                 @map("trading_name") @db.VarChar(200)
-  kraPinEnc         Bytes?                  @map("kra_pin_enc")
-  kraPinBidx        String?                 @map("kra_pin_bidx") @db.Char(64)
-  kraPinMasked      String?                 @map("kra_pin_masked") @db.VarChar(16)
-  etimsStatus       String                  @default("unknown") @map("etims_status") @db.VarChar(20)
-  etimsCheckedOn    DateTime?               @map("etims_checked_on") @db.Date
-  status            String                  @default("active") @db.VarChar(10)
-  statusReason      String?                 @map("status_reason") @db.VarChar(500)
-  creditDays        Int                     @default(0) @map("credit_days")
-  creditLimitMinor  BigInt?                 @map("credit_limit_minor")
-  notes             String?                 @db.VarChar(2000)
-  version           Int                     @default(1)
-  createdBy         String                  @map("created_by") @db.Uuid
-  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy         String                  @map("updated_by") @db.Uuid
-  updatedAt         DateTime                @default(now()) @map("updated_at") @db.Timestamptz
-  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contacts          SupplierContact[]
-  phoneChanges      SupplierPhoneChange[]
-  payoutVersions    SupplierPayoutVersion[]
-  conversions       UnitConversion[]
-  prices            MaterialPrice[]
-  rfqs              RfqSupplier[]
-  lpos              Lpo[]
-  invoices          SupplierInvoice[]
-  costEntries       CostEntry[]
-  costJournalLines  CostJournalLine[]
-  pettyCashExpenses PettyCashExpense[]
-  portalUsers       SupplierPortalUser[]
-  plantItems        PlantItem[]
+  id                  String                  @id @default(uuid(7)) @db.Uuid
+  tenantId            String                  @map("tenant_id") @db.Uuid
+  code                String                  @db.VarChar(20)
+  legalName           String                  @map("legal_name") @db.VarChar(200)
+  tradingName         String?                 @map("trading_name") @db.VarChar(200)
+  kraPinEnc           Bytes?                  @map("kra_pin_enc")
+  kraPinBidx          String?                 @map("kra_pin_bidx") @db.Char(64)
+  kraPinMasked        String?                 @map("kra_pin_masked") @db.VarChar(16)
+  etimsStatus         String                  @default("unknown") @map("etims_status") @db.VarChar(20)
+  etimsCheckedOn      DateTime?               @map("etims_checked_on") @db.Date
+  status              String                  @default("active") @db.VarChar(10)
+  statusReason        String?                 @map("status_reason") @db.VarChar(500)
+  creditDays          Int                     @default(0) @map("credit_days")
+  creditLimitMinor    BigInt?                 @map("credit_limit_minor")
+  notes               String?                 @db.VarChar(2000)
+  isSubcontractor     Boolean                 @default(false) @map("is_subcontractor")
+  version             Int                     @default(1)
+  createdBy           String                  @map("created_by") @db.Uuid
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy           String                  @map("updated_by") @db.Uuid
+  updatedAt           DateTime                @default(now()) @map("updated_at") @db.Timestamptz
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contacts            SupplierContact[]
+  phoneChanges        SupplierPhoneChange[]
+  payoutVersions      SupplierPayoutVersion[]
+  conversions         UnitConversion[]
+  prices              MaterialPrice[]
+  rfqs                RfqSupplier[]
+  lpos                Lpo[]
+  invoices            SupplierInvoice[]
+  costEntries         CostEntry[]
+  costJournalLines    CostJournalLine[]
+  pettyCashExpenses   PettyCashExpense[]
+  portalUsers         SupplierPortalUser[]
+  plantItems          PlantItem[]
+  subcontracts        Subcontract[]
+  subcontractInvoices SubcontractInvoice[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1439,6 +1446,7 @@ model Labourer {
   plantOperators        PlantOperator[]
   plantUsageLogs        PlantUsageLog[]
   plantFuelIssues       PlantFuelIssue[]
+  pieceRateJobs         PieceRateJob[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, workerNo])
@@ -1594,6 +1602,7 @@ model Gang {
   stockMovements       StockMovement[]
   stockEntries         StockLedgerEntry[]
   toolboxTalkAttendees ToolboxTalkAttendee[]
+  pieceRateJobs        PieceRateJob[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -2131,6 +2140,7 @@ model PieceRateOutput {
   labourerId   String?                @map("labourer_id") @db.Uuid
   gangId       String?                @map("gang_id") @db.Uuid
   bqItemId     String?                @map("bq_item_id") @db.Uuid
+  jobId        String?                @map("job_id") @db.Uuid
   description  String                 @db.VarChar(200)
   unit         String                 @db.VarChar(20)
   quantity     Decimal                @db.Decimal(12, 3)
@@ -2147,11 +2157,13 @@ model PieceRateOutput {
   labourer     Labourer?              @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
   gang         Gang?                  @relation(fields: [tenantId, projectId, gangId], references: [tenantId, projectId, id], onDelete: NoAction)
   bqItem       BqItem?                @relation(fields: [tenantId, bqItemId], references: [tenantId, id], onDelete: NoAction)
+  job          PieceRateJob?          @relation(fields: [tenantId, projectId, jobId], references: [tenantId, projectId, id], onDelete: Restrict)
   shares       PieceRateOutputShare[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
   @@index([tenantId, projectId, workDate])
+  @@index([tenantId, jobId])
   @@map("piece_rate_outputs")
 }
 
@@ -4047,47 +4059,55 @@ model CostJournalLine {
 // category, counterparty and payment reference, in one of two measures (accrued, paid). Exactly
 // one source per entry, posted once per purpose; a correction is a reversing entry (journal).
 model CostEntry {
-  id               String             @id @default(uuid(7)) @db.Uuid
-  tenantId         String             @map("tenant_id") @db.Uuid
-  projectId        String             @map("project_id") @db.Uuid
-  siteId           String?            @map("site_id") @db.Uuid
-  measure          String             @db.VarChar(8)
-  category         String             @db.VarChar(20)
-  costCodeId       String?            @map("cost_code_id") @db.Uuid
-  bqVersionId      String?            @map("bq_version_id") @db.Uuid
-  bqItemLineageId  String?            @map("bq_item_lineage_id") @db.Uuid
-  counterpartyKind String             @map("counterparty_kind") @db.VarChar(10)
-  supplierId       String?            @map("supplier_id") @db.Uuid
-  counterpartyName String?            @map("counterparty_name") @db.VarChar(200)
-  paymentReference String?            @map("payment_reference") @db.VarChar(60)
-  amountMinor      BigInt             @map("amount_minor")
-  occurredOn       DateTime           @map("occurred_on") @db.Date
-  source           String             @db.VarChar(20)
-  purpose          String             @db.VarChar(20)
-  invoiceId        String?            @map("invoice_id") @db.Uuid
-  settlementId     String?            @map("settlement_id") @db.Uuid
-  expenseId        String?            @map("expense_id") @db.Uuid
-  floatCountId     String?            @map("float_count_id") @db.Uuid
-  journalId        String?            @map("journal_id") @db.Uuid
-  journalLineId    String?            @map("journal_line_id") @db.Uuid
-  reversesEntryId  String?            @map("reverses_entry_id") @db.Uuid
-  recordedBy       String             @map("recorded_by") @db.Uuid
-  recordedAt       DateTime           @default(now()) @map("recorded_at") @db.Timestamptz
-  businessDate     DateTime           @map("business_date") @db.Date
-  project          Project            @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
-  site             Site?              @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
-  costCode         CostCode?          @relation(fields: [tenantId, costCodeId], references: [tenantId, id], onDelete: Restrict)
-  bqItem           BqItem?            @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
-  supplier         Supplier?          @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
-  invoice          SupplierInvoice?   @relation(fields: [tenantId, projectId, invoiceId], references: [tenantId, projectId, id], onDelete: Restrict)
-  settlement       InvoiceSettlement? @relation(fields: [tenantId, invoiceId, settlementId], references: [tenantId, invoiceId, id], onDelete: Restrict)
-  expense          PettyCashExpense?  @relation(fields: [tenantId, projectId, expenseId], references: [tenantId, projectId, id], onDelete: Restrict)
-  floatCount       PettyCashCount?    @relation(fields: [tenantId, projectId, floatCountId], references: [tenantId, projectId, id], onDelete: Restrict)
-  journal          CostJournal?       @relation(fields: [tenantId, projectId, journalId], references: [tenantId, projectId, id], onDelete: Restrict)
-  journalLine      CostJournalLine?   @relation("JournalLineEntries", fields: [tenantId, journalId, journalLineId], references: [tenantId, journalId, id], onDelete: Restrict)
-  reverses         CostEntry?         @relation("CostReversal", fields: [tenantId, reversesEntryId], references: [tenantId, id], onDelete: Restrict)
-  reversedBy       CostEntry?         @relation("CostReversal")
-  reversalLines    CostJournalLine[]  @relation("JournalReversal")
+  id                       String                  @id @default(uuid(7)) @db.Uuid
+  tenantId                 String                  @map("tenant_id") @db.Uuid
+  projectId                String                  @map("project_id") @db.Uuid
+  siteId                   String?                 @map("site_id") @db.Uuid
+  measure                  String                  @db.VarChar(8)
+  category                 String                  @db.VarChar(20)
+  costCodeId               String?                 @map("cost_code_id") @db.Uuid
+  bqVersionId              String?                 @map("bq_version_id") @db.Uuid
+  bqItemLineageId          String?                 @map("bq_item_lineage_id") @db.Uuid
+  counterpartyKind         String                  @map("counterparty_kind") @db.VarChar(10)
+  supplierId               String?                 @map("supplier_id") @db.Uuid
+  counterpartyName         String?                 @map("counterparty_name") @db.VarChar(200)
+  paymentReference         String?                 @map("payment_reference") @db.VarChar(60)
+  amountMinor              BigInt                  @map("amount_minor")
+  occurredOn               DateTime                @map("occurred_on") @db.Date
+  source                   String                  @db.VarChar(30)
+  purpose                  String                  @db.VarChar(20)
+  invoiceId                String?                 @map("invoice_id") @db.Uuid
+  settlementId             String?                 @map("settlement_id") @db.Uuid
+  expenseId                String?                 @map("expense_id") @db.Uuid
+  floatCountId             String?                 @map("float_count_id") @db.Uuid
+  journalId                String?                 @map("journal_id") @db.Uuid
+  journalLineId            String?                 @map("journal_line_id") @db.Uuid
+  reversesEntryId          String?                 @map("reverses_entry_id") @db.Uuid
+  subcontractCertificateId String?                 @map("subcontract_certificate_id") @db.Uuid
+  subcontractLineId        String?                 @map("subcontract_line_id") @db.Uuid
+  subcontractPaymentId     String?                 @map("subcontract_payment_id") @db.Uuid
+  subcontractAdvanceId     String?                 @map("subcontract_advance_id") @db.Uuid
+  recordedBy               String                  @map("recorded_by") @db.Uuid
+  recordedAt               DateTime                @default(now()) @map("recorded_at") @db.Timestamptz
+  businessDate             DateTime                @map("business_date") @db.Date
+  project                  Project                 @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  site                     Site?                   @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  costCode                 CostCode?               @relation(fields: [tenantId, costCodeId], references: [tenantId, id], onDelete: Restrict)
+  bqItem                   BqItem?                 @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  supplier                 Supplier?               @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  invoice                  SupplierInvoice?        @relation(fields: [tenantId, projectId, invoiceId], references: [tenantId, projectId, id], onDelete: Restrict)
+  settlement               InvoiceSettlement?      @relation(fields: [tenantId, invoiceId, settlementId], references: [tenantId, invoiceId, id], onDelete: Restrict)
+  expense                  PettyCashExpense?       @relation(fields: [tenantId, projectId, expenseId], references: [tenantId, projectId, id], onDelete: Restrict)
+  floatCount               PettyCashCount?         @relation(fields: [tenantId, projectId, floatCountId], references: [tenantId, projectId, id], onDelete: Restrict)
+  journal                  CostJournal?            @relation(fields: [tenantId, projectId, journalId], references: [tenantId, projectId, id], onDelete: Restrict)
+  journalLine              CostJournalLine?        @relation("JournalLineEntries", fields: [tenantId, journalId, journalLineId], references: [tenantId, journalId, id], onDelete: Restrict)
+  reverses                 CostEntry?              @relation("CostReversal", fields: [tenantId, reversesEntryId], references: [tenantId, id], onDelete: Restrict)
+  reversedBy               CostEntry?              @relation("CostReversal")
+  reversalLines            CostJournalLine[]       @relation("JournalReversal")
+  subcontractCertificate   SubcontractCertificate? @relation(fields: [tenantId, projectId, subcontractCertificateId], references: [tenantId, projectId, id], onDelete: Restrict)
+  subcontractLine          SubcontractLine?        @relation(fields: [tenantId, subcontractLineId], references: [tenantId, id], onDelete: Restrict)
+  subcontractPayment       SubcontractPayment?     @relation(fields: [tenantId, projectId, subcontractPaymentId], references: [tenantId, projectId, id], onDelete: Restrict)
+  subcontractAdvance       SubcontractAdvance?     @relation(fields: [tenantId, projectId, subcontractAdvanceId], references: [tenantId, projectId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
   @@unique([tenantId, reversesEntryId])
@@ -4097,6 +4117,7 @@ model CostEntry {
   @@index([tenantId, invoiceId])
   @@index([tenantId, expenseId])
   @@index([tenantId, costCodeId])
+  @@index([tenantId, subcontractCertificateId])
   @@map("cost_entries")
 }
 
@@ -5718,6 +5739,419 @@ model ApprovalResponse {
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, requestId])
   @@map("approval_responses")
+}
+
+// D6.3 part B: a subcontract on a project with a D5.1 supplier flagged as a subcontractor
+// (decision D-140): draft → submitted (digest) → approved (never a contributor) → active →
+// completed | terminated; draft | submitted → cancelled. Terms are frozen at submission; after
+// approval only variations change the lines (app.guard_subcontract). One number per project.
+model Subcontract {
+  id                      String                   @id @default(uuid(7)) @db.Uuid
+  tenantId                String                   @map("tenant_id") @db.Uuid
+  projectId               String                   @map("project_id") @db.Uuid
+  number                  Int
+  supplierId              String                   @map("supplier_id") @db.Uuid
+  kind                    String                   @db.VarChar(20)
+  title                   String                   @db.VarChar(200)
+  scope                   String?                  @db.VarChar(2000)
+  status                  String                   @default("draft") @db.VarChar(12)
+  startDate               DateTime                 @map("start_date") @db.Date
+  endDate                 DateTime                 @map("end_date") @db.Date
+  retentionPercent        Decimal                  @map("retention_percent") @db.Decimal(5, 2)
+  retentionLimitPercent   Decimal?                 @map("retention_limit_percent") @db.Decimal(5, 2)
+  practicalReleasePercent Decimal                  @map("practical_release_percent") @db.Decimal(5, 2)
+  vatPercent              Decimal                  @map("vat_percent") @db.Decimal(5, 2)
+  whtPercent              Decimal                  @map("wht_percent") @db.Decimal(5, 2)
+  advanceLimitMinor       BigInt                   @default(0) @map("advance_limit_minor")
+  advanceRecoveryPercent  Decimal                  @map("advance_recovery_percent") @db.Decimal(5, 2)
+  paymentTermsDays        Int                      @map("payment_terms_days")
+  paymentTermsNote        String?                  @map("payment_terms_note") @db.VarChar(500)
+  contractVersion         Int                      @default(0) @map("contract_version")
+  originalValueMinor      BigInt?                  @map("original_value_minor")
+  currentValueMinor       BigInt?                  @map("current_value_minor")
+  digest                  String?                  @db.Char(64)
+  contributors            String[]                 @default([]) @db.Uuid
+  createdBy               String                   @map("created_by") @db.Uuid
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy               String                   @map("updated_by") @db.Uuid
+  updatedAt               DateTime                 @default(now()) @map("updated_at") @db.Timestamptz
+  submittedBy             String?                  @map("submitted_by") @db.Uuid
+  submittedAt             DateTime?                @map("submitted_at") @db.Timestamptz
+  approvedBy              String?                  @map("approved_by") @db.Uuid
+  approvedAt              DateTime?                @map("approved_at") @db.Timestamptz
+  activatedBy             String?                  @map("activated_by") @db.Uuid
+  activatedAt             DateTime?                @map("activated_at") @db.Timestamptz
+  closedBy                String?                  @map("closed_by") @db.Uuid
+  closedAt                DateTime?                @map("closed_at") @db.Timestamptz
+  closeReason             String?                  @map("close_reason") @db.VarChar(500)
+  cancelledBy             String?                  @map("cancelled_by") @db.Uuid
+  cancelledAt             DateTime?                @map("cancelled_at") @db.Timestamptz
+  cancelReason            String?                  @map("cancel_reason") @db.VarChar(500)
+  returnReason            String?                  @map("return_reason") @db.VarChar(500)
+  version                 Int                      @default(1)
+  project                 Project                  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  supplier                Supplier                 @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  lines                   SubcontractLine[]
+  variations              SubcontractVariation[]
+  advances                SubcontractAdvance[]
+  certificates            SubcontractCertificate[]
+  payments                SubcontractPayment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, status])
+  @@index([tenantId, supplierId])
+  @@map("subcontracts")
+}
+
+// A scope line of a subcontract: one BQ item (lineage, on the BQ version in force when it was
+// added) at the subcontract's own rate, never the client BQ rate. Lines of the original contract
+// have no variation; lines added by a variation count once it is approved. Never updated.
+model SubcontractLine {
+  id                 String                        @id @default(uuid(7)) @db.Uuid
+  tenantId           String                        @map("tenant_id") @db.Uuid
+  projectId          String                        @map("project_id") @db.Uuid
+  subcontractId      String                        @map("subcontract_id") @db.Uuid
+  variationId        String?                       @map("variation_id") @db.Uuid
+  lineNo             Int                           @map("line_no")
+  bqVersionId        String                        @map("bq_version_id") @db.Uuid
+  bqItemLineageId    String                        @map("bq_item_lineage_id") @db.Uuid
+  basis              String                        @db.VarChar(10)
+  description        String                        @db.VarChar(500)
+  unit               String?                       @db.VarChar(20)
+  quantity           Decimal                       @db.Decimal(20, 4)
+  rateMinor          BigInt?                       @map("rate_minor")
+  amountMinor        BigInt                        @map("amount_minor")
+  vatTreatment       String                        @map("vat_treatment") @db.VarChar(12)
+  overQuantityReason String?                       @map("over_quantity_reason") @db.VarChar(500)
+  createdBy          String                        @map("created_by") @db.Uuid
+  createdAt          DateTime                      @default(now()) @map("created_at") @db.Timestamptz
+  subcontract        Subcontract                   @relation(fields: [tenantId, projectId, subcontractId], references: [tenantId, projectId, id], onDelete: Restrict)
+  variation          SubcontractVariation?         @relation(fields: [tenantId, subcontractId, variationId], references: [tenantId, subcontractId, id], onDelete: Restrict)
+  bqItem             BqItem                        @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  changes            SubcontractLineChange[]
+  claims             SubcontractCertificateClaim[]
+  certificateLines   SubcontractCertificateLine[]
+  costEntries        CostEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, subcontractId, id])
+  @@unique([tenantId, subcontractId, lineNo])
+  @@index([tenantId, projectId, bqItemLineageId])
+  @@map("subcontract_lines")
+}
+
+// A variation of an approved subcontract (append-only): pending → approved | rejected, with a
+// reason; it adds lines and changes line quantities; approval moves the contract version on.
+model SubcontractVariation {
+  id               String                  @id @default(uuid(7)) @db.Uuid
+  tenantId         String                  @map("tenant_id") @db.Uuid
+  projectId        String                  @map("project_id") @db.Uuid
+  subcontractId    String                  @map("subcontract_id") @db.Uuid
+  number           Int
+  reason           String                  @db.VarChar(1000)
+  status           String                  @default("pending") @db.VarChar(10)
+  valueChangeMinor BigInt                  @map("value_change_minor")
+  digest           String                  @db.Char(64)
+  resultingVersion Int?                    @map("resulting_version")
+  createdBy        String                  @map("created_by") @db.Uuid
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  decidedBy        String?                 @map("decided_by") @db.Uuid
+  decidedAt        DateTime?               @map("decided_at") @db.Timestamptz
+  decisionReason   String?                 @map("decision_reason") @db.VarChar(500)
+  version          Int                     @default(1)
+  subcontract      Subcontract             @relation(fields: [tenantId, projectId, subcontractId], references: [tenantId, projectId, id], onDelete: Restrict)
+  lines            SubcontractLine[]
+  changes          SubcontractLineChange[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, subcontractId, id])
+  @@unique([tenantId, subcontractId, number])
+  @@map("subcontract_variations")
+}
+
+// A variation's change to an existing line's quantity (signed), valued at the line's rate.
+model SubcontractLineChange {
+  tenantId           String               @map("tenant_id") @db.Uuid
+  subcontractId      String               @map("subcontract_id") @db.Uuid
+  variationId        String               @map("variation_id") @db.Uuid
+  lineId             String               @map("line_id") @db.Uuid
+  quantityChange     Decimal              @map("quantity_change") @db.Decimal(20, 4)
+  amountChangeMinor  BigInt               @map("amount_change_minor")
+  overQuantityReason String?              @map("over_quantity_reason") @db.VarChar(500)
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  variation          SubcontractVariation @relation(fields: [tenantId, subcontractId, variationId], references: [tenantId, subcontractId, id], onDelete: Restrict)
+  line               SubcontractLine      @relation(fields: [tenantId, subcontractId, lineId], references: [tenantId, subcontractId, id], onDelete: Restrict)
+
+  @@id([tenantId, variationId, lineId])
+  @@index([tenantId, subcontractId, lineId])
+  @@map("subcontract_line_changes")
+}
+
+// An advance to a subcontractor: requested → approved (not the requester) → paid outside
+// PM-Buddy (recorded by neither); recovered by certificates. Never deleted.
+model SubcontractAdvance {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  tenantId      String      @map("tenant_id") @db.Uuid
+  projectId     String      @map("project_id") @db.Uuid
+  subcontractId String      @map("subcontract_id") @db.Uuid
+  number        Int
+  amountMinor   BigInt      @map("amount_minor")
+  reason        String      @db.VarChar(500)
+  status        String      @default("requested") @db.VarChar(10)
+  requestedBy   String      @map("requested_by") @db.Uuid
+  requestedAt   DateTime    @default(now()) @map("requested_at") @db.Timestamptz
+  decidedBy     String?     @map("decided_by") @db.Uuid
+  decidedAt     DateTime?   @map("decided_at") @db.Timestamptz
+  decisionNote  String?     @map("decision_note") @db.VarChar(500)
+  paidBy        String?     @map("paid_by") @db.Uuid
+  paidAt        DateTime?   @map("paid_at") @db.Timestamptz
+  paidOn        DateTime?   @map("paid_on") @db.Date
+  method        String?     @db.VarChar(15)
+  reference     String?     @db.VarChar(60)
+  version       Int         @default(1)
+  subcontract   Subcontract @relation(fields: [tenantId, projectId, subcontractId], references: [tenantId, projectId, id], onDelete: Restrict)
+  costEntries   CostEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, subcontractId, number])
+  @@map("subcontract_advances")
+}
+
+// A subcontract payment certificate (rule KE-SUB-1): figures frozen at submission with a digest,
+// certified by finance (never a contributor); certified certificates never change.
+model SubcontractCertificate {
+  id                      String                        @id @default(uuid(7)) @db.Uuid
+  tenantId                String                        @map("tenant_id") @db.Uuid
+  projectId               String                        @map("project_id") @db.Uuid
+  subcontractId           String                        @map("subcontract_id") @db.Uuid
+  number                  Int
+  certificateNumber       Int?                          @map("certificate_number")
+  kind                    String                        @db.VarChar(20)
+  releaseStage            String?                       @map("release_stage") @db.VarChar(10)
+  status                  String                        @default("draft") @db.VarChar(10)
+  valuationDate           DateTime                      @map("valuation_date") @db.Date
+  notes                   String?                       @db.VarChar(1000)
+  revision                Int                           @default(0)
+  ruleVersion             String?                       @map("rule_version") @db.VarChar(20)
+  contractVersion         Int?                          @map("contract_version")
+  retentionPercent        Decimal?                      @map("retention_percent") @db.Decimal(5, 2)
+  retentionLimitPercent   Decimal?                      @map("retention_limit_percent") @db.Decimal(5, 2)
+  practicalReleasePercent Decimal?                      @map("practical_release_percent") @db.Decimal(5, 2)
+  vatPercent              Decimal?                      @map("vat_percent") @db.Decimal(5, 2)
+  whtPercent              Decimal?                      @map("wht_percent") @db.Decimal(5, 2)
+  advanceRecoveryPercent  Decimal?                      @map("advance_recovery_percent") @db.Decimal(5, 2)
+  originalValueMinor      BigInt?                       @map("original_value_minor")
+  workDoneMinor           BigInt?                       @map("work_done_minor")
+  vatableWorkDoneMinor    BigInt?                       @map("vatable_work_done_minor")
+  retentionStage          String?                       @map("retention_stage") @db.VarChar(10)
+  retentionLimitMinor     BigInt?                       @map("retention_limit_minor")
+  retentionComputedMinor  BigInt?                       @map("retention_computed_minor")
+  retentionHeldMinor      BigInt?                       @map("retention_held_minor")
+  advancesPaidMinor       BigInt?                       @map("advances_paid_minor")
+  recoveredToDateMinor    BigInt?                       @map("recovered_to_date_minor")
+  netToDateMinor          BigInt?                       @map("net_to_date_minor")
+  previousCertifiedMinor  BigInt?                       @map("previous_certified_minor")
+  amountDueMinor          BigInt?                       @map("amount_due_minor")
+  vatMinor                BigInt?                       @map("vat_minor")
+  whtMinor                BigInt?                       @map("wht_minor")
+  payableMinor            BigInt?                       @map("payable_minor")
+  lineCount               Int                           @default(0) @map("line_count")
+  digest                  String?                       @db.Char(64)
+  contributors            String[]                      @default([]) @db.Uuid
+  createdBy               String                        @map("created_by") @db.Uuid
+  createdAt               DateTime                      @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy               String                        @map("updated_by") @db.Uuid
+  updatedAt               DateTime                      @default(now()) @map("updated_at") @db.Timestamptz
+  submittedBy             String?                       @map("submitted_by") @db.Uuid
+  submittedAt             DateTime?                     @map("submitted_at") @db.Timestamptz
+  certifiedBy             String?                       @map("certified_by") @db.Uuid
+  certifiedAt             DateTime?                     @map("certified_at") @db.Timestamptz
+  cancelledBy             String?                       @map("cancelled_by") @db.Uuid
+  cancelledAt             DateTime?                     @map("cancelled_at") @db.Timestamptz
+  cancelReason            String?                       @map("cancel_reason") @db.VarChar(500)
+  returnReason            String?                       @map("return_reason") @db.VarChar(500)
+  version                 Int                           @default(1)
+  subcontract             Subcontract                   @relation(fields: [tenantId, projectId, subcontractId], references: [tenantId, projectId, id], onDelete: Restrict)
+  claims                  SubcontractCertificateClaim[]
+  lines                   SubcontractCertificateLine[]
+  payments                SubcontractPayment[]
+  invoices                SubcontractInvoice[]
+  costEntries             CostEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, subcontractId, id])
+  @@unique([tenantId, subcontractId, number])
+  @@unique([tenantId, subcontractId, certificateNumber])
+  @@index([tenantId, projectId, status])
+  @@map("subcontract_certificates")
+}
+
+// A draft certificate's quantity to date on a line (the preparer's claim); removed or changed
+// only while the certificate is a draft.
+model SubcontractCertificateClaim {
+  tenantId       String                 @map("tenant_id") @db.Uuid
+  subcontractId  String                 @map("subcontract_id") @db.Uuid
+  certificateId  String                 @map("certificate_id") @db.Uuid
+  lineId         String                 @map("line_id") @db.Uuid
+  quantityToDate Decimal                @map("quantity_to_date") @db.Decimal(20, 4)
+  enteredBy      String                 @map("entered_by") @db.Uuid
+  enteredAt      DateTime               @default(now()) @map("entered_at") @db.Timestamptz
+  certificate    SubcontractCertificate @relation(fields: [tenantId, subcontractId, certificateId], references: [tenantId, subcontractId, id], onDelete: Restrict)
+  line           SubcontractLine        @relation(fields: [tenantId, subcontractId, lineId], references: [tenantId, subcontractId, id], onDelete: Restrict)
+
+  @@id([tenantId, certificateId, lineId])
+  @@map("subcontract_certificate_claims")
+}
+
+// The lines frozen with each submission (revision) of a subcontract certificate. Append-only.
+model SubcontractCertificateLine {
+  tenantId         String                 @map("tenant_id") @db.Uuid
+  certificateId    String                 @map("certificate_id") @db.Uuid
+  revision         Int
+  lineNo           Int                    @map("line_no")
+  lineId           String                 @map("line_id") @db.Uuid
+  bqItemLineageId  String                 @map("bq_item_lineage_id") @db.Uuid
+  basis            String                 @db.VarChar(10)
+  description      String                 @db.VarChar(500)
+  unit             String?                @db.VarChar(20)
+  rateMinor        BigInt?                @map("rate_minor")
+  lineQuantity     Decimal                @map("line_quantity") @db.Decimal(20, 4)
+  lineAmountMinor  BigInt                 @map("line_amount_minor")
+  vatTreatment     String                 @map("vat_treatment") @db.VarChar(12)
+  measuredToDate   Decimal?               @map("measured_to_date") @db.Decimal(20, 4)
+  quantityToDate   Decimal                @map("quantity_to_date") @db.Decimal(20, 4)
+  previousQuantity Decimal                @map("previous_quantity") @db.Decimal(20, 4)
+  previousMinor    BigInt                 @map("previous_minor")
+  valueToDateMinor BigInt                 @map("value_to_date_minor")
+  certificate      SubcontractCertificate @relation(fields: [tenantId, certificateId], references: [tenantId, id], onDelete: Restrict)
+  line             SubcontractLine        @relation(fields: [tenantId, lineId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, certificateId, revision, lineNo])
+  @@index([tenantId, lineId])
+  @@map("subcontract_certificate_lines")
+}
+
+// A payment of a certified certificate made outside PM-Buddy and recorded here (as D5.2
+// settlements): never above what is payable; never by the certifier; append-only.
+model SubcontractPayment {
+  id             String                 @id @default(uuid(7)) @db.Uuid
+  tenantId       String                 @map("tenant_id") @db.Uuid
+  projectId      String                 @map("project_id") @db.Uuid
+  subcontractId  String                 @map("subcontract_id") @db.Uuid
+  certificateId  String                 @map("certificate_id") @db.Uuid
+  amountMinor    BigInt                 @map("amount_minor")
+  paidOn         DateTime               @map("paid_on") @db.Date
+  method         String                 @db.VarChar(15)
+  reference      String                 @db.VarChar(60)
+  referenceKey   String                 @map("reference_key") @db.VarChar(60)
+  idempotencyKey String                 @map("idempotency_key") @db.VarChar(100)
+  requestDigest  String                 @map("request_digest") @db.Char(64)
+  recordedBy     String                 @map("recorded_by") @db.Uuid
+  recordedAt     DateTime               @default(now()) @map("recorded_at") @db.Timestamptz
+  subcontract    Subcontract            @relation(fields: [tenantId, projectId, subcontractId], references: [tenantId, projectId, id], onDelete: Restrict)
+  certificate    SubcontractCertificate @relation(fields: [tenantId, subcontractId, certificateId], references: [tenantId, subcontractId, id], onDelete: Restrict)
+  costEntries    CostEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, idempotencyKey])
+  @@unique([tenantId, method, referenceKey])
+  @@index([tenantId, certificateId])
+  @@map("subcontract_payments")
+}
+
+// The subcontractor's tax invoice matched to a certified certificate (decision D-145): it posts
+// nothing to the cost ledger (the certificate already did) and its number can never also be a
+// procure-to-pay supplier invoice of the same supplier.
+model SubcontractInvoice {
+  id               String                 @id @default(uuid(7)) @db.Uuid
+  tenantId         String                 @map("tenant_id") @db.Uuid
+  subcontractId    String                 @map("subcontract_id") @db.Uuid
+  certificateId    String                 @map("certificate_id") @db.Uuid
+  supplierId       String                 @map("supplier_id") @db.Uuid
+  invoiceNumber    String                 @map("invoice_number") @db.VarChar(60)
+  invoiceNumberKey String                 @map("invoice_number_key") @db.VarChar(60)
+  invoiceDate      DateTime               @map("invoice_date") @db.Date
+  etimsNumber      String?                @map("etims_number") @db.VarChar(60)
+  amountMinor      BigInt                 @map("amount_minor")
+  recordedBy       String                 @map("recorded_by") @db.Uuid
+  recordedAt       DateTime               @default(now()) @map("recorded_at") @db.Timestamptz
+  certificate      SubcontractCertificate @relation(fields: [tenantId, subcontractId, certificateId], references: [tenantId, subcontractId, id], onDelete: Restrict)
+  supplier         Supplier               @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, certificateId])
+  @@unique([tenantId, supplierId, invoiceNumberKey])
+  @@map("subcontract_invoices")
+}
+
+// D6.3 part B: a piece-rate job — the agreed rate and scope against a BQ item for a gang or a
+// labourer (decision D-147). pending → approved (not the creator) | rejected; approved → closed.
+// Outputs recorded against it take its rate; approved output never exceeds the quantity in force.
+model PieceRateJob {
+  id               String                  @id @default(uuid(7)) @db.Uuid
+  tenantId         String                  @map("tenant_id") @db.Uuid
+  projectId        String                  @map("project_id") @db.Uuid
+  number           Int
+  bqVersionId      String                  @map("bq_version_id") @db.Uuid
+  bqItemLineageId  String                  @map("bq_item_lineage_id") @db.Uuid
+  labourerId       String?                 @map("labourer_id") @db.Uuid
+  gangId           String?                 @map("gang_id") @db.Uuid
+  description      String                  @db.VarChar(200)
+  unit             String                  @db.VarChar(20)
+  bqUnit           String                  @map("bq_unit") @db.VarChar(20)
+  conversionFactor Decimal                 @default(1) @map("conversion_factor") @db.Decimal(20, 6)
+  rateMinor        BigInt                  @map("rate_minor")
+  agreedQuantity   Decimal                 @map("agreed_quantity") @db.Decimal(12, 3)
+  startDate        DateTime                @map("start_date") @db.Date
+  endDate          DateTime                @map("end_date") @db.Date
+  status           String                  @default("pending") @db.VarChar(10)
+  createdBy        String                  @map("created_by") @db.Uuid
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  decidedBy        String?                 @map("decided_by") @db.Uuid
+  decidedAt        DateTime?               @map("decided_at") @db.Timestamptz
+  decisionNote     String?                 @map("decision_note") @db.VarChar(500)
+  closedBy         String?                 @map("closed_by") @db.Uuid
+  closedAt         DateTime?               @map("closed_at") @db.Timestamptz
+  version          Int                     @default(1)
+  project          Project                 @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Restrict)
+  bqItem           BqItem                  @relation(fields: [tenantId, bqVersionId, bqItemLineageId], references: [tenantId, versionId, lineageId], onDelete: Restrict)
+  labourer         Labourer?               @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+  gang             Gang?                   @relation(fields: [tenantId, projectId, gangId], references: [tenantId, projectId, id], onDelete: Restrict)
+  extensions       PieceRateJobExtension[]
+  outputs          PieceRateOutput[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, id])
+  @@unique([tenantId, projectId, number])
+  @@index([tenantId, projectId, bqItemLineageId])
+  @@map("piece_rate_jobs")
+}
+
+// An extension of a job's agreed quantity: pending → approved (not the requester) | rejected.
+model PieceRateJobExtension {
+  id           String       @id @default(uuid(7)) @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  projectId    String       @map("project_id") @db.Uuid
+  jobId        String       @map("job_id") @db.Uuid
+  quantity     Decimal      @db.Decimal(12, 3)
+  reason       String       @db.VarChar(500)
+  status       String       @default("pending") @db.VarChar(10)
+  requestedBy  String       @map("requested_by") @db.Uuid
+  requestedAt  DateTime     @default(now()) @map("requested_at") @db.Timestamptz
+  decidedBy    String?      @map("decided_by") @db.Uuid
+  decidedAt    DateTime?    @map("decided_at") @db.Timestamptz
+  decisionNote String?      @map("decision_note") @db.VarChar(500)
+  version      Int          @default(1)
+  job          PieceRateJob @relation(fields: [tenantId, projectId, jobId], references: [tenantId, projectId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, jobId])
+  @@map("piece_rate_job_extensions")
 }
 
 // ---------------------------------------------------------------------------------------------

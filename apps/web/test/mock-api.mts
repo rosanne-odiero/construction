@@ -111,6 +111,12 @@ import {
   valuationExport,
   type ValuationsState,
 } from "./mock-valuations.mts";
+import {
+  handleSubcontracts,
+  initialSubcontracts,
+  subcontractExport,
+  type SubcontractsState,
+} from "./mock-subcontracts.mts";
 import { handleSafety, initialSafety, type SafetyState } from "./mock-safety.mts";
 import { handlePlant, initialPlant, type PlantState } from "./mock-plant.mts";
 import {
@@ -226,6 +232,8 @@ type State = {
   quality: QualityState;
   /** D6.3 measurements, valuations, certificates and earned value (mock-valuations.mts). */
   valuations: ValuationsState;
+  /** D6.3 part B subcontracts and piece-rate jobs (mock-subcontracts.mts). */
+  subcontracts: SubcontractsState;
   /** D8.2 health and safety (mock-safety.mts). */
   safety: SafetyState;
   /** D7.2 each supplier's portal users (mock-supplier-portal.mts). */
@@ -496,6 +504,12 @@ function fixture(persona: Persona): State {
     }),
     photos,
     valuations: initialValuations(RUIRU_ID, [photos[0]!.id]),
+    subcontracts: initialSubcontracts(RUIRU_ID, {
+      owner: { id: OWNER_ID, displayName: "Wanjiru Kamau" },
+      pm: { id: PM_ID, displayName: "Brian Otieno" },
+      agent: { id: AGENT_ID, displayName: "Kevin Kiprono" },
+      finance: { id: FINANCE_ID, displayName: "Daniel Mwangi" },
+    }),
     bq,
     procurement,
     p2p: initialP2p(p2pBase(projects, procurement, bq)),
@@ -1084,6 +1098,26 @@ async function handle(
     body,
   );
   if (valuations) return valuations;
+  const subcontracts = handleSubcontracts(
+    {
+      fail: (status, code) => new HttpError(status, code),
+      parse,
+      actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      projects: projectInfo(state.projects),
+      projectPermissions: (projectId) => valuationPermissions(state, projectId),
+      requireStepUp: () => requireStepUp(state),
+      idempotencyKey:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+    },
+    state.subcontracts,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (subcontracts) return subcontracts;
   const stores = handleStores(
     {
       fail: (status, code) => new HttpError(status, code),
@@ -1868,6 +1902,28 @@ const server = createServer((req, res) => {
           "Cache-Control": "no-store",
         });
         return res.end(file.content);
+      } catch {
+        return send(res, 401, { code: "unauthorized" }, true);
+      }
+    }
+    // Subcontract certificate and statement files (D6.3 part B).
+    if (
+      /^\/(subcontract-certificates\/[^/]+\/export|subcontracts\/[^/]+\/statement)\/(pdf|xlsx)$/.test(
+        path,
+      ) &&
+      req.method === "GET"
+    ) {
+      try {
+        const file = subcontractExport(stateFor(req).subcontracts, path);
+        if (!file) return send(res, 404, { code: "not-found" }, true);
+        res.writeHead(200, {
+          "Content-Type": file.type,
+          "Content-Disposition": `attachment; filename="${file.name}"`,
+          "Cache-Control": "no-store",
+        });
+        return res.end(
+          file.type === "application/pdf" ? "%PDF-1.4 synthetic\n%%EOF\n" : "PK synthetic",
+        );
       } catch {
         return send(res, 401, { code: "unauthorized" }, true);
       }

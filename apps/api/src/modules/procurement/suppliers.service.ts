@@ -88,6 +88,7 @@ export class SuppliersService {
       const filters: Prisma.SupplierWhereInput[] = [{ tenantId: access.tenantId }];
       if (query.status) filters.push({ status: query.status });
       if (query.etims) filters.push({ etimsStatus: query.etims });
+      if (query.subcontractor) filters.push({ isSubcontractor: query.subcontractor === "true" });
       if (query.search) {
         const contains = { contains: query.search, mode: "insensitive" as const };
         filters.push({
@@ -193,6 +194,7 @@ export class SuppliersService {
             ? null
             : BigInt(input.creditLimitMinor),
         notes: input.notes ?? null,
+        isSubcontractor: input.isSubcontractor,
         createdBy: access.userId,
         updatedBy: access.userId,
       },
@@ -322,6 +324,9 @@ export class SuppliersService {
                 }
               : {}),
             ...(fields.notes !== undefined ? { notes: fields.notes } : {}),
+            ...(fields.isSubcontractor !== undefined
+              ? { isSubcontractor: fields.isSubcontractor }
+              : {}),
             ...(fields.status !== undefined ? { status: fields.status } : {}),
             ...(fields.status !== undefined || fields.statusReason !== undefined
               ? {

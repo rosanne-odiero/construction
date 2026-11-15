@@ -1417,6 +1417,7 @@ class Valuations {
         budgetMinor,
         actualMinor,
         ...costToComplete({ contractMinor, evMinor, budgetMinor, actualMinor }),
+        committedMinor: 0,
       };
     };
     const measured = ours ? this.state.items.filter((item) => measurementBasis(item) !== null) : [];

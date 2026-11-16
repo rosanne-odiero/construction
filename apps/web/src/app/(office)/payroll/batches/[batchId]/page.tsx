@@ -2,9 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { z } from "zod";
-import { batchDetailResponseSchema } from "@pm-buddy/validation";
+import { batchApprovalResponseSchema, batchDetailResponseSchema } from "@pm-buddy/validation";
 import { PayrollShell } from "@/components/payroll/payroll-shell";
 import { BatchActions } from "@/components/payroll/batch-actions";
+import {
+  BatchApproval,
+  BatchTimeline,
+  DecisionHistory,
+} from "@/components/payroll/batch-approval";
+import { WaiverBanner } from "@/components/payroll/waiver-banner";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import {
   Table,
@@ -15,25 +21,36 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCalendarDate, formatKES } from "@/lib/format";
-import { loadLive, requireSession } from "@/lib/server-api";
+import { loadLive, requireSession, serverApi } from "@/lib/server-api";
 import { hours } from "@/lib/payroll";
+import { isSettlementStatus } from "@/lib/payouts";
 
 export default async function BatchPage({ params }: { params: Promise<{ batchId: string }> }) {
   const { batchId } = await params;
   if (!z.uuid().safeParse(batchId).success) notFound();
   const path = `/payroll/batches/${batchId}`;
-  if (!(await requireSession(path))) return <LiveUnavailable retryHref={path} />;
+  const session = await requireSession(path);
+  if (!session) return <LiveUnavailable retryHref={path} />;
   const result = await loadLive(path, batchDetailResponseSchema, path);
   if (!result.ok)
     return result.status === 403 ? <LiveForbidden /> : <LiveUnavailable retryHref={path} />;
   const data = result.data;
   const { batch, totals } = data;
+  // D4.3: who decided what, and what approval would bind (absent for callers who cannot see it).
+  const approval = await serverApi(`${path}/approval`, batchApprovalResponseSchema);
   const t = await getTranslations("payrollLive");
+  const tPayouts = await getTranslations("payouts.approval");
   return (
     <PayrollShell title={t("batch")}>
       <Link className="underline" href={`/payroll/projects/${data.project.id}`}>
         {data.project.name}
       </Link>
+      {approval.ok ? (
+        <WaiverBanner
+          waiver={approval.data.waiver}
+          approvedUnderWaiver={approval.data.approvedUnderWaiver}
+        />
+      ) : null}
       <p>
         {formatCalendarDate(batch.periodStart)} – {formatCalendarDate(batch.periodEnd)} ·{" "}
         {t(`values.${batch.status}`)} · {t("payDate")}: {formatCalendarDate(batch.payDate)}
@@ -52,7 +69,21 @@ export default async function BatchPage({ params }: { params: Promise<{ batchId:
       <p className="break-all font-mono text-xs">
         {t("digest")}: {batch.digest}
       </p>
+      {approval.ok ? (
+        <BatchTimeline batch={approval.data.batch} decisions={approval.data.decisions} />
+      ) : null}
+      {isSettlementStatus(batch.status) ? (
+        <p>
+          <Link
+            className="font-medium underline underline-offset-4"
+            href={`${path}/payouts`}
+          >
+            {tPayouts("openPayouts")}
+          </Link>
+        </p>
+      ) : null}
       <BatchActions data={data} />
+      {approval.ok ? <BatchApproval approval={approval.data} userId={session.user.id} /> : null}
       <dl className="grid gap-3 sm:grid-cols-4">
         {(["grossMinor", "totalDeductionsMinor", "netMinor", "employerCostMinor"] as const).map(
           (key) => (
@@ -62,6 +93,12 @@ export default async function BatchPage({ params }: { params: Promise<{ batchId:
             </div>
           ),
         )}
+        {totals.broughtForwardMinor ? (
+          <div className="rounded-lg border p-3">
+            <dt>{t("broughtForward")}</dt>
+            <dd className="font-semibold">{formatKES(totals.broughtForwardMinor)}</dd>
+          </div>
+        ) : null}
       </dl>
       {totals.shortfallMinor > 0 ? (
         <p role="alert">
@@ -105,7 +142,16 @@ export default async function BatchPage({ params }: { params: Promise<{ batchId:
                 <TableCell>{formatKES(line.grossMinor)}</TableCell>
                 <TableCell>{formatKES(line.statutoryWithheldMinor)}</TableCell>
                 <TableCell>{formatKES(line.advanceRecoveryMinor)}</TableCell>
-                <TableCell>{formatKES(line.netMinor)}</TableCell>
+                <TableCell>
+                  {formatKES(line.netMinor)}
+                  {line.broughtForwardMinor ? (
+                    <span className="block text-xs text-muted-foreground">
+                      {t("includesBroughtForward", {
+                        amount: formatKES(line.broughtForwardMinor),
+                      })}
+                    </span>
+                  ) : null}
+                </TableCell>
                 <TableCell>
                   {line.warnings.map((warning, index) => (
                     <p key={`${warning.code}-${index}`}>{t(`warningsList.${warning.code}`)}</p>
@@ -135,6 +181,7 @@ export default async function BatchPage({ params }: { params: Promise<{ batchId:
         ))}
         <p>{t("pendingOutputs", { count: data.pendingOutputs })}</p>
       </section>
+      {approval.ok ? <DecisionHistory decisions={approval.data.decisions} /> : null}
       <section className="space-y-2">
         <h2 className="font-semibold">{t("rules")}</h2>
         {data.rules.map((rule) => (

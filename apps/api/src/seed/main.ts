@@ -66,6 +66,10 @@ function print(summary: SeedSummary) {
     `  ${payroll.ruleVersions} statutory rule versions; ${payroll.minimumWages} minimum wages; ${payroll.allowances} allowances`,
     `  ${payroll.outputs} piece-rate outputs; ${payroll.advances} advances; ${payroll.submittedBatches} submitted and ${payroll.draftBatches} draft batches (${payroll.lines} lines)`,
   );
+  const { payouts } = summary;
+  lines.push(
+    `  Payouts (D4.3): ${payouts.verifiedWorkers} of ${payouts.workersWithNumber} workers' M-Pesa numbers verified in person by the project manager`,
+  );
   const p2p = summary.procureToPay;
   lines.push(
     "",

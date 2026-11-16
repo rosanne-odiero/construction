@@ -16,17 +16,20 @@ import { CertificateStore } from "./provider/security-credential.js";
 import { ReconciliationService } from "./reconciliation.service.js";
 import { PaymentRequestsService } from "./requests.service.js";
 import { PaymentSettingsService } from "./settings.service.js";
+import { PaymentTariffsController } from "./tariffs.controller.js";
+import { PaymentTariffsService } from "./tariffs.service.js";
 
 /**
  * Payments and the Daraja integration (D4.2, ARCHITECTURE §4.18): the provider-neutral
  * PaymentProvider with DarajaProvider, per-company encrypted credentials, payment requests and
  * attempts, the durable callback inbox, reconciliation, the transactional outbox with BullMQ
  * workers and the watchdog. D4.3 imports it to create B2C attempts for payroll obligations
- * (PaymentRequestsService.createRequest) and registers a PaymentOutcomeHandler.
+ * (PaymentRequestsService.createRequest), registers a PaymentOutcomeHandler and runs float checks
+ * through PaymentRequestsService.requestBalance; the M-Pesa charges tariff lives here too.
  */
 @Module({
   imports: [IdentityModule],
-  controllers: [PaymentsController, PaymentCallbacksController],
+  controllers: [PaymentsController, PaymentCallbacksController, PaymentTariffsController],
   providers: [
     CallbackIntake,
     CertificateStore,
@@ -39,6 +42,7 @@ import { PaymentSettingsService } from "./settings.service.js";
     PaymentProcessor,
     PaymentRequestsService,
     PaymentSettingsService,
+    PaymentTariffsService,
     PaymentsCrypto,
     PaymentsRelay,
     PaymentsRuntime,
@@ -49,6 +53,7 @@ import { PaymentSettingsService } from "./settings.service.js";
     PaymentRequestsService,
     PaymentsRelay,
     PaymentLedger,
+    PaymentsCrypto,
     PAYMENT_PROVIDER,
   ],
 })

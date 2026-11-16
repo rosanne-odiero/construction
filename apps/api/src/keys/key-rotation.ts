@@ -56,6 +56,10 @@ export const FIELD_COLUMNS: readonly FieldColumn[] = [
   ...each("payment_callback_routes", ["token_enc"]),
   ...each("payment_requests", ["msisdn_enc"]),
   ...each("payment_callback_inbox", ["body_enc"]),
+  // D4.3 payroll payouts: a mismatched receiver name and a notification's recipient (migration
+  // 20261205090000_payroll_payouts lets the owner rewrap them).
+  ...each("payroll_payouts", ["receiver_name_enc"]),
+  ...each("payroll_notifications", ["recipient_enc"]),
 ];
 
 /** users columns sealed with AUTH_MFA_ENCRYPTION_KEY (TOTP seeds, sealed for `totp:<user ID>`). */

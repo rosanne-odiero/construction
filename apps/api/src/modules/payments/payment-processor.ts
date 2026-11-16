@@ -6,6 +6,7 @@ import {
   interpretStkQuery,
   interpretTransactionStatus,
   isFinalOutcome,
+  parseReceiverPartyPublicName,
   verifyCallback,
   verifySettlement,
   type CallbackIdentifiers,
@@ -64,6 +65,34 @@ const CALLBACK_FOR_KIND: Record<PaymentAttemptKind, readonly CallbackKind[]> = {
 const TOKEN_ERRORS = new Set(["400.003.01", "404.001.03", "401.002.01"]);
 const providerResultCode = (value: unknown): string | null =>
   typeof value === "string" || typeof value === "number" ? String(value) : null;
+
+/**
+ * D4.3 name check: the receiver's name in a B2C result (`ReceiverPartyPublicName`) or a Transaction
+ * Status answer (`CreditPartyName`), "<MSISDN> - <NAME>" → "<NAME>"; null when absent or nameless.
+ */
+export function receiverNameOf(kind: CallbackKind, body: unknown): string | null {
+  const key =
+    kind === "b2c_result"
+      ? "ReceiverPartyPublicName"
+      : kind === "status_result"
+        ? "CreditPartyName"
+        : null;
+  if (!key || typeof body !== "object" || body === null) return null;
+  const result = (body as Record<string, unknown>)["Result"];
+  const parameters =
+    typeof result === "object" && result !== null
+      ? (result as Record<string, unknown>)["ResultParameters"]
+      : null;
+  const list =
+    typeof parameters === "object" && parameters !== null
+      ? (parameters as Record<string, unknown>)["ResultParameter"]
+      : null;
+  const entries = Array.isArray(list) ? list : list ? [list] : [];
+  for (const entry of entries)
+    if (typeof entry === "object" && entry !== null && (entry as Record<string, unknown>)["Key"] === key)
+      return parseReceiverPartyPublicName((entry as Record<string, unknown>)["Value"]);
+  return null;
+}
 
 /**
  * Executes payment work (ARCHITECTURE §4.18): submissions, status queries, callback processing,
@@ -897,6 +926,7 @@ export class PaymentProcessor {
       const result = this.provider.parseCallback(row.kind as CallbackKind, body);
       if (!result.ok) return this.quarantine(tx, row, result.reason);
       const parsed = result.value;
+      const receiverName = receiverNameOf(parsed.kind, body);
       switch (parsed.kind) {
         case "c2b_validation":
           return this.processed(tx, row, {}, "c2b_validation");
@@ -904,9 +934,9 @@ export class PaymentProcessor {
           return this.c2bConfirmation(tx, row, parsed);
         case "balance_result":
         case "status_result":
-          return this.queryAnswer(tx, row, parsed);
+          return this.queryAnswer(tx, row, parsed, receiverName);
         default:
-          return this.attemptResult(tx, row, parsed);
+          return this.attemptResult(tx, row, parsed, receiverName);
       }
     });
   }
@@ -943,7 +973,12 @@ export class PaymentProcessor {
     return this.processed(tx, row, {}, "c2b_receipt");
   }
 
-  private async queryAnswer(tx: Tx, row: PaymentCallbackInbox, parsed: ParsedCallback) {
+  private async queryAnswer(
+    tx: Tx,
+    row: PaymentCallbackInbox,
+    parsed: ParsedCallback,
+    receiverName: string | null = null,
+  ) {
     const ids = parsed.identifiers;
     const or: Prisma.ProviderQueryWhereInput[] = [];
     if (ids.originatorConversationId)
@@ -1028,6 +1063,7 @@ export class PaymentProcessor {
           resultDesc: "Confirmed by Transaction Status",
           callbackId: row.id,
           completedAtRaw: null,
+          receiverName: attempt.kind === "b2c" ? receiverName : null,
         },
         "status_query_success",
         SYSTEM,
@@ -1067,7 +1103,12 @@ export class PaymentProcessor {
     return Boolean(existing && existing.attemptId !== attempt.id);
   }
 
-  private async attemptResult(tx: Tx, row: PaymentCallbackInbox, parsed: ParsedCallback) {
+  private async attemptResult(
+    tx: Tx,
+    row: PaymentCallbackInbox,
+    parsed: ParsedCallback,
+    receiverName: string | null = null,
+  ) {
     let attempt = await this.findAttempt(tx, row.tenantId, parsed);
     if (!attempt && parsed.kind === "timeout") {
       // A queue timeout for a status or balance query: the query's outcome is unknown.
@@ -1135,6 +1176,7 @@ export class PaymentProcessor {
           resultDesc: parsed.resultDesc,
           callbackId: row.id,
           completedAtRaw: parsed.completedAt,
+          receiverName: attempt.kind === "b2c" ? receiverName : null,
         },
         "provider_success",
         SYSTEM,

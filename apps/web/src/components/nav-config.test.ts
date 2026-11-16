@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isLiveRoute, navGroups } from "./nav-config";
+import { activeNavHref, isLiveRoute, navGroups, visibleNavGroups } from "./nav-config";
 
 const APP = join(import.meta.dirname, "..", "app");
 
@@ -64,5 +64,40 @@ describe("sidebar", () => {
       expect(isLiveRoute(path)).toBe(true);
     expect(isLiveRoute("/payments/requests/retry")).toBe(false);
     expect(isLiveRoute("/payments/production")).toBe(false);
+  });
+
+  it("treats reconciliation, statements and tariffs as live payments pages", () => {
+    const id = "01a1db46-7d90-7436-b8e8-4582012ff940";
+    for (const path of [
+      "/payments/reconciliation",
+      `/payments/reconciliation/items/${id}`,
+      "/payments/statements",
+      `/payments/statements/${id}`,
+      "/payments/tariffs",
+    ])
+      expect(isLiveRoute(path), path).toBe(true);
+    expect(isLiveRoute("/payments/reconciliation/items")).toBe(false);
+    expect(isLiveRoute(`/payments/statements/${id}/lines`)).toBe(false);
+  });
+
+  it("shows reconciliation only to members holding payments.view, under finance", () => {
+    const keys = (permissions: string[] | null) =>
+      visibleNavGroups(permissions).flatMap((group) => group.items.map((item) => item.key));
+    expect(keys(null)).not.toContain("reconciliation");
+    expect(keys(["payroll.view"])).not.toContain("reconciliation");
+    expect(keys(["payments.view"])).toContain("reconciliation");
+    expect(
+      navGroups.find((group) => group.key === "finance")?.items.map((item) => item.key),
+    ).toContain("reconciliation");
+    expect(keys(null)).toContain("payments");
+  });
+
+  it("marks the most specific entry active", () => {
+    const items = navGroups.flatMap((group) => group.items);
+    expect(activeNavHref("/payments/reconciliation/items/x", items)).toBe(
+      "/payments/reconciliation",
+    );
+    expect(activeNavHref("/payments/requests", items)).toBe("/payments");
+    expect(activeNavHref("/paymentsx", items)).toBeNull();
   });
 });

@@ -6,7 +6,7 @@ import {
   HttpException,
   Logger,
 } from "@nestjs/common";
-import { problemType, type ProblemDetails } from "@pm-buddy/types";
+import { PROBLEM_FACT_KEYS, problemType, type ProblemDetails } from "@pm-buddy/types";
 import type { Request, Response } from "express";
 import { ZodError } from "zod";
 
@@ -62,6 +62,36 @@ function matchOf(response: string | object): Record<string, string> | undefined 
   return Object.fromEntries(entries) as Record<string, string>;
 }
 
+const FACT_KEYS = new Set<string>(PROBLEM_FACT_KEYS);
+/** Identifiers, codes, ISO timestamps and decimal figures only. */
+const FACT_TEXT = /^[A-Za-z0-9:.+_-]{1,64}$/;
+
+type FactValue = NonNullable<ProblemDetails["facts"]>[string];
+
+const isFactValue = (value: unknown): value is FactValue =>
+  value === null ||
+  typeof value === "boolean" ||
+  (typeof value === "number" && Number.isFinite(value)) ||
+  (typeof value === "string" && FACT_TEXT.test(value)) ||
+  (Array.isArray(value) &&
+    value.length <= 200 &&
+    value.every((entry) => typeof entry === "string" && FACT_TEXT.test(entry)));
+
+/**
+ * D4.3: safe figures explaining a refusal (`approval-limit-exceeded`, `insufficient-float`, …).
+ * Only keys from PROBLEM_FACT_KEYS with numbers, booleans, null, short identifier-like strings or
+ * lists of them pass; anything else is dropped, so personal data never leaves in a problem.
+ */
+function factsOf(response: string | object): ProblemDetails["facts"] {
+  if (typeof response !== "object") return undefined;
+  const facts = (response as { facts?: unknown }).facts;
+  if (typeof facts !== "object" || facts === null || Array.isArray(facts)) return undefined;
+  const entries = Object.entries(facts).filter(
+    ([key, value]) => FACT_KEYS.has(key) && isFactValue(value),
+  );
+  return entries.length ? (Object.fromEntries(entries) as ProblemDetails["facts"]) : undefined;
+}
+
 /** Maps any thrown value to an RFC 9457 problem. Unknown errors never leak internals. */
 export function toProblem(exception: unknown, instance: string, traceId?: string): ProblemDetails {
   if (exception instanceof ZodError) {
@@ -85,6 +115,7 @@ export function toProblem(exception: unknown, instance: string, traceId?: string
     const code =
       customCode(response) ?? CODES[status] ?? (status >= 500 ? "internal-error" : "error");
     const match = status === 409 ? matchOf(response) : undefined;
+    const facts = status >= 400 && status < 500 ? factsOf(response) : undefined;
     return {
       type: problemType(code),
       title: STATUS_CODES[status] ?? "Error",
@@ -94,6 +125,7 @@ export function toProblem(exception: unknown, instance: string, traceId?: string
       instance,
       traceId,
       ...(match ? { match } : {}),
+      ...(facts ? { facts } : {}),
     };
   }
 

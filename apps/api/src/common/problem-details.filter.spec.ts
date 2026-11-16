@@ -54,6 +54,34 @@ describe("toProblem", () => {
     expect(JSON.stringify(problem)).not.toContain("pmb_app");
   });
 
+  it("keeps only allowlisted, identifier-like facts of a refusal (D4.3)", () => {
+    const problem = toProblem(
+      new ConflictException({
+        code: "insufficient-float",
+        message: "Not enough float",
+        facts: {
+          availableMinor: 120_000,
+          shortfallMinor: 5_000,
+          answeredAt: "2026-11-16T09:15:00.000Z",
+          labourerIds: ["0195f3c2-6c1e-7a2b-9d3e-111111111111"],
+          phone: "254700000001",
+          ownerNote: "Wanjiru Kamau",
+          requiredMinor: { nested: true },
+        },
+      }),
+      "/x",
+    );
+    expect(problem.facts).toEqual({
+      availableMinor: 120_000,
+      shortfallMinor: 5_000,
+      answeredAt: "2026-11-16T09:15:00.000Z",
+      labourerIds: ["0195f3c2-6c1e-7a2b-9d3e-111111111111"],
+    });
+    expect(toProblem(new ConflictException({ code: "nothing-eligible" }), "/x").facts).toBe(
+      undefined,
+    );
+  });
+
   it("hides details of 5xx HTTP exceptions", () => {
     const problem = toProblem(new HttpException("upstream secret detail", 503), "/x");
     expect(problem.status).toBe(503);

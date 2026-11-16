@@ -1775,6 +1775,10 @@ describe("Projects, sites, geofences, WBS and milestones (real runtime role)", (
       draftBatches: 3,
     });
     expect(second.payroll).toEqual({ ...first.payroll, created: false });
+    // Payouts (D4.3): the project manager verified every active worker's number once.
+    expect(first.payouts.workersWithNumber).toBeGreaterThan(0);
+    expect(first.payouts.verifiedWorkers).toBe(first.payouts.workersWithNumber);
+    expect(second.payouts).toEqual({ ...first.payouts, created: false });
     await db.run(
       { tenantId: first.company.id, userId: ownerId, requestId: "seed-payroll" },
       async (tx) => {

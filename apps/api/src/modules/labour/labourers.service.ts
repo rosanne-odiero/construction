@@ -8,7 +8,7 @@ import {
   normalizeKenyanPhone,
   summariseAccreditation,
 } from "@pm-buddy/domain";
-import { CURRENT_CONSENT_NOTICE, type SensitiveLabourField } from "@pm-buddy/types";
+import { CURRENT_CONSENT_NOTICE, type Locale, type SensitiveLabourField } from "@pm-buddy/types";
 import {
   labourersResponseSchema,
   revealResponseSchema,
@@ -30,6 +30,7 @@ import type { Prisma } from "../../generated/prisma/client.js";
 import type { Scope } from "../identity/access-policy.js";
 import { AuthService, type Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
+import { enqueueNumberChangeNotices } from "../payouts/notification-queue.js";
 import { fromCalendarDate, toCalendarDate } from "../projects/project-mappers.js";
 import { loadLabourers, toSummary } from "./labour-mappers.js";
 import {
@@ -352,6 +353,7 @@ export class LabourersService {
               idNumberEnc: this.crypto.seal(tenantId, id, "id_number_enc", input.idNumber),
               idNumberBidx: idIndex,
               ...this.identifiers(tenantId, id, input),
+              preferredLanguage: input.preferredLanguage,
               createdBy: access.userId,
             },
           });
@@ -514,6 +516,8 @@ export class LabourersService {
                 matchedOn: "kraPin",
               });
           }
+          if (input.preferredLanguage !== undefined)
+            data.preferredLanguage = input.preferredLanguage;
           Object.assign(data, this.identifiers(tenantId, labourerId, input));
           const updated = await tx.labourer.updateMany({
             where: { tenantId, id: labourerId, version: input.version },
@@ -523,6 +527,26 @@ export class LabourersService {
           await this.scope.audit(tx, "labourer.updated", labourerId, {
             fields: changedFields(input),
           });
+          // D4.3 (A-04): a new M-Pesa number is announced to the old number and the new one.
+          if (input.phone !== undefined && data.phoneBidx !== row.phoneBidx) {
+            const after = await tx.labourer.findUniqueOrThrow({
+              where: { tenantId_id: { tenantId, id: labourerId } },
+              select: { phoneChangedAt: true, preferredLanguage: true },
+            });
+            if (after.phoneChangedAt) {
+              const notices = await enqueueNumberChangeNotices(tx, this.crypto.cipher, {
+                tenantId,
+                labourerId,
+                changedAt: after.phoneChangedAt,
+                oldPhone: row.phoneEnc
+                  ? this.crypto.open(tenantId, labourerId, "phone_enc", row.phoneEnc)
+                  : null,
+                newPhone: input.phone ?? null,
+                language: after.preferredLanguage as Locale,
+              });
+              await this.scope.audit(tx, "labourer.phone_change_notified", labourerId, { notices });
+            }
+          }
           const warnings: LabourerWarning[] = [];
           if (input.phone) {
             const shared = await tx.labourer.count({

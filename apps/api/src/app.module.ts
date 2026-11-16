@@ -13,6 +13,7 @@ import { ProcurementModule } from "./modules/procurement/procurement.module.js";
 import { LabourModule } from "./modules/labour/labour.module.js";
 import { PaymentsModule } from "./modules/payments/payments.module.js";
 import { PayrollModule } from "./modules/payroll/payroll.module.js";
+import { PayoutsModule } from "./modules/payouts/payouts.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
 import { PortalsModule } from "./modules/portals/portals.module.js";
 import { ProgressModule } from "./modules/progress/progress.module.js";
@@ -44,6 +45,7 @@ import { SubcontractsModule } from "./modules/subcontracts/subcontracts.module.j
     AttendanceModule,
     PaymentsModule,
     PayrollModule,
+    PayoutsModule,
     ProgressModule,
     SubcontractsModule,
     ScheduleModule,

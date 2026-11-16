@@ -85,6 +85,7 @@ import {
 import { attendanceFixture, handleAttendance, type AttendanceState } from "./mock-attendance.mts";
 import { handleLabour, labourFixture, type LabourState } from "./mock-labour.mts";
 import { handlePayroll, payrollFixture, type PayrollState } from "./mock-payroll.mts";
+import { handlePayouts, payoutsFixture, type PayoutsState } from "./mock-payouts.mts";
 import { handleDiaries, initialDiaries } from "./mock-diaries.mts";
 import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
 import { handleCaptureTicket, handlePhotos, initialPhotos } from "./mock-photos.mts";
@@ -227,6 +228,8 @@ type State = {
   labour: LabourState;
   attendance: AttendanceState;
   payroll: PayrollState;
+  /** D4.3 approvals, payouts, worker payout records and reconciliation (mock-payouts.mts). */
+  payouts: PayoutsState;
   diaries: SiteDiary[];
   photos: SitePhoto[];
   /** D6.2 schedules by project (mock-schedule.mts). */
@@ -524,6 +527,7 @@ function fixture(persona: Persona): State {
     labour,
     attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
     payroll: payrollFixture(),
+    payouts: payoutsFixture(),
     team: new Map([
       [
         RUIRU_ID,
@@ -611,11 +615,19 @@ class HttpError extends Error {
   readonly code: string;
   /** RFC 9457 extension naming an existing record (labour duplicate and do-not-rehire matches). */
   readonly match: Record<string, string> | undefined;
-  constructor(status: number, code: string, match?: Record<string, string>) {
+  /** Safe figures explaining a refusal (D4.3 `facts`). */
+  readonly facts: Record<string, unknown> | undefined;
+  constructor(
+    status: number,
+    code: string,
+    match?: Record<string, string>,
+    facts?: Record<string, unknown>,
+  ) {
     super(code);
     this.status = status;
     this.code = code;
     this.match = match;
+    this.facts = facts;
   }
 }
 
@@ -954,6 +966,34 @@ async function handle(
     if (reports) return reports;
     throw new HttpError(404, "not-found");
   }
+  const payouts = handlePayouts(
+    {
+      user: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      role: PERSONAS[state.persona].role,
+      permissions: rolePermissions(state),
+      tenantWide: isTenantWide(state.persona),
+      stepUpFresh: () => Date.now() - (state.stepUpAt.get(state.persona) ?? 0) <= 5 * 60_000,
+      key:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+      contentType: req.headers["content-type"],
+      raw,
+      fail: (status, code, facts) => {
+        throw new HttpError(status, code, undefined, facts);
+      },
+      parse,
+      labour: state.labour,
+      payroll: state.payroll,
+      paymentsKey: state,
+    },
+    state.payouts,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (payouts) return payouts;
   const payroll = handlePayroll(
     {
       persona: state.persona,
@@ -2043,6 +2083,7 @@ const server = createServer((req, res) => {
             status: error.status,
             code: error.code,
             ...(error.match ? { match: error.match } : {}),
+            ...(error.facts ? { facts: error.facts } : {}),
           },
           true,
         );

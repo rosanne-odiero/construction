@@ -13,6 +13,7 @@ import {
   NotebookPen,
   Package,
   Receipt,
+  Scale,
   ScanFace,
   ShieldAlert,
   ShoppingCart,
@@ -40,6 +41,7 @@ export type NavKey =
   | "safety"
   | "payroll"
   | "payments"
+  | "reconciliation"
   | "spending"
   | "documents"
   | "reports";
@@ -49,6 +51,8 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   phase?: number;
+  /** Shown only to members holding this company-wide permission (the page refuses others too). */
+  permission?: string;
 }
 
 export const navGroups: {
@@ -91,6 +95,12 @@ export const navGroups: {
       // The live payroll screens (D4.1 web) are not on main yet; the D0 prototype stands in.
       { key: "payroll", href: "/payroll", icon: Wallet },
       { key: "payments", href: "/payments", icon: Banknote },
+      {
+        key: "reconciliation",
+        href: "/payments/reconciliation",
+        icon: Scale,
+        permission: "payments.view",
+      },
       { key: "spending", href: "/spending", icon: Receipt },
     ],
   },
@@ -102,6 +112,27 @@ export const navGroups: {
     ],
   },
 ];
+
+/** The groups and items a member may see: permission-gated items need that permission. */
+export function visibleNavGroups(permissions: readonly string[] | null | undefined) {
+  return navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) => !item.permission || (permissions ?? []).includes(item.permission),
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+/** The item whose href is the longest prefix of the path ("/payments/reconciliation" over "/payments"). */
+export function activeNavHref(pathname: string, items: readonly NavItem[]): string | null {
+  return (
+    items
+      .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+      .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null
+  );
+}
 
 /** Sections that render the "coming in phase N" empty state. */
 export const comingSoonSections = {
@@ -128,7 +159,15 @@ export type ComingSoonSection = keyof typeof comingSoonSections;
  */
 export function isLiveRoute(pathname: string): boolean {
   if (
-    /^\/payments(\/(requests|callbacks|cases)(\/[0-9a-f-]{36})?|\/(settings|new))?$/.test(pathname)
+    /^\/payments(\/(requests|callbacks|cases)(\/[0-9a-f-]{36})?|\/(settings|new|tariffs))?$/.test(
+      pathname,
+    )
+  )
+    return true;
+  if (
+    /^\/payments\/(reconciliation(\/items\/[0-9a-f-]{36})?|statements(\/[0-9a-f-]{36})?)$/.test(
+      pathname,
+    )
   )
     return true;
   if (pathname === "/projects" || pathname === "/bq" || pathname === "/diary") return true;

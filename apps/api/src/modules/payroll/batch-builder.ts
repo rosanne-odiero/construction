@@ -10,6 +10,7 @@ import {
   type BatchInput,
   type BatchLabourer,
   type BatchResult,
+  type CarryForwardSource,
   type DayClaim,
   type MinimumWageRow,
   type PayCalendar,
@@ -44,6 +45,7 @@ import { loadPeriodSettings } from "../attendance/period-store.js";
 import { fromCalendarDate, toCalendarDate } from "../projects/project-mappers.js";
 import {
   canonicalJson,
+  FROZEN_BATCH_STATUSES,
   money,
   payrollConflict,
   sha256,
@@ -179,6 +181,9 @@ type SnapshotTimesheetRules = {
  * employer costs and recoveries, every consumed source, every day claim, the exclusions and the
  * totals. Row IDs and timestamps are left out, so recalculating unchanged inputs gives the same
  * digest; rule verification status is left out (verifying later does not change what was paid).
+ * D4.3 (D-167): a line carries `broughtForwardMinor` and the consumptions list the carry-forwards
+ * it brings forward only when there are any, so the digests of batches without them (including
+ * every batch submitted before D4.3) are unchanged.
  */
 export function snapshotOf(input: {
   target: BatchTarget;
@@ -215,6 +220,9 @@ export function snapshotOf(input: {
       advanceRecoveryMinor: money(line.advanceRecoveryMinor as bigint),
       otherDeductionsMinor: money(line.otherDeductionsMinor as bigint),
       netMinor: money(line.netMinor as bigint),
+      ...(money((line.broughtForwardMinor ?? 0n) as bigint) > 0
+        ? { broughtForwardMinor: money(line.broughtForwardMinor as bigint) }
+        : {}),
       employerCostMinor: money(line.employerCostMinor as bigint),
       statutoryMonth: line.statutoryMonth,
       monthToDate: line.monthToDate,
@@ -277,7 +285,9 @@ export function snapshotOf(input: {
     mtdBatchIds: [...input.mtdBatchIds].sort(),
     lines,
     consumptions: input.rows.consumptions
-      .map((row) => `${row.sourceKind}:${row.timesheetLineId ?? row.shareId}`)
+      .map(
+        (row) => `${row.sourceKind}:${row.timesheetLineId ?? row.shareId ?? row.carryForwardId}`,
+      )
       .sort(),
     claims: input.rows.claims
       .map((row) => `${row.labourerId}:${toCalendarDate(new Date(row.workDate))}:${row.basis}`)
@@ -300,7 +310,7 @@ const multipliersOf = (rule: TimesheetRuleRow): Record<DayType, string> => ({
  * Loads a batch's inputs in the tenant transaction, runs the pure engine (packages/domain
  * computeBatch) and turns the result into rows and a digest; persists drafts. Sources consumed,
  * days claimed and advances recovered by other live batches are left out; the batch's own are
- * available to it (recalculation).
+ * available to it (recalculation). D4.3: open carry-forwards are brought forward the same way.
  */
 @Injectable()
 export class BatchBuilder {
@@ -408,14 +418,14 @@ export class BatchBuilder {
       endedOn: row.endedOn ? toCalendarDate(row.endedOn) : null,
     }));
 
-    // Earlier submitted batches of the statutory month (company-wide), excluding this one.
+    // Earlier frozen batches of the statutory month (company-wide), excluding this one.
     const priorLines = labourerIds.length
       ? await tx.payrollLine.findMany({
           where: {
             tenantId,
             statutoryMonth,
             labourerId: { in: labourerIds },
-            batch: { status: "submitted", id: { not: target.id } },
+            batch: { status: { in: [...FROZEN_BATCH_STATUSES] }, id: { not: target.id } },
           },
           include: { deductions: true },
         })
@@ -489,6 +499,20 @@ export class BatchBuilder {
           basis: row.basis as "attendance" | "piece_rate",
         }))
       : [];
+    // D4.3 (D-167): the cents of earlier approved payrolls owed to these labourers (any project),
+    // except those another live batch already brings forward.
+    const carryRows = labourerIds.length
+      ? await tx.payrollCarryForward.findMany({
+          where: { tenantId, labourerId: { in: labourerIds }, consumptions: notOthers },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        })
+      : [];
+    const carryForwards = new Map<string, CarryForwardSource[]>();
+    for (const row of carryRows)
+      carryForwards.set(row.labourerId, [
+        ...(carryForwards.get(row.labourerId) ?? []),
+        { id: row.id, amountMinor: money(row.amountMinor) },
+      ]);
     const minimumWages: MinimumWageRow[] = (
       await tx.minimumWageRate.findMany({ where: { tenantId } })
     ).map((row) => ({
@@ -544,6 +568,7 @@ export class BatchBuilder {
       allowUnverifiedTimesheetRules: !production,
       minimumWageArea: calendar.minimumWageArea,
       minimumWages,
+      carryForwards,
     };
     const result = computeBatch(input);
     const byLabourer = new Map(labourerRows.map((row) => [row.id, row]));
@@ -632,6 +657,7 @@ export class BatchBuilder {
         ),
         otherDeductionsMinor: BigInt(line.otherDeductionsMinor),
         netMinor: BigInt(line.netMinor),
+        broughtForwardMinor: BigInt(line.broughtForwardMinor),
         employerCostMinor: BigInt(line.employerCostMinor),
         statutoryMonth,
         monthToDate: {
@@ -732,6 +758,14 @@ export class BatchBuilder {
           projectId: target.projectId,
           sourceKind: "piece_rate_share",
           shareId,
+        });
+      for (const carryForwardId of line.carryForwardIds)
+        rows.consumptions.push({
+          ...base,
+          id: uuidv7(),
+          projectId: target.projectId,
+          sourceKind: "carry_forward",
+          carryForwardId,
         });
       for (const claim of line.claims)
         rows.claims.push({

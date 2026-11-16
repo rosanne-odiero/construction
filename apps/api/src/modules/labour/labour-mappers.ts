@@ -6,7 +6,7 @@ import {
   maskPhone,
   summariseAccreditation,
 } from "@pm-buddy/domain";
-import { CURRENT_CONSENT_NOTICE, type Permission } from "@pm-buddy/types";
+import { CURRENT_CONSENT_NOTICE, type Locale, type Permission } from "@pm-buddy/types";
 import type {
   AccreditationRecord,
   ConsentRecord,
@@ -325,6 +325,7 @@ export function toDetail(row: LabourerRow, ctx: MapContext, extras: DetailExtras
           reason: row.doNotRehire && canFlag ? extras.doNotRehireReason : null,
         }
       : null,
+    preferredLanguage: row.preferredLanguage as Locale,
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

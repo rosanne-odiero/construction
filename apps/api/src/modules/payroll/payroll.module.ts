@@ -33,6 +33,6 @@ import { PayrollRulesService } from "./rules.service.js";
     PayrollRulesService,
     PieceRateJobsService,
   ],
-  exports: [BatchBuilder],
+  exports: [BatchBuilder, PayrollAccess, PayrollCommands],
 })
 export class PayrollModule {}

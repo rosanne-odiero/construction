@@ -10,10 +10,10 @@ import {
   EMPLOYEE_STATUTORY,
   type AttendanceStatus,
   type EmployeeStatutory,
-  type PayrollBatchStatus,
 } from "@pm-buddy/types";
 import type { ReportCell } from "@pm-buddy/validation";
 import {
+  batchStatusLabel,
   bounded,
   column,
   fill,
@@ -279,7 +279,7 @@ export async function payrollRegister(ctx: BuildContext): Promise<BuildResult> {
       },
     ],
     notes: [
-      fill(t.statusNote, { status: t.statuses[batch.status as PayrollBatchStatus] }),
+      fill(t.statusNote, { status: batchStatusLabel(t.statuses, batch.status) }),
       ...(batch.unverifiedRules ? [t.unverified] : []),
     ],
   };

@@ -74,6 +74,31 @@ export function loopbackCallbackTarget(url: string): URL | null {
   return target;
 }
 
+/**
+ * A test subscriber (D4.3): the name M-Pesa reports for the MSISDN (`ReceiverPartyPublicName`
+ * "<MSISDN> - <NAME>", an empty name when unknown) and an optional scenario for B2C payments to
+ * it, which overrides the amount-coded one (an admin-selected next scenario still comes first).
+ */
+export type MockSubscriber = {
+  msisdn: string;
+  name?: string | null;
+  scenario?: MockScenario | null;
+};
+
+const LOOPBACK_PEERS = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+/** "0712 345 678", "+254712345678", "712345678" → "254712345678"; null when not a Kenyan mobile. */
+export function normaliseMsisdn(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const digits = String(value).replace(/[\s+()-]/g, "");
+  const canonical = /^0[17]\d{8}$/.test(digits)
+    ? `254${digits.slice(1)}`
+    : /^[17]\d{8}$/.test(digits)
+      ? `254${digits}`
+      : digits;
+  return /^254[17]\d{8}$/.test(canonical) ? canonical : null;
+}
+
 type Kind = "stk" | "b2c" | "b2b" | "reversal";
 type Transaction = {
   kind: Kind;
@@ -90,6 +115,8 @@ type Transaction = {
   partyA: string;
   partyB: string;
   phone?: string;
+  /** B2C: the registered subscriber name reported for PartyB ("" when unknown). */
+  receiverName?: string;
   /** Status queries answered so far (status_busy_then_completed refuses the first). */
   queries?: number;
 };
@@ -101,6 +128,10 @@ export type MockDaraja = {
   requests: RecordedRequest[];
   callbacks: SentCallback[];
   setNextScenario(scenario: MockScenario | null): void;
+  /** Registers (or replaces) test subscribers by MSISDN; `reset()` clears them. */
+  setSubscribers(subscribers: readonly MockSubscriber[]): void;
+  /** Sets the B2C utility account balance reported by Account Balance (whole KES). */
+  setUtilityBalance(kes: number): void;
   /** Customer pays a Paybill/till (sends C2B validation/confirmation to the registered URLs). */
   simulateC2b(input: {
     shortCode: string;
@@ -198,6 +229,27 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
   const waiters: { count: number; resolve: () => void }[] = [];
   let nextScenario: MockScenario | null = null;
   let utilityMinor = 50_000_000;
+  const subscribers = new Map<string, { name: string; scenario: MockScenario | null }>();
+
+  /** Validates and stores subscribers; returns an error message for a bad entry. */
+  const registerSubscribers = (entries: unknown): string | null => {
+    if (!Array.isArray(entries)) return "send an array of { msisdn, name?, scenario? }";
+    const parsed: [string, { name: string; scenario: MockScenario | null }][] = [];
+    for (const entry of entries) {
+      if (!isObject(entry)) return "each subscriber is an object";
+      const msisdn = normaliseMsisdn(entry["msisdn"]);
+      if (!msisdn) return "msisdn must be a Kenyan mobile number";
+      const name = entry["name"] ?? null;
+      if (name !== null && (typeof name !== "string" || name.length > 100))
+        return "name must be a string of at most 100 characters";
+      const scenario = entry["scenario"] ?? null;
+      if (scenario !== null && !isScenario(scenario))
+        return `scenario must be one of ${MOCK_SCENARIOS.join(", ")}`;
+      parsed.push([msisdn, { name: name ?? "", scenario }]);
+    }
+    for (const [msisdn, subscriber] of parsed) subscribers.set(msisdn, subscriber);
+    return null;
+  };
 
   const notifyWaiters = () => {
     const ready = waiters.filter((waiter) => callbacks.length >= waiter.count);
@@ -263,13 +315,14 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
       await deliver(url, body, label);
     });
 
-  const pickScenario = (amount: unknown): MockScenario => {
+  /** The admin-selected next scenario, else the subscriber's, else the amount's. */
+  const pickScenario = (amount: unknown, subscriber?: MockScenario | null): MockScenario => {
     if (nextScenario) {
       const chosen = nextScenario;
       nextScenario = null;
       return chosen;
     }
-    return scenarioForAmount(amount);
+    return subscriber ?? scenarioForAmount(amount);
   };
 
   /** RSA PKCS #1 v1.5 with the mock key; OpenSSL implicit rejection turns bad input into noise. */
@@ -332,7 +385,7 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
         ? [
             { Key: "TransactionAmount", Value: amount },
             { Key: "TransactionReceipt", Value: tx.receipt },
-            { Key: "ReceiverPartyPublicName", Value: `${tx.partyB} - MOCK RECIPIENT` },
+            { Key: "ReceiverPartyPublicName", Value: `${tx.partyB} - ${tx.receiverName ?? ""}` },
             { Key: "TransactionCompletedDateTime", Value: nairobi().dotted },
             { Key: "B2CUtilityAccountAvailableFunds", Value: utilityMinor / 100 },
             { Key: "B2CWorkingAccountAvailableFunds", Value: 700000.0 },
@@ -675,7 +728,9 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
       if (str(body["AccountReference"]).length > 13)
         return gatewayError(400, "400.002.02", "Bad Request - Invalid AccountReference");
     }
-    let scenario = pickScenario(amount);
+    const subscriber =
+      kind === "b2c" ? subscribers.get(normaliseMsisdn(body["PartyB"]) ?? "") : undefined;
+    let scenario = pickScenario(amount, subscriber?.scenario);
     if (scenario === "rejected")
       return { ...gatewayError(400, "400.002.02", "Bad Request - Invalid PartyB"), scenario };
     if (!credentialValid(body["SecurityCredential"])) scenario = "invalid_credentials";
@@ -689,6 +744,7 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
       conversationId: conversationId(),
       partyA: str(body["PartyA"]),
       partyB: str(body["PartyB"]),
+      ...(kind === "b2c" ? { receiverName: subscriber?.name.toUpperCase() ?? "" } : {}),
     };
     if (tx.status === "Completed") utilityMinor -= amount * 100;
     transactions.set(originator, tx);
@@ -794,7 +850,9 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
                   Value:
                     tx.kind === "stk"
                       ? `${tx.partyB} - Mock Daraja Org`
-                      : `${tx.partyB} - MOCK RECIPIENT`,
+                      : tx.kind === "b2c"
+                        ? `${tx.partyB} - ${tx.receiverName ?? ""}`
+                        : `${tx.partyB} - Mock Biller`,
                 },
                 { Key: "OriginatorConversationID", Value: tx.originatorConversationId },
                 { Key: "InitiatedTime", Value: nairobi().compact },
@@ -957,6 +1015,24 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
       instance.reset();
       return json(res, 200, { reset: true });
     }
+    // Test subscribers and the float carry personal-looking data and money: loopback callers only.
+    if (
+      (path === "/__mock/subscribers" || path === "/__mock/balance") &&
+      !LOOPBACK_PEERS.has(req.socket.remoteAddress ?? "")
+    )
+      return json(res, 403, { error: "loopback only" });
+    if (path === "/__mock/subscribers" && req.method === "POST") {
+      const error = registerSubscribers(body);
+      if (error) return json(res, 400, { error });
+      return json(res, 200, { subscribers: subscribers.size });
+    }
+    if (path === "/__mock/balance" && req.method === "POST") {
+      const kes = isObject(body) ? Number(body["utility"]) : NaN;
+      if (!Number.isFinite(kes) || kes < 0)
+        return json(res, 400, { error: "utility must be a KES amount of at least 0" });
+      instance.setUtilityBalance(kes);
+      return json(res, 200, { utility: utilityMinor / 100 });
+    }
     if (path === "/__mock/c2b" && req.method === "POST" && isObject(body)) {
       try {
         return json(
@@ -1043,6 +1119,13 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
     setNextScenario(scenario) {
       nextScenario = scenario;
     },
+    setSubscribers(entries) {
+      const error = registerSubscribers(entries);
+      if (error) throw new Error(error);
+    },
+    setUtilityBalance(kes) {
+      utilityMinor = Math.round(kes * 100);
+    },
     simulateC2b,
     waitForCallbacks(count, timeoutMs = 10_000) {
       if (callbacks.length >= count) return Promise.resolve();
@@ -1063,6 +1146,7 @@ export async function startMockDaraja(options: MockDarajaOptions = {}): Promise<
       callbacks.length = 0;
       transactions.clear();
       seenOriginators.clear();
+      subscribers.clear();
       nextScenario = null;
       for (const timer of timers) clearTimeout(timer);
       timers.clear();

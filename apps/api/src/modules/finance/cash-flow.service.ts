@@ -9,7 +9,11 @@ import {
   weekStartOf,
   type ForecastItem,
 } from "@pm-buddy/domain";
-import { SPENDING_READ_PERMISSIONS, type ForecastLineKind } from "@pm-buddy/types";
+import {
+  SPENDING_READ_PERMISSIONS,
+  type ForecastLineKind,
+  type PayrollBatchStatus,
+} from "@pm-buddy/types";
 import {
   cashFlowItemResponseSchema,
   cashFlowItemsResponseSchema,
@@ -22,6 +26,10 @@ import type { Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import { loadCalendar } from "../payroll/batch-builder.js";
+import { FROZEN_BATCH_STATUSES as FROZEN_PAYROLL } from "../payroll/payroll-support.js";
+
+/** Approved batches still being paid: their unpaid obligations are forecast (D4.3). */
+const SETTLING_PAYROLL = ["approved", "disbursing", "partially_settled"] as const;
 import { clientReceiptsMinor, loadClientLedger } from "./client-ledger.js";
 import { nextId } from "../procurement/catalogue-store.js";
 import { peopleOf, personOf, toCalendarDate } from "../procurement/procurement-mappers.js";
@@ -49,10 +57,12 @@ type Line = ForecastItem & {
 /**
  * Manual cash-flow lines and the weekly cash-flow forecast (D5.4, brief §5.8). The forecast is a
  * read model over recorded facts, never stored:
- * - payroll: live batches (submitted = recorded, draft = estimated) on their pay date, and later
- *   pay periods of the project's calendar at the latest submitted batch's run rate (estimated);
- *   the amount is gross pay plus the employer's statutory cost (conservative: deductions are
- *   remitted later). Past pay dates are assumed paid outside PM-Buddy until D4.3 records payouts;
+ * - payroll: batches before approval (submitted/reviewed = recorded, draft/rejected = estimated)
+ *   on their pay date at gross pay plus the employer's statutory cost (conservative: deductions
+ *   are remitted later; past pay dates are assumed paid outside PM-Buddy); approved batches (D4.3)
+ *   only their unpaid obligations, recorded on the pay date even when overdue; settled batches
+ *   nothing; later pay periods of the project's calendar at the latest frozen batch's run rate
+ *   (estimated);
  * - supplier invoices: approved, outstanding (incl. VAT) on their due date; overdue shown now;
  * - LPO commitments: approved LPOs not yet invoiced (incl. VAT) at delivery date (else approval
  *   date) + credit days (estimated);
@@ -306,9 +316,10 @@ export class CashFlowService {
         lines.push({ kind, direction, date: on, amountMinor, basis, project: ref, document });
     };
 
-    // Payroll: live batches and the calendar's later periods at the latest run rate.
+    // Payroll: live batches and the calendar's later periods at the latest run rate. From approval
+    // (D4.3) only the unpaid obligations are forecast, so paid wages are never counted twice.
     const batches = await tx.payrollBatch.findMany({
-      where: { tenantId, projectId, status: { in: ["draft", "submitted"] } },
+      where: { tenantId, projectId, status: { not: "cancelled" } },
       orderBy: { periodStart: "desc" },
       select: {
         id: true,
@@ -319,14 +330,36 @@ export class CashFlowService {
         employerCostMinor: true,
       },
     });
-    const facts = batches.map((batch) => ({
-      id: batch.id,
-      periodStart: toCalendarDate(batch.periodStart),
-      payDate: toCalendarDate(batch.payDate),
-      amountMinor: minorOf(batch.grossMinor + batch.employerCostMinor),
-      status: batch.status as "draft" | "submitted",
-    }));
-    const runRate = facts.find((batch) => batch.status === "submitted")?.amountMinor ?? null;
+    const settlingIds = batches
+      .filter((batch) => (SETTLING_PAYROLL as readonly string[]).includes(batch.status))
+      .map((batch) => batch.id);
+    const owed = settlingIds.length
+      ? await tx.payrollObligation.groupBy({
+          by: ["batchId"],
+          where: { tenantId, batchId: { in: settlingIds }, status: "open" },
+          _sum: { amountMinor: true, paidMinor: true },
+        })
+      : [];
+    const facts = batches.map((batch) => {
+      const open = owed.find((row) => row.batchId === batch.id);
+      return {
+        id: batch.id,
+        periodStart: toCalendarDate(batch.periodStart),
+        payDate: toCalendarDate(batch.payDate),
+        amountMinor: minorOf(batch.grossMinor + batch.employerCostMinor),
+        status: batch.status as Exclude<PayrollBatchStatus, "cancelled">,
+        ...(settlingIds.includes(batch.id)
+          ? {
+              outstandingMinor: minorOf(
+                (open?._sum.amountMinor ?? 0n) - (open?._sum.paidMinor ?? 0n),
+              ),
+            }
+          : {}),
+      };
+    });
+    const runRate =
+      facts.find((batch) => (FROZEN_PAYROLL as readonly string[]).includes(batch.status))
+        ?.amountMinor ?? null;
     const calendar = await loadCalendar(tx, tenantId, projectId);
     for (const item of projectPayroll({
       calendar,

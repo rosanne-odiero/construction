@@ -60,7 +60,18 @@ validation before confirmation.
 - `POST /__mock/c2b` with
   `{"shortCode":"600966","amount":1500,"billRefNumber":"TEST-INV"}`: simulate a payment to
   previously registered C2B URLs. Amount is in whole shillings.
-- `POST /__mock/reset`: clear test state.
+- `POST /__mock/subscribers` with
+  `[{"msisdn":"0711000001","name":"Jane Wanjiku"},{"msisdn":"0711000002","scenario":"failure"}]`:
+  register test subscribers (loopback callers only; repeated numbers are replaced). B2C results
+  and Transaction Status answers report `ReceiverPartyPublicName` / `CreditPartyName` as
+  `"<MSISDN> - <NAME>"` (the name upper-cased, empty for a number nobody registered), so payroll
+  tests can produce name matches, mismatches and `unavailable` checks. A subscriber's `scenario`
+  applies to every B2C payment to that number and overrides the amount-coded one (a scenario
+  selected with `/__mock/scenario` still comes first), so one worker of a payroll can fail, get a
+  duplicate callback or lose the HTTP response while the others succeed.
+- `POST /__mock/balance` with `{"utility":1500}`: set the Utility Account balance (KES) that
+  Account Balance reports, e.g. to test an insufficient float (loopback callers only).
+- `POST /__mock/reset`: clear test state (requests, callbacks, transactions, subscribers).
 
 The API integration suite starts and closes its own mock on an ephemeral port:
 

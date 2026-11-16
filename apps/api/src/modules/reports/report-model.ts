@@ -81,6 +81,13 @@ export const quantity = (value: { toFixed(): string } | number | null): string |
 };
 export const fromDay = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
+/**
+ * A payroll batch status label from the report catalogue. The D4.3 states (reviewed, rejected,
+ * approved and the settlement states) fall back to their key until the catalogue names them.
+ */
+export const batchStatusLabel = (statuses: Readonly<Record<string, string>>, status: string) =>
+  statuses[status] ?? status.replace(/_/g, " ");
+
 /** 422 report-too-large: a builder found more rows than any report may hold. */
 export const tooLarge = (maxRows: number) =>
   reportProblem(

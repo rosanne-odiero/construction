@@ -15,11 +15,11 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
-import { navGroups } from "@/components/nav-config";
+import { visibleNavGroups } from "@/components/nav-config";
 import { labourers } from "@/mocks/labour";
 import { projects } from "@/mocks/projects";
 
-export function CommandMenu() {
+export function CommandMenu({ permissions = null }: { permissions?: readonly string[] | null }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const t = useTranslations("command");
@@ -62,7 +62,7 @@ export function CommandMenu() {
         <CommandList>
           <CommandEmpty>{t("empty")}</CommandEmpty>
           <CommandGroup heading={t("pages")}>
-            {navGroups
+            {visibleNavGroups(permissions)
               .flatMap((g) => g.items)
               .map((item) => (
                 <CommandItem key={item.key} onSelect={() => go(item.href)}>

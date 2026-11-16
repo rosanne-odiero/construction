@@ -35,6 +35,8 @@ export type OfficeAccount = {
   identifier: string;
   companyName: string;
   roleLabel: string;
+  /** The selected company's permissions (hide permission-gated navigation). */
+  permissions?: readonly string[];
 };
 
 export function TopBar({ account }: { account: OfficeAccount | null }) {
@@ -73,7 +75,7 @@ export function TopBar({ account }: { account: OfficeAccount | null }) {
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-5" />
       <div className="min-w-0 flex-1">
-        <CommandMenu />
+        <CommandMenu permissions={account?.permissions ?? null} />
       </div>
       <LanguageSwitcher className="hidden sm:flex" />
       <ThemeToggle />

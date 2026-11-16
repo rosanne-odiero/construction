@@ -8,9 +8,11 @@ export {
   type MockScenario,
 } from "./scenarios.js";
 export {
+  normaliseMsisdn,
   startMockDaraja,
   type MockDaraja,
   type MockDarajaOptions,
+  type MockSubscriber,
   type RecordedRequest,
   type SentCallback,
 } from "./server.js";

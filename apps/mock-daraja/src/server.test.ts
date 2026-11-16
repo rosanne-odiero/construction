@@ -8,7 +8,7 @@ import {
   startMockDaraja,
   type MockDaraja,
 } from "./index.js";
-import { loopbackCallbackTarget } from "./server.js";
+import { loopbackCallbackTarget, normaliseMsisdn } from "./server.js";
 
 describe("mock Daraja server", () => {
   let mock: MockDaraja;
@@ -201,5 +201,102 @@ describe("mock Daraja server", () => {
     expect(mock.callbacks.slice(before)).toEqual([
       expect.objectContaining({ url: "http://198.51.100.7/b2c", status: null, refused: true }),
     ]);
+  });
+  it("reports registered subscriber names and per-number scenarios on B2C results", async () => {
+    const admin = await fetch(`${mock.url}/__mock/subscribers`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([
+        { msisdn: "0711000001", name: "Jane Wanjiku" },
+        { msisdn: "+254 711 000 002", scenario: "failure" },
+      ]),
+    });
+    expect(admin.status).toBe(200);
+    expect(await admin.json()).toEqual({ subscribers: 2 });
+    const bad = await fetch(`${mock.url}/__mock/subscribers`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([{ msisdn: "12345" }]),
+    });
+    expect(bad.status).toBe(400);
+    expect(() =>
+      mock.setSubscribers([{ msisdn: "0711000003", scenario: "nope" as never }]),
+    ).toThrow(/scenario/);
+    const pay = async (id: string, partyB: string, amount: string) => {
+      const before = mock.callbacks.length;
+      const accepted = await post("/mpesa/b2c/v3/paymentrequest", {
+        OriginatorConversationID: id,
+        InitiatorName: "testapi",
+        SecurityCredential: credential("Safaricom999!*!"),
+        CommandID: "SalaryPayment",
+        Amount: amount,
+        PartyA: "600992",
+        PartyB: partyB,
+        Remarks: "Wages",
+        QueueTimeOutURL: `${receiverUrl}/timeout`,
+        ResultURL: `${receiverUrl}/b2c-${id}`,
+      });
+      expect(accepted.body["ResponseCode"]).toBe("0");
+      await mock.waitForCallbacks(before + 1);
+      const result = received.find((entry) => entry.path === `/b2c-${id}`)!.body as {
+        Result: {
+          ResultCode: number | string;
+          ResultParameters?: { ResultParameter: { Key: string; Value?: unknown }[] };
+        };
+      };
+      return {
+        code: String(result.Result.ResultCode),
+        name: result.Result.ResultParameters?.ResultParameter.find(
+          (entry) => entry.Key === "ReceiverPartyPublicName",
+        )?.Value,
+      };
+    };
+    expect(await pay("sub-1", "254711000001", "250")).toEqual({
+      code: "0",
+      name: "254711000001 - JANE WANJIKU",
+    });
+    // The subscriber's scenario overrides the amount; an unknown number has an empty name.
+    expect((await pay("sub-2", "254711000002", "250")).code).toBe("2040");
+    expect(await pay("sub-3", "254711000009", "250")).toEqual({
+      code: "0",
+      name: "254711000009 - ",
+    });
+    // An admin-selected next scenario still comes first.
+    mock.setNextScenario("failure");
+    expect((await pay("sub-4", "254711000001", "250")).code).toBe("2040");
+    expect(normaliseMsisdn("0711 000 001")).toBe("254711000001");
+    expect(normaliseMsisdn("254611000001")).toBeNull();
+  });
+
+  it("sets the utility balance reported by Account Balance", async () => {
+    const response = await fetch(`${mock.url}/__mock/balance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ utility: 1500 }),
+    });
+    expect(await response.json()).toEqual({ utility: 1500 });
+    const before = mock.callbacks.length;
+    await post("/mpesa/accountbalance/v1/query", {
+      Initiator: "testapi",
+      SecurityCredential: credential("Safaricom999!*!"),
+      CommandID: "AccountBalance",
+      PartyA: "600992",
+      IdentifierType: "4",
+      Remarks: "float",
+      QueueTimeOutURL: `${receiverUrl}/timeout`,
+      ResultURL: `${receiverUrl}/balance`,
+    });
+    await mock.waitForCallbacks(before + 1);
+    const answer = received.filter((entry) => entry.path === "/balance").at(-1)!.body as {
+      Result: { ResultParameters: { ResultParameter: { Key: string; Value?: unknown }[] } };
+    };
+    expect(
+      String(
+        answer.Result.ResultParameters.ResultParameter.find(
+          (entry) => entry.Key === "AccountBalance",
+        )?.Value,
+      ),
+    ).toContain("Utility Account|KES|1500.00|1500.00");
+    mock.setUtilityBalance(500_000);
   });
 });

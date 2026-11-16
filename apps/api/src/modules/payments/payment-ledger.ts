@@ -26,6 +26,8 @@ export type SettlementEvidence = {
   resultDesc: string | null;
   callbackId: string | null;
   completedAtRaw: string | null;
+  /** The receiver's name from a B2C result or status answer (D4.3 name check), if any. */
+  receiverName?: string | null;
 };
 
 const TRANSACTION_KIND: Record<string, ProviderTransactionKind> = {
@@ -404,6 +406,7 @@ export class PaymentLedger {
         request.purposeRef,
         "confirmed",
         evidence.receipt,
+        evidence.receiverName ?? null,
       );
     }
     return confirmed;
@@ -461,6 +464,7 @@ export class PaymentLedger {
     purposeRef: string | null,
     outcome: "confirmed" | "failed" | "reversed",
     receipt: string | null,
+    receiverName: string | null = null,
   ) {
     return this.outcomes.dispatch(tx, {
       tenantId: attempt.tenantId,
@@ -471,6 +475,7 @@ export class PaymentLedger {
       outcome,
       amountMinor: minor(attempt.amountMinor),
       receipt,
+      receiverName,
     });
   }
 }

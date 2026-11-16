@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import * as wire from "@pm-buddy/validation";
@@ -7,6 +6,7 @@ import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state
 import { loadLive, requireSession } from "@/lib/server-api";
 import { paymentRoute } from "@/lib/payments";
 import { PaymentConsole, type ConsoleData } from "./console";
+import { PaymentsNav } from "./payments-nav";
 
 export async function PaymentsPage({
   segments = [],
@@ -102,23 +102,10 @@ export async function PaymentsPage({
   return (
     <div className="min-w-0 space-y-6">
       <PageHeader title={t("title")} description={t("safety")} />
-      <nav aria-label={t("navigation")} className="flex flex-wrap gap-4 text-sm">
-        {(["overview", "requests", "callbacks", "cases", "settings", "new"] as const)
-          .filter(
-            (key) =>
-              key !== "new" || session.company.permissions.includes("payments.initiate_test"),
-          )
-          .map((key) => (
-            <Link
-              key={key}
-              href={key === "overview" ? "/payments" : `/payments/${key}`}
-              aria-current={route.kind === key ? "page" : undefined}
-              className="underline underline-offset-4"
-            >
-              {t(`nav.${key}`)}
-            </Link>
-          ))}
-      </nav>
+      <PaymentsNav
+        current={route.kind}
+        canTest={session.company.permissions.includes("payments.initiate_test")}
+      />
       <PaymentConsole
         key={href}
         data={data}

@@ -27,6 +27,7 @@ import { seedProcurement, type ProcurementSeedSummary } from "./demo-procurement
 import { LabourCrypto } from "../modules/labour/labour-support.js";
 import { seedAttendance, type AttendanceSeedSummary } from "./attendance-seed.js";
 import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
+import { seedPayouts, type PayoutsSeedSummary } from "./payouts-seed.js";
 import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
 import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
 import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
@@ -437,6 +438,7 @@ export type SeedSummary = {
   labour: LabourSeedSummary;
   attendance: AttendanceSeedSummary;
   payroll: PayrollSeedSummary;
+  payouts: PayoutsSeedSummary;
   procureToPay: ProcureToPaySeedSummary;
   stores: StoresSeedSummary;
   schedule: ScheduleSeedSummary;
@@ -634,6 +636,11 @@ export async function seedDemo(
     pmId: userOf("projectManager").id,
     agentId: userOf("siteAgent").id,
   });
+  // D4.3: the project manager checks the workers' IDs (the owner registered them), so the
+  // submitted batch can be reviewed by finance and approved by the owner.
+  const payouts = await seedPayouts(app, tenantId, {
+    verifierId: userOf("projectManager").id,
+  });
   const stores = await seedStores(app, tenantId, {
     ownerId: owner.id,
     projectManagerId: userOf("projectManager").id,
@@ -745,6 +752,7 @@ export async function seedDemo(
     labour,
     attendance,
     payroll,
+    payouts,
     procureToPay,
     stores,
     schedule,

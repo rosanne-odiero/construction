@@ -46,3 +46,14 @@ export function paymentRoute(segments: string[] = []) {
     };
   return null;
 }
+
+/**
+ * The payments area is company-wide: a company-wide member holding one of `any` (the console and
+ * reconciliation need payments.view; reviewers also see reconciliation).
+ */
+export function paymentsAllowed(
+  company: { tenantWide: boolean; permissions: readonly string[] },
+  any: readonly string[] = ["payments.view"],
+): boolean {
+  return company.tenantWide && company.permissions.some((permission) => any.includes(permission));
+}

@@ -35,6 +35,7 @@ import {
   sha256,
   versionConflict,
 } from "./payments-support.js";
+import { ensureDemoTariff } from "./tariffs.service.js";
 import { CertificateStore } from "./provider/security-credential.js";
 import { DarajaProvider } from "./provider/daraja-provider.js";
 
@@ -178,6 +179,8 @@ export class PaymentSettingsService {
         },
       });
       await this.createRoute(tx, access.tenantId, access.userId);
+      // D4.3: the DEMO charges tariff (CR-PMT-02) until the company adds its own.
+      await ensureDemoTariff(tx, access.tenantId);
       await this.ledger.event(tx, access.tenantId, {
         subjectType: "settings",
         subjectId: access.tenantId,

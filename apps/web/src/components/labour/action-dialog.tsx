@@ -32,6 +32,7 @@ export function ActionDialog({
   children,
   destructive,
   problemContext,
+  problem: describeProblem,
 }: {
   id: string;
   open: boolean;
@@ -44,9 +45,12 @@ export function ActionDialog({
   children: React.ReactNode;
   destructive?: boolean;
   problemContext?: "payroll";
+  /** Overrides the API problem text (e.g. payout refusals with their figures). */
+  problem?: (error: unknown) => string;
 }) {
   const t = useTranslations("labourLive.common");
-  const problem = useProblemMessage(problemContext);
+  const generic = useProblemMessage(problemContext);
+  const problem = describeProblem ?? generic;
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 

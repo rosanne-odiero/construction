@@ -129,6 +129,9 @@ export function toLineSummary(row: LineRow): PayrollLineSummary {
     statutoryWithheldMinor: money(row.statutoryWithheldMinor),
     advanceRecoveryMinor: money(row.advanceRecoveryMinor),
     netMinor: money(row.netMinor),
+    ...(money(row.broughtForwardMinor) > 0
+      ? { broughtForwardMinor: money(row.broughtForwardMinor) }
+      : {}),
     employerCostMinor: money(row.employerCostMinor),
     warnings: row.warnings as unknown as PayrollWarning[],
   };

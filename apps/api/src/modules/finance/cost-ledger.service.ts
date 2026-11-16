@@ -246,6 +246,48 @@ export class CostLedgerService {
         select: { id: true, number: true, subcontract: { select: { id: true, number: true } } },
       }),
     ]);
+    // D4.3 payroll entries open their batch (labelled with the batch reference).
+    const payrollLines = await tx.payrollLine.findMany({
+      where: {
+        tenantId: access.tenantId,
+        id: { in: rows.flatMap((row) => (row.payrollLineId ? [row.payrollLineId] : [])) },
+      },
+      select: { id: true, batchId: true },
+    });
+    const payrollPayouts = await tx.payrollPayout.findMany({
+      where: {
+        tenantId: access.tenantId,
+        id: { in: rows.flatMap((row) => (row.payrollPayoutId ? [row.payrollPayoutId] : [])) },
+      },
+      select: { id: true, batchId: true },
+    });
+    const payrollBatches = await tx.payrollBatch.findMany({
+      where: {
+        tenantId: access.tenantId,
+        id: {
+          in: [
+            ...new Set([...payrollLines, ...payrollPayouts].map((entry) => entry.batchId)),
+          ],
+        },
+      },
+      select: { id: true, projectId: true, periodStart: true },
+    });
+    const payrollDocument = (row: EntryRow) => {
+      const batchId =
+        row.source === "payroll_line"
+          ? payrollLines.find((entry) => entry.id === row.payrollLineId)?.batchId
+          : payrollPayouts.find((entry) => entry.id === row.payrollPayoutId)?.batchId;
+      const batch = payrollBatches.find((entry) => entry.id === batchId);
+      const project = projects.find((entry) => entry.id === batch?.projectId);
+      return {
+        kind: row.source as "payroll_line" | "payroll_payout",
+        id: batch?.id ?? row.payrollLineId ?? row.payrollPayoutId!,
+        label:
+          batch && project
+            ? `${project.code}-${toCalendarDate(batch.periodStart).replace(/-/g, "")}`
+            : "—",
+      };
+    };
     const certificateLabel = (row?: { number: number; certificateNumber: number | null }) =>
       row
         ? subcontractCertificateCode(
@@ -294,7 +336,9 @@ export class CostLedgerService {
               ? { kind: row.source, id: row.floatCountId!, label: label(counts, row.floatCountId!) }
               : row.source === "cost_journal"
                 ? { kind: row.source, id: row.journalId!, label: label(journals, row.journalId!) }
-                : subcontractDocument(row);
+                : row.source === "payroll_line" || row.source === "payroll_payout"
+                  ? payrollDocument(row)
+                  : subcontractDocument(row);
       return {
         id: row.id,
         project: projectRef(project),

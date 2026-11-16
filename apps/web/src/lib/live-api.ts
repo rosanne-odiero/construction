@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { authResponseSchema, csrfResponseSchema } from "@pm-buddy/validation";
-import { FoundationApiError, foundationRequest } from "./foundation-api";
+import { FoundationApiError, foundationRequest, parseProblem } from "./foundation-api";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -71,12 +71,14 @@ export async function liveRequest<T>(
 /**
  * Same-origin multipart upload of one file (field `file`, after any text `fields`) with the CSRF
  * token, one refresh on an expired access token, and the response parsed with the shared schema.
+ * `headers` (e.g. an Idempotency-Key) are sent on the retry too.
  */
 export async function liveUpload<T>(
   path: string,
   file: File,
   schema: z.ZodType<T>,
   fields: Record<string, string> = {},
+  headers: Record<string, string> = {},
 ): Promise<T> {
   const attempt = async (): Promise<T> => {
     const form = new FormData();
@@ -89,7 +91,7 @@ export async function liveUpload<T>(
         credentials: "same-origin",
         cache: "no-store",
         signal: AbortSignal.timeout(120_000),
-        headers: { Accept: "application/json", "X-CSRF-Token": await csrfToken() },
+        headers: { ...headers, Accept: "application/json", "X-CSRF-Token": await csrfToken() },
         body: form,
       });
     } catch {
@@ -97,13 +99,14 @@ export async function liveUpload<T>(
     }
     const body: unknown = await response.json().catch(() => undefined);
     if (!response.ok) {
-      const code =
-        typeof body === "object" &&
-        body !== null &&
-        typeof (body as { code?: unknown }).code === "string"
-          ? (body as { code: string }).code
-          : "requestFailed";
-      throw new FoundationApiError(response.status, code);
+      const problem = parseProblem(body);
+      throw new FoundationApiError(
+        response.status,
+        problem?.code ?? "requestFailed",
+        problem?.traceId,
+        problem?.match,
+        problem?.facts,
+      );
     }
     const parsed = schema.safeParse(body);
     if (!parsed.success) throw new FoundationApiError(response.status, "invalidResponse");

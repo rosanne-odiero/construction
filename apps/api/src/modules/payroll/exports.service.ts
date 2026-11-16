@@ -21,6 +21,7 @@ import { TenantScope } from "../identity/tenant-scope.service.js";
 import { LabourCrypto, type LabourerColumn } from "../labour/labour-support.js";
 import { toCalendarDate } from "../projects/project-mappers.js";
 import {
+  FROZEN_BATCH_STATUSES,
   PayrollAccess,
   money,
   payrollConflict,
@@ -231,7 +232,7 @@ export class PayrollExportsService {
 
   private async collect(tx: Tx, tenantId: string, month: string) {
     const batches = await tx.payrollBatch.findMany({
-      where: { tenantId, statutoryMonth: month, status: "submitted" },
+      where: { tenantId, statutoryMonth: month, status: { in: [...FROZEN_BATCH_STATUSES] } },
       include: { project: { select: { id: true, code: true, name: true } } },
       orderBy: [{ payDate: "asc" }, { submittedAt: "asc" }],
     });

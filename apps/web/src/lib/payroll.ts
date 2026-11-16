@@ -33,6 +33,12 @@ export const hours = (minutes: number) => formatDuration(minutes);
 export const batchTone: Record<PayrollBatchStatus, Tone> = {
   draft: "neutral",
   submitted: "info",
+  reviewed: "info",
+  rejected: "danger",
+  approved: "info",
+  disbursing: "warning",
+  partially_settled: "warning",
+  settled: "success",
   cancelled: "danger",
 };
 

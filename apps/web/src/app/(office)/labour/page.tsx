@@ -7,6 +7,7 @@ import {
   accreditationAlertsResponseSchema,
   gangsResponseSchema,
   labourerAttendanceResponseSchema,
+  labourerPayoutStatusResponseSchema,
   labourerResponseSchema,
   labourersResponseSchema,
   labourSetupResponseSchema,
@@ -91,6 +92,11 @@ export default async function LabourPage({
   const attendance =
     worker && detail?.ok
       ? await serverApi(`/attendance/labourers/${worker}/summary`, labourerAttendanceResponseSchema)
+      : null;
+  // The payout side of the record (D4.3) only for callers who may see it.
+  const payouts =
+    worker && detail?.ok
+      ? await serverApi(`/labour/labourers/${worker}/payout-status`, labourerPayoutStatusResponseSchema)
       : null;
   const t = await getTranslations("labourLive");
   const locale = await getLocale();
@@ -375,6 +381,7 @@ export default async function LabourPage({
             closeHref={closeHref}
             setup={setup.ok ? setup.data : null}
             attendance={attendance?.ok ? attendance.data : null}
+            payouts={payouts?.ok ? payouts.data : null}
           />
         ) : (
           <p role="alert" className="text-sm text-destructive">

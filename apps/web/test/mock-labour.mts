@@ -128,6 +128,11 @@ type MockLabourer = {
   version: number;
   createdAt: string;
   updatedAt: string;
+  /** D4.3: the payslip SMS language (absent = Kiswahili, the default). */
+  preferredLanguage?: "en" | "sw";
+  /** D4.3: set when the number changes (null for numbers older than D4.3). */
+  phoneChangedAt?: string | null;
+  phoneChangedBy?: { id: string; displayName: string } | null;
 };
 type MockGang = {
   id: string;
@@ -488,6 +493,7 @@ function detail(labour: LabourState, row: MockLabourer, ctx: LabourContext): Lab
       daysLeft: calendarDaysBetween(today, entry.expiresOn),
     })),
     consents: [...row.consents].reverse(),
+    preferredLanguage: row.preferredLanguage ?? "sw",
     doNotRehireDetail: {
       flagged: row.flag.flagged,
       setAt: row.flag.setAt,
@@ -881,6 +887,7 @@ export function handleLabour(
       version: 1,
       createdAt: now,
       updatedAt: now,
+      preferredLanguage: input.preferredLanguage,
     };
     labour.labourers.push(row);
     const warnings: LabourerWarning[] = [];
@@ -911,7 +918,12 @@ export function handleLabour(
         "rateBasis",
       ] as const)
         if (input[key] !== undefined) Object.assign(row, { [key]: input[key] });
-      if (input.phone !== undefined) row.phone = input.phone;
+      if (input.phone !== undefined && input.phone !== row.phone) {
+        row.phone = input.phone;
+        row.phoneChangedAt = new Date().toISOString();
+        row.phoneChangedBy = actor(ctx);
+      }
+      if (input.preferredLanguage !== undefined) row.preferredLanguage = input.preferredLanguage;
       return labourerReply(labour, ctx, row);
     }
     if (rest === "status" && method === "POST") {

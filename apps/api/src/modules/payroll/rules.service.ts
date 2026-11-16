@@ -27,6 +27,7 @@ import { fromCalendarDate } from "../projects/project-mappers.js";
 import { loadCalendar, loadPayrollSettings } from "./batch-builder.js";
 import { toMinimumWage, toRule } from "./payroll-mappers.js";
 import {
+  FROZEN_BATCH_STATUSES,
   PAYROLL_VIEW,
   PayrollAccess,
   PayrollCommands,
@@ -179,7 +180,7 @@ export class PayrollRulesService {
       orderBy: [{ kind: "asc" }, { effectiveFrom: "desc" }],
     });
     const submitted = await tx.payrollBatch.findMany({
-      where: { tenantId: access.tenantId, status: "submitted" },
+      where: { tenantId: access.tenantId, status: { in: [...FROZEN_BATCH_STATUSES] } },
       select: { ruleVersionIds: true },
     });
     const names = await displayNames(tx, [
@@ -368,7 +369,11 @@ export class PayrollRulesService {
         "A version of this rule already starts on that date; add one with another date.",
       );
     const closed = await tx.payrollBatch.count({
-      where: { tenantId, status: "submitted", payDate: { gte: fromCalendarDate(effectiveFrom) } },
+      where: {
+        tenantId,
+        status: { in: [...FROZEN_BATCH_STATUSES] },
+        payDate: { gte: fromCalendarDate(effectiveFrom) },
+      },
     });
     if (closed)
       throw payrollConflict(
@@ -391,7 +396,11 @@ export class PayrollRulesService {
     const row = rows.find((entry) => entry.id === ruleId)!;
     const names = await displayNames(tx, [row.createdBy, row.verifiedBy]);
     const submitted = await tx.payrollBatch.count({
-      where: { tenantId: access.tenantId, status: "submitted", ruleVersionIds: { has: ruleId } },
+      where: {
+        tenantId: access.tenantId,
+        status: { in: [...FROZEN_BATCH_STATUSES] },
+        ruleVersionIds: { has: ruleId },
+      },
     });
     return statutoryRuleResponseSchema.parse({
       rule: toRule(row, rows, nairobiDate(), names, submitted),

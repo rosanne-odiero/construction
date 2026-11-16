@@ -1,11 +1,20 @@
 import { getTranslations } from "next-intl/server";
-import { payrollSettingsResponseSchema } from "@pm-buddy/validation";
+import {
+  approvalLimitsResponseSchema,
+  payoutSettingsResponseSchema,
+  payrollSettingsResponseSchema,
+} from "@pm-buddy/validation";
 import { MINIMUM_WAGE_AREAS, PAY_FREQUENCIES } from "@pm-buddy/types";
 import { PayrollAction } from "@/components/payroll/payroll-action";
 import { PayrollShell } from "@/components/payroll/payroll-shell";
+import {
+  ApprovalLimitsPanel,
+  PayoutSettingsPanel,
+  WaiverPanel,
+} from "@/components/payroll/payout-settings";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { formatCalendarDate, formatKES } from "@/lib/format";
-import { loadLive, requireSession } from "@/lib/server-api";
+import { loadLive, requireSession, serverApi } from "@/lib/server-api";
 
 export default async function PayrollSettingsPage() {
   const path = "/payroll/settings";
@@ -14,6 +23,11 @@ export default async function PayrollSettingsPage() {
   if (!result.ok)
     return result.status === 403 ? <LiveForbidden /> : <LiveUnavailable retryHref={path} />;
   const { settings, calendars, canConfigure } = result.data;
+  // D4.3: payout settings, the waiver and approval limits, for those who may see them.
+  const [payouts, limits] = await Promise.all([
+    serverApi("/payroll/payout-settings", payoutSettingsResponseSchema),
+    serverApi("/payroll/approval-limits", approvalLimitsResponseSchema),
+  ]);
   const t = await getTranslations("payrollLive");
   return (
     <PayrollShell title={t("settings")}>
@@ -108,6 +122,13 @@ export default async function PayrollSettingsPage() {
           ) : null}
         </section>
       ))}
+      {payouts.ok ? (
+        <>
+          <WaiverPanel key={`waiver-${payouts.data.settings.version}`} value={payouts.data} />
+          <PayoutSettingsPanel value={payouts.data} />
+        </>
+      ) : null}
+      {limits.ok ? <ApprovalLimitsPanel key={limits.data.version} value={limits.data} /> : null}
     </PayrollShell>
   );
 }

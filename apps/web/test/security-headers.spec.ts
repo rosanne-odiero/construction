@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { RUIRU_ID, signInAs } from "./live-helpers";
 import { PAYMENT_REQUEST_ID } from "./mock-payments.mts";
 import { PAYROLL_BATCH_ID } from "./mock-payroll.mts";
+import { HISTORY_BATCH_ID, PAYOUT_BATCH_ID } from "./mock-payouts.mts";
 
 /**
  * D9.1 browser security (ASVS 5.0.0 V3.4): every page is served with the nonce-based CSP and the
@@ -99,7 +100,22 @@ const pages: { name: string; persona?: "owner" | "client" | "supplier"; path: st
     persona: "owner",
     path: "/payroll/exports?month=2026-11",
   },
+  { name: "payroll approval", persona: "owner", path: `/payroll/batches/${PAYOUT_BATCH_ID}` },
+  {
+    name: "payroll payouts (live statuses)",
+    persona: "owner",
+    path: `/payroll/batches/${HISTORY_BATCH_ID}/payouts`,
+  },
+  { name: "payout settings and limits", persona: "owner", path: "/payroll/settings" },
+  {
+    name: "worker payout record",
+    persona: "owner",
+    path: "/labour?worker=42000000-0000-4000-8000-000000000001",
+  },
   { name: "payments console", persona: "owner", path: "/payments" },
+  { name: "M-Pesa reconciliation", persona: "owner", path: "/payments/reconciliation" },
+  { name: "M-Pesa statements", persona: "owner", path: "/payments/statements" },
+  { name: "charges tariff", persona: "owner", path: "/payments/tariffs" },
   {
     name: "payment request (timeline)",
     persona: "owner",

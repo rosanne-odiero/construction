@@ -16,6 +16,7 @@ import {
 } from "@pm-buddy/domain";
 import {
   ACCREDITATION_CATEGORIES,
+  DEFAULT_LABOURER_LANGUAGE,
   ENGAGEMENT_TYPES,
   GENDERS,
   ID_DOCUMENT_TYPES,
@@ -70,6 +71,8 @@ type Values = {
   ncaCategory: (typeof ACCREDITATION_CATEGORIES)[number];
   ncaCard: string;
   ncaExpires: string;
+  /** The language of the worker's payslip and notice SMS (D4.3). */
+  preferredLanguage: Locale;
 };
 type FieldName = keyof Values;
 type Invalid =
@@ -151,6 +154,7 @@ export function RegisterForm({
     ncaCategory: "nca_skilled_worker",
     ncaCard: "",
     ncaExpires: "",
+    preferredLanguage: DEFAULT_LABOURER_LANGUAGE,
   });
   const [step, setStep] = useState<"consent" | "details">("consent");
   const [consent, setConsent] = useConsentCapture(initialLanguage);
@@ -230,6 +234,7 @@ export function RegisterForm({
         ? { category: values.ncaCategory, cardNumber: text(values.ncaCard), expiresOn: ncaExpires }
         : undefined,
       doNotRehireOverride: overrideReason ? { reason: overrideReason } : undefined,
+      preferredLanguage: values.preferredLanguage,
     };
     const parsed = registerLabourerRequestSchema.safeParse(body);
     if (!parsed.success) {
@@ -539,6 +544,14 @@ export function RegisterForm({
             hint: t("phoneHint"),
             maxLength: 20,
           })}
+          {select(
+            "preferredLanguage",
+            tPanel("fields.preferredLanguage"),
+            (["sw", "en"] as const).map((value) => ({
+              value,
+              label: tPanel(`languages.${value}`),
+            })),
+          )}
           {field("kraPin", { hint: t("kraPinHint"), maxLength: 20 })}
           {field("nssfNumber", { maxLength: 40 })}
           {field("shaNumber", { maxLength: 40 })}

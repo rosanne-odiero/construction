@@ -26,12 +26,13 @@ export default async function OfficeLayout({ children }: { children: React.React
       identifier: user.identifier,
       companyName: company.name,
       roleLabel: company.roleName ?? (system.success ? t(`roles.${system.data}`) : t("customRole")),
+      permissions: company.permissions,
     };
   }
 
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
-      <AppSidebar companyName={account?.companyName} />
+      <AppSidebar companyName={account?.companyName} permissions={account?.permissions ?? null} />
       <SidebarInset className="min-w-0">
         <PrototypeOnly>
           <PrototypeBanner />

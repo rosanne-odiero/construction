@@ -311,6 +311,21 @@ import {
   runDueResponseSchema,
   type AuthResponse as SharedAuthResponse,
   type PasskeyRegistrationResponse,
+  approvalLimitsResponseSchema,
+  approveBatchResponseSchema,
+  batchApprovalResponseSchema,
+  batchDecisionResponseSchema,
+  batchPayoutsResponseSchema,
+  floatCheckResponseSchema,
+  labourerPayoutStatusResponseSchema,
+  manualPaymentResponseSchema,
+  obligationResponseSchema,
+  paymentEvidenceResponseSchema,
+  payoutFlagResponseSchema,
+  payoutSettingsResponseSchema,
+  payrollNotificationResponseSchema,
+  startPayoutsResponseSchema,
+  tariffsResponseSchema,
 } from "@pm-buddy/validation";
 import type { CeremonyOverrides, SoftwareAuthenticator } from "./webauthn.js";
 
@@ -477,6 +492,7 @@ function paymentsContract(method: string, path: string) {
   if (/^payments\/callbacks\/[^/]+(\/review)?$/.test(path)) return paymentCallbackResponseSchema;
   if (path === "payments/cases") return reconciliationCasesResponseSchema;
   if (/^payments\/cases\/[^/]+(\/resolve)?$/.test(path)) return reconciliationCaseResponseSchema;
+  if (path === "payments/tariffs") return tariffsResponseSchema;
   return null;
 }
 
@@ -826,6 +842,29 @@ function procurementContract(method: string, path: string) {
 function payrollContract(method: string, path: string) {
   if (!path.startsWith("payroll/")) return null;
   const get = method === "get";
+  // D4.3 approvals and payouts.
+  if (/^payroll\/batches\/[^/]+\/approval$/.test(path)) return batchApprovalResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/(review|reject|reopen)$/.test(path))
+    return batchDecisionResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/approve$/.test(path)) return approveBatchResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/payouts$/.test(path))
+    return get ? batchPayoutsResponseSchema : startPayoutsResponseSchema;
+  if (/^payroll\/batches\/[^/]+\/float-check$/.test(path)) return floatCheckResponseSchema;
+  if (/^payroll\/obligations\/[^/]+\/manual-payments$/.test(path))
+    return manualPaymentResponseSchema;
+  if (/^payroll\/manual-payments\/[^/]+\/(confirm|reject)$/.test(path))
+    return manualPaymentResponseSchema;
+  if (/^payroll\/manual-payments\/[^/]+\/evidence$/.test(path))
+    return paymentEvidenceResponseSchema;
+  if (/^payroll\/obligations\/[^/]+\/destination-approval$/.test(path))
+    return obligationResponseSchema;
+  if (/^payroll\/flags\/[^/]+\/clear$/.test(path)) return payoutFlagResponseSchema;
+  if (/^payroll\/notifications\/[^/]+\/resend$/.test(path))
+    return payrollNotificationResponseSchema;
+  if (path === "payroll/payout-settings" || path === "payroll/payout-settings/waiver")
+    return payoutSettingsResponseSchema;
+  if (path === "payroll/approval-limits") return approvalLimitsResponseSchema;
+  if (/^payroll\/payout-evidence\/[^/]+$/.test(path)) return z.unknown();
   if (path === "payroll/overview") return payrollOverviewResponseSchema;
   if (path === "payroll/settings") return payrollSettingsResponseSchema;
   if (/^payroll\/projects\/[^/]+\/calendar$/.test(path)) return payCalendarResponseSchema;
@@ -913,6 +952,14 @@ function labourContract(method: string, path: string) {
   if (path === "labour/labourers/lookup") return labourersResponseSchema;
   if (/^labour\/labourers\/[^/]+\/reveal$/.test(path)) return revealResponseSchema;
   if (/^labour\/labourers\/[^/]+\/rate$/.test(path)) return resolvedRateResponseSchema;
+  // D4.3: the payout side of a worker record.
+  if (
+    /^labour\/labourers\/[^/]+\/(payout-status|payout-verifications|payout-holds|change-hold-override)$/.test(
+      path,
+    ) ||
+    /^labour\/payout-holds\/[^/]+\/release$/.test(path)
+  )
+    return labourerPayoutStatusResponseSchema;
   if (/^labour\/labourers\/[^/]+(\/.*)?$/.test(path)) return labourerResponseSchema;
   if (path === "labour/accreditation-alerts") return accreditationAlertsResponseSchema;
   if (path === "labour/views")

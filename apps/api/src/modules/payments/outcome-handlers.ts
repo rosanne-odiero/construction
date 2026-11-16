@@ -17,6 +17,12 @@ export type PaymentOutcome = {
   outcome: "confirmed" | "failed" | "reversed";
   amountMinor: number;
   receipt: string | null;
+  /**
+   * D4.3: the receiver's registered name from a confirmed B2C result (`ReceiverPartyPublicName`, or
+   * the `CreditPartyName` of a Transaction Status answer), the part after " - "; null or absent
+   * when the provider gave none. Personal data: never logged or stored unsealed.
+   */
+  receiverName?: string | null;
 };
 
 export interface PaymentOutcomeHandler {

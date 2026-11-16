@@ -7,7 +7,6 @@ import {
   REPORT_IDS,
   REPORT_LIMITS,
   type Locale,
-  type PayrollBatchStatus,
   type ReportId,
 } from "@pm-buddy/types";
 import {
@@ -33,7 +32,7 @@ import {
   totalRows,
   XLSX_CONTENT_TYPE,
 } from "./report-renderer.js";
-import { fill, tooLarge, type ResolvedParams } from "./report-model.js";
+import { batchStatusLabel, fill, tooLarge, type ResolvedParams } from "./report-model.js";
 import {
   reportProblem,
   ReportsAccess,
@@ -457,8 +456,7 @@ export class ReportsService {
           from: iso(batch.periodStart),
           to: iso(batch.periodEnd),
           payDate: iso(batch.payDate),
-          status:
-            messages(locale).reportExport.payroll.statuses[batch.status as PayrollBatchStatus],
+          status: batchStatusLabel(messages(locale).reportExport.payroll.statuses, batch.status),
         }),
       });
     }

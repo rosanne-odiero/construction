@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { formatCalendarDate, formatKES } from "@/lib/format";
 import { loadLive, requireSession } from "@/lib/server-api";
+import { isSettlementStatus } from "@/lib/payouts";
 
 export default async function PayslipPage({
   params,
@@ -45,7 +46,16 @@ export default async function PayslipPage({
         {formatCalendarDate(batch.periodStart)} – {formatCalendarDate(batch.periodEnd)} ·{" "}
         {t(`values.${batch.status}`)}
       </p>
-      <p role="note">{t("notPaid")}</p>
+      {isSettlementStatus(batch.status) ? (
+        <p role="note">
+          {t("approvedForPayment")}{" "}
+          <Link className="underline" href={`/payroll/batches/${batchId}/payouts`}>
+            {t("seePayouts")}
+          </Link>
+        </p>
+      ) : (
+        <p role="note">{t("notPaid")}</p>
+      )}
       {batch.unverifiedRules ? <p role="note">{t("unverified")}</p> : null}
       <div className="overflow-x-auto">
         <Table aria-label={t("earnings")}>
@@ -113,9 +123,26 @@ export default async function PayslipPage({
           {t("outstanding")}: {formatKES(line.advanceBalanceMinor)}
         </p>
       </section>
+      {line.broughtForwardMinor ? (
+        <p>
+          {t("broughtForward")}: {formatKES(line.broughtForwardMinor)}
+          <span className="block text-sm text-muted-foreground">{t("broughtForwardHint")}</span>
+        </p>
+      ) : null}
       <p className="text-xl font-semibold">
         {t("netMinor")}: {formatKES(line.netMinor)}
       </p>
+      {line.carryForwardMinor !== undefined ? (
+        <p>
+          {t("paidInShillings", { amount: formatKES(line.netMinor - line.carryForwardMinor) })}
+          {line.carryForwardMinor > 0 ? (
+            <>
+              {" · "}
+              {t("carriedForward", { amount: formatKES(line.carryForwardMinor) })}
+            </>
+          ) : null}
+        </p>
+      ) : null}
       <section className="space-y-2">
         <h2 className="font-semibold">{t("employerCostMinor")}</h2>
         {line.employerCosts.map((item) => (

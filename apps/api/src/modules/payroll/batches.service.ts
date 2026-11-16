@@ -1,13 +1,20 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import {
   addCalendarDays,
+  batchCommand,
   isPeriodStart,
   nairobiDate,
   payPeriodFor,
   payPeriodsBetween,
   normaliseDecimal,
 } from "@pm-buddy/domain";
-import type { DayType, EmployeeStatutory, EmployerCost, Permission } from "@pm-buddy/types";
+import type {
+  DayType,
+  EmployeeStatutory,
+  EmployerCost,
+  PayrollBatchStatus,
+  Permission,
+} from "@pm-buddy/types";
 import {
   batchDetailResponseSchema,
   batchSnapshotResponseSchema,
@@ -35,11 +42,14 @@ import {
   type BatchTarget,
   type ProjectCalendar,
 } from "./batch-builder.js";
+import { recordDecision } from "./payroll-decisions.js";
 import { batchNames, toBatch, toLineSummary, type BatchRow } from "./payroll-mappers.js";
 import {
+  FROZEN_BATCH_STATUSES,
   PAYROLL_VIEW,
   PayrollAccess,
   PayrollCommands,
+  SETTLEMENT_BATCH_STATUSES,
   money,
   payrollBadRequest,
   payrollConflict,
@@ -56,7 +66,8 @@ const LOOKBACK_DAYS = { daily: 14, weekly: 63, fortnightly: 112, monthly: 120 } 
  * (recalculated freely, expected versions), submission into an immutable snapshot bound to its
  * digest, cancellation, payslips and the snapshot integrity check. Production refuses to submit a
  * batch computed with unverified rules (COMPLIANCE-REVIEW); development marks it "not for filing".
- * Review, approval and payout are D4.3.
+ * Review, approval and payout are D4.3 (modules/payouts); submissions and cancellations are recorded
+ * in the batch decision log too.
  */
 @Injectable()
 export class PayrollBatchesService {
@@ -342,6 +353,16 @@ export class PayrollBatchesService {
           data: { status: "submitted", submittedBy: access.userId, version: { increment: 1 } },
         });
         if (!updated.count) throw versionConflict();
+        await recordDecision(tx, {
+          tenantId: access.tenantId,
+          projectId: row.projectId,
+          batchId,
+          action: "submit",
+          actorId: access.userId,
+          batchVersion: row.version + 1,
+          digest: row.digest,
+          netMinor: money(row.netMinor),
+        });
         await this.commands.audit(scope, "payroll.batch_submitted", batchId, {
           projectId: row.projectId,
           lines: row.lineCount,
@@ -378,8 +399,15 @@ export class PayrollBatchesService {
         const row = await this.batch(tx, access.tenantId, batchId);
         await this.access.project(scope, row.projectId, ["payroll.prepare"]);
         if (row.version !== input.version) throw versionConflict();
-        if (row.status === "cancelled")
-          throw payrollConflict("invalid-transition", "This batch is already cancelled.");
+        // D4.3: draft, submitted and reviewed batches can be cancelled; a rejected one is reopened
+        // first, an approved one never (its obligations are owed).
+        if (!batchCommand(row.status as PayrollBatchStatus, "cancel").ok)
+          throw payrollConflict(
+            "invalid-transition",
+            row.status === "cancelled"
+              ? "This batch is already cancelled."
+              : "Only a draft, submitted or reviewed batch can be cancelled.",
+          );
         const updated = await tx.payrollBatch.updateMany({
           where: { tenantId: access.tenantId, id: batchId, version: row.version },
           data: {
@@ -390,7 +418,18 @@ export class PayrollBatchesService {
           },
         });
         if (!updated.count) throw versionConflict();
-        // Releasing the sources and day claims lets a new batch pay them (the marker rule).
+        await recordDecision(tx, {
+          tenantId: access.tenantId,
+          projectId: row.projectId,
+          batchId,
+          action: "cancel",
+          actorId: access.userId,
+          batchVersion: row.version + 1,
+          digest: row.digest,
+          netMinor: money(row.netMinor),
+          note: input.reason,
+        });
+        // Releasing the sources (carry-forwards included) and day claims lets a new batch pay them.
         await tx.payrollConsumption.updateMany({
           where: { tenantId: access.tenantId, batchId, activeMarker: "active" },
           data: { activeMarker: null },
@@ -451,7 +490,7 @@ export class PayrollBatchesService {
             where: {
               tenantId: access.tenantId,
               id: { in: [...new Set(recoveries.map((row) => row.batchId))] },
-              status: "submitted",
+              status: { in: [...FROZEN_BATCH_STATUSES] },
             },
             select: { id: true },
           })
@@ -465,6 +504,13 @@ export class PayrollBatchesService {
           .reduce((total, entry) => total + money(entry.amountMinor), 0);
         return sum + money(advance.amountMinor) - recovered;
       }, 0);
+      // D4.3 (D-167): once approved, the cents of the net carried to the worker's next payroll.
+      const approved = (SETTLEMENT_BATCH_STATUSES as readonly string[]).includes(batch.status);
+      const carried = approved
+        ? await tx.payrollCarryForward.findFirst({
+            where: { tenantId: access.tenantId, batchId, lineId },
+          })
+        : null;
       const mtd = line.monthToDate as unknown as {
         statutoryMonth: string;
         priorBatchIds: string[];
@@ -534,6 +580,7 @@ export class PayrollBatchesService {
             monthly: mtd.monthly.employee,
           },
           advanceBalanceMinor,
+          ...(approved ? { carryForwardMinor: carried ? money(carried.amountMinor) : 0 } : {}),
         },
       });
     });
@@ -641,7 +688,7 @@ export class PayrollBatchesService {
       digest: null,
       verified: null,
     };
-    if (row.status === "submitted") {
+    if ([...FROZEN_BATCH_STATUSES, "rejected"].includes(row.status)) {
       const recomputed = await this.builder.storedSnapshot(tx, access.tenantId, row.id);
       snapshot = { digest: row.digest, verified: recomputed.digest === row.digest };
     }
@@ -689,7 +736,9 @@ export class PayrollBatchesService {
       permissions: {
         canRecalculate: prepare && row.status === "draft",
         canSubmit: prepare && row.status === "draft",
-        canCancel: effective.has("payroll.prepare") && row.status !== "cancelled",
+        canCancel:
+          effective.has("payroll.prepare") &&
+          batchCommand(row.status as PayrollBatchStatus, "cancel").ok,
       },
     });
   }

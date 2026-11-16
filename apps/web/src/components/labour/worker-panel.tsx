@@ -22,6 +22,7 @@ import {
   revealResponseSchema,
   type LabourerAttendanceResponse,
   type LabourerDetail,
+  type LabourerPayoutStatusResponse,
   type LabourSetupResponse,
   type RevealResponse,
 } from "@pm-buddy/validation";
@@ -44,6 +45,7 @@ import { calendarInput, parseCalendarInput } from "@/lib/project-input";
 import { formatCalendarDate, formatDateTime } from "@/lib/format";
 import { liveRequest } from "@/lib/live-api";
 import { ActionDialog, selectClass } from "./action-dialog";
+import { WorkerPayouts } from "./worker-payouts";
 import {
   AccreditationBadge,
   ConsentBadge,
@@ -72,12 +74,15 @@ export function WorkerPanel({
   closeHref,
   setup,
   attendance = null,
+  payouts = null,
 }: {
   labourer: LabourerDetail;
   closeHref: string;
   setup: LabourSetupResponse | null;
   /** Attendance summary (D3.3); null when the caller cannot view attendance. */
   attendance?: LabourerAttendanceResponse | null;
+  /** The payout side of the record (D4.3); null when the caller cannot view it. */
+  payouts?: LabourerPayoutStatusResponse | null;
 }) {
   const t = useTranslations("labourLive.panel");
   const tLabour = useTranslations("labourLive");
@@ -237,6 +242,8 @@ export function WorkerPanel({
               <dd>{t(`rateBases.${labourer.rateBasis}`)}</dd>
               <dt className="text-muted-foreground">{t("fields.registeredOn")}</dt>
               <dd className="tabular-nums">{formatCalendarDate(labourer.registeredOn)}</dd>
+              <dt className="text-muted-foreground">{t("fields.preferredLanguage")}</dt>
+              <dd>{t(`languages.${labourer.preferredLanguage ?? "sw"}`)}</dd>
             </dl>
           </section>
 
@@ -311,6 +318,13 @@ export function WorkerPanel({
             <>
               <Separator />
               <WorkerAttendance summary={attendance} />
+            </>
+          ) : null}
+
+          {payouts ? (
+            <>
+              <Separator />
+              <WorkerPayouts status={payouts} />
             </>
           ) : null}
 
@@ -907,6 +921,8 @@ function EditDialog({
   const [engagementType, setEngagementType] = useState(labourer.engagementType);
   const [rateBasis, setRateBasis] = useState(labourer.rateBasis);
   const [phone, setPhone] = useState("");
+  const currentLanguage = labourer.preferredLanguage ?? "sw";
+  const [language, setLanguage] = useState(currentLanguage);
   const changes = {
     ...(fullName.trim() !== labourer.fullName ? { fullName: fullName.trim() } : {}),
     ...(tradeId !== labourer.trade?.id ? { tradeId } : {}),
@@ -914,6 +930,7 @@ function EditDialog({
     ...(engagementType !== labourer.engagementType ? { engagementType } : {}),
     ...(rateBasis !== labourer.rateBasis ? { rateBasis } : {}),
     ...(phone.trim() ? { phone: phone.trim() } : {}),
+    ...(language !== currentLanguage ? { preferredLanguage: language } : {}),
   };
   return (
     <ActionDialog
@@ -1010,6 +1027,23 @@ function EditDialog({
           aria-describedby="edit-phone-hint"
         />
         <FieldDescription id="edit-phone-hint">{t("edit.newPhoneHint")}</FieldDescription>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="edit-language">{t("fields.preferredLanguage")}</FieldLabel>
+        <select
+          id="edit-language"
+          className={selectClass}
+          value={language}
+          onChange={(event) => setLanguage(event.target.value as typeof language)}
+          aria-describedby="edit-language-hint"
+        >
+          {(["sw", "en"] as const).map((value) => (
+            <option key={value} value={value}>
+              {t(`languages.${value}`)}
+            </option>
+          ))}
+        </select>
+        <FieldDescription id="edit-language-hint">{t("edit.languageHint")}</FieldDescription>
       </Field>
     </ActionDialog>
   );

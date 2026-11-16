@@ -27,6 +27,7 @@ import { fromCalendarDate, toCalendarDate } from "../projects/project-mappers.js
 import { loadPayrollSettings } from "./batch-builder.js";
 import { actor, iso, optionalActor } from "./payroll-mappers.js";
 import {
+  FROZEN_BATCH_STATUSES,
   PayrollAccess,
   PayrollCommands,
   inProjects,
@@ -37,6 +38,8 @@ import {
   samePerson,
   versionConflict,
 } from "./payroll-support.js";
+
+const frozen = (status: string) => (FROZEN_BATCH_STATUSES as readonly string[]).includes(status);
 
 type Tx = Prisma.TransactionClient;
 type AdvanceRow = Prisma.SalaryAdvanceGetPayload<object>;
@@ -349,7 +352,7 @@ export class AdvancesService {
         sum +
         money(row.amountMinor) -
         recoveries
-          .filter((entry) => entry.advanceId === row.id && entry.batch.status === "submitted")
+          .filter((entry) => entry.advanceId === row.id && frozen(entry.batch.status))
           .reduce((total, entry) => total + money(entry.amountMinor), 0),
       0,
     );
@@ -419,7 +422,7 @@ export class AdvancesService {
     return rows.map((row) => {
       const recoveries = allRecoveries.filter((entry) => entry.advanceId === row.id);
       const recovered = recoveries
-        .filter((entry) => entry.batch.status === "submitted")
+        .filter((entry) => frozen(entry.batch.status))
         .reduce((sum, entry) => sum + money(entry.amountMinor), 0);
       const amount = money(row.amountMinor);
       const status = row.status as AdvanceStatus;

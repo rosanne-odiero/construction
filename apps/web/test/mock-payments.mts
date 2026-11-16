@@ -142,11 +142,135 @@ function initial() {
     requests: [request],
     callback,
     reconciliation,
+    /** D4.3: cases opened for uncertain payroll payouts (see registerPayoutRequest). */
+    extraCases: [] as wire.ReconciliationCase[],
     settings,
     timeline,
     queries: [] as wire.ProviderQuery[],
     keys: new Map<string, wire.PaymentRequestSummary>(),
   };
+}
+
+function fixtureFor(state: object) {
+  let s = fixtures.get(state);
+  if (!s) {
+    s = initial();
+    fixtures.set(state, s);
+  }
+  return s;
+}
+
+/**
+ * D4.3: a payroll payout's B2C payment request, so the payments console shows it. The payouts mock
+ * moves it with `updatePayoutRequest`; an uncertain outcome opens a case like D4.2 does.
+ */
+export function registerPayoutRequest(
+  state: object,
+  input: {
+    id: string;
+    reference: string;
+    amountMinor: number;
+    counterparty: string;
+    projectId: string;
+    createdBy: { id: string; displayName: string };
+    createdAt: string;
+  },
+): void {
+  const s = fixtureFor(state);
+  s.requests.push({
+    id: input.id,
+    reference: input.reference,
+    kind: "b2c",
+    direction: "out",
+    purpose: "payroll_obligation",
+    status: "in_progress",
+    amountMinor: input.amountMinor,
+    currency: "KES",
+    counterparty: input.counterparty,
+    accountReference: null,
+    description: "Payroll",
+    environment: "mock",
+    projectId: input.projectId,
+    createdAt: input.createdAt,
+    createdBy: input.createdBy,
+    latestAttempt: {
+      ...s.requests[0]!.latestAttempt!,
+      id: randomUUID(),
+      kind: "b2c",
+      direction: "out",
+      status: "queued",
+      reason: "queued",
+      amountMinor: input.amountMinor,
+      shortcode: "600000",
+      providerIds: {
+        merchantRequestId: null,
+        checkoutRequestId: null,
+        originatorConversationId: null,
+        conversationId: null,
+      },
+      createdAt: input.createdAt,
+      submittedAt: null,
+      finalizedAt: null,
+    },
+    version: 1,
+  });
+}
+
+/** Moves a registered payroll request; returns the case opened for an uncertain outcome. */
+export function updatePayoutRequest(
+  state: object,
+  id: string,
+  update: {
+    request: wire.PaymentRequestSummary["status"];
+    attempt: wire.PaymentAttempt["status"];
+    receipt?: string | null;
+    resultCode?: string | null;
+    resultDesc?: string | null;
+  },
+): string | null {
+  const s = fixtureFor(state);
+  const request = s.requests.find((entry) => entry.id === id);
+  const attempt = request?.latestAttempt;
+  if (!request || !attempt) return null;
+  const now = new Date().toISOString();
+  request.status = update.request;
+  request.version += 1;
+  const reasons: Partial<Record<wire.PaymentAttempt["status"], wire.PaymentAttempt["reason"]>> = {
+    unknown: "lost_response",
+    confirmed: "provider_success",
+    failed: "provider_failure",
+    pending: "accepted",
+    submitting: "submission_started",
+  };
+  request.latestAttempt = {
+    ...attempt,
+    status: update.attempt,
+    reason: reasons[update.attempt] ?? "queued",
+    receipt: update.receipt ?? attempt.receipt,
+    resultCode: update.resultCode ?? attempt.resultCode,
+    resultDesc: update.resultDesc ?? attempt.resultDesc,
+    submittedAt: attempt.submittedAt ?? now,
+    finalizedAt: ["confirmed", "failed"].includes(update.attempt) ? now : null,
+  };
+  if (update.request !== "uncertain") return null;
+  const existing = s.extraCases.find((entry) => entry.requestId === id);
+  if (existing) return existing.id;
+  const opened: wire.ReconciliationCase = {
+    ...s.reconciliation,
+    id: randomUUID(),
+    openedAt: now,
+    requestId: id,
+    attemptId: attempt.id,
+    amountMinor: request.amountMinor,
+    status: "open",
+    resolution: null,
+    resolutionNote: null,
+    resolvedAt: null,
+    resolvedBy: null,
+    version: 1,
+  };
+  s.extraCases.push(opened);
+  return opened.id;
 }
 
 type Deps = {
@@ -176,19 +300,18 @@ export function handlePayments(
       ? "payments.manage_credentials"
       : "payments.view",
   );
-  let s = fixtures.get(state);
-  if (!s) {
-    s = initial();
-    fixtures.set(state, s);
-  }
+  const s = fixtureFor(state);
   const reply = (schema: z.ZodType, result: unknown): Reply => ({ schema, body: result });
   const detail = (request: wire.PaymentRequestSummary): wire.PaymentRequestDetailResponse => ({
     request,
     attempts: request.latestAttempt ? [request.latestAttempt] : [],
-    timeline: s!.timeline,
+    timeline: s.timeline,
     callbacks: [],
-    cases: request.id === PAYMENT_REQUEST_ID ? [s!.reconciliation] : [],
-    queries: s!.queries,
+    cases: [
+      ...(request.id === PAYMENT_REQUEST_ID ? [s.reconciliation] : []),
+      ...s.extraCases.filter((entry) => entry.requestId === request.id),
+    ],
+    queries: s.queries,
     transactions: [],
     canReverse: false,
     canQueryStatus: d.permissions.includes("payments.review"),
@@ -196,7 +319,7 @@ export function handlePayments(
   const settings = () =>
     reply(wire.paymentSettingsResponseSchema, {
       configured: true,
-      settings: s!.settings,
+      settings: s.settings,
       canManage: d.permissions.includes("payments.manage_credentials"),
       canPause: d.permissions.includes("payments.review"),
     });
@@ -327,11 +450,20 @@ export function handlePayments(
       callback: s.callback,
       canReview: d.permissions.includes("payments.review") && s.callback.status === "quarantined",
     });
-  if (path === "/payments/cases")
+  if (path === "/payments/cases") {
+    const cases = [s.reconciliation, ...s.extraCases];
     return reply(wire.reconciliationCasesResponseSchema, {
-      cases: page([s.reconciliation], (c) => c.status),
-      total: 1,
-      open: s.reconciliation.status === "open" ? 1 : 0,
+      cases: page(cases, (c) => c.status),
+      total: cases.filter((c) => !query.get("status") || c.status === query.get("status")).length,
+      open: cases.filter((c) => c.status === "open").length,
+    });
+  }
+  const extraCase = /^\/payments\/cases\/([^/]+)$/.exec(path);
+  const opened = extraCase ? s.extraCases.find((entry) => entry.id === extraCase[1]) : undefined;
+  if (opened && method === "GET")
+    return reply(wire.reconciliationCaseResponseSchema, {
+      case: { ...opened, canResolve: false },
+      timeline: [],
     });
   if (path === `/payments/cases/${PAYMENT_CASE_ID}/resolve`) {
     allow("payments.review");

@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { isProjectReadOnly } from "@pm-buddy/domain";
-import type { Permission, ProjectStatus } from "@pm-buddy/types";
+import type { PayrollBatchStatus, Permission, ProjectStatus } from "@pm-buddy/types";
 import type { Request } from "express";
 import { AppConfig } from "../../config/app-config.js";
 import {
@@ -120,6 +120,29 @@ type ProjectRow = Prisma.ProjectGetPayload<object>;
 export const PAYROLL_VIEW: readonly Permission[] = ["payroll.view", "payroll.prepare"];
 
 /**
+ * Batches whose snapshot is frozen and final for later calculations (D4.1 "submitted", and from
+ * D4.3 every state after it but `rejected`, which returns to draft): their lines count in the
+ * statutory month to date, their recoveries reduce advances, statutory exports include them and
+ * the rule versions they used cannot be removed.
+ */
+export const FROZEN_BATCH_STATUSES = [
+  "submitted",
+  "reviewed",
+  "approved",
+  "disbursing",
+  "partially_settled",
+  "settled",
+] as const satisfies readonly PayrollBatchStatus[];
+
+/** Approved batches (D4.3): their status is derived from obligations and payouts. */
+export const SETTLEMENT_BATCH_STATUSES = [
+  "approved",
+  "disbursing",
+  "partially_settled",
+  "settled",
+] as const satisfies readonly PayrollBatchStatus[];
+
+/**
  * Payroll permissions are project-scoped like attendance (ARCHITECTURE §8): company-wide roles act
  * on every project; other roles on assigned projects with role ∩ assignment. Rule management,
  * verification and exports are company-level. A project outside the caller's company is 404.
@@ -224,6 +247,12 @@ export class PayrollCommands {
     operation: string,
     payload: unknown,
     command: (scope: Scope) => Promise<T>,
+    options: {
+      /** Money commands (D4.3 payouts) refuse to run without an Idempotency-Key. */
+      requireKey?: boolean;
+      /** Maps database refusals to the caller's problems (default: payroll's). */
+      mapError?: (error: unknown) => never;
+    } = {},
   ): Promise<T> {
     const header = req.headers["idempotency-key"];
     const key = typeof header === "string" ? header : undefined;
@@ -232,6 +261,11 @@ export class PayrollCommands {
         "invalid-idempotency-key",
         "Idempotency-Key must be 8–128 letters, digits, '-' or '_'.",
       );
+    if (options.requireKey && !key)
+      throw new BadRequestException({
+        message: "Send an Idempotency-Key header with every payment instruction.",
+        code: "idempotency-key-required",
+      });
     return this.scope
       .run(
         principal,
@@ -274,7 +308,7 @@ export class PayrollCommands {
         true,
         60_000,
       )
-      .catch((error: unknown) => rethrowPayrollDbError(error));
+      .catch((error: unknown) => (options.mapError ?? rethrowPayrollDbError)(error));
   }
 
   /** Read-only work in the tenant transaction (no lock, no idempotency). */

@@ -4,7 +4,22 @@ const problemSchema = z.object({
   code: z.string().optional(),
   traceId: z.string().optional(),
   match: z.record(z.string(), z.string()).optional(),
+  facts: z
+    .record(
+      z.string(),
+      z.union([z.number(), z.string(), z.boolean(), z.null(), z.array(z.string())]),
+    )
+    .optional(),
 });
+
+/** Safe figures a refusal carries (RFC 9457 extension, D4.3), e.g. a limit and the amount. */
+export type ProblemFacts = Readonly<Record<string, number | string | boolean | null | string[]>>;
+
+/** The problem body of a failed response, or null when it is not one. */
+export function parseProblem(body: unknown) {
+  const problem = problemSchema.safeParse(body);
+  return problem.success ? problem.data : null;
+}
 
 export class FoundationApiError extends Error {
   constructor(
@@ -13,6 +28,8 @@ export class FoundationApiError extends Error {
     readonly traceId?: string,
     /** The existing record a 409 collided with (RFC 9457 extension), e.g. a labourer. */
     readonly match?: Readonly<Record<string, string>>,
+    /** Safe figures explaining a refusal (D4.3), e.g. `{ limitMinor, netMinor }`. */
+    readonly facts?: ProblemFacts,
   ) {
     super(code);
     this.name = "FoundationApiError";
@@ -61,12 +78,13 @@ export async function foundationRequest<T>(
     throw error;
   }
   if (!response.ok) {
-    const problem = problemSchema.safeParse(body);
+    const problem = parseProblem(body);
     throw new FoundationApiError(
       response.status,
-      problem.success ? (problem.data.code ?? "requestFailed") : "requestFailed",
-      problem.success ? problem.data.traceId : undefined,
-      problem.success ? problem.data.match : undefined,
+      problem?.code ?? "requestFailed",
+      problem?.traceId,
+      problem?.match,
+      problem?.facts,
     );
   }
   const parsed = schema.safeParse(body);

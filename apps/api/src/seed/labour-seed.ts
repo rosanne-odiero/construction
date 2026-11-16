@@ -466,6 +466,8 @@ export async function seedLabour(
               kraPinBidx: crypto.index(tenantId, "kra_pin", ids.kraPin),
             }
           : {}),
+        // D4.3: payslip and notice SMS in the language the worker chose for the consent notice.
+        preferredLanguage: demo.consentLanguage,
         createdBy: ownerId,
       },
     });

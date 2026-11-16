@@ -26,13 +26,27 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { navGroups } from "@/components/nav-config";
+import { activeNavHref, visibleNavGroups } from "@/components/nav-config";
 import { company } from "@/mocks/company";
 
-/** `companyName` is the signed-in company; without a session the prototype's mock company shows. */
-export function AppSidebar({ companyName }: { companyName?: string }) {
+/**
+ * `companyName` is the signed-in company; without a session the prototype's mock company shows.
+ * `permissions` (the selected company's) hide permission-gated entries such as reconciliation.
+ */
+export function AppSidebar({
+  companyName,
+  permissions = null,
+}: {
+  companyName?: string;
+  permissions?: readonly string[] | null;
+}) {
   const pathname = usePathname();
   const t = useTranslations("nav");
+  const groups = visibleNavGroups(permissions);
+  const active = activeNavHref(
+    pathname,
+    groups.flatMap((group) => group.items),
+  );
 
   // Live project pages (including a project's BQ) belong to Projects; the BQ entry opens the D0
   // prototype BQ.
@@ -44,7 +58,7 @@ export function AppSidebar({ companyName }: { companyName?: string }) {
           !pathname.includes("/bq"))
       : href === "/bq"
         ? pathname.startsWith("/bq") || pathname.startsWith("/rate-buildups")
-        : pathname.startsWith(href);
+        : active === href;
 
   return (
     <Sidebar collapsible="icon">
@@ -69,7 +83,7 @@ export function AppSidebar({ companyName }: { companyName?: string }) {
       </SidebarHeader>
 
       <SidebarContent>
-        {navGroups.map((group) => (
+        {groups.map((group) => (
           <SidebarGroup key={group.key}>
             <SidebarGroupLabel>{t(`groups.${group.key}`)}</SidebarGroupLabel>
             <SidebarGroupContent>

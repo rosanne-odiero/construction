@@ -253,7 +253,7 @@ How the D3.3 web slice (branch `phase-3/d3.3-web-timesheets`) handles the items 
 
 ## D3.4 implementation notes (biometric attendance, first slice: the DPIA gate)
 
-How the DPIA gate (branch `phase-3/d3.4-dpia-gate`, ARCHITECTURE §4.17, decisions D-160–D-165) handles the items above. Every status stays `open`: nothing here is a legal confirmation, and no biometric data is collected by this slice.
+How the DPIA gate (branch `phase-3/d3.4-dpia-gate`, ARCHITECTURE §4.19, decisions D-160–D-165) handles the items above. Every status stays `open`: nothing here is a legal confirmation, and no biometric data is collected by this slice.
 
 | Item | What the DPIA gate does | Still needed |
 |---|---|---|

@@ -16,6 +16,7 @@ import {
 } from "./auth-security.service.js";
 import { AuthService, newSessionData } from "./auth.service.js";
 import { GOOGLE_ISSUER, googleProfile, type GoogleProfile } from "./google-profile.js";
+import { securityEvent } from "./security-events.js";
 
 const PENDING_MINUTES = 10;
 const CALLBACK_PATH = "/api/v1/auth/google/callback";
@@ -113,10 +114,10 @@ export class GoogleSignIn {
     const pending = await this.pending(req);
     this.security.setCookie(res, "oauth", "", 0);
     const next = pending?.next ?? null;
-    if (!this.settings) return this.back("unavailable", next);
+    if (!this.settings) return this.rejected("unavailable", next);
     if (req.query["error"] !== undefined)
-      return this.back(req.query["error"] === "access_denied" ? "cancelled" : "failed", next);
-    if (!pending) return this.back("failed", null);
+      return this.rejected(req.query["error"] === "access_denied" ? "cancelled" : "failed", next);
+    if (!pending) return this.rejected("failed", null);
     try {
       await this.auth.throttle(req, "google-callback", digest(pending.state));
       const config = await this.discover();
@@ -130,10 +131,11 @@ export class GoogleSignIn {
       });
       const claims = tokens.claims();
       const profile = claims ? googleProfile(claims) : null;
-      if (!profile) return this.back("email-unsupported", next);
+      if (!profile) return this.rejected("email-unsupported", next);
       const signedIn = await this.signIn(profile);
-      if (!signedIn) return this.back("account-conflict", next);
+      if (!signedIn) return this.rejected("account-conflict", next);
       await this.auth.issue(signedIn.sessionId, res);
+      securityEvent("auth.login.succeeded", { sessionId: signedIn.sessionId, method: "google" });
       if (signedIn.linkedIdentifier)
         this.security.notifyLater(
           signedIn.linkedIdentifier,
@@ -268,11 +270,17 @@ export class GoogleSignIn {
 
   private failure(error: unknown, next: string | null): string {
     if (error instanceof HttpException && error.getStatus() === 429)
-      return this.back("rate-limited", next);
-    if (error instanceof ServiceUnavailableException) return this.back("unavailable", next);
+      return this.rejected("rate-limited", next);
+    if (error instanceof ServiceUnavailableException) return this.rejected("unavailable", next);
     // Never log codes, tokens or claims: only the error's message or code.
     this.logger.warn(`Google sign-in failed: ${describeError(error)}`);
-    return this.back("failed", next);
+    return this.rejected("failed", next);
+  }
+
+  /** A sign-in that did not complete: logged as a security event, then back to /sign-in. */
+  private rejected(outcome: GoogleSignInOutcome, next: string | null): string {
+    securityEvent("auth.login.failed", { method: "google", reason: outcome });
+    return this.back(outcome, next);
   }
 
   private back(outcome: GoogleSignInOutcome, next: string | null): string {

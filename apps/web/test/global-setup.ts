@@ -140,6 +140,15 @@ const ROUTES = [
   "/reports/subscriptions",
   "/reports/cost-ledger",
   "/reports/cost-ledger?projectId=30000000-0000-4000-8000-000000000001",
+  "/payroll",
+  "/payroll/projects/30000000-0000-4000-8000-000000000001",
+  "/payroll/projects/30000000-0000-4000-8000-000000000001/inputs",
+  "/payroll/batches/49000000-0000-4000-8000-000000000001",
+  "/payroll/batches/49000000-0000-4000-8000-000000000001/lines/49100000-0000-4000-8000-000000000001",
+  "/payroll/rules",
+  "/payroll/advances",
+  "/payroll/exports",
+  "/payroll/settings",
 ];
 /** D7.2 supplier portal pages, warmed as the supplier persona (others are redirected). */
 const SUPPLIER_ROUTES = [

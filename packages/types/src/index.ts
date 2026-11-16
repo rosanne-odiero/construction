@@ -254,6 +254,7 @@ export {
   type TimesheetPeriodStatus,
   type TimesheetRuleValues,
 } from "./attendance.js";
+export * from "./payments.js";
 export {
   BIOMETRIC_CAPTURE_METHODS,
   BIOMETRIC_GATE_REASONS,

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
+import { headers } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
 import { Providers } from "@/components/providers";
@@ -26,6 +27,9 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
+  // Set by src/proxy.ts for every page; reading it also keeps every page dynamically rendered, as
+  // a per-request CSP nonce requires.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
     <html
@@ -35,7 +39,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     >
       <body className="min-h-full">
         <NextIntlClientProvider>
-          <Providers>{children}</Providers>
+          <Providers nonce={nonce}>{children}</Providers>
         </NextIntlClientProvider>
       </body>
     </html>

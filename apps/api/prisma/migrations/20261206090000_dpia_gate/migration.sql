@@ -1,4 +1,4 @@
--- D3.4 biometric attendance, first slice: the DPIA gate (DPIA_TEMPLATE §12.4; ARCHITECTURE §4.17;
+-- D3.4 biometric attendance, first slice: the DPIA gate (DPIA_TEMPLATE §12.4; ARCHITECTURE §4.19;
 -- ERD §6; decisions D-160–D-165). Biometric capture is off for a company until its DPIA is approved
 -- in the app, and then only for the sites and methods switched on under it. Enforced in the
 -- database as well as the API:
@@ -523,6 +523,9 @@ CREATE TRIGGER attendance_record_biometric_gate BEFORE INSERT ON "attendance_rec
 
 -- Permissions (packages/types PERMISSIONS): biometrics.manage and biometrics.approve ----------
 -- Both are company-level, so project assignments (project_permissions_check) do not change.
+-- MERGE NOTE: this list must stay the union of every permission added by earlier migrations (as of
+-- 20261204090000_payments_daraja, which added payments.manage_credentials, payments.review and
+-- payments.initiate_test).
 ALTER TABLE "tenant_roles" DROP CONSTRAINT "tenant_roles_permissions_check";
 ALTER TABLE "tenant_roles" ADD CONSTRAINT "tenant_roles_permissions_check" CHECK (
   permissions IS NOT NULL
@@ -538,7 +541,8 @@ ALTER TABLE "tenant_roles" ADD CONSTRAINT "tenant_roles_permissions_check" CHECK
     'payroll.view', 'payroll.prepare', 'payroll.review', 'payroll.approve',
     'payroll.manage_rules', 'payroll.verify_rules', 'payroll.export', 'advances.request',
     'advances.approve', 'payments.view', 'payments.approve', 'payments.disburse',
-    'payments.record_cash', 'payments.reverse', 'procurement.requisition',
+    'payments.record_cash', 'payments.reverse', 'payments.manage_credentials',
+    'payments.review', 'payments.initiate_test', 'procurement.requisition',
     'procurement.approve', 'procurement.manage_suppliers', 'stores.manage', 'finance.view',
     'finance.manage', 'finance.view_sensitive', 'finance.petty_cash', 'site.diary', 'site.photos',
     'quality.manage', 'safety.manage', 'plant.manage', 'documents.manage', 'reports.view',

@@ -299,7 +299,7 @@ export class PasskeyService {
       });
       return "ok";
     });
-    this.auth.rejectMfaOutcome(outcome, principal, res, "Passkey could not be verified");
+    this.auth.rejectMfaOutcome(outcome, principal, res, "Passkey could not be verified", "passkey");
     return this.auth.issue(principal.session.id, res);
   }
 

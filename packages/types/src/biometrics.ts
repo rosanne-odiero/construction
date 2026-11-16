@@ -1,5 +1,5 @@
 /**
- * Biometric attendance gate (D3.4 first slice; DPIA_TEMPLATE §12.4, ARCHITECTURE §4.17). Each
+ * Biometric attendance gate (D3.4 first slice; DPIA_TEMPLATE §12.4, ARCHITECTURE §4.19). Each
  * company, as data controller, records its own DPIA for biometric attendance in the app: the signed
  * document, the DPO's opinion, the controller's decision, the capture methods and sites in scope
  * and the next review date. Biometric capture can be switched on only per site and method, only

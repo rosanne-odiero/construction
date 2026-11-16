@@ -191,7 +191,7 @@ Accounts: the owner (`owner@jenga-bora.example.test`, TOTP) holds both new permi
 
 - Migration `20261206090000_dpia_gate`: `dpia_records`, `dpia_record_sites`, `dpia_documents` and `biometric_switches` with forced RLS, composite tenant keys and narrowed `pmb_app` grants; guard triggers for every transition, `app.biometric_capture_allowed` and a trigger that refuses biometric attendance records where the gate is closed; permissions `biometrics.manage` and `biometrics.approve` (MFA).
 - `packages/domain/src/biometrics.ts`: lapse dates, approval gaps, the gate and the carry-forward rule (unit-tested); `packages/validation/src/biometrics.ts`: every request and response; `BIOMETRICS_CAPTURE` in the environment schema.
-- API module `biometrics` (10 operations, [ARCHITECTURE §4.17](../ARCHITECTURE.md#417-biometric-attendance-gate-d34-first-slice)) with step-up, audit and hashed documents.
+- API module `biometrics` (10 operations, [ARCHITECTURE §4.19](../ARCHITECTURE.md#419-biometric-attendance-gate-d34-first-slice)) with step-up, audit and hashed documents.
 - Web: `/attendance/biometrics` and `/attendance/biometrics/dpias/[dpiaId]`.
 
 ### 4. Known limitations

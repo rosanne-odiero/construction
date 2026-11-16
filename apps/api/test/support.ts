@@ -130,6 +130,16 @@ import {
   periodsResponseSchema,
   timesheetLinesResponseSchema,
   timesheetRuleResponseSchema,
+  balanceCheckResponseSchema,
+  paymentCallbackResponseSchema,
+  paymentCallbacksResponseSchema,
+  paymentRequestDetailResponseSchema,
+  paymentRequestResponseSchema,
+  paymentRequestsResponseSchema,
+  paymentSettingsResponseSchema,
+  paymentsOverviewResponseSchema,
+  reconciliationCaseResponseSchema,
+  reconciliationCasesResponseSchema,
   advanceResponseSchema,
   advancesResponseSchema,
   allowanceResponseSchema,
@@ -432,6 +442,8 @@ export function responseContract(method: string, target: string) {
   if (labour) return labour;
   const attendance = attendanceContract(path);
   if (attendance) return attendance;
+  const payments = paymentsContract(method, path);
+  if (payments) return payments;
   const payroll = payrollContract(method, path);
   if (payroll) return payroll;
   const p2p = procureToPayContract(method, path);
@@ -461,6 +473,24 @@ function biometricsContract(path: string) {
   if (/^biometrics\/sites\/[^/]+\/methods\/[^/]+$/.test(path)) return biometricSwitchResponseSchema;
   if (/^biometrics\/dpias(\/[^/]+(\/(document|approve|reject|withdraw))?)?$/.test(path))
     return dpiaResponseSchema;
+  return null;
+}
+
+/** The D4.2 payments console endpoints' success contracts. */
+function paymentsContract(method: string, path: string) {
+  if (!path.startsWith("payments/")) return null;
+  if (path === "payments/overview") return paymentsOverviewResponseSchema;
+  if (path.startsWith("payments/settings")) return paymentSettingsResponseSchema;
+  if (path === "payments/balance-checks") return balanceCheckResponseSchema;
+  if (path === "payments/requests")
+    return method === "get" ? paymentRequestsResponseSchema : paymentRequestResponseSchema;
+  if (/^payments\/requests\/[^/]+$/.test(path)) return paymentRequestDetailResponseSchema;
+  if (/^payments\/attempts\/[^/]+\/(reversal|status-query)$/.test(path))
+    return paymentRequestDetailResponseSchema;
+  if (path === "payments/callbacks") return paymentCallbacksResponseSchema;
+  if (/^payments\/callbacks\/[^/]+(\/review)?$/.test(path)) return paymentCallbackResponseSchema;
+  if (path === "payments/cases") return reconciliationCasesResponseSchema;
+  if (/^payments\/cases\/[^/]+(\/resolve)?$/.test(path)) return reconciliationCaseResponseSchema;
   return null;
 }
 

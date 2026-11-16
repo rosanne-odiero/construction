@@ -13,6 +13,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
+import { handlePayments } from "./mock-payments.mts";
 import type { z } from "zod";
 import {
   activationGaps,
@@ -83,6 +84,7 @@ import {
 } from "./mock-procurement.mts";
 import { attendanceFixture, handleAttendance, type AttendanceState } from "./mock-attendance.mts";
 import { handleLabour, labourFixture, type LabourState } from "./mock-labour.mts";
+import { handlePayroll, payrollFixture, type PayrollState } from "./mock-payroll.mts";
 import { handleDiaries, initialDiaries } from "./mock-diaries.mts";
 import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
 import { handleCaptureTicket, handlePhotos, initialPhotos } from "./mock-photos.mts";
@@ -230,6 +232,7 @@ type State = {
   spending: SpendingState;
   labour: LabourState;
   attendance: AttendanceState;
+  payroll: PayrollState;
   diaries: SiteDiary[];
   photos: SitePhoto[];
   /** D6.2 schedules by project (mock-schedule.mts). */
@@ -529,6 +532,7 @@ function fixture(persona: Persona): State {
     projects,
     labour,
     attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
+    payroll: payrollFixture(),
     team: new Map([
       [
         RUIRU_ID,
@@ -989,6 +993,22 @@ async function handle(
     if (reports) return reports;
     throw new HttpError(404, "not-found");
   }
+  const payroll = handlePayroll(
+    {
+      persona: state.persona,
+      user: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      fresh: () => Date.now() - (state.stepUpAt.get(state.persona) ?? 0) <= 5 * 60_000,
+      fail: (status, code) => {
+        throw new HttpError(status, code);
+      },
+    },
+    state.payroll,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (payroll) return payroll;
   // The labour and attendance mocks know two personas; anyone but the owner acts as the agent.
   const labour = handleLabour(
     {
@@ -1079,6 +1099,25 @@ async function handle(
     ]);
     return { status: 201, body: { project }, schema: projectResponseSchema };
   }
+  const payments = handlePayments(
+    {
+      permissions: rolePermissions(state),
+      tenantWide: isTenantWide(state.persona),
+      stepUp: () => requireStepUp(state),
+      parse,
+      key:
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+      fail: (status, code) => new HttpError(status, code),
+    },
+    state,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (payments) return payments;
   const documents = handleDocuments(
     documentsDeps(state),
     state.documents,

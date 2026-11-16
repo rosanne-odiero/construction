@@ -59,7 +59,7 @@ const DECIDE =
   "Requires biometrics.approve (company-level, MFA) and MFA verified within five minutes (403 step-up-required).";
 
 /**
- * Biometric attendance gate (D3.4 first slice; DPIA_TEMPLATE §12.4, ARCHITECTURE §4.17): the
+ * Biometric attendance gate (D3.4 first slice; DPIA_TEMPLATE §12.4, ARCHITECTURE §4.19): the
  * company's DPIA versions with the signed document, approval with every go-live condition
  * confirmed, and biometric capture switched on per site and method under the DPIA in force.
  */

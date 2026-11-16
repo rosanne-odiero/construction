@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Params } from "nestjs-pino";
 import type { SerializedRequest, SerializedResponse } from "pino";
 import type { AppConfig } from "../config/app-config.js";
+import { redactCallbackPath } from "./callback-path.js";
 
 /**
  * Never log secrets or personal data (brief §7, ARCHITECTURE §19). Paths are matched by pino's
@@ -47,16 +48,44 @@ export function requestId(req: IncomingMessage, res: ServerResponse): string {
 /** Request logs keep what is needed to trace a call; headers and query strings can hold personal data. */
 export function serializeRequest(req: SerializedRequest) {
   const queryStart = req.url.indexOf("?");
+  const path = queryStart === -1 ? req.url : req.url.slice(0, queryStart);
   return {
     id: req.id,
     method: req.method,
-    url: queryStart === -1 ? req.url : req.url.slice(0, queryStart),
+    url: redactCallbackPath(path),
     remoteAddress: req.remoteAddress,
   };
 }
 
 export function serializeResponse(res: SerializedResponse) {
   return { statusCode: res.statusCode };
+}
+
+/** Who made a request: pseudonymous IDs only (never the email or phone). */
+export type RequestActor = { userId: string; sessionId: string; tenantId: string | null };
+const ACTOR = Symbol.for("pm-buddy.request-actor");
+
+/** Called once the session is verified, so the request log line names the actor (ASVS V16.2.1). */
+export function setRequestActor(req: object, actor: RequestActor): void {
+  (req as Record<symbol, RequestActor>)[ACTOR] = actor;
+}
+
+export function requestActor(req: object): RequestActor | undefined {
+  return (req as Record<symbol, RequestActor | undefined>)[ACTOR];
+}
+
+/** Request log properties, evaluated again when the response finishes. */
+export function requestLogProps(service: string, req: object) {
+  const actor = requestActor(req);
+  return actor
+    ? { service, userId: actor.userId, sessionId: actor.sessionId, tenantId: actor.tenantId }
+    : { service };
+}
+
+/** Refused authentication, authorisation and rate limits stand out as warnings (ASVS V16.3.2). */
+export function requestLogLevel(statusCode: number, error?: Error): "info" | "warn" | "error" {
+  if (error || statusCode >= 500) return "error";
+  return statusCode === 401 || statusCode === 403 || statusCode === 429 ? "warn" : "info";
 }
 
 export function loggerOptions(config: AppConfig): Params {
@@ -67,7 +96,8 @@ export function loggerOptions(config: AppConfig): Params {
       redact: { paths: REDACT_PATHS, censor: "[REDACTED]" },
       serializers: { req: serializeRequest, res: serializeResponse },
       genReqId: requestId,
-      customProps: () => ({ service: config.get("OTEL_SERVICE_NAME") }),
+      customProps: (req) => requestLogProps(config.get("OTEL_SERVICE_NAME"), req),
+      customLogLevel: (_req, res, error) => requestLogLevel(res.statusCode, error),
       autoLogging: { ignore: (req) => req.url?.startsWith("/api/v1/health") ?? false },
       ...(pretty
         ? {

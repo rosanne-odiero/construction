@@ -588,6 +588,7 @@ export {
   type TimesheetRule,
   type TimesheetTotalsWire,
 } from "./attendance.js";
+export * from "./payments.js";
 export * from "./payroll.js";
 export * from "./procure-to-pay.js";
 export * from "./stores.js";

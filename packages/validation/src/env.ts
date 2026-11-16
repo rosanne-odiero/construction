@@ -25,16 +25,26 @@ export const apiEnvSchema = z.object({
     .refine((value) => value !== "true", "Never trust every proxy; list addresses or a hop count")
     .optional(),
   AUTH_SIGNING_PRIVATE_KEY: z.string().min(1).optional(),
+  // Seals TOTP seeds, CSRF tokens and the Google sign-in cookie (AES-256-GCM JWE): 64 hex
+  // characters (version 1) or, while rotating, `<version>:<64 hex>` keys with the active version
+  // set explicitly (D-151). Older versions stay listed until `keys:rotate rewrap` has moved every
+  // stored TOTP seed to the active key.
   AUTH_MFA_ENCRYPTION_KEY: z
     .string()
-    .regex(/^[a-fA-F0-9]{64}$/)
+    .trim()
+    .regex(
+      /^(?:[a-fA-F0-9]{64}|\d{1,3}:[0-9a-fA-F]{64}(?:,\s*\d{1,3}:[0-9a-fA-F]{64})*)$/,
+      "64 hex characters, or a version:hexkey list",
+    )
     .optional(),
+  AUTH_MFA_ENCRYPTION_ACTIVE_KEY_VERSION: z.coerce.number().int().min(1).max(255).optional(),
   AUTH_NOTIFICATION_TRANSPORT: z.enum(["development", "disabled"]).default("disabled"),
   AUTH_MAILPIT_PORT: z.coerce.number().int().min(1).max(65535).default(8025),
-  // Breached-password check on registration and reset: `hibp` asks the Have I Been Pwned range API
-  // (k-anonymity: only the first five hex characters of the SHA-1 leave the server). It fails
-  // open, with a warning, when the service is slow or unreachable.
-  AUTH_BREACHED_PASSWORD_CHECK: z.enum(["off", "hibp"]).default("off"),
+  // Breached-password check on registration, reset and change: `hibp` asks the Have I Been Pwned
+  // range API (k-anonymity: only the first five hex characters of the SHA-1 leave the server). It
+  // fails open, with a warning, when the service is slow or unreachable. Unset: `hibp` in
+  // production (ASVS V6.2.12), `off` elsewhere.
+  AUTH_BREACHED_PASSWORD_CHECK: z.enum(["off", "hibp"]).optional(),
   // Field-level encryption of labourer identifiers (D3.1, ARCHITECTURE §10): comma-separated
   // `<version>:<64 hex characters>` keys (AES-256-GCM). New values use the active version (default:
   // the highest); older versions stay listed until every value is re-encrypted. The blind-index key
@@ -83,10 +93,14 @@ export const apiEnvSchema = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
   OTEL_SERVICE_NAME: z.string().min(1).default("pm-buddy-api"),
 
-  // Malware scanning of uploads (ARCHITECTURE §17). `development` is a no-op that records
-  // "not_scanned" and is refused in production; `disabled` (the default) refuses uploads until a
-  // real scanner (ClamAV, TODO) is configured.
-  MALWARE_SCANNER: z.enum(["development", "disabled"]).default("disabled"),
+  // Malware scanning of uploads (ARCHITECTURE §17). `clamav` streams each upload to clamd
+  // (INSTREAM over TCP at CLAMAV_HOST:CLAMAV_PORT) and refuses it when clamd finds a signature or
+  // cannot answer; `development` is a no-op that records "not_scanned" and is refused in
+  // production; `disabled` (the default) refuses uploads.
+  MALWARE_SCANNER: z.enum(["development", "disabled", "clamav"]).default("disabled"),
+  CLAMAV_HOST: z.string().trim().min(1).max(255).optional(),
+  CLAMAV_PORT: z.coerce.number().int().min(1).max(65_535).default(3310),
+  CLAMAV_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
   // VAT on BQ grand summaries in percent (`bq.vat.rate`, COMPLIANCE-REVIEW CR-TAX-01). Each BQ
   // version stores the rate it was built with.
   BQ_VAT_RATE_PERCENT: z
@@ -109,8 +123,33 @@ export const apiEnvSchema = z.object({
   // approved DPIA and must switch capture on per site and method.
   BIOMETRICS_CAPTURE: z.enum(["on", "off"]).optional(),
 
-  API_DOCS_ENABLED: z.stringbool().default(true),
+  // Swagger UI and the OpenAPI document at /api/docs. Unset: on, except in production, where the
+  // internal API description is published only when explicitly enabled (ASVS V13.4.5).
+  API_DOCS_ENABLED: z.stringbool().optional(),
   HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
+
+  // Payments and Daraja (D4.2; docs/CONFIGURATION.md §4 and §8). Workers (outbox relay, BullMQ
+  // consumers, watchdog) run inside the API process unless switched off.
+  PAYMENTS_WORKERS_ENABLED: z.stringbool().default(true),
+  // Public HTTPS base URL Safaricom posts callbacks to (required for the sandbox; production is
+  // gated off). Defaults to http://localhost:<PORT> outside production, which only the mock reaches.
+  PAYMENTS_CALLBACK_BASE_URL: z.url().optional(),
+  // Optional source-IP allow-list for callbacks (comma-separated addresses or IPv4 CIDRs). Defence
+  // in depth only, never proof of payment; needs TRUST_PROXY behind a proxy. Empty: disabled.
+  PAYMENTS_CALLBACK_IP_ALLOWLIST: z.string().trim().optional(),
+  PAYMENTS_CALLBACK_MAX_BYTES: z.coerce.number().int().min(1_024).max(1_048_576).default(32_768),
+  DARAJA_MOCK_BASE_URL: z.url().default("http://localhost:4690"),
+  DARAJA_SANDBOX_BASE_URL: z.url().default("https://sandbox.safaricom.co.ke"),
+  // Safaricom's public sandbox certificate (PEM) used to encrypt the initiator password. The
+  // production certificate comes from the secrets manager when production is enabled.
+  DARAJA_SANDBOX_CERTIFICATE_PATH: z.string().min(1).optional(),
+  DARAJA_HTTP_TIMEOUT_MS: z.coerce.number().int().min(500).max(120_000).default(15_000),
+  PAYMENTS_SUBMIT_LEASE_SECONDS: z.coerce.number().int().min(5).max(3_600).default(120),
+  PAYMENTS_RESULT_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(86_400).default(600),
+  PAYMENTS_STATUS_QUERY_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(86_400).default(300),
+  PAYMENTS_STATUS_QUERY_MAX: z.coerce.number().int().min(0).max(20).default(3),
+  PAYMENTS_RELAY_INTERVAL_MS: z.coerce.number().int().min(100).max(600_000).default(2_000),
+  PAYMENTS_OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(50).default(8),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

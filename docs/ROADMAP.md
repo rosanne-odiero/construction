@@ -97,9 +97,29 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D4.1 | **Payroll engine**:<br/>• Daily, weekly, fortnightly or monthly pay periods<br/>• Gross pay from attendance, overtime, piece-rate output and allowances<br/>• Versioned statutory rules (PAYE, NSSF, SHIF, Housing Levy, NITA)<br/>• Advances with automatic recovery<br/>• Payslip preview; statutory export CSVs | Payroll batch builder, payslip preview, rule versions screen | Unit tests cover every rule boundary; seed rules are flagged `COMPLIANCE-REVIEW` | L | ⏳ |
-| D4.2 | **Daraja integration**:<br/>• `PaymentProvider` interface with `DarajaProvider`: OAuth, STK Push + query, C2B, B2C, B2B, transaction status, account balance, reversal<br/>• Per-tenant credentials<br/>• Outbox + BullMQ<br/>• Callback hardening<br/>• Local mock Daraja server for success, failure, timeout, duplicate and out-of-order callbacks | Payments console: requests, callbacks, state timeline, unknown-callback alerts | Mock and sandbox flows pass the integration suite | XL | ⬜ |
+| D4.1 | **Payroll engine**:<br/>• Daily, weekly, fortnightly or monthly pay periods<br/>• Gross pay from attendance, overtime, piece-rate output and allowances<br/>• Versioned statutory rules (PAYE, NSSF, SHIF, Housing Levy, NITA)<br/>• Advances with automatic recovery<br/>• Payslip preview; statutory export CSVs | Payroll batch builder, payslip preview, rule versions screen | Unit tests cover every rule boundary; seed rules are flagged `COMPLIANCE-REVIEW` | L | 🔎 |
+| D4.2 | **Daraja integration**:<br/>• `PaymentProvider` interface with `DarajaProvider`: OAuth, STK Push + query, C2B, B2C, B2B, transaction status, account balance, reversal<br/>• Per-tenant credentials<br/>• Outbox + BullMQ<br/>• Callback hardening<br/>• Local mock Daraja server for success, failure, timeout, duplicate and out-of-order callbacks | Payments console: requests, callbacks, state timeline, unknown-callback alerts | Mock and sandbox flows pass the integration suite; [review and external sandbox gate](./demos/phase-4.md) | XL | 🔎 |
 | D4.3 | **Approvals and payouts**:<br/>• Maker-checker with step-up MFA and approval limits<br/>• Float check, then bulk B2C payout with per-worker status<br/>• Recipient name check<br/>• SMS payslips<br/>• Daily reconciliation and statement upload<br/>• M-Pesa charges booked as cost<br/>• Cash and bank payments; unusual-payout alerts | Approval flow, live payout statuses, reconciliation screen | **Phase 4 acceptance:** a weekly payroll for 40 workers pays out in sandbox with every callback reconciled; failed and duplicate cases are handled | L | ⬜ |
+
+> **D4.1 is built, pending review (🔎).** The live `/payroll`
+> screens now connect the existing engine/API to batch preparation and immutable
+> submission, payslip previews, rule versions, inputs, advances, calendars and
+> statutory CSV templates. Format, lint, typecheck, unit suites (domain payroll 68,
+> validation 139, web 98), the production build and the browser suite pass (177
+> tests; three unrelated load-timing failures passed on rerun). No production filing certification or payout
+> activation is claimed. See [completion evidence](./IMPLEMENTATION_STATUS.md#d41-payroll-live-engine-completion-15-november-2026).
+
+> **D4.2 is in review (🔎).** The Daraja transport and the payments console are on `main`
+> through PR #48 and were independently reviewed: seven findings were fixed with tests that fail
+> without the fix. They covered dropped follow-up status queries, a retired callback token in new
+> calls, a reversal's requester settling its outcome, shortcode drift, re-quarantined callbacks,
+> the token in idempotency records and traces, and long provider codes. D9.1's key rotation now
+> covers the payment ciphertexts. **Mock flows pass the integration suite**: 24 payments tests
+> against the local mock Daraja server, within the full API suite of 398. **The sandbox half of
+> the done-when is still open**: the Safaricom sandbox suite needs test credentials, the public
+> certificate and an approved public HTTPS callback endpoint. Production stays gated off
+> (CR-PMT-01–04). See the [review script and sandbox gate](./demos/phase-4.md) and the
+> [status record](./IMPLEMENTATION_STATUS.md#d42-daraja-payments-branch-phase-4d42-daraja).
 
 ### Phase 5: Materials, stores and spending
 
@@ -165,9 +185,11 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 
 | ID | Deliverable | What you'll review | Done when | Size | Status |
 |---|---|---|---|---|---|
-| D9.1 | **Security**: OWASP ASVS L2 checklist; threat model refresh; header and CSP review; key rotation drill; pen-test preparation | Security checklist report | The checklist passes | L | ⬜ |
+| D9.1 | **Security**: OWASP ASVS L2 checklist; threat model refresh; header and CSP review; key rotation drill; pen-test preparation | Security checklist report | The checklist passes | L | 🔎 |
 | D9.2 | **Performance and reliability**: k6 load tests (payroll payout, attendance sync); index and query tuning; degradation drills (M-Pesa, SMS down) | Load test report | Performance budget met | M | ⬜ |
 | D9.3 | **Operations**: Terraform for the chosen cloud; backups with point-in-time recovery; **restore drill**; observability dashboards and alerts; deployment, incident and breach runbooks | Runbooks, dashboards | **Phase 9 acceptance:** restore drill documented | L | ⬜ |
+
+> **D9.1 is in review (🔎).** On `main` through PR #46 and independently reviewed (two findings fixed: the headers had blocked D6.1's in-app camera, and key activation now takes two deploys); waiting for the owner's review. The [security checklist](./SECURITY_CHECKLIST.md) assesses all 253 OWASP ASVS 5.0.0 L1/L2 requirements (139 Pass, 51 N/A, 43 fixed in D9.1, 20 deferred to D9.3 infrastructure); the web app now sends a nonce-based CSP and security headers, keys rotate with `keys:rotate` (drilled on the development database, OPERATIONS "Key rotation"), the threat model is refreshed and [PENTEST_SCOPE](./PENTEST_SCOPE.md) prepares the pen test. Built on `phase-9/d9.1-security`, not yet independently reviewed.
 
 ---
 

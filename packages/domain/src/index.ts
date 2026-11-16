@@ -119,6 +119,7 @@ export {
   type DpiaDraftFacts,
   type SwitchCandidate,
 } from "./biometrics.js";
+export * from "./payments/index.js";
 export * from "./payroll/index.js";
 export * from "./site-diary.js";
 export { PIN_LENGTH, pinProblem, PIN_PROBLEMS, type PinProblem } from "./pin.js";

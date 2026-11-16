@@ -1,6 +1,8 @@
 # PM-Buddy: Threat Model
 
-> **Status:** Phase 0 draft for approval (D0). This is a living document. It is refreshed at the end of every deliverable and formally reviewed in **D9.1**.
+> **Status:** Version 1.0 candidate: formally refreshed in **D9.1** (14/11/2026) against the code as built, with the [ASVS 5.0.0 L1/L2 checklist](./SECURITY_CHECKLIST.md). Not yet independently reviewed or signed off by the product owner. This is a living document, refreshed at the end of every deliverable.
+>
+> **D9.1 reconciliation.** Every T- and A- row was checked against the code. Controls described here but not built yet are marked *Not built* with their owner; controls built differently from the original design say *As built*. The main correction: the web app had **no CSP or security headers** until D9.1, although T-02, T-04 and T-07 counted on them.
 >
 > Related: [ARCHITECTURE](./ARCHITECTURE.md) · [ERD](./ERD.md) · [ROADMAP](./ROADMAP.md) · [DPIA template](./DPIA_TEMPLATE.md) · [Questions](./QUESTIONS.md) · [Compliance TODO](./COMPLIANCE_TODO.md)
 >
@@ -181,12 +183,12 @@ Columns: **ID**, **element**, **STRIDE** category, **threat**, **mitigation** (w
 | ID | Element | STRIDE | Threat | Mitigation | Residual | Phase |
 |---|---|---|---|---|---|---|
 | T-01 | Web app | S | Credential stuffing or phishing of Owner and Finance accounts in order to approve payouts | Argon2id, breached-password blocklist, lockout and rate limits; mandatory TOTP or passkey MFA for Owner, Finance and Admin; step-up for approvals; session list with revoke (§7) | M: TOTP can be phished; prefer passkeys for approvers (OR-16) | D1.3 |
-| T-02 | Web app | T, E | Stored XSS from imported or user text (BQ descriptions from Excel, diary notes, supplier names) used to act as the victim | React output encoding; lint ban on raw HTML injection; strict nonce-based CSP; httpOnly cookies so tokens cannot be read by script; Zod validation (§7, §18) | L | D1.2, D2.2 |
+| T-02 | Web app | T, E | Stored XSS from imported or user text (BQ descriptions from Excel, diary notes, supplier names) used to act as the victim | React output encoding; lint ban on raw HTML injection; httpOnly cookies so tokens cannot be read by script; Zod validation (§7, §18). *As built (D9.1):* the strict nonce-based CSP (`'strict-dynamic'`, no `'unsafe-inline'`/`'unsafe-eval'` for scripts in production, `object-src 'none'`, `base-uri 'none'`) only arrived in D9.1 (`apps/web/src/proxy.ts`, A-133); `style-src` keeps `'unsafe-inline'` (D-150) | L | D1.2, D2.2, D9.1 |
 | T-03 | Web app | T | CSRF against state-changing calls (approve payroll, change a payee) | SameSite cookies, same-origin rewrites (D-16), double-submit `X-CSRF-Token`, Origin and Referer checks (§7) | L | D1.3 |
-| T-04 | Web app | T | Clickjacking of approval screens | `frame-ancestors 'none'`; the approval dialog re-fetches amount and payee count from the server (§18) | L | D1.2 |
-| T-05 | Web app | I | Payslips or PII left on shared or cyber-café computers (browser cache, PWA cache, downloaded exports) | Service worker caches the app shell only; `Cache-Control: no-store` on personal-data responses; masked fields by default (§8); shorter sessions for privileged roles (§7); exports through short-lived URLs (§17) | M | D1.2, D1.3 |
+| T-04 | Web app | T | Clickjacking of approval screens | `frame-ancestors 'none'` and `X-Frame-Options: DENY` on every web page and static file (*built in D9.1*; the API had them since D1.1); the approval dialog re-fetches amount and payee count from the server (§18) | L | D9.1 |
+| T-05 | Web app | I | Payslips or PII left on shared or cyber-café computers (browser cache, PWA cache, downloaded exports) | *As built:* no service worker yet; `Cache-Control: no-store` on every API response (a test covers every controller since D9.1) and on every page; client photo images no longer cached (D9.1); sign-out reloads the page so no authenticated view stays in memory (D9.1); masked fields by default (§8); 8-hour sessions with MFA, 30 minutes idle (§7); exports are attachments streamed through the API, never URLs. Downloaded files stay on the computer (user guidance) | M | D1.2, D1.3, D9.1 |
 | T-06 | Web app | E | Client or supplier portal user reaches office functions by URL or direct API calls | Route groups are presentation only; every API call passes the policy guard with external-membership scope (§6.3, §8) | L | D1.4, D7.1, D7.2 |
-| T-07 | Web app | I | A third-party script (analytics, chat widget, CDN library) reads page data | No third-party scripts on authenticated pages; self-hosted assets; nonce CSP (§18); dependency review (§21) | L | D1.2 |
+| T-07 | Web app | I | A third-party script (analytics, chat widget, CDN library) reads page data | No third-party scripts; self-hosted fonts and assets; nonce CSP with `connect-src 'self'` and `img-src 'self' blob:` in production (*built in D9.1*); dependency review and `pnpm audit` gate (§21, D9.1) | L | D1.2, D9.1 |
 
 ### 5.2 API (`apps/api`, NestJS)
 
@@ -194,11 +196,11 @@ Columns: **ID**, **element**, **STRIDE** category, **threat**, **mitigation** (w
 |---|---|---|---|---|---|---|
 | T-08 | API | E | Broken object-level authorisation (IDOR): reading or changing another project's or tenant's records by ID | Tenant only from the session `tid`; project policy guard; fail-closed RLS; composite tenant FKs; generated tenant-isolation suite (§6.1, §6.3, §8) | L | D1.4 |
 | T-09 | API | E | Mass assignment or property-level authorisation gaps: a client sets `status`, `approved_by`, `tenant_id` or a rate, or reads masked fields | Strict Zod schemas that reject unknown keys; state changes only through domain commands; response DTOs mask sensitive fields without `*.view_sensitive` (§6.1, §8) | L | D1.4 |
-| T-10 | API | S | Forged or replayed access token | `jose` with pinned EdDSA/ES256; 10-minute TTL; `sid` checked against revoked sessions; rotating refresh tokens with reuse detection (§7) | L | D1.3 |
+| T-10 | API | S | Forged or replayed access token | `jose` with EdDSA only, issuer and audience pinned; 10-minute TTL; every request checks the session row (`sid`, generation, revocation, idle and absolute expiry); rotating opaque refresh tokens with reuse detection (§7). Signing-key rotation by replacement drilled in D9.1 | L | D1.3, D9.1 |
 | T-11 | API | D | Resource and cost exhaustion: OTP SMS pumping, expensive exports, huge BQ imports, unbounded lists | Redis rate limits per identifier, IP and device; OTP quotas (§7); heavy work queued (§3); size and page caps; SMS spend alerts (§19) | M: SMS pumping costs real money | D1.3, D2.2, D9.2 |
 | T-12 | API | R | An approver denies approving a payroll or changing a payee | Append-only, hash-chained audit with actor, IP, device and before/after (§9); `Approval.action_hash` binds step-up MFA to the entity and amount (§7) | L | D1.4, D4.3 |
 | T-13 | API | T | Replayed or double-submitted financial requests create duplicates | `Idempotency-Key` required on financial endpoints and stored with the request hash in `IdempotencyRecord` (§14.4) | L | D4.2 |
-| T-14 | API | I | Stack traces, SQL errors or PII in responses and logs | Problem+JSON without internals; pino redaction paths for phones, IDs, tokens and biometric fields; Sentry scrubbing (§19) | L | D1.1 |
+| T-14 | API | I | Stack traces, SQL errors or PII in responses and logs | Problem+JSON without internals; pino redaction paths for phones, IDs, tokens and biometric fields; query strings dropped from request logs; security events carry IDs only (D9.1). *Not built:* Sentry (D9.3) | L | D1.1, D9.1 |
 | T-15 | API | T | Formula injection in CSV and Excel exports (statutory CSVs, reports) opened by Finance | Escape cells that start with `=`, `+`, `-`, `@`, tab or carriage return. **Gap:** add to §17 in D2.2 | L once added | D2.2, D8.1 |
 
 ### 5.3 Worker and queues (BullMQ, schedulers, outbox relay)
@@ -217,7 +219,7 @@ Columns: **ID**, **element**, **STRIDE** category, **threat**, **mitigation** (w
 | ID | Element | STRIDE | Threat | Mitigation | Residual | Phase |
 |---|---|---|---|---|---|---|
 | T-22 | PostgreSQL | E | RLS bypass through a new table without a policy, a view owned by the table owner, a `SECURITY DEFINER` function or a privileged connection | `ENABLE` and `FORCE` RLS; CI migration check; isolation suite generated from the model list; `pmb_app` without `BYPASSRLS` (§6.1); views created with `security_invoker`; definer functions only after review | L | D1.4 |
-| T-23 | PostgreSQL | T | Audit log or append-only ledgers altered, or rows deleted | `pmb_app` has `INSERT`/`SELECT` only on `audit_log` and no `UPDATE`/`DELETE` on append-only tables (§6.1, §9); per-tenant hash chain verified on a schedule; chain heads exported to write-once storage (OR-07) | M: whoever holds `pmb_migrator` could still rewrite history | D1.4, D9.1 |
+| T-23 | PostgreSQL | T | Audit log or append-only ledgers altered, or rows deleted | `pmb_app` has `INSERT`/`SELECT` only on `audit_events` and no `UPDATE`/`DELETE` on append-only tables (§6.1, §9); per-tenant hash chain. The D9.1 key-rotation path lets the schema owner rewrite only a ciphertext column, recorded in `key_rotation_runs` (A-130). *Not built:* scheduled chain verification and export of chain heads to write-once storage (OR-07, D9.3) | M: whoever holds `pmb_migrator` could still rewrite history | D1.4, D9.3 |
 | T-24 | PostgreSQL | I | Backups, replicas or ad-hoc dumps expose PII and payroll | Sensitive fields are ciphertext in every copy (§10); encrypted backups with restricted access; restore drills use the same controls (§20); no production dumps on laptops | M | D9.3 |
 | T-25 | PostgreSQL | T | SQL injection through raw SQL (reports, RLS helpers, search) | Prisma parameterised queries; raw SQL only through tagged templates; CodeQL (§21) | L | D1.1 |
 | T-26 | PostgreSQL | D | Connection exhaustion or slow report queries starve financial transactions | PgBouncer transaction pooling (§3); statement timeouts per role; heavy reports on a read replica (§9) | M | D9.2 |
@@ -294,7 +296,7 @@ Columns: **ID**, **element**, **STRIDE** category, **threat**, **mitigation** (w
 |---|---|---|---|---|---|---|
 | T-58 | Notification providers | S | Spoofed delivery-receipt or WhatsApp webhook calls | WhatsApp webhook signatures verified with the app secret; path token and IP allowlist for Africa's Talking; receipts only change notification status (§15) | L | D7.3 |
 | T-59 | Notification providers | I | Personal data exposed through message content held by providers | Minimal templates with no ID numbers, KRA PINs or full bank details; data-processing terms with each provider; providers listed in the DPIA (§15) | M | D7.3 |
-| T-60 | Notification providers | S | Phishing SMS or WhatsApp messages that imitate PM-Buddy ("approve payment here") | Registered sender ID; no login or approval links in SMS; approvals only inside the app with step-up; passkeys for approvers (§7, §15) | M | D7.3, D9.1 |
+| T-60 | Notification providers | S | Phishing SMS or WhatsApp messages that imitate PM-Buddy ("approve payment here") | Registered sender ID; no login or approval links in SMS; approvals only inside the app with step-up; passkeys for approvers (§7, §15). *D9.1:* passkeys exist and satisfy step-up; requiring them for approvers waits for D4.3 (OR-16) | M | D7.3, D4.3 |
 | T-61 | Notification providers | S | OTP intercepted through SIM swap, SS7 abuse or a shared phone | OTP is never the only second factor for Owner, Finance or Admin; six digits, five-minute expiry, hashed and rate-limited (§7); see A-22 | M | D1.3 |
 
 ### 5.13 CI/CD and supply chain
@@ -310,10 +312,10 @@ Columns: **ID**, **element**, **STRIDE** category, **threat**, **mitigation** (w
 
 | ID | Element | STRIDE | Threat | Mitigation | Residual | Phase |
 |---|---|---|---|---|---|---|
-| T-66 | Platform admin | E | An operator uses `pmb_platform` (bypasses RLS) to read tenant PII or payroll | No generic data browser in the `platform` module (§4); `pmb_platform` used only by named, audited jobs (§6.1); break-glass access time-boxed, dual-approved and visible to the tenant; the biometric KEK is not usable by platform identities (§10) | M | D1.4, D9.1 |
-| T-67 | Platform admin | S | Takeover of a platform super-admin account | Mandatory passkey or TOTP; short sessions (§7); admin access from allowlisted networks (to decide in D9.1) | M | D1.3 |
+| T-66 | Platform admin | E | An operator uses `pmb_platform` (bypasses RLS) to read tenant PII or payroll | No generic data browser in the `platform` module (§4); `pmb_platform` used only by named, audited jobs (§6.1); break-glass access time-boxed, dual-approved and visible to the tenant; the biometric KEK is not usable by platform identities (§10) | M | D1.4, D9.3 (*D9.1:* no break-glass tooling exists yet; `pmb_platform` is not used by any job) |
+| T-67 | Platform admin | S | Takeover of a platform super-admin account | Mandatory passkey or TOTP; short sessions (§7). *Not built:* a platform admin console does not exist yet; network allowlisting of admin access moved to D9.3 | M | D1.3, D9.3 |
 | T-68 | Platform admin | T | Platform-level configuration (Safaricom IP allowlist, statutory seed rules) changed silently | Configuration changes need a permission plus maker-checker and are audited; rules that are not approved show warnings (§11) | L | D1.4, D4.1 |
-| T-69 | Platform admin | I | A "log in as tenant user" support feature is abused | Not built by default. If needed: granted by the tenant, time-limited, read-only, bannered and audited (OR-08) | M | D9.1 |
+| T-69 | Platform admin | I | A "log in as tenant user" support feature is abused | Not built by default. If needed: granted by the tenant, time-limited, read-only, bannered and audited (OR-08) | M | Not built (OR-08: no impersonation in v1) |
 
 ---
 
@@ -417,6 +419,12 @@ These are misuse cases by people with legitimate access, often colluding. The de
 | A-124 | **Overpayment of a certificate**: recording payments above what is payable, the certifier recording their own payment, or a retried request recording the same payment twice (TA-05, TA-07) | **D6.3 part B:** payments ≤ the certificate's payable − paid **and** ≤ the subcontract's certified payable − paid, so a correcting (negative) certificate nets off what is left to pay; never by the certifier (`app.guard_subcontract_payment`, subcontract and certificate rows locked), `Idempotency-Key` required with a request digest, reference unique per method; M-Pesa B2B (D4.3) not built — payments are records of money paid outside |
 | A-125 | **Piece-rate leakage**: typing a higher rate per output, recording output beyond the agreed job, paying for work never measured, or a creator approving their own job (TA-05) | **D6.3 part B (D-147):** output against a job sends no rate; `app.guard_piece_rate_output_job` enforces the job's rate, unit, worker, item, dates and cap with the job row locked; jobs and extensions decided by someone else; D4.1 output approval never by the recorder; the reconciliation flags pay above measured, and output without a job in a unit that cannot be compared with the item's (`not-comparable`, counted as flagged) |
 | A-126 | **Subcontract data exposure**: a subcontractor (D7.2 portal user), client, consultant or site agent reading rates, retention, advances or other subcontractors' certificates (TA-06) | **D6.3 part B (D-149):** reader sets per action (role ∩ assignment); restrictive RLS policies keep supplier-role members (D7.2) and client members (D7.1) out of all twelve subcontract and piece-rate tables (404); exports rate-limited, audited and generated on demand, text neutralised against formulas (A-102) |
+| A-130 | **Key compromise or a misused rotation path**: a leaked field or sealing key reads stored identifiers or TOTP seeds; an insider with the schema owner's credentials uses the re-encryption path to swap ciphertexts (TA-08) | **D9.1 (D-151):** versioned field and sealing keys rotate without downtime (`keys:rotate`); retired keys are removed from the running configuration and kept only for restores; the database lets the schema owner change a ciphertext column only, only to a different key version, never on behalf of `pmb_app`; cryptoperiods and key custody in SECURITY_CHECKLIST §5.5. *Gap:* the blind-index key cannot rotate (payroll snapshots keep indexes without plaintext) | `keys:rotate status`; `key_rotation_runs` (operator, counts, failures) | `key_rotation_runs`; OPERATIONS key-rotation log | D9.1, D9.3 (KMS) |
+| A-131 | **One-time link tokens leaking**: an invitation or PIN-reset link (token in the query string) is read from a shared phone's browser history, a forwarded SMS, or proxy logs, and used to join a company or reset a labourer's PIN (TA-02, TA-09) | Tokens are 256-bit, single use, hashed at rest and expire (PIN reset 15 minutes; invitations expire); invitations are bound to the recipient's identifier; `Referrer-Policy: strict-origin-when-cross-origin` (D9.1) keeps them out of third-party Referer headers; API request logs drop query strings. *Option:* move tokens to the URL fragment (owner decision, SECURITY_CHECKLIST §4) | Failed and replayed redemptions are rate-limited and refused | Invitation and challenge rows (consumed time) | D9.1 |
+| A-132 | **Take-over from a session left open** on a shared or cyber-café computer: the next person changes the password, signs the owner out of their other devices or adds their own MFA factor (TA-02) | **D9.1 (D-152):** password change needs the current password and, with MFA, a fresh step-up; ending other sessions needs a sign-in or MFA within five minutes; adding a factor needs a fresh sign-in or step-up (D1.3); 30-minute idle timeout; `no-store` responses and a full reload on sign-out (A-133 headers) | Security events for password changes and session revocations; email or SMS notice on password change | Security event log; session rows | D9.1 |
+| A-133 | **Script injection despite React**: a dependency, a future raw-HTML feature or a browser quirk runs injected script and acts as the user (TA-01, TA-02) | **D9.1 (D-150):** per-request nonce CSP with `'strict-dynamic'`, no `'unsafe-inline'` or (in production) `'unsafe-eval'` for scripts, `object-src 'none'`, `base-uri 'none'`, `form-action 'self'`, `connect-src 'self'`; Zod's eval probe disabled; tests prove injected handlers, `javascript:` URLs and foreign images are blocked. `style-src 'unsafe-inline'` remains (CSS injection cannot run script) | Browser CSP violations (a reporting endpoint is a D9.3 option) | — | D9.1 |
+| A-134 | **Malware delivered through an upload**: an infected PDF, Office file or image uploaded as a document, receipt or photo and opened by staff or clients (TA-01, TA-04) | Content-only type detection, macro and PDF-script refusal, ZIP limits (D2.2, D8.4); **D9.1 (D-156):** ClamAV clamd scanning that fails closed; downloads as attachments with `nosniff` and a sandbox CSP | clamd findings logged with the file's SHA-256 | Refused uploads are not stored; audit of refusals where the module records them | D9.1, D9.3 (clamd operations) |
+| A-135 | **Attacks on sign-in going unnoticed**: credential stuffing, PIN guessing or MFA brute force spread over time (TA-01, TA-09) | Rate limits, lockouts and budgets (SECURITY_CHECKLIST §5.1); **D9.1 (D-154):** structured security events for every authentication outcome and 401/403/429 logged at `warn` with the actor. *Not built:* alerting on these events (D9.3) | Security events and request logs | Logs (retention D9.3) | D9.1, D9.3 |
 
 ---
 
@@ -424,26 +432,26 @@ These are misuse cases by people with legitimate access, often colluding. The de
 
 ### 7.1 OWASP ASVS
 
-The brief targets **ASVS Level 2**. The current major version is **ASVS 5.0**. The exact version (for example 5.0.x) is **pinned in D9.1**, when the requirement-level checklist is produced. Version 5.0 renumbered requirements compared with 4.0.3, so this table maps at chapter level only.
+The brief targets **ASVS Level 2**. **Pinned in D9.1: ASVS 5.0.0** (release `v5.0.0_release`, 30 May 2025). The requirement-by-requirement assessment of all 253 Level 1 and Level 2 requirements, with evidence, is [SECURITY_CHECKLIST.md](./SECURITY_CHECKLIST.md) (on 14/11/2026: 139 Pass, 51 N/A, 43 fixed in D9.1, 20 deferred to D9.3, none open). This table maps chapters to threats; "First verified" names the deliverable whose tests first proved the control.
 
 | ASVS 5.0 chapter | PM-Buddy controls | ARCHITECTURE | Related IDs | First verified |
 |---|---|---|---|---|
 | V1 Encoding and Sanitization | React output encoding, no raw HTML, parameterised SQL, formula escaping in exports | §9, §18 | T-02, T-15, T-25 | D1.2, D2.2 |
 | V2 Validation and Business Logic | Shared Zod schemas; state machines; maker-checker; approval limits; anomaly rules; idempotency | §8, §13, §14 | T-09, A-03, A-05, A-16 | D1.4, D3.3, D4.3 |
-| V3 Web Frontend Security | Nonce-based CSP, HSTS, `frame-ancestors 'none'`, `__Host-` cookies, SameSite | §7, §18 | T-02, T-04, T-07 | D1.2 |
+| V3 Web Frontend Security | Nonce-based CSP, HSTS, `frame-ancestors 'none'`, `__Host-` cookies, SameSite | §7, §18, §4.17 | T-02, T-04, T-07, A-133 | Cookies and CSRF D1.3; **web CSP and headers D9.1** (they were not built in D1.2) |
 | V4 API and Web Service | OpenAPI contract, problem+JSON, webhook hardening, `Idempotency-Key` | §14.4, §16, §21 | T-13, T-48, T-52 | D1.1, D4.2 |
-| V5 File Handling | Constrained pre-signed uploads, quarantine, magic bytes, malware scan, private buckets | §17 | T-19, T-27, T-28 | D3.1, D6.1 |
-| V6 Authentication | Argon2id, breached-password check, TOTP and passkeys, OTP limits, USSD PIN lockout | §7 | T-01, T-49, T-61 | D1.3, D7.3 |
-| V7 Session Management | Short access tokens, rotating refresh tokens with reuse detection, session revoke, device binding | §7 | T-10, T-34 | D1.3, D3.2 |
+| V5 File Handling | Uploads through the API (not pre-signed URLs, as built), magic bytes, ZIP limits, malware scan, private buckets | §17 | T-19, T-27, T-28, A-134 | D2.2, D6.1, D8.4; ClamAV D9.1 |
+| V6 Authentication | Argon2id, breached-password check (on in production since D9.1), TOTP and passkeys, OTP limits, PIN lockout, password change (D9.1) | §7 | T-01, T-49, T-61, A-132 | D1.3, D9.1; USSD D7.3 |
+| V7 Session Management | Short access tokens, rotating refresh tokens with reuse detection, session revoke (re-authentication since D9.1), device binding | §7 | T-10, T-34, A-132 | D1.3, D9.1; device binding D3.2 |
 | V8 Authorization | RBAC with project scope, RLS, composite FKs, sensitive-field masking, step-up | §6, §8 | T-08, T-22, A-19 | D1.4 |
 | V9 Self-contained Tokens | JWT with pinned algorithms, short TTL, claim checks, action-bound step-up token | §7 | T-10, A-17 | D1.3 |
 | V10 OAuth and OIDC | Daraja OAuth client-credential token caching; Google sign-in as an OIDC relying party (code flow, PKCE S256, state and nonce in an encrypted single-use cookie, ID token issuer/audience/expiry/nonce/signature checks, Gmail or matching Workspace `hd` only, linking by stable subject, PM-Buddy MFA unchanged) | §7, §14.1 | T-54 | D4.2; Google sign-in 11/11/2026 |
-| V11 Cryptography | AES-256-GCM envelope encryption, KMS-held KEKs, separate biometric KEK, HMAC blind indexes, Ed25519 device signatures, vetted libraries only | §10, §12.2 | T-35, A-20 | D1.3, D3.1, D3.4 |
+| V11 Cryptography | AES-256-GCM field encryption with versioned keys (KMS-held KEKs later), separate biometric KEK (D3.4), HMAC blind indexes, Ed25519, vetted libraries only; key rotation tooling and drill | §10, §12.2, §4.17 | T-35, A-20, A-130 | D1.3, D3.1, D9.1 |
 | V12 Secure Communication | TLS everywhere, including Redis and PostgreSQL connections; HSTS | §18, §20 | T-31 | D1.1, D9.3 |
-| V13 Configuration | Secrets manager, no secrets in the repo, production guards, hardened images, governed business configuration | §11, §14.1, §20 | T-63, T-65, T-68 | D1.1, D9.1 |
+| V13 Configuration | Secrets manager (D9.3), no secrets in the repo, production guards (API docs off since D9.1), hardened images (D9.3), governed business configuration | §11, §14.1, §20 | T-63, T-65, T-68 | D1.1, D9.1 |
 | V14 Data Protection | Field-level encryption, masking, minimisation, retention and deletion jobs, `no-store` caching, DPIA | §8, §10, §17 | T-05, T-24, A-18 | D3.1, D3.4 |
-| V15 Secure Coding and Architecture | Module boundaries (dependency-cruiser), dependency hygiene, SBOM, safe concurrency | §4, §20, §21 | T-17, T-62 | D1.1 |
-| V16 Security Logging and Error Handling | Hash-chained audit, log redaction, Sentry scrubbing, security alerts | §9, §19 | T-12, T-14, A-24 | D1.4 |
+| V15 Secure Coding and Architecture | Module boundaries, dependency hygiene (`pnpm audit` gate and CycloneDX SBOM since D9.1), safe concurrency | §4, §20, §21 | T-17, T-62 | D1.1, D9.1 |
+| V16 Security Logging and Error Handling | Hash-chained audit, log redaction, security events and actor-attributed request logs (D9.1); Sentry, shipping and alerts (D9.3) | §9, §19 | T-12, T-14, A-24, A-135 | D1.4, D9.1 |
 | V17 WebRTC | Not applicable: no WebRTC is planned | n/a | n/a | n/a |
 
 ### 7.2 OWASP API Security Top 10 (2023)
@@ -463,6 +471,37 @@ The brief targets **ASVS Level 2**. The current major version is **ASVS 5.0**. T
 
 ---
 
+## D4.2 implementation evidence and residual limits
+
+The local Daraja transport now exercises T-52–55 and A-06/A-07 through
+`apps/api/test/payments.e2e-spec.ts`: encrypted durable callbacks before acknowledgement,
+unknown/mismatched callback quarantine, concurrent duplicate deliveries, monotonic outcomes,
+lost results/acknowledgements, status reconciliation, write-only credentials, independent
+review/reversal and tenant/portal RLS. Runtime tests reject malformed IP allow-lists; logging
+tests ensure callback path tokens are removed, and since the independent review they are also
+removed from exported trace spans and masked in stored idempotent responses. After a token
+rotation no provider call carries the retired token. A reversal's requester cannot settle its
+outcome. A credential update's idempotency fingerprint is keyed and includes the values, not just
+field names.
+
+These are **not production approvals**. In particular:
+
+- Daraja callbacks are unsigned. The implemented path token is per company/rotated route, not a
+  separate secret per request. Source allow-lists are optional and need approved ranges plus a
+  correctly configured trusted proxy. A leaked valid path and known provider identifiers remain
+  a risk; OR-11's high-value independent verification is still open.
+- Secrets are field-encrypted in PostgreSQL under versioned external master keys, rather than
+  individual secrets-manager references; the configured master keys must come from approved key
+  management outside development. Losing a key loses decryptability.
+- C2B validation checks the company's shortcode, **not** whether a client certificate is open.
+  Confirmations remain unallocated; neither they nor console STK test payments create client
+  receipts. T-56 and the client portal's disabled STK boundary remain open.
+- Payroll reservations, recipient-name comparison, statement upload/reconciliation, tariffs and
+  business-ledger outcome handlers are D4.3. No production environment can be selected. A mock
+  test pass or a skipped sandbox suite does not close CR-PMT-01–04.
+- The mock is loopback-only by default and has unauthenticated control routes; it must never be
+  publicly exposed or configured with real credentials.
+
 ## 8. Security testing plan per phase
 
 Every mitigation above needs at least one automated test before it counts as implemented. Tooling follows §21.
@@ -470,7 +509,7 @@ Every mitigation above needs at least one automated test before it counts as imp
 | Phase | Security tests and gates |
 |---|---|
 | **D1.1** | CI from day one: CodeQL, gitleaks (pre-commit and CI), dependency review, OSV-Scanner, Trivy image scan, SBOM. Lint bans on raw HTML injection and untagged raw SQL. Unit tests for production guards (no static KEK, no mock provider). |
-| **D1.2** | Security-header and CSP snapshot tests; XSS regression tests on free-text fields. |
+| **D1.2** | Security-header and CSP snapshot tests; XSS regression tests on free-text fields. *D9.1 finding:* the header and CSP tests were not built in D1.2 (the web sent no CSP); they arrived in D9.1. |
 | **D1.3** | Authentication integration tests: lockout, OTP expiry and rate limits, refresh-token rotation and **reuse revokes the family**, step-up required and **bound to the action hash** (changing the amount after MFA must fail), CSRF rejection without a token or with a foreign Origin. |
 | **D1.4** | **Tenant isolation suite** generated from the Prisma model list: cross-tenant read, update and delete through the API and directly as `pmb_app` with a missing or wrong `app.tenant_id` (must fail closed). RLS migration check. Authorisation matrix tests (role × permission × endpoint). Maker-checker trigger tests. Audit hash-chain verification, including tamper detection. |
 | **D2.2** | Excel import fuzzing (malformed, oversized, zip bombs, formulas, external links). Formula-injection tests on exports. Upload type and size enforcement. |
@@ -490,7 +529,7 @@ Every mitigation above needs at least one automated test before it counts as imp
 | **D8.1** | Reports (A-100–A-107): each report against its source endpoint for the same person (owner, finance, project manager on assigned projects only, site agent, storekeeper, supplier and client refused), another company's project 404, sites/stores/batches of other projects 422; formula injection in the Excel export; the PDF and row limits; `report.viewed`/`report.exported` metadata IDs only; subscriptions only for oneself and changed only by the subscriber (API and SQL as `pmb_app`); runs append-only; the scheduler claiming a due subscription once under concurrency, skipping on lost permission and sending no report data. Not done: PDF watermarking. |
 | **D8.3** | Plant (A-70–A-74): backwards and back-dated meter readings and out-of-order resets through the API and in SQL as the runtime role; UPDATE/DELETE of usage, fuel, moves and resets; forged status or site without a move or breakdown; usage or fuel at a site the item was not at; a fuel issue with another standard; working days on unsafe plant; corrections by someone who neither manages plant nor recorded the entry; portal roles and another company refused; database refusals mapped to problems, never a 500. |
 | **D8.4** | Documents (A-90–A-95): two current versions, a current version that is not the newest, UPDATE/DELETE of versions, records, responses and attachments, a status changed without a response, a self-approval in the app, a response on another digest, a non-verified photo attachment and writes on a closed project, through the API and in SQL as the runtime role; files refused by content (CAD, old Office, macros, PDF scripts, renamed executables, unsafe zips); confidential documents invisible to non-finance readers in lists, details, downloads, evidence and attachments; clients, storekeepers and another company refused; downloads audited; database refusals mapped to problems, never a 500. |
-| **D9.1** | ASVS Level 2 checklist (version pinned). **ZAP baseline scan against staging** in CI. Header and CSP review. Key rotation drill (KEKs including the biometric KEK, DEK re-wrap). Threat model v1.0. Pen-test preparation. |
+| **D9.1** | **Done:** ASVS 5.0.0 L1/L2 checklist ([SECURITY_CHECKLIST](./SECURITY_CHECKLIST.md)); web header and CSP tests (`apps/web/src/lib/security-headers.test.ts`, `apps/web/test/security-headers.spec.ts`: headers on pages and static files, injected handlers, `javascript:` URLs and foreign images blocked, six key pages without a violation) plus a walk of 442 page loads against the real API (191 under `next dev`: owner, client and supplier; 251 in a production build: owner, project manager, client and supplier); guard coverage of every API controller; password change, session re-authentication, security-event and malware-scanner tests; **key rotation drill** for field keys, the sealing (MFA) key and the signing key, end to end in `apps/api/test/key-rotation.e2e-spec.ts` and on the development database (OPERATIONS "Key rotation"); threat model refresh (this version); pen-test preparation ([PENTEST_SCOPE](./PENTEST_SCOPE.md)); `pnpm audit` gate and SBOM in CI. **Moved to D9.3:** ZAP baseline against staging (no staging yet), KMS-held KEKs and DEK re-wrap (keys are environment variables, D-30), biometric KEK (D3.4). |
 | **D9.2** | Abuse load tests: sync storms, callback bursts, OTP floods. Degradation drills (M-Pesa, SMS down). |
 | **D9.3** | Restore drill, with audit-chain verification after the restore. Breach runbook tabletop exercise (with [DPIA](./DPIA_TEMPLATE.md) §10). Secret rotation. |
 | **Before any real money moves** | **Independent penetration test** covering web, API, site app, kiosk and terminal, USSD and payment callbacks. This is the "security review" go-live gate in ROADMAP §4 and applies to a pilot too. High findings are fixed and retested. |
@@ -505,6 +544,8 @@ Every mitigation above needs at least one automated test before it counts as imp
 
 **Residual risk summary (STRIDE):** 1 High (T-45), 35 Medium, 33 Low across 69 threats. The High item must be reduced or explicitly accepted before D3.4 ships terminal support.
 
+**D9.1 refresh (14/11/2026).** Ratings are unchanged; the evidence behind several Low ratings changed. T-02, T-04 and T-07 were rated Low on a CSP that did not exist until D9.1; with it now built and tested they stay Low. T-05 stays Medium (downloaded files and shared computers). New abuse cases A-130–A-135 cover key handling, one-time links, take-over from open sessions, script injection, malware uploads and unnoticed sign-in attacks. What the ASVS checklist defers to D9.3 (TLS, secrets manager, log shipping, edge, operations view) is listed in [SECURITY_CHECKLIST §4](./SECURITY_CHECKLIST.md#4-deferred-items-and-decisions-for-the-owner).
+
 **Gaps found by this model** (now in ARCHITECTURE §17 items 6–7 and §10): formula-injection escaping for exports (T-15, D2.2); locked-down PDF rendering against SSRF (T-20, D2.2); perceptual-hash photo reuse detection (A-13, D6.1; built: difference hash, see A-13); biometric KEK held by a separately deployed worker (OR-01, D3.4).
 
 Each decision below should be logged in [QUESTIONS.md](./QUESTIONS.md). Legal and regulatory items are also tracked in [COMPLIANCE_TODO.md](./COMPLIANCE_TODO.md).
@@ -517,7 +558,7 @@ Each decision below should be logged in [QUESTIONS.md](./QUESTIONS.md). Legal an
 | OR-04 | **Segregation of duties for small tenants** | Some contractors have only one or two office staff (A-16) | Require two distinct people for payouts by default. Allow an Owner waiver with a reason, a visible banner, audit and lower limits. | D4.3 |
 | OR-05 | **Payee-change hold and verification** | Fraud protection (A-04, A-25) against urgent-payment friction | Default hold with an Owner override under step-up; confirm the worker in person on site | D4.3 |
 | OR-06 | **Cash payment policy** | Unrecorded cash is a top leak (A-12) | Per-tenant cap, or disallow cash for payroll; require worker acknowledgement | D4.3 |
-| OR-07 | **Where to anchor audit-chain heads and evidence objects** | Protects against insiders with database or storage admin rights (T-23, T-29, A-24) | Object-lock (WORM) bucket in a separate account, or an external timestamping service | D1.4, D9.1 |
+| OR-07 | **Where to anchor audit-chain heads and evidence objects** | Protects against insiders with database or storage admin rights (T-23, T-29, A-24) | Object-lock (WORM) bucket in a separate account, or an external timestamping service | D9.3 (not decided in D9.1: depends on the cloud choice) |
 | OR-08 | **Platform support access** | Impersonation is powerful and easy to abuse (T-66, T-69) | No impersonation in v1; break-glass only, dual-approved and tenant-visible | D1.4 |
 | OR-09 | **Hosting region and cross-border transfer** | Affects where the KMS, backups and biometric data live (DPIA §11) | Decide before any real personal data reaches production | Before Phase 9, and before any pilot |
 | OR-10 | **Device attestation (Play Integrity)** | Raises the bar on mock location and repackaged apps (T-36, T-40), but depends on Google Play services and may fail on some low-end phones | Use the verdict as an anomaly signal, not a hard block | D3.2, D3.3 |
@@ -525,6 +566,9 @@ Each decision below should be logged in [QUESTIONS.md](./QUESTIONS.md). Legal an
 | OR-17 | **Second approver for Paybill instructions** | A changed Paybill redirects clients' money (A-113); D7.1 relies on step-up, versions and audit | Require a second `config.manage` holder to confirm a change before clients see it, with an Owner waiver for one-admin companies (as OR-04) | Before a real company's clients use the portal |
 | OR-12 | **Operator SIM-swap check** | Reduces payouts diverted by SIM swap (A-22) | Ask Safaricom whether a SIM-swap check is commercially available | D4.3 |
 | OR-13 | **Pen-test vendor, scope and timing** | Required before any real money moves (ROADMAP §4) | Book early; include kiosk and terminal hardware and USSD | Before pilot |
-| OR-14 | **Vulnerability disclosure** | Researchers need a safe channel | Publish `security.txt` and a disclosure policy | D9.1 |
+| OR-14 | **Vulnerability disclosure** | Researchers need a safe channel | Publish `/.well-known/security.txt` (RFC 9116) and a disclosure policy. *D9.1:* not published, because it needs a monitored contact address and an expiry date the owner must choose; the template and triage rules are in [PENTEST_SCOPE](./PENTEST_SCOPE.md) | Before pilot (owner: contact address) |
 | OR-15 | **1:1 verification vs 1:N identification** | 1:1 (tap card, then match only that worker's template) is less intrusive and more accurate than 1:N | Evaluate 1:1 as the default where cards are issued; record the choice in the DPIA | D3.4 |
 | OR-16 | **Passkeys for approvers** | TOTP can be phished in real time (T-01, A-17) | Require passkeys for payout approval, with TOTP as a fallback only | D1.3, D4.3 |
+| OR-20 | **MFA for every office role** (ASVS V6.3.3) | Project managers, site agents and storekeepers may sign in with a password only; ASVS L2 expects MFA for everyone unless the relaxation is documented (SECURITY_CHECKLIST §4, D-155) | Require MFA for project managers and site agents before pilot; keep labourers on PINs | Before pilot |
+| OR-21 | **Blind-index key cannot rotate** (A-130) | A leaked `FIELD_BLIND_INDEX_KEY` plus a database copy allows dictionary attacks on phones and ID numbers; recomputing indexes would break payroll snapshots | Version blind indexes (key version column next to each `*_bidx`) before real personal data is stored, or accept with a recompute-in-maintenance procedure | Before real personal data |
+| OR-22 | **No CSP violation reporting or security alerting** | Blocked injections and sign-in attacks are logged or seen only in browsers; nobody is alerted (A-133, A-135) | Add a CSP `report-to` endpoint and alerts on security events with the log pipeline | D9.3 |

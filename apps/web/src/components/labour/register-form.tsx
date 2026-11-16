@@ -29,6 +29,7 @@ import {
   type LabourerWarning,
   type LabourSetupResponse,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
@@ -382,38 +383,40 @@ export function RegisterForm({
       type?: string;
       inputMode?: "numeric" | "tel" | "text";
       maxLength?: number;
+      date?: boolean;
     } = {},
-  ) => (
-    <Field data-invalid={invalid[name] ? true : undefined}>
-      <FieldLabel htmlFor={`register-${name}`}>
-        {options.label ?? t(`fields.${name as "fullName"}`)}
-        {options.required ? <span aria-hidden> *</span> : null}
-      </FieldLabel>
-      <Input
-        id={`register-${name}`}
-        value={values[name]}
-        onChange={set(name)}
-        type={options.type ?? "text"}
-        inputMode={options.inputMode}
-        maxLength={options.maxLength ?? 150}
-        autoComplete="off"
-        required={options.required}
-        aria-invalid={invalid[name] ? true : undefined}
-        aria-describedby={
-          [
-            options.hint ? `register-${name}-hint` : "",
-            invalid[name] ? `register-${name}-error` : "",
-          ]
-            .filter(Boolean)
-            .join(" ") || undefined
-        }
-      />
-      {options.hint ? (
-        <FieldDescription id={`register-${name}-hint`}>{options.hint}</FieldDescription>
-      ) : null}
-      <InvalidMessage id={`register-${name}-error`} reason={invalid[name]} oldest={oldest} />
-    </Field>
-  );
+  ) => {
+    const control = {
+      id: `register-${name}`,
+      value: values[name],
+      onChange: set(name),
+      inputMode: options.inputMode,
+      maxLength: options.maxLength ?? 150,
+      required: options.required,
+      "aria-invalid": invalid[name] ? true : undefined,
+      "aria-describedby":
+        [options.hint ? `register-${name}-hint` : "", invalid[name] ? `register-${name}-error` : ""]
+          .filter(Boolean)
+          .join(" ") || undefined,
+    };
+    return (
+      <Field data-invalid={invalid[name] ? true : undefined}>
+        <FieldLabel htmlFor={`register-${name}`}>
+          {options.label ?? t(`fields.${name as "fullName"}`)}
+          {options.required ? <span aria-hidden> *</span> : null}
+        </FieldLabel>
+        {options.date ? (
+          <DateTextInput {...control} />
+        ) : (
+          <Input {...control} type={options.type ?? "text"} autoComplete="off" />
+        )}
+        {options.hint ? (
+          <FieldDescription id={`register-${name}-hint`}>{options.hint}</FieldDescription>
+        ) : null}
+        <InvalidMessage id={`register-${name}-error`} reason={invalid[name]} oldest={oldest} />
+      </Field>
+    );
+  };
   const select = (
     name: FieldName,
     label: string,
@@ -508,6 +511,7 @@ export function RegisterForm({
             inputMode: "numeric",
             hint: t("dobHint", { date: formatCalendarDate(oldest) }),
             maxLength: 10,
+            date: true,
           })}
           {select(
             "gender",
@@ -582,7 +586,12 @@ export function RegisterForm({
             ...(companyWide ? [{ value: NO_PROJECT, label: t("noProject") }] : []),
           ])}
           {values.projectId !== NO_PROJECT
-            ? field("startDate", { inputMode: "numeric", hint: t("dateHint"), maxLength: 10 })
+            ? field("startDate", {
+                inputMode: "numeric",
+                hint: t("dateHint"),
+                maxLength: 10,
+                date: true,
+              })
             : null}
         </fieldset>
 
@@ -604,6 +613,7 @@ export function RegisterForm({
               date: formatCalendarDate(addCalendarDays(today, 365)),
             }),
             maxLength: 10,
+            date: true,
           })}
         </fieldset>
 

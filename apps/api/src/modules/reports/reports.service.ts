@@ -43,7 +43,7 @@ import {
 
 export type ReportMode = "preview" | "pdf" | "xlsx";
 
-const ID_PARAMS = ["projectId", "siteId", "storeId", "batchId", "actorId"] as const;
+const ID_PARAMS = ["projectId", "siteId", "storeId", "batchId", "actorId", "recordId"] as const;
 
 /**
  * The reports centre (D8.1, ARCHITECTURE §4.14): the list of reports with what the caller may run,
@@ -217,7 +217,9 @@ export class ReportsService {
       ...(definition.site ? ["siteId"] : []),
       ...(definition.store ? ["storeId"] : []),
       ...(definition.batch ? ["batchId"] : []),
-      ...(definition.actor ? ["actorId", "action"] : []),
+      ...(definition.actor ? ["actorId"] : []),
+      ...(definition.action ? ["action"] : []),
+      ...(definition.record ? ["recordId"] : []),
       ...(definition.period === "range" ? ["from", "to"] : []),
       ...(definition.period === "as-at" ? ["asAt"] : []),
     ]);
@@ -278,10 +280,9 @@ export class ReportsService {
       if (!batch) throw invalid("The payroll batch is not one of this project's batches");
       resolved.batchId = params.batchId;
     }
-    if (definition.actor) {
-      if (params.actorId) resolved.actorId = params.actorId;
-      if (params.action) resolved.action = params.action;
-    }
+    if (definition.actor && params.actorId) resolved.actorId = params.actorId;
+    if (definition.action && params.action) resolved.action = params.action;
+    if (definition.record && params.recordId) resolved.recordId = params.recordId;
     if (definition.period === "range") {
       const result = reportPeriod(definition, params, today);
       if (!result.ok)
@@ -404,7 +405,7 @@ export class ReportsService {
     );
   }
 
-  /** The header lines: project, site, store, batch, period, as-at, person and action. */
+  /** The header lines: project, site, store, batch, period, as-at, person, action and record. */
   private async parameters(
     scope: Scope,
     id: ReportId,
@@ -484,8 +485,11 @@ export class ReportsService {
         label: t.actor,
         value: actor?.displayName ?? (resolved.actorId ? resolved.actorId : t.anyone),
       });
-      lines.push({ key: "action", label: t.action, value: resolved.action ?? t.anyAction });
     }
+    if (definition.action)
+      lines.push({ key: "action", label: t.action, value: resolved.action ?? t.anyAction });
+    if (definition.record)
+      lines.push({ key: "record", label: t.record, value: resolved.recordId ?? t.anyRecord });
     return lines;
   }
 

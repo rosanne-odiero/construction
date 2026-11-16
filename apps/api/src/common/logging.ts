@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Params } from "nestjs-pino";
 import type { SerializedRequest, SerializedResponse } from "pino";
 import type { AppConfig } from "../config/app-config.js";
+import { accessIdentity } from "./access-context.js";
 
 /**
  * Never log secrets or personal data (brief §7, ARCHITECTURE §19). Paths are matched by pino's
@@ -14,6 +15,7 @@ export const REDACT_PATHS = [
   'req.headers["x-step-up-token"]',
   'req.headers["x-device-proof"]',
   'req.headers["x-csrf-token"]',
+  'req.headers["x-ussd-token"]',
   'res.headers["set-cookie"]',
   "*.password",
   "*.token",
@@ -24,6 +26,10 @@ export const REDACT_PATHS = [
   "*.recoveryCodes",
   "*.uri",
   "*.identifier",
+  "*.pin",
+  "*.phoneNumber",
+  "*.sessionId",
+  "*.text",
   "*.phone",
   "*.idNumber",
   "*.kraPin",
@@ -59,6 +65,12 @@ export function serializeResponse(res: SerializedResponse) {
   return { statusCode: res.statusCode };
 }
 
+/** Who made the request (IDs only), once the API resolved a signed-in session. */
+export function withIdentity<T extends object>(req: object, value: T) {
+  const who = accessIdentity(req);
+  return who ? { ...value, userId: who.userId, tenantId: who.tenantId } : value;
+}
+
 export function loggerOptions(config: AppConfig): Params {
   const pretty = config.get("NODE_ENV") === "development";
   return {
@@ -68,6 +80,8 @@ export function loggerOptions(config: AppConfig): Params {
       serializers: { req: serializeRequest, res: serializeResponse },
       genReqId: requestId,
       customProps: () => ({ service: config.get("OTEL_SERVICE_NAME") }),
+      customSuccessObject: (req, _res, value: object) => withIdentity(req, value),
+      customErrorObject: (req, _res, _error, value: object) => withIdentity(req, value),
       autoLogging: { ignore: (req) => req.url?.startsWith("/api/v1/health") ?? false },
       ...(pretty
         ? {

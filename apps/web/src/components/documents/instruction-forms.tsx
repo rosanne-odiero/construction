@@ -15,6 +15,7 @@ import {
   type InstructionLogDetail,
   type InstructionOptionsResponse,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { checkboxClass } from "@/components/safety/common";
 import { FormError, selectClass } from "@/components/schedule/use-schedule-mutation";
 import { Button } from "@/components/ui/button";
@@ -139,10 +140,9 @@ function InstructionFields({
         </Field>
         <Field>
           <FieldLabel htmlFor="instruction-issued">{t("instructions.form.issuedOn")}</FieldLabel>
-          <Input
+          <DateInput
             id="instruction-issued"
             name="issuedOn"
-            type="date"
             required
             max={today}
             defaultValue={values.issuedOn ?? today}
@@ -152,10 +152,9 @@ function InstructionFields({
           <FieldLabel htmlFor="instruction-received">
             {t("instructions.form.receivedOn")}
           </FieldLabel>
-          <Input
+          <DateInput
             id="instruction-received"
             name="receivedOn"
-            type="date"
             required
             max={today}
             defaultValue={values.receivedOn ?? today}

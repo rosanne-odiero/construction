@@ -1,3 +1,4 @@
+export { canonicalJson, captureClockDrift } from "./capture.js";
 export {
   detectDayAnomalies,
   hasValidCard,

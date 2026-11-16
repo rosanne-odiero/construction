@@ -18,6 +18,7 @@ import {
   bounded,
   column,
   displayNames,
+  fill,
   money,
   sum,
   type BuildContext,
@@ -303,6 +304,109 @@ export async function auditLog(ctx: BuildContext): Promise<BuildResult> {
           column("action", t.action, "text"),
           column("resource", t.resource, "text"),
           column("metadata", t.metadata, "text"),
+        ],
+        rows,
+        totals: null,
+        notes: [t.note],
+      },
+    ],
+    notes: [],
+  };
+}
+
+const ACCESS_KEY = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
+const ACCESS_VALUE = /^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,63}|\[redacted\])$/;
+type AccessOutcome = "allowed" | "refused" | "notFound" | "rejected" | "failed" | "cancelled";
+const accessOutcome = (status: number): AccessOutcome =>
+  status === 499
+    ? "cancelled"
+    : status < 400
+      ? "allowed"
+      : status === 401 || status === 403
+        ? "refused"
+        : status === 404
+          ? "notFound"
+          : status < 500
+            ? "rejected"
+            : "failed";
+/** `id=… projectId=…`: keys and values as recorded, anything else as [text]. */
+const accessRecords = (params: unknown): string | null => {
+  if (!params || typeof params !== "object" || Array.isArray(params)) return null;
+  const parts = Object.entries(params as Record<string, unknown>).map(
+    ([key, value]) =>
+      `${ACCESS_KEY.test(key) ? key : "[text]"}=${typeof value === "string" && ACCESS_VALUE.test(value) ? value : "[text]"}`,
+  );
+  return parts.length ? parts.join(" ") : null;
+};
+
+/**
+ * Access log (company): who accessed what and when — every signed-in request made in the company,
+ * reads and refusals included, newest first; optionally one person's and/or those whose address
+ * carried a record's ID. Same permission as the audit log: audit.view with a recent MFA check.
+ */
+export async function accessLog(ctx: BuildContext): Promise<BuildResult> {
+  const { tx, access } = ctx.scope;
+  const t = ctx.t.access;
+  const { from, to } = ctx.params.period!;
+  const events = bounded(
+    await tx.accessEvent.findMany({
+      where: {
+        tenantId: access.tenantId,
+        occurredAt: {
+          gte: zonedDateTime(from, 0),
+          lt: zonedDateTime(addCalendarDays(to, 1), 0),
+        },
+        ...(ctx.params.actorId ? { userId: ctx.params.actorId } : {}),
+        ...(ctx.params.recordId ? { resourceIds: { has: ctx.params.recordId } } : {}),
+      },
+      select: {
+        occurredAt: true,
+        userId: true,
+        authMethod: true,
+        method: true,
+        route: true,
+        params: true,
+        status: true,
+        ipAddress: true,
+        requestId: true,
+      },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      take: ctx.maxRows + 1,
+    }),
+    ctx.maxRows,
+  );
+  const people = await displayNames(
+    tx,
+    events.map((event) => event.userId),
+  );
+  const methods = t.methods as Record<string, string | undefined>;
+  const rows: ReportCell[][] = events.map((event) => [
+    event.occurredAt.toISOString(),
+    people.get(event.userId) ?? "—",
+    methods[event.authMethod] ?? event.authMethod,
+    `${event.method} ${event.route.replace(/^\/api\/v1\//, "")}`,
+    accessRecords(event.params),
+    fill(t.outcomeValue, {
+      status: event.status,
+      label: t.outcomes[accessOutcome(event.status)],
+    }),
+    event.ipAddress,
+    event.requestId,
+  ]);
+  return {
+    sections: [
+      {
+        key: "requests",
+        title: t.section,
+        columns: [
+          column("time", t.time, "datetime"),
+          column("actor", t.actor, "text"),
+          column("signIn", t.signIn, "text"),
+          column("request", t.request, "text"),
+          column("records", t.records, "text"),
+          column("outcome", t.outcome, "text"),
+          column("ip", t.ip, "text"),
+          column("requestId", t.requestId, "text"),
         ],
         rows,
         totals: null,

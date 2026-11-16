@@ -343,6 +343,7 @@ export class ReportSubscriptionsService {
           : null,
         entry["actorId"] ? (people.get(entry["actorId"]) ?? "—") : null,
         entry["action"] ? `${entry["action"]}…` : null,
+        entry["recordId"] ?? null,
       ]
         .filter((part): part is string => !!part)
         .join(" · ") || titles.params.allProjects.replace(/ \(\{count\}\)$/, "");

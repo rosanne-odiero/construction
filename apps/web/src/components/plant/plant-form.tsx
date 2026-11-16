@@ -19,6 +19,7 @@ import {
   type PlantDetail,
   type PlantOptionsResponse,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { field } from "@/components/safety/common";
 import {
   FormError,
@@ -288,7 +289,7 @@ export function PlantForm({
           </Field>
           <Field>
             <FieldLabel htmlFor={`${prefix}-start`}>{t("form.hireStart")}</FieldLabel>
-            <Input
+            <DateTextInput
               id={`${prefix}-start`}
               name="hireStartOn"
               inputMode="numeric"
@@ -297,7 +298,7 @@ export function PlantForm({
           </Field>
           <Field>
             <FieldLabel htmlFor={`${prefix}-end`}>{t("form.hireEnd")}</FieldLabel>
-            <Input
+            <DateTextInput
               id={`${prefix}-end`}
               name="hireEndOn"
               inputMode="numeric"
@@ -358,7 +359,7 @@ export function PlantForm({
         {editing ? null : (
           <Field>
             <FieldLabel htmlFor={`${prefix}-opening-on`}>{t("form.openingOn")}</FieldLabel>
-            <Input
+            <DateTextInput
               id={`${prefix}-opening-on`}
               name="openingOn"
               inputMode="numeric"

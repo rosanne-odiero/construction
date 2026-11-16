@@ -22,6 +22,7 @@ import {
   type IncidentDetailResponse,
   type SafetyOptionsResponse,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { PhotoThumbs, PhotoUpload } from "@/components/quality/photos";
 import {
   FormError,
@@ -569,12 +570,7 @@ export function IncidentDetail({
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Field>
                       <FieldLabel htmlFor="regulator-date">{t("detail.notifiedOn")}</FieldLabel>
-                      <Input
-                        id="regulator-date"
-                        name="notifiedOn"
-                        inputMode="numeric"
-                        placeholder="DD/MM/YYYY"
-                      />
+                      <DateTextInput id="regulator-date" name="notifiedOn" inputMode="numeric" />
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="regulator-reference">{t("detail.reference")}</FieldLabel>

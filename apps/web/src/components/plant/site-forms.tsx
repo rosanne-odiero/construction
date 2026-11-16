@@ -18,6 +18,7 @@ import {
   type ProjectPlantItem,
   type ProjectPlantOptionsResponse,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { checkboxClass, field } from "@/components/safety/common";
 import {
@@ -198,7 +199,7 @@ export function UsageForm({
       </p>
       <Field>
         <FieldLabel htmlFor="usage-date">{t("form.date")}</FieldLabel>
-        <Input id="usage-date" name="usedOn" inputMode="numeric" defaultValue={today} />
+        <DateTextInput id="usage-date" name="usedOn" inputMode="numeric" defaultValue={today} />
       </Field>
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">{t("usage.status")}</legend>
@@ -409,7 +410,7 @@ export function FuelForm({
       <div className="grid grid-cols-2 gap-3">
         <Field>
           <FieldLabel htmlFor="fuel-date">{t("form.date")}</FieldLabel>
-          <Input id="fuel-date" name="date" inputMode="numeric" defaultValue={today} />
+          <DateTextInput id="fuel-date" name="date" inputMode="numeric" defaultValue={today} />
         </Field>
         <Field>
           <FieldLabel htmlFor="fuel-time">{t("form.time")}</FieldLabel>

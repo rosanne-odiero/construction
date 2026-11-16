@@ -20,6 +20,7 @@ export const PARAM_KEYS = [
   "batchId",
   "actorId",
   "action",
+  "recordId",
   "from",
   "to",
   "asAt",
@@ -52,7 +53,9 @@ export function allowedParams(definition: ReportDefinition): (keyof ReportParams
     ...(definition.site ? (["siteId"] as const) : []),
     ...(definition.store ? (["storeId"] as const) : []),
     ...(definition.batch ? (["batchId"] as const) : []),
-    ...(definition.actor ? (["actorId", "action"] as const) : []),
+    ...(definition.actor ? (["actorId"] as const) : []),
+    ...(definition.action ? (["action"] as const) : []),
+    ...(definition.record ? (["recordId"] as const) : []),
     ...(definition.period === "range" ? (["from", "to"] as const) : []),
     ...(definition.period === "as-at" ? (["asAt"] as const) : []),
   ];

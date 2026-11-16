@@ -15,6 +15,7 @@ import {
   type ScheduleDelayVersion,
   type ScheduleItem,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -351,10 +352,9 @@ function DelayDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor="delay-start">{t("startDate")}</FieldLabel>
-              <Input
+              <DateTextInput
                 id="delay-start"
                 name="startDate"
-                placeholder="DD/MM/YYYY"
                 defaultValue={calendarInput(delay?.startDate ?? nairobiDate())}
                 required
                 disabled={busy}
@@ -362,10 +362,9 @@ function DelayDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor="delay-end">{t("endDate")}</FieldLabel>
-              <Input
+              <DateTextInput
                 id="delay-end"
                 name="endDate"
-                placeholder="DD/MM/YYYY"
                 defaultValue={calendarInput(delay?.endDate ?? null)}
                 disabled={busy}
                 aria-describedby="delay-end-hint"

@@ -19,6 +19,20 @@ const codes: Record<string, ProblemKey> = {
   conflict: "conflict",
   "rate-limited": "rateLimited",
   "version-conflict": "versionConflict",
+  "batch-stale": "payrollBatchStale",
+  "batch-exists": "payrollBatchExists",
+  "batch-empty": "payrollBatchEmpty",
+  "period-not-in-calendar": "payrollPeriodCalendar",
+  "period-not-started": "payrollPeriodNotStarted",
+  "rule-in-closed-period": "payrollRuleClosed",
+  "rule-in-use": "payrollRuleLocked",
+  "rule-verified": "payrollRuleLocked",
+  "minimum-wage-exists": "payrollMinimumExists",
+  "allowance-ended": "payrollAllowanceEnded",
+  "advance-over-limit": "payrollAdvanceLimit",
+  "advance-outstanding-limit": "payrollOutstandingLimit",
+  "nothing-to-export": "payrollNothingExport",
+  "payroll-rule": "payrollRule",
   "project-read-only": "projectReadOnly",
   "project-code-taken": "projectCodeTaken",
   "project-code-fixed": "projectCodeFixed",
@@ -146,6 +160,7 @@ const codes: Record<string, ProblemKey> = {
   "correction-not-needed": "correctionNotNeeded",
   "correction-outdated": "correctionOutdated",
   "pending-corrections": "pendingCorrections",
+  "pending-captures": "pendingCaptures",
   "period-not-due": "periodNotDue",
   "unconfirmed-days": "unconfirmedDays",
   "open-anomalies": "openAnomalies",
@@ -464,10 +479,14 @@ const codes: Record<string, ProblemKey> = {
 };
 
 /** EN/SW text for an API problem code; anything unknown is "unexpected" (never a success). */
-export function useProblemMessage() {
+export function useProblemMessage(context?: "payroll") {
   const t = useTranslations("apiErrors");
   return (error: unknown): string => {
     if (!(error instanceof FoundationApiError)) return t("unexpected");
+    if (context === "payroll" && error.code === "rules-not-configured")
+      return t("payrollRulesMissing");
+    if (context === "payroll" && error.code === "same-person") return t("payrollSamePerson");
+    if (context === "payroll" && error.code === "rule-exists") return t("payrollRuleExists");
     return t(codes[error.code] ?? (error.status === 409 ? "conflict" : "unexpected"));
   };
 }

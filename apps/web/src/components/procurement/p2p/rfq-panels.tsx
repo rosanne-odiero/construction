@@ -12,6 +12,7 @@ import {
   type RfqLine,
   type UnitWire,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { selectClass } from "@/components/procurement/material-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -204,20 +205,14 @@ export function QuotationDialog({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="quote-quoted-on">{t("quotedOn")}</FieldLabel>
-                  <Input
-                    id="quote-quoted-on"
-                    type="date"
-                    value={quotedOn}
-                    onChange={(event) => setQuotedOn(event.target.value)}
-                  />
+                  <DateInput id="quote-quoted-on" value={quotedOn} onValueChange={setQuotedOn} />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="quote-valid-until">{t("validUntil")}</FieldLabel>
-                  <Input
+                  <DateInput
                     id="quote-valid-until"
-                    type="date"
                     value={validUntil}
-                    onChange={(event) => setValidUntil(event.target.value)}
+                    onValueChange={setValidUntil}
                   />
                 </Field>
                 <Field>
@@ -442,12 +437,7 @@ export function AwardDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor="award-date">{t("deliveryDate")}</FieldLabel>
-              <Input
-                id="award-date"
-                type="date"
-                value={deliveryDate}
-                onChange={(event) => setDeliveryDate(event.target.value)}
-              />
+              <DateInput id="award-date" value={deliveryDate} onValueChange={setDeliveryDate} />
             </Field>
           </div>
           <Field>

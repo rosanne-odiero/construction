@@ -22,6 +22,7 @@ import {
   type PublicHoliday,
   type TimesheetRule,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { ActionDialog, selectClass } from "@/components/labour/action-dialog";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { Button } from "@/components/ui/button";
@@ -216,10 +217,9 @@ export function AddRuleButton({
           </Field>
           <Field>
             <FieldLabel htmlFor="rule-from">{t("effectiveFrom")}</FieldLabel>
-            <Input
+            <DateTextInput
               id="rule-from"
               value={form.effectiveFrom}
-              placeholder="DD/MM/YYYY"
               inputMode="numeric"
               aria-invalid={effectiveFrom ? undefined : true}
               onChange={(event) => setForm({ ...form, effectiveFrom: event.target.value })}
@@ -432,10 +432,9 @@ export function AddHolidayButton() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Field>
             <FieldLabel htmlFor="holiday-date">{tl("common.date")}</FieldLabel>
-            <Input
+            <DateTextInput
               id="holiday-date"
               value={form.date}
-              placeholder="DD/MM/YYYY"
               inputMode="numeric"
               onChange={(event) => setForm({ ...form, date: event.target.value })}
             />

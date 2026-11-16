@@ -10,6 +10,7 @@ import {
   updateProjectRequestSchema,
   type Project,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -209,30 +210,40 @@ export function ProjectFormDialog({
       type?: string;
       autoComplete?: string;
       inputMode?: "decimal" | "tel" | "email";
+      date?: boolean;
     } = {},
-  ) => (
-    <Field data-invalid={invalid[name] ? true : undefined}>
-      <FieldLabel htmlFor={`project-${name}`}>
-        {t(name)}
-        {options.required ? <span aria-hidden> *</span> : null}
-      </FieldLabel>
-      <Input
-        id={`project-${name}`}
-        value={values[name]}
-        onChange={set(name)}
-        type={options.type ?? "text"}
-        inputMode={options.inputMode}
-        autoComplete={options.autoComplete ?? "off"}
-        required={options.required}
-        aria-invalid={invalid[name] ? true : undefined}
-        aria-describedby={options.hint ? `project-${name}-hint` : undefined}
-      />
-      {options.hint ? (
-        <FieldDescription id={`project-${name}-hint`}>{options.hint}</FieldDescription>
-      ) : null}
-      {invalid[name] ? <FieldError>{t(`invalid.${invalid[name]}`)}</FieldError> : null}
-    </Field>
-  );
+  ) => {
+    const control = {
+      id: `project-${name}`,
+      value: values[name],
+      onChange: set(name),
+      required: options.required,
+      "aria-invalid": invalid[name] ? true : undefined,
+      "aria-describedby": options.hint ? `project-${name}-hint` : undefined,
+    };
+    return (
+      <Field data-invalid={invalid[name] ? true : undefined}>
+        <FieldLabel htmlFor={`project-${name}`}>
+          {t(name)}
+          {options.required ? <span aria-hidden> *</span> : null}
+        </FieldLabel>
+        {options.date ? (
+          <DateTextInput {...control} />
+        ) : (
+          <Input
+            {...control}
+            type={options.type ?? "text"}
+            inputMode={options.inputMode}
+            autoComplete={options.autoComplete ?? "off"}
+          />
+        )}
+        {options.hint ? (
+          <FieldDescription id={`project-${name}-hint`}>{options.hint}</FieldDescription>
+        ) : null}
+        {invalid[name] ? <FieldError>{t(`invalid.${invalid[name]}`)}</FieldError> : null}
+      </Field>
+    );
+  };
 
   return (
     <>
@@ -293,8 +304,8 @@ export function ProjectFormDialog({
             {field("clientEmail", { type: "email", inputMode: "email" })}
             {field("clientPhone", { type: "tel", inputMode: "tel", hint: t("clientPhoneHint") })}
             {field("contractSum", { inputMode: "decimal", hint: t("contractSumHint") })}
-            {field("startDate", { hint: t("dateHint") })}
-            {field("endDate", { hint: t("dateHint") })}
+            {field("startDate", { hint: t("dateHint"), date: true })}
+            {field("endDate", { hint: t("dateHint"), date: true })}
             <Field>
               <FieldLabel htmlFor="project-county">{t("county")}</FieldLabel>
               <select

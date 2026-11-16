@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { DateInput } from "@/components/date-input";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StatusBadge } from "@/components/status-badge";
@@ -94,6 +95,15 @@ export default async function DesignSystemPage() {
                 <FieldDescription id="sample-error-hint" className="text-destructive">
                   {t("errorHint")}
                 </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="sample-date">{t("dateField")}</FieldLabel>
+                <DateInput
+                  id="sample-date"
+                  aria-describedby="sample-date-hint"
+                  defaultValue="2026-11-10"
+                />
+                <FieldDescription id="sample-date-hint">{t("dateHint")}</FieldDescription>
               </Field>
             </CardContent>
           </Card>

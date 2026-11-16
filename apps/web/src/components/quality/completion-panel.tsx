@@ -12,6 +12,7 @@ import {
   type CompletionCertificate,
   type CompletionResponse,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { FormError, useScheduleMutation } from "@/components/schedule/use-schedule-mutation";
 import { StatusBadge, type Tone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -357,10 +358,9 @@ export function CompletionPanel({
                 ) : null}
                 <Field>
                   <FieldLabel htmlFor="completion-date">{t("completion.date")}</FieldLabel>
-                  <Input
+                  <DateTextInput
                     id="completion-date"
                     name="completionDate"
-                    placeholder="DD/MM/YYYY"
                     defaultValue={calendarInput(nairobiDate())}
                   />
                 </Field>

@@ -11,6 +11,7 @@ import {
   type LpoDetailResponse,
   type UnitWire,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { selectClass } from "@/components/procurement/material-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -242,12 +243,7 @@ export function InvoiceForm({
           </Field>
           <Field>
             <FieldLabel htmlFor="invoice-date">{t("invoiceDate")}</FieldLabel>
-            <Input
-              id="invoice-date"
-              type="date"
-              value={invoiceDate}
-              onChange={(event) => setInvoiceDate(event.target.value)}
-            />
+            <DateInput id="invoice-date" value={invoiceDate} onValueChange={setInvoiceDate} />
           </Field>
           <Field>
             <FieldLabel htmlFor="invoice-etims">{t("etims")}</FieldLabel>

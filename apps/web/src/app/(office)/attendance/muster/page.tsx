@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addCalendarDays } from "@pm-buddy/domain";
 import { attendanceOverviewResponseSchema, musterResponseSchema } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { AttendanceNav } from "@/components/attendance/attendance-nav";
@@ -11,7 +12,6 @@ import { MusterRoll } from "@/components/attendance/muster-roll";
 import { selectClass } from "@/components/labour/action-dialog";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { dateParam, musterHref, uuidParam } from "@/lib/attendance";
 import { formatCalendarDate } from "@/lib/format";
 import { calendarInput } from "@/lib/project-input";
@@ -150,11 +150,10 @@ export default async function MusterPage({
           <label htmlFor="muster-date" className="block text-sm font-medium">
             {t("common.date")}
           </label>
-          <Input
+          <DateTextInput
             id="muster-date"
             name="date"
             defaultValue={calendarInput(date)}
-            placeholder="DD/MM/YYYY"
             inputMode="numeric"
             className="w-36 tabular-nums"
             aria-describedby="muster-date-hint"

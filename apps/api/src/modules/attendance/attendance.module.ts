@@ -3,6 +3,8 @@ import { IdentityModule } from "../identity/identity.module.js";
 import { AdjustmentsService } from "./adjustments.service.js";
 import { AnomaliesService } from "./anomalies.service.js";
 import { AttendanceController } from "./attendance.controller.js";
+import { AttendanceCaptureController } from "./capture.controller.js";
+import { AttendanceCaptureService } from "./capture.service.js";
 import { AttendanceAccess, AttendanceCommands } from "./attendance-support.js";
 import { CorrectionsService } from "./corrections.service.js";
 import { MusterService } from "./muster.service.js";
@@ -19,12 +21,13 @@ import { TimesheetCalculator } from "./timesheet-calculator.js";
  */
 @Module({
   imports: [IdentityModule],
-  controllers: [AttendanceController],
+  controllers: [AttendanceController, AttendanceCaptureController],
   providers: [
     AdjustmentsService,
     AnomaliesService,
     AnomalyEvaluator,
     AttendanceAccess,
+    AttendanceCaptureService,
     AttendanceCommands,
     AttendanceSettingsService,
     CorrectionsService,

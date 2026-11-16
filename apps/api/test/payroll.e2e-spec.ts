@@ -1,4 +1,5 @@
 import type { INestApplication } from "@nestjs/common";
+import { randomInt } from "node:crypto";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
@@ -38,6 +39,8 @@ import {
   siteResponseSchema,
   statutoryRuleResponseSchema,
   musterResponseSchema,
+  workerPortalResponseSchema,
+  workerNotificationHistorySchema,
   type BatchDetailResponse,
 } from "@pm-buddy/validation";
 import { AppModule } from "../src/app.module.js";
@@ -47,6 +50,8 @@ import { PrismaService } from "../src/infra/prisma.service.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
 import { PayrollAccess } from "../src/modules/payroll/payroll-support.js";
+import { WorkerNotificationDispatcher } from "../src/modules/portals/worker-notification-dispatcher.js";
+import { NotificationProvider } from "../src/modules/notifications/notification.provider.js";
 import { Browser, notifications } from "./support.js";
 
 const ruiru = { lat: -1.1489, lng: 36.9612 };
@@ -267,6 +272,8 @@ describe("Payroll engine (real runtime role)", () => {
     browser.call("post", `payroll/projects/${projectId}/batches`, { periodStart }, true, headers);
 
   beforeAll(async () => {
+    vi.stubEnv("USSD_CALLBACK_TOKEN", "b".repeat(64));
+    vi.stubEnv("USSD_SERVICE_CODE", "*384*127#");
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication({ bufferLogs: true });
     configureApp(app);
@@ -399,6 +406,7 @@ describe("Payroll engine (real runtime role)", () => {
     notificationSpy?.mockRestore();
     vi.restoreAllMocks();
     await app?.close();
+    vi.unstubAllEnvs();
   });
 
   it("documents every payroll operation in OpenAPI", async () => {
@@ -1398,6 +1406,135 @@ describe("Payroll engine (real runtime role)", () => {
     ];
     for (const [label, attempt] of attempts)
       await expect(db.run(inB, attempt), label).rejects.toThrow();
+  });
+
+  it("shows a labourer only their submitted payroll and checks the same net pay through USSD", async () => {
+    const number = `2547${String(randomInt(0, 100_000_000)).padStart(8, "0")}`;
+    await fresh(owner);
+    const currentWorker = labourerResponseSchema.parse(
+      (await owner.call("get", `labour/labourers/${workers.W1}`)).body,
+    ).labourer;
+    const updated = await owner.call("patch", `labour/labourers/${workers.W1}`, {
+      version: currentWorker.version,
+      phone: number,
+    });
+    expect(updated.status, JSON.stringify(updated.body)).toBe(200);
+    const invitation = await owner.call("post", `projects/${p1}/labourers/invitations`, {
+      identifier: number,
+    });
+    expect(invitation.status, JSON.stringify(invitation.body)).toBe(201);
+    const token = notifications
+      .get(number)
+      ?.at(-1)
+      ?.text.match(/token=([A-Za-z0-9_-]{43})/)?.[1];
+    const worker = new Browser(app);
+    await worker.initialize();
+    const joined = await worker.call("post", "auth/pin/join", {
+      identifier: number,
+      token,
+      displayName: "Payroll self-service worker",
+      pin: "274915",
+    });
+    expect(joined.status, JSON.stringify(joined.body)).toBe(200);
+    const portal = workerPortalResponseSchema.parse(
+      (await worker.call("get", "portal/worker")).body,
+    );
+    const expected = [lineOf(batchP1, "W1")!, lineOf(batchP2, "W1")!];
+    expect(portal.pay?.lines.map((line) => line.id).sort()).toEqual(
+      expected.map((line) => line.id).sort(),
+    );
+    for (const line of expected)
+      expect(portal.pay?.lines.find((entry) => entry.id === line.id)).toMatchObject({
+        grossMinor: String(line.grossMinor),
+        netMinor: String(line.netMinor),
+      });
+    expect(portal.pay?.payments).toBeNull();
+    const sessionId = `payroll-${randomInt(0, 1_000_000_000)}`;
+    let response: request.Response | undefined;
+    for (const text of [
+      "",
+      "1",
+      "1*70000001",
+      "1*70000001*274915",
+      "1*70000001*274915*1",
+      "1*70000001*274915*1*2",
+    ]) {
+      response = await request(app.getHttpServer())
+        .post("/api/v1/ussd")
+        .set("X-USSD-Token", "b".repeat(64))
+        .type("form")
+        .send({ sessionId, phoneNumber: `+${number}`, serviceCode: "*384*127#", text });
+      expect(response.status, response.text).toBe(200);
+    }
+    const latest = portal.pay!.lines[0]!;
+    const formattedNet = (Number(latest.netMinor) / 100).toLocaleString("en-KE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    expect(response?.text).toContain(`KES ${formattedNet}`);
+    expect(response?.text).toContain("not payment");
+    expect(response?.text.startsWith("END ")).toBe(true);
+    await worker.call("put", "portal/worker/notifications", {
+      sms: true,
+      whatsapp: false,
+      locale: "en",
+    });
+    const send = vi.spyOn(app.get(NotificationProvider), "send").mockResolvedValue();
+    try {
+      await app.get(WorkerNotificationDispatcher).runDue(tenantA);
+      expect(send).not.toHaveBeenCalled();
+      // Re-emitting the committed domain event exercises the worker consumer against real payroll.
+      await db.run(
+        { tenantId: tenantA, userId: owner.auth.user.id, requestId: "test-worker-pay-alert" },
+        (tx) =>
+          tx.outboxEvent.create({
+            data: {
+              tenantId: tenantA,
+              topic: "payroll.batch_submitted",
+              aggregateId: batchP1.batch.id,
+            },
+          }),
+      );
+      await app.get(WorkerNotificationDispatcher).runDue(tenantA);
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ recipient: number, channel: "sms" }),
+      );
+      expect(send).toHaveBeenCalledTimes(1);
+      const history = workerNotificationHistorySchema.parse(
+        (await worker.call("get", "portal/worker/notifications/history")).body,
+      );
+      expect(history.items).toEqual([
+        expect.objectContaining({ topic: "payroll.batch_submitted", status: "accepted" }),
+      ]);
+      const advance = await readA((tx) =>
+        tx.salaryAdvance.findFirstOrThrow({
+          where: { labourerId: workers.W1, status: "disbursed" },
+        }),
+      );
+      await readA((tx) =>
+        tx.outboxEvent.create({
+          data: { tenantId: tenantA, topic: "advance.disbursed", aggregateId: advance.id },
+        }),
+      );
+      const cancelled = await pm.call("post", `payroll/batches/${batchP1.batch.id}/cancel`, {
+        version: batchP1.batch.version,
+        reason: "Worker cancellation notification regression (test)",
+      });
+      expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(200);
+      await app.get(WorkerNotificationDispatcher).runDue(tenantA);
+      expect(send).toHaveBeenCalledTimes(3);
+      const all = workerNotificationHistorySchema.parse(
+        (await worker.call("get", "portal/worker/notifications/history")).body,
+      );
+      expect(all.items.map((row) => row.topic).sort()).toEqual([
+        "advance.disbursed",
+        "payroll.batch_cancelled",
+        "payroll.batch_submitted",
+      ]);
+      expect(all.items.every((row) => row.status === "accepted")).toBe(true);
+    } finally {
+      send.mockRestore();
+    }
   });
 });
 

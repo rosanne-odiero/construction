@@ -10,6 +10,7 @@ import {
   type ConversionResultResponse,
   type UnitWire,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -161,11 +162,10 @@ export function Converter({
         </Field>
         <Field>
           <FieldLabel htmlFor="convert-on">{t("on")}</FieldLabel>
-          <Input
+          <DateInput
             id="convert-on"
-            type="date"
             value={form.on}
-            onChange={(event) => setForm({ ...form, on: event.target.value })}
+            onValueChange={(value) => setForm({ ...form, on: value })}
             required
           />
         </Field>

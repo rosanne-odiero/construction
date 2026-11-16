@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
-import { requestId, serializeRequest, serializeResponse } from "./logging.js";
+import { noteAccess } from "./access-context.js";
+import { requestId, serializeRequest, serializeResponse, withIdentity } from "./logging.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -66,5 +67,19 @@ describe("log serializers", () => {
       raw: {} as ServerResponse,
     });
     expect(logged).toEqual({ statusCode: 201 });
+  });
+
+  it("name who made the request (IDs only) once a session was resolved", () => {
+    const req = { route: { path: "/api/v1/projects/:id" }, params: { id: "p" }, query: {} };
+    expect(withIdentity(req, { responseTime: 5 })).toEqual({ responseTime: 5 });
+    noteAccess(req, {
+      user: { id: "user-1" },
+      session: { id: "session-1", activeTenantId: "tenant-1", authMethod: "password" },
+    });
+    expect(withIdentity(req, { responseTime: 5 })).toEqual({
+      responseTime: 5,
+      userId: "user-1",
+      tenantId: "tenant-1",
+    });
   });
 });

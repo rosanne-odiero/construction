@@ -33,6 +33,7 @@ import {
   selectClass,
   useScheduleMutation,
 } from "@/components/schedule/use-schedule-mutation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -573,7 +574,7 @@ export function FirstAidPanel({
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field>
                     <FieldLabel htmlFor="check-date">{t("firstAid.checkedOn")}</FieldLabel>
-                    <Input
+                    <DateTextInput
                       id="check-date"
                       name="checkedOn"
                       inputMode="numeric"
@@ -598,7 +599,7 @@ export function FirstAidPanel({
                 </div>
                 <Field>
                   <FieldLabel htmlFor="check-expires">{t("firstAid.expiresOn")}</FieldLabel>
-                  <Input id="check-expires" name="expiresOn" inputMode="numeric" />
+                  <DateTextInput id="check-expires" name="expiresOn" inputMode="numeric" />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="check-notes">{t("firstAid.checkNotes")}</FieldLabel>
@@ -613,7 +614,11 @@ export function FirstAidPanel({
                   <FieldLabel htmlFor="aider-expires">
                     {t("firstAid.certificateExpires")}
                   </FieldLabel>
-                  <Input id="aider-expires" name="certificateExpiresOn" inputMode="numeric" />
+                  <DateTextInput
+                    id="aider-expires"
+                    name="certificateExpiresOn"
+                    inputMode="numeric"
+                  />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="aider-reference">
@@ -628,7 +633,7 @@ export function FirstAidPanel({
                 <div className="grid grid-cols-2 gap-4">
                   <Field>
                     <FieldLabel htmlFor="treatment-date">{t("firstAid.treatedOn")}</FieldLabel>
-                    <Input
+                    <DateTextInput
                       id="treatment-date"
                       name="date"
                       inputMode="numeric"

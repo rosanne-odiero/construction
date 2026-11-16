@@ -25,6 +25,7 @@ import {
   type LabourSetupResponse,
   type RevealResponse,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge } from "@/components/status-badge";
 import { WorkerAttendance } from "@/components/attendance/worker-attendance";
 import { useStepUp } from "@/components/projects/step-up";
@@ -742,7 +743,7 @@ function EngageDialog({
       </Field>
       <Field>
         <FieldLabel htmlFor="engage-start">{t("startDate")}</FieldLabel>
-        <Input
+        <DateTextInput
           id="engage-start"
           value={start}
           onChange={(event) => setStart(event.target.value)}
@@ -798,7 +799,7 @@ function EndEngagementButton({
       >
         <Field>
           <FieldLabel htmlFor={`end-date-${engagement.id}`}>{t("endDate")}</FieldLabel>
-          <Input
+          <DateTextInput
             id={`end-date-${engagement.id}`}
             value={end}
             onChange={(event) => setEnd(event.target.value)}
@@ -873,7 +874,7 @@ function AccreditationDialog({
       </Field>
       <Field>
         <FieldLabel htmlFor="nca-expires">{t("expiresOn")}</FieldLabel>
-        <Input
+        <DateTextInput
           id="nca-expires"
           value={expires}
           onChange={(event) => setExpires(event.target.value)}

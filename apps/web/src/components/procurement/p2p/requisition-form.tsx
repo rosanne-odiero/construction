@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Link2, Plus, Trash2 } from "lucide-react";
 import type { StandardUnitCode } from "@pm-buddy/types";
 import { requisitionDetailResponseSchema, type UnitWire } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { selectClass } from "@/components/procurement/material-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -183,11 +184,10 @@ export function RequisitionForm({
           </Field>
           <Field>
             <FieldLabel htmlFor="requisition-needed-by">{t("neededBy")}</FieldLabel>
-            <Input
+            <DateInput
               id="requisition-needed-by"
-              type="date"
               value={neededBy}
-              onChange={(event) => setNeededBy(event.target.value)}
+              onValueChange={setNeededBy}
               required
             />
           </Field>

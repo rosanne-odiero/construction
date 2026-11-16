@@ -34,6 +34,10 @@ playwright-report/
 test-results/
 .playwright-mcp/
 
+# Operational fixtures contain synthetic session credentials and signed evidence.
+infra/performance/*.local.json
+infra/performance/results/
+
 # editors
 .vscode/*
 !.vscode/extensions.json

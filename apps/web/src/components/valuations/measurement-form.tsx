@@ -12,6 +12,7 @@ import {
   type MeasurementItem,
   type QualityPhoto,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { PhotoThumbs, PhotoUpload } from "@/components/quality/photos";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -253,14 +254,13 @@ export function MeasurementForm({
       ) : null}
       <Field>
         <FieldLabel htmlFor="measure-date">{t("date")}</FieldLabel>
-        <Input
+        <DateInput
           id="measure-date"
-          type="date"
           className="h-11 text-base sm:text-sm"
           value={measuredOn}
           max={today}
           disabled={Boolean(correction)}
-          onChange={(event) => setMeasuredOn(event.target.value)}
+          onValueChange={setMeasuredOn}
         />
       </Field>
       <Field>

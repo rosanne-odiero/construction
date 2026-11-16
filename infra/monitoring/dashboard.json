@@ -1,0 +1,70 @@
+{
+  "title": "PM-Buddy API health",
+  "uid": "pmb-api-health",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["pm-buddy", "operations"],
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "label": "Prometheus"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Liveness and readiness (1 = healthy)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "probe_success{job=\"api-health\"}",
+          "legendFormat": "{{probe}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "max": 1 }, "overrides": [] },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "Probe duration (not business-request latency)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "probe_duration_seconds{job=\"api-health\"}",
+          "legendFormat": "{{probe}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Exporter scrape health",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=~\"api-health|blackbox\"}",
+          "legendFormat": "{{job}} {{instance}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "max": 1 }, "overrides": [] },
+      "options": {}
+    }
+  ]
+}

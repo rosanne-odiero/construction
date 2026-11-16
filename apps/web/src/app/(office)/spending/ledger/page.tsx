@@ -9,6 +9,7 @@ import {
   type CostSource,
 } from "@pm-buddy/types";
 import { costLedgerResponseSchema, type CostEntry } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { apiQuery, listHrefs, Pager } from "@/components/procurement/p2p/list-filters";
 import { PageHeader } from "@/components/page-header";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
@@ -17,7 +18,6 @@ import { SpendingEyebrow, SpendingSubnav } from "@/components/spending/spending-
 import { StatusBadge } from "@/components/status-badge";
 import { ScrollTable } from "@/components/stores/stores-subnav";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { formatCalendarDate, formatKES } from "@/lib/format";
 import { loadOrRedirect, projectOptions } from "@/lib/p2p-server";
 import { pickParam } from "@/lib/p2p";
@@ -187,13 +187,13 @@ export default async function CostLedgerPage({
           <label htmlFor="ledger-from" className="block text-sm font-medium">
             {t("from")}
           </label>
-          <Input id="ledger-from" name="from" type="date" defaultValue={from ?? ""} />
+          <DateInput id="ledger-from" name="from" defaultValue={from ?? ""} />
         </div>
         <div className="space-y-1.5">
           <label htmlFor="ledger-to" className="block text-sm font-medium">
             {t("to")}
           </label>
-          <Input id="ledger-to" name="to" type="date" defaultValue={to ?? ""} />
+          <DateInput id="ledger-to" name="to" defaultValue={to ?? ""} />
         </div>
         <div className="flex items-end gap-2">
           <Button type="submit" variant="secondary">

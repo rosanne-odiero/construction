@@ -17,6 +17,7 @@ import {
   sessionsResponseSchema,
 } from "@pm-buddy/validation";
 import type { Prisma, Session, User } from "../../generated/prisma/client.js";
+import { noteAccess } from "../../common/access-context.js";
 import { AppConfig } from "../../config/app-config.js";
 import { PrismaService } from "../../infra/prisma.service.js";
 import {
@@ -54,11 +55,19 @@ type UserWithFactors = User & { _count: { passkeys: number } };
 const withFactors = { _count: { select: { passkeys: true } } } as const;
 export const isFresh = (at: Date | null | undefined): boolean =>
   Boolean(at && Date.now() - at.getTime() <= FRESH_MINUTES * MINUTE);
-export const requestId = (req: Request): string =>
-  typeof req.headers["x-request-id"] === "string" &&
-  /^[A-Za-z0-9-]{8,64}$/.test(req.headers["x-request-id"])
+const SAFE_REQUEST_ID = /^[A-Za-z0-9-]{8,64}$/;
+/**
+ * The request's ID as logged and echoed in X-Request-Id (assigned by the request logger), so audit
+ * events and access-log entries of one request share it.
+ */
+export const requestId = (req: Request): string => {
+  const assigned: unknown = (req as { id?: unknown }).id;
+  if (typeof assigned === "string" && SAFE_REQUEST_ID.test(assigned)) return assigned;
+  return typeof req.headers["x-request-id"] === "string" &&
+    SAFE_REQUEST_ID.test(req.headers["x-request-id"])
     ? req.headers["x-request-id"]
     : randomUUID();
+};
 /** A new sign-in session: 8 hours with an MFA factor, otherwise 24; 30 minutes idle. */
 export const newSessionData = (
   user: Pick<User, "id" | "mfaEnabled">,
@@ -256,14 +265,23 @@ export class AuthService {
 
   async principal(req: Request): Promise<Principal> {
     const claims = await this.security.accessClaims(req);
+    const principal = await this.sessionPrincipal(claims.sessionId, claims);
+    noteAccess(req, principal);
+    return principal;
+  }
+
+  /** Internal session lookup for a short-lived, gateway-bound USSD session. */
+  async sessionPrincipal(
+    sessionId: string,
+    claims?: { userId: string; generation: number },
+  ): Promise<Principal> {
     const session = await this.prisma.session.findUnique({
-      where: { id: claims.sessionId },
+      where: { id: sessionId },
       include: { user: { include: withFactors } },
     });
     if (
       !session ||
-      session.userId !== claims.userId ||
-      session.generation !== claims.generation ||
+      (claims && (session.userId !== claims.userId || session.generation !== claims.generation)) ||
       session.revokedAt ||
       session.expiresAt <= new Date() ||
       session.idleExpiresAt <= new Date() ||

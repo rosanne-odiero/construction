@@ -7,6 +7,7 @@ import { BadgeCheck, CheckCircle2, ShieldAlert } from "lucide-react";
 import { REASON_LIMITS } from "@pm-buddy/domain";
 import { SETTLEMENT_METHODS, type SettlementMethod } from "@pm-buddy/types";
 import { invoiceDetailResponseSchema } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { selectClass } from "@/components/procurement/material-form";
 import { useStepUp } from "@/components/projects/step-up";
 import { Button } from "@/components/ui/button";
@@ -329,13 +330,12 @@ export function SettlementForm({
           </Field>
           <Field>
             <FieldLabel htmlFor="settlement-paid-on">{t("paidOn")}</FieldLabel>
-            <Input
+            <DateInput
               id="settlement-paid-on"
-              type="date"
               min={invoiceDate}
               max={today}
               value={paidOn}
-              onChange={(event) => setPaidOn(event.target.value)}
+              onValueChange={setPaidOn}
             />
           </Field>
         </div>

@@ -1,9 +1,11 @@
 import type { INestApplication } from "@nestjs/common";
+import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { Test } from "@nestjs/testing";
+import sharp from "sharp";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { addCalendarDays, isoWeekday, nairobiDate } from "@pm-buddy/domain";
+import { addCalendarDays, canonicalJson, isoWeekday, nairobiDate } from "@pm-buddy/domain";
 import {
   AUTOMATIC_ADJUSTMENT_REASON,
   CURRENT_CONSENT_NOTICE,
@@ -15,6 +17,8 @@ import {
   adjustmentsResponseSchema,
   anomaliesResponseSchema,
   attendanceSettingsResponseSchema,
+  captureReceiptSchema,
+  captureQueueResponseSchema,
   correctionResponseSchema,
   labourerAttendanceResponseSchema,
   labourerResponseSchema,
@@ -24,9 +28,11 @@ import {
   periodsResponseSchema,
   projectResponseSchema,
   siteResponseSchema,
+  siteRosterSchema,
   timesheetLinesResponseSchema,
   type MusterResponse,
   type PeriodDetailResponse,
+  type SignedAttendanceEvent,
 } from "@pm-buddy/validation";
 import { AppModule } from "../src/app.module.js";
 import { configureApp } from "../src/app.setup.js";
@@ -39,6 +45,7 @@ import { Browser, notifications } from "./support.js";
 type Method = "get" | "post" | "patch" | "put" | "delete";
 const ruiru = { lat: -1.1489, lng: 36.9612 };
 const day = (value: string) => new Date(`${value}T00:00:00.000Z`);
+const MINUTE = 60_000;
 
 describe("Attendance and timesheets (real runtime role)", () => {
   let app: INestApplication<App>;
@@ -2342,6 +2349,396 @@ describe("Attendance and timesheets (real runtime role)", () => {
     ];
     for (const [label, attempt] of attempts)
       await expect(db.run(inB, attempt), label).rejects.toThrow();
+  });
+
+  describe("signed QR/NFC site capture", () => {
+    const keys = generateKeyPairSync("ed25519");
+    const publicKey = keys.publicKey
+      .export({ format: "der", type: "spki" })
+      .subarray(-32)
+      .toString("hex");
+    let deviceId: string;
+    let projectId: string;
+    let siteId: string;
+    let workerId: string;
+    let token: string;
+    let photoBase64: string;
+    let photoSha256: string;
+    let roster: ReturnType<typeof siteRosterSchema.parse>;
+    const pack = (event: SignedAttendanceEvent) => ({
+      event,
+      signature: sign(null, Buffer.from(canonicalJson(event)), keys.privateKey).toString("hex"),
+      photoBase64,
+    });
+    const eventFor = (overrides: Partial<SignedAttendanceEvent> = {}): SignedAttendanceEvent => ({
+      schemaVersion: 1,
+      id: randomUUID(),
+      deviceId,
+      leaseId: roster.lease.id,
+      tenantId: tenantA,
+      projectId,
+      siteId,
+      bootId: roster.lease.bootId,
+      monotonicMs: roster.lease.monotonicMs,
+      capturedAt: roster.lease.serverTime,
+      direction: "in",
+      shiftId: randomUUID(),
+      cardToken: token,
+      method: "qr_card",
+      position: { ...ruiru, accuracyM: 5 },
+      photoSha256,
+      supervisorConfirmed: true,
+      ...overrides,
+    });
+    const push = (event: SignedAttendanceEvent, browser = owner) =>
+      browser.call("post", "attendance/capture/events", pack(event));
+
+    beforeAll(async () => {
+      await fresh(owner);
+      projectId = projectResponseSchema.parse(
+        (await owner.call("post", "projects", { code: "CAP-ONE", name: "Signed capture project" }))
+          .body,
+      ).project.id;
+      siteId = await site(owner, projectId, "Capture gate", 0);
+      const setup = labourSetupResponseSchema.parse((await owner.call("get", "labour/setup")).body);
+      workerId = await register(owner, "CAPTURE", projectId, {
+        trade: setup.trades.find((trade) => trade.key === "general_labourer")!.id,
+        level: setup.skillLevels.find((level) => level.key === "unskilled")!.id,
+      });
+      const card = await owner.call("post", "attendance/capture/cards", { labourerId: workerId });
+      expect(card.status, JSON.stringify(card.body)).toBe(200);
+      token = (card.body as { card: { token: string } }).card.token;
+      deviceId = randomUUID();
+      const registered = await owner.call("post", "attendance/capture/devices", {
+        id: deviceId,
+        name: "Synthetic Android",
+        publicKey,
+      });
+      expect(registered.status, JSON.stringify(registered.body)).toBe(200);
+      const lease = await owner.call("post", `attendance/capture/devices/${deviceId}/lease`, {
+        bootId: randomUUID(),
+        deviceTime: new Date().toISOString(),
+        monotonicMs: 2000,
+      });
+      expect(lease.status, JSON.stringify(lease.body)).toBe(200);
+      roster = siteRosterSchema.parse(lease.body);
+      const photo = await sharp({
+        create: { width: 4, height: 4, channels: 3, background: "#338844" },
+      })
+        .jpeg()
+        .toBuffer();
+      photoBase64 = photo.toString("base64");
+      photoSha256 = createHash("sha256").update(photo).digest("hex");
+    });
+
+    it("binds cards and device keys, allocates a pair once, and checks signatures before replay", async () => {
+      const projectRoster = roster.projects.find((item) => item.id === projectId)!;
+      expect(projectRoster.workers.find((item) => item.id === workerId)?.cardDigest).toBe(
+        createHash("sha256").update(token).digest("hex"),
+      );
+      expect(JSON.stringify(roster)).not.toContain(token);
+      const start = eventFor();
+      const first = await push(start);
+      expect(first.status, JSON.stringify(first.body)).toBe(200);
+      expect(captureReceiptSchema.parse(first.body)).toMatchObject({
+        status: "confirmed",
+        flags: [],
+        recordId: null,
+      });
+      const end = eventFor({
+        direction: "out",
+        shiftId: start.shiftId,
+        method: "nfc_card",
+        capturedAt: new Date(Date.parse(start.capturedAt) + MINUTE).toISOString(),
+        monotonicMs: start.monotonicMs + MINUTE,
+      });
+      const responses = await Promise.all([push(end), push(end)]);
+      for (const response of responses)
+        expect(response.status, JSON.stringify(response.body)).toBe(200);
+      expect(responses[0]!.body).toEqual(responses[1]!.body);
+      expect(captureReceiptSchema.parse(responses[0]!.body).recordId).not.toBeNull();
+      expect((await push(start)).body).toEqual(first.body);
+      const record = await readA((tx) =>
+        tx.attendanceRecord.findFirstOrThrow({
+          where: { tenantId: tenantA, labourerId: workerId },
+        }),
+      );
+      expect(record).toMatchObject({
+        captureMethod: "qr_card",
+        clientEventId: start.id,
+        deviceId,
+        createdBy: owner.auth.user.id,
+      });
+      expect(
+        await readA((tx) => tx.attendanceRecord.count({ where: { labourerId: workerId } })),
+      ).toBe(1);
+      const tampered = await owner.call("post", "attendance/capture/events", {
+        ...pack(start),
+        event: { ...start, direction: "out" },
+      });
+      expect(tampered.status).toBe(403);
+      expect((await push({ ...start, shiftId: randomUUID() })).status).toBe(409);
+      const wrongPhoto = await owner.call("post", "attendance/capture/events", {
+        ...pack(start),
+        photoBase64: Buffer.from("wrong").toString("base64"),
+      });
+      expect(wrongPhoto.status).toBe(400);
+      expect((await push(start, foreman)).status).toBe(403); // no project assignment
+      expect((await push(start, ownerB)).status).toBe(404);
+      expect((await owner.call("get", `attendance/capture/events/${start.id}/photo`)).status).toBe(
+        200,
+      );
+      expect((await ownerB.call("get", `attendance/capture/events/${start.id}/photo`)).status).toBe(
+        404,
+      );
+      const raw = await readA((tx) =>
+        tx.attendanceCaptureEvent.findUniqueOrThrow({ where: { id: start.id } }),
+      );
+      expect(raw.photoEncrypted).not.toContain(photoBase64);
+      await expect(
+        readA((tx) =>
+          tx.attendanceCaptureEvent.update({
+            where: { id: start.id },
+            data: { signature: "0".repeat(128) },
+          }),
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("retains duplicate, drift, reboot, expired lease, geofence and impossible-travel signals", async () => {
+      const baseline = eventFor({ shiftId: randomUUID() });
+      const duplicate = await push(baseline);
+      expect(captureReceiptSchema.parse(duplicate.body).flags).toContain("duplicate_capture");
+      const backwards = await push(eventFor({ monotonicMs: 1000, position: null }));
+      expect(captureReceiptSchema.parse(backwards.body)).toMatchObject({
+        status: "quarantined",
+        flags: expect.arrayContaining(["clock_drift", "lease_expired", "location_unknown"]),
+      });
+      const reboot = await push(eventFor({ bootId: randomUUID() }));
+      expect(captureReceiptSchema.parse(reboot.body).flags).toContain("clock_drift");
+      const outside = await push(
+        eventFor({ position: { lat: -4.0435, lng: 39.6682, accuracyM: 5 } }),
+      );
+      expect(captureReceiptSchema.parse(outside.body).flags).toContain("outside_geofence");
+      const otherSite = await site(owner, projectId, "Distant gate", 2000);
+      const impossible = await push(
+        eventFor({ siteId: otherSite, position: { lat: -4.0435, lng: 39.6682, accuracyM: 5 } }),
+      );
+      expect(captureReceiptSchema.parse(impossible.body).flags).toContain("impossible_travel");
+      const late = await push(
+        eventFor({
+          capturedAt: new Date(Date.parse(roster.lease.serverTime) + 73 * 3_600_000).toISOString(),
+          monotonicMs: roster.lease.monotonicMs + 73 * 3_600_000,
+        }),
+      );
+      expect(captureReceiptSchema.parse(late.body).flags).toContain("lease_expired");
+      const hidden = await db.run(as(ownerB, tenantB, "capture-isolation"), async (tx) => ({
+        devices: await tx.attendanceDevice.count(),
+        leases: await tx.attendanceDeviceLease.count(),
+        cards: await tx.attendanceWorkerCard.count(),
+        events: await tx.attendanceCaptureEvent.count(),
+      }));
+      expect(hidden).toEqual({ devices: 0, leases: 0, cards: 0, events: 0 });
+      const audit = JSON.stringify(await auditEvents());
+      expect(audit).not.toContain(token);
+      expect(audit).not.toContain(photoBase64);
+    });
+
+    it("pages evidence by receipt time rather than random event UUID order", async () => {
+      // The highest UUID is received first; random tails keep the persistent test DB re-runnable.
+      const earlier = eventFor({ id: `f${randomUUID().slice(1)}` });
+      const later = eventFor({ id: `0${randomUUID().slice(1)}` });
+      expect((await push(earlier)).status).toBe(200);
+      expect((await push(later)).status).toBe(200);
+      const queue = await owner.call("get", `attendance/capture/events?projectId=${projectId}`);
+      const firstPage = captureQueueResponseSchema.parse(queue.body);
+      expect(firstPage.events.slice(0, 2).map((row) => row.event.id)).toEqual([
+        later.id,
+        earlier.id,
+      ]);
+      const next = await owner.call(
+        "get",
+        `attendance/capture/events?projectId=${projectId}&before=${later.id}`,
+      );
+      const nextPage = captureQueueResponseSchema.parse(next.body);
+      expect(nextPage.events[0]?.event.id).toBe(earlier.id);
+      expect(nextPage.events.some((row) => row.event.id === later.id)).toBe(false);
+      expect(
+        (
+          await owner.call(
+            "get",
+            `attendance/capture/events?projectId=${projectId}&before=${randomUUID()}`,
+          )
+        ).status,
+      ).toBe(400);
+    });
+
+    it("retains overnight checkout after engagement ends without permitting a new shift", async () => {
+      const setup = labourSetupResponseSchema.parse((await owner.call("get", "labour/setup")).body);
+      const overnightWorker = await register(owner, "OVERNIGHT-CAPTURE", projectId, {
+        trade: setup.trades.find((trade) => trade.key === "general_labourer")!.id,
+        level: setup.skillLevels.find((level) => level.key === "unskilled")!.id,
+      });
+      const card = await owner.call("post", "attendance/capture/cards", {
+        labourerId: overnightWorker,
+      });
+      expect(card.status).toBe(200);
+      const overnightToken = (card.body as { card: { token: string } }).card.token;
+      const yesterday = addCalendarDays(today, -1);
+      await readA((tx) =>
+        tx.labourEngagement.updateMany({
+          where: { tenantId: tenantA, labourerId: overnightWorker, projectId },
+          data: { endDate: day(yesterday), endedBy: owner.auth.user.id, endedAt: new Date() },
+        }),
+      );
+      const start = eventFor({
+        cardToken: overnightToken,
+        capturedAt: `${yesterday}T23:59:00+03:00`,
+      });
+      expect((await push(start)).status).toBe(200);
+      const end = eventFor({
+        cardToken: overnightToken,
+        direction: "out",
+        shiftId: start.shiftId,
+        capturedAt: `${today}T00:01:00+03:00`,
+        monotonicMs: start.monotonicMs + 2 * MINUTE,
+      });
+      const checkedOut = await push(end);
+      expect(checkedOut.status, JSON.stringify(checkedOut.body)).toBe(200);
+      expect(captureReceiptSchema.parse(checkedOut.body).flags).not.toContain("invalid_shift");
+      const newShift = await push(
+        eventFor({ cardToken: overnightToken, capturedAt: `${today}T07:00:00+03:00` }),
+      );
+      expect(problem(newShift)).toBe("not-engaged");
+    });
+
+    it("requires a different stepped-up reviewer and never overwrites an existing muster entry", async () => {
+      const start = eventFor({ position: null });
+      expect((await push(start)).status).toBe(200);
+      const end = eventFor({
+        direction: "out",
+        shiftId: start.shiftId,
+        position: null,
+        capturedAt: new Date(Date.parse(start.capturedAt) + MINUTE).toISOString(),
+        monotonicMs: start.monotonicMs + MINUTE,
+      });
+      expect((await push(end)).status).toBe(200);
+      const review = { decision: "resolve", reason: "Gate register independently checked" };
+      expect(
+        (await owner.call("post", `attendance/capture/events/${start.id}/review`, review)).status,
+      ).toBe(409);
+      const reviewer = new Browser(app);
+      await reviewer.register();
+      await reviewer.enroll();
+      await join(reviewer, "project_manager", [projectId]);
+      for (const event of [start, end]) {
+        const result = await reviewer.call(
+          "post",
+          `attendance/capture/events/${event.id}/review`,
+          review,
+        );
+        expect(result.status, JSON.stringify(result.body)).toBe(200);
+      }
+      expect(
+        (await reviewer.call("post", `attendance/capture/events/${end.id}/review`, review)).status,
+      ).toBe(409);
+      expect(
+        await readA((tx) => tx.attendanceRecord.count({ where: { labourerId: workerId } })),
+      ).toBe(1);
+      const oldDate = addCalendarDays(today, -14);
+      const oldDay = await recordDay(owner, reviewer, projectId, siteId, oldDate, [
+        { labourerId: workerId, version: 0, status: "absent" },
+      ]);
+      const oldCapture = eventFor({ capturedAt: `${oldDate}T07:00:00+03:00` });
+      expect((await push(oldCapture)).status).toBe(200);
+      const oldPeriod = await periodFor(owner, projectId, oldDate);
+      const held = await owner.call("post", `attendance/periods/${oldPeriod.id}/submit`, {
+        version: oldPeriod.version,
+      });
+      expect(problem(held)).toBe("pending-captures");
+      await expect(
+        readA((tx) =>
+          tx.timesheetPeriod.update({
+            where: { id: oldPeriod.id! },
+            data: {
+              status: "submitted",
+              submittedBy: owner.auth.user.id,
+              submittedDigest: "a".repeat(64),
+              version: { increment: 1 },
+            },
+          }),
+        ),
+      ).rejects.toThrow();
+      expect(oldDay.day?.status).toBe("confirmed");
+      const setup = labourSetupResponseSchema.parse((await owner.call("get", "labour/setup")).body);
+      const reviewWorker = await register(owner, "REVIEW-CAPTURE", projectId, {
+        trade: setup.trades.find((trade) => trade.key === "general_labourer")!.id,
+        level: setup.skillLevels.find((level) => level.key === "unskilled")!.id,
+      });
+      const reviewCard = await owner.call("post", "attendance/capture/cards", {
+        labourerId: reviewWorker,
+      });
+      const reviewToken = (reviewCard.body as { card: { token: string } }).card.token;
+      const reviewStart = eventFor({ cardToken: reviewToken, position: null });
+      const reviewEnd = eventFor({
+        cardToken: reviewToken,
+        position: null,
+        direction: "out",
+        shiftId: reviewStart.shiftId,
+        capturedAt: new Date(Date.parse(reviewStart.capturedAt) + MINUTE).toISOString(),
+        monotonicMs: reviewStart.monotonicMs + MINUTE,
+      });
+      const initialReceipts = [await push(reviewStart), await push(reviewEnd)];
+      for (const event of [reviewStart, reviewEnd]) {
+        const result = await reviewer.call(
+          "post",
+          `attendance/capture/events/${event.id}/review`,
+          review,
+        );
+        expect(result.status, JSON.stringify(result.body)).toBe(200);
+      }
+      expect(
+        await readA((tx) => tx.attendanceRecord.count({ where: { labourerId: reviewWorker } })),
+      ).toBe(1);
+      expect((await push(reviewStart)).body).toEqual(initialReceipts[0]!.body);
+      expect((await push(reviewEnd)).body).toEqual(initialReceipts[1]!.body);
+      const queue = await owner.call("get", `attendance/capture/events?projectId=${projectId}`);
+      expect(
+        (
+          queue.body as { events: { event: { id: string }; recordId: string | null }[] }
+        ).events.find((item) => item.event.id === reviewEnd.id)?.recordId,
+      ).not.toBeNull();
+      const revokedCard = await owner.call("post", "attendance/capture/cards", {
+        labourerId: workerId,
+      });
+      expect(revokedCard.status).toBe(200);
+      const revokedEvidence = await push(eventFor());
+      expect(captureReceiptSchema.parse(revokedEvidence.body).flags).toContain("card_revoked");
+      expect(
+        (await owner.call("post", `attendance/capture/devices/${deviceId}/revoke`, {})).status,
+      ).toBe(200);
+      // The site app erases its local data only on this exact code, from every device call.
+      const replay = await push(start);
+      expect([replay.status, problem(replay)]).toEqual([403, "device-revoked"]);
+      const lease = await owner.call("post", `attendance/capture/devices/${deviceId}/lease`, {
+        bootId: randomUUID(),
+        deviceTime: new Date().toISOString(),
+        monotonicMs: 0,
+      });
+      expect([lease.status, problem(lease)]).toEqual([403, "device-revoked"]);
+      const reRegister = await owner.call("post", "attendance/capture/devices", {
+        id: deviceId,
+        name: "Synthetic Android",
+        publicKey,
+      });
+      expect([reRegister.status, problem(reRegister)]).toEqual([403, "device-revoked"]);
+      const otherKey = await owner.call("post", "attendance/capture/devices", {
+        id: deviceId,
+        name: "Synthetic Android",
+        publicKey: "a".repeat(64),
+      });
+      expect([otherKey.status, problem(otherKey)]).toEqual([409, "device-conflict"]);
+    });
   });
 
   it("keeps reasons and notes out of the audit log and audits every command", async () => {

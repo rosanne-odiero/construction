@@ -30,6 +30,7 @@ import { AppModule } from "../src/app.module.js";
 import { configureApp } from "../src/app.setup.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
+import { AccessLogWriter } from "../src/modules/access-log/access-log.writer.js";
 import { AuthSecurity } from "../src/modules/identity/auth-security.service.js";
 import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
 import { ReportsService } from "../src/modules/reports/reports.service.js";
@@ -318,10 +319,10 @@ describe("Dashboards and reports (real runtime role)", () => {
     const all = REPORT_IDS.filter((id) => REPORT_DEFINITIONS[id].available);
     expect(await runnable(people["owner"]!)).toEqual(all);
     expect(await runnable(people["finance"]!)).toEqual(
-      all.filter((id) => !["safety-actions", "audit-log"].includes(id)),
+      all.filter((id) => !["safety-actions", "audit-log", "access-log"].includes(id)),
     );
     expect(await runnable(people["project_manager"]!)).toEqual(
-      all.filter((id) => id !== "audit-log"),
+      all.filter((id) => !["audit-log", "access-log"].includes(id)),
     );
     expect(await runnable(people["site_agent"]!)).toEqual([
       "muster-roll",
@@ -371,6 +372,7 @@ describe("Dashboards and reports (real runtime role)", () => {
     refused(await agent.call("get", `reports/budget-vs-actual?projectId=${ruiru}`), 403);
     refused(await agent.call("get", `reports/payroll-register/options?projectId=${ruiru}`), 403);
     refused(await agent.call("get", "reports/audit-log"), 403, "report-forbidden");
+    refused(await agent.call("get", "reports/access-log"), 403, "report-forbidden");
     // Storekeepers, suppliers and clients: none.
     for (const browser of [people["storekeeper"]!, supplier, client])
       for (const id of ["stock", "cost-ledger", "petty-cash"] as const)
@@ -731,6 +733,8 @@ describe("Dashboards and reports (real runtime role)", () => {
       return base;
     };
     let exported = 0;
+    // The access log holds this file's requests once they are written.
+    await app.get(AccessLogWriter).flush();
     for (const id of REPORT_IDS) {
       const definition = REPORT_DEFINITIONS[id];
       if (!definition.available) {
@@ -797,6 +801,7 @@ describe("Dashboards and reports (real runtime role)", () => {
       "storeId",
       "batchId",
       "actorId",
+      "recordId",
       "rows",
     ];
     for (const event of events) {

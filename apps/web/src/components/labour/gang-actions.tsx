@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import { nairobiDate } from "@pm-buddy/domain";
 import { gangDetailResponseSchema, type GangDetailResponse } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -203,7 +204,7 @@ export function AddMemberButton({ gangId, candidates }: { gangId: string; candid
         </Field>
         <Field>
           <FieldLabel htmlFor="member-joined">{t("joinedOn")}</FieldLabel>
-          <Input
+          <DateTextInput
             id="member-joined"
             value={joined}
             onChange={(event) => setJoined(event.target.value)}
@@ -280,7 +281,7 @@ export function MemberActions({
       >
         <Field>
           <FieldLabel htmlFor={`left-${member.membershipId}`}>{t("leftOn")}</FieldLabel>
-          <Input
+          <DateTextInput
             id={`left-${member.membershipId}`}
             value={left}
             onChange={(event) => setLeft(event.target.value)}

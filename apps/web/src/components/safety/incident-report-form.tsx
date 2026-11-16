@@ -23,6 +23,7 @@ import {
   type SafetyOptionsResponse,
   type Site,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { PhotoThumbs, PhotoUpload } from "@/components/quality/photos";
 import { FormError, selectClass } from "@/components/schedule/use-schedule-mutation";
@@ -423,7 +424,7 @@ export function IncidentReportForm({
       <div className="grid grid-cols-2 gap-4">
         <Field>
           <FieldLabel htmlFor="report-date">{t("report.date")}</FieldLabel>
-          <Input
+          <DateTextInput
             id="report-date"
             name="date"
             inputMode="numeric"

@@ -12,6 +12,7 @@ import {
 } from "@pm-buddy/domain";
 import type { StandardUnitCode, UnitDimension } from "@pm-buddy/types";
 import { conversionResponseSchema, type UnitWire } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { Button } from "@/components/ui/button";
 import {
@@ -212,11 +213,10 @@ export function ConversionDialogButton({
             </Field>
             <Field>
               <FieldLabel htmlFor="conversion-from-date">{t("effectiveFrom")}</FieldLabel>
-              <Input
+              <DateInput
                 id="conversion-from-date"
-                type="date"
                 value={form.effectiveFrom}
-                onChange={(event) => setForm({ ...form, effectiveFrom: event.target.value })}
+                onValueChange={(value) => setForm({ ...form, effectiveFrom: value })}
                 required
               />
             </Field>
@@ -317,11 +317,10 @@ export function EndConversionButton({
           >
             <Field>
               <FieldLabel htmlFor={`${id}-date`}>{t("effectiveTo")}</FieldLabel>
-              <Input
+              <DateInput
                 id={`${id}-date`}
-                type="date"
                 value={effectiveTo}
-                onChange={(event) => setEffectiveTo(event.target.value)}
+                onValueChange={setEffectiveTo}
                 required
               />
             </Field>

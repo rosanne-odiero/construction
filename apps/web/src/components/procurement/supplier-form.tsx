@@ -12,6 +12,7 @@ import {
   type SupplierStatus,
 } from "@pm-buddy/types";
 import { supplierDetailResponseSchema, type SupplierDetailResponse } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -243,11 +244,10 @@ export function SupplierForm({ existing }: { existing?: SupplierDetailResponse }
           </Field>
           <Field>
             <FieldLabel htmlFor="supplier-etims-date">{t("etimsCheckedOn")}</FieldLabel>
-            <Input
+            <DateInput
               id="supplier-etims-date"
-              type="date"
               value={form.etimsCheckedOn}
-              onChange={(event) => setForm({ ...form, etimsCheckedOn: event.target.value })}
+              onValueChange={(value) => setForm({ ...form, etimsCheckedOn: value })}
             />
           </Field>
           <Field>

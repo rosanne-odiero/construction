@@ -10,6 +10,7 @@ import {
   valuationResponseSchema,
   type ContractSettings,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { PhotoUpload } from "@/components/quality/photos";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -107,13 +108,12 @@ export function CreateValuationForm({
       </Field>
       <Field>
         <FieldLabel htmlFor="new-valuation-date">{t("date")}</FieldLabel>
-        <Input
+        <DateInput
           id="new-valuation-date"
-          type="date"
           value={date}
           max={today}
           min={minDate ?? undefined}
-          onChange={(event) => setDate(event.target.value)}
+          onValueChange={setDate}
         />
         <FieldDescription>{t("dateHint")}</FieldDescription>
       </Field>
@@ -331,13 +331,7 @@ export function DraftEditor({
       >
         <Field>
           <FieldLabel htmlFor="draft-date">{t("date")}</FieldLabel>
-          <Input
-            id="draft-date"
-            type="date"
-            value={date}
-            max={today}
-            onChange={(event) => setDate(event.target.value)}
-          />
+          <DateInput id="draft-date" value={date} max={today} onValueChange={setDate} />
         </Field>
         <Field>
           <FieldLabel htmlFor="draft-notes">{t("notes")}</FieldLabel>

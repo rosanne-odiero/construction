@@ -7,6 +7,7 @@ const SECTIONS = [
   { key: "muster", href: "/attendance/muster" },
   { key: "periods", href: "/attendance/periods" },
   { key: "anomalies", href: "/attendance/anomalies" },
+  { key: "capture", href: "/attendance/capture" },
   { key: "settings", href: "/attendance/settings" },
 ] as const;
 export type AttendanceSection = (typeof SECTIONS)[number]["key"];

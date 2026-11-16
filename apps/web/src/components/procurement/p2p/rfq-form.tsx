@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { rfqDetailResponseSchema } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { selectClass } from "@/components/procurement/material-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCalendarDate } from "@/lib/format";
 import { liveRequest } from "@/lib/live-api";
@@ -154,12 +154,7 @@ export function RfqForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="rfq-respond-by">{t("respondBy")}</FieldLabel>
-              <Input
-                id="rfq-respond-by"
-                type="date"
-                value={respondBy}
-                onChange={(event) => setRespondBy(event.target.value)}
-              />
+              <DateInput id="rfq-respond-by" value={respondBy} onValueChange={setRespondBy} />
             </Field>
             <Field>
               <FieldLabel htmlFor="rfq-notes">{tCommon("notesOptional")}</FieldLabel>

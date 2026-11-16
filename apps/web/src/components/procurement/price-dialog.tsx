@@ -7,6 +7,7 @@ import { Plus } from "lucide-react";
 import { nairobiDate, splitVat } from "@pm-buddy/domain";
 import { VAT_TREATMENTS, type StandardUnitCode, type VatTreatment } from "@pm-buddy/types";
 import { priceResponseSchema, type Price, type UnitWire } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { Button } from "@/components/ui/button";
 import {
@@ -215,11 +216,10 @@ export function PriceDialogButton({
             </Field>
             <Field>
               <FieldLabel htmlFor={`${id}-date`}>{t("effectiveOn")}</FieldLabel>
-              <Input
+              <DateInput
                 id={`${id}-date`}
-                type="date"
                 value={form.effectiveOn}
-                onChange={(event) => setForm({ ...form, effectiveOn: event.target.value })}
+                onValueChange={(value) => setForm({ ...form, effectiveOn: value })}
                 required
               />
             </Field>

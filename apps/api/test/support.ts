@@ -6,6 +6,13 @@ import type { App } from "supertest/types.js";
 import { expect } from "vitest";
 import { z } from "zod";
 import {
+  captureQueueResponseSchema,
+  captureReceiptSchema,
+  siteDeviceResponseSchema,
+  siteDevicesResponseSchema,
+  siteRosterSchema,
+  workerCardResponseSchema,
+  workerCardsResponseSchema,
   bqBillResponseSchema,
   bqCompareResponseSchema,
   bqContractSumResponseSchema,
@@ -148,6 +155,8 @@ import {
   projectPayrollResponseSchema,
   statutoryRuleResponseSchema,
   workerPortalResponseSchema,
+  workerNotificationPreferencesSchema,
+  workerNotificationHistorySchema,
   scheduleActivityResponseSchema,
   correctiveActionResponseSchema,
   correctiveActionsResponseSchema,
@@ -340,6 +349,9 @@ export function responseContract(method: string, target: string) {
   const clientPortal = clientPortalContract(path);
   if (clientPortal) return clientPortal;
   if (path === "portal/worker") return workerPortalResponseSchema;
+  if (path === "portal/worker/notifications") return workerNotificationPreferencesSchema;
+  if (path === "portal/worker/notifications/send") return messageResponseSchema;
+  if (path === "portal/worker/notifications/history") return workerNotificationHistorySchema;
   const supplierPortal = supplierPortalContract(method, path);
   if (supplierPortal) return supplierPortal;
   if (/^projects\/[^/]+\/labourers\/invitations$/.test(path)) return invitationResponseSchema;
@@ -416,7 +428,7 @@ export function responseContract(method: string, target: string) {
   if (procurement) return procurement;
   const labour = labourContract(method, path);
   if (labour) return labour;
-  const attendance = attendanceContract(path);
+  const attendance = attendanceContract(method, path);
   if (attendance) return attendance;
   const payroll = payrollContract(method, path);
   if (payroll) return payroll;
@@ -791,8 +803,18 @@ function payrollContract(method: string, path: string) {
 }
 
 /** The D3.3 attendance and timesheet endpoints' success contracts. */
-function attendanceContract(path: string) {
+function attendanceContract(method: string, path: string) {
   if (!path.startsWith("attendance/")) return null;
+  if (path === "attendance/capture/devices")
+    return method === "get" ? siteDevicesResponseSchema : siteDeviceResponseSchema;
+  if (/^attendance\/capture\/devices\/[^/]+\/lease$/.test(path)) return siteRosterSchema;
+  if (path === "attendance/capture/cards")
+    return method === "get" ? workerCardsResponseSchema : workerCardResponseSchema;
+  if (path === "attendance/capture/events")
+    return method === "get" ? captureQueueResponseSchema : captureReceiptSchema;
+  if (/^attendance\/capture\/events\/[^/]+\/photo$/.test(path)) return z.unknown();
+  if (/^attendance\/capture\/(devices|cards|events)\/[^/]+\/(revoke|review)$/.test(path))
+    return messageResponseSchema;
   if (path === "attendance/overview") return attendanceOverviewResponseSchema;
   if (
     [

@@ -1,0 +1,117 @@
+rule_files:
+  - alerts.yml
+evaluation_interval: 30s
+tests:
+  - interval: 30s
+    input_series:
+      - series: 'probe_success{job="api-health",probe="live",instance="synthetic"}'
+        values: "1 0 0 0 0 0"
+      - series: 'probe_success{job="api-health",probe="ready",instance="synthetic"}'
+        values: "1 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ApiNotReady
+        exp_alerts: []
+      - eval_time: 2m30s
+        alertname: ApiNotReady
+        exp_alerts:
+          - exp_labels:
+              job: api-health
+              probe: ready
+              instance: synthetic
+              severity: critical
+            exp_annotations:
+              summary: API dependency readiness has failed for two minutes
+              runbook: docs/OPERATIONS.md#api-or-dependency-outage
+      - eval_time: 2m30s
+        alertname: ApiNotLive
+        exp_alerts:
+          - exp_labels:
+              job: api-health
+              probe: live
+              instance: synthetic
+              severity: critical
+            exp_annotations:
+              summary: API liveness has failed for two minutes
+              runbook: docs/OPERATIONS.md#api-or-dependency-outage
+  - interval: 30s
+    input_series:
+      - series: 'probe_success{job="api-health",probe="live"}'
+        values: "1+0x12"
+      - series: 'probe_success{job="api-health",probe="ready"}'
+        values: "1+0x12"
+      - series: 'up{job="blackbox",instance="blackbox:9115"}'
+        values: "1+0x12"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ApiNotReady
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: HealthProbeMissing
+        exp_alerts: []
+  - interval: 30s
+    input_series: []
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: HealthProbeMissing
+        exp_alerts:
+          - exp_labels:
+              job: api-health
+              probe: live
+              severity: critical
+            exp_annotations:
+              summary: A required health probe series is missing
+              runbook: docs/OPERATIONS.md#monitoring-failure
+          - exp_labels:
+              job: api-health
+              probe: ready
+              severity: critical
+            exp_annotations:
+              summary: A required health probe series is missing
+              runbook: docs/OPERATIONS.md#monitoring-failure
+  - interval: 30s
+    input_series:
+      - series: 'probe_duration_seconds{job="api-health",probe="ready",instance="synthetic"}'
+        values: "3+0x12"
+      - series: 'up{job="blackbox",instance="blackbox:9115"}'
+        values: "0+0x12"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HealthProbeSlow
+        exp_alerts:
+          - exp_labels:
+              job: api-health
+              probe: ready
+              instance: synthetic
+              severity: warning
+            exp_annotations:
+              summary: Health probe has been slower than two seconds for five minutes
+              runbook: docs/OPERATIONS.md#api-or-dependency-outage
+      - eval_time: 2m
+        alertname: HealthScrapeUnavailable
+        exp_alerts:
+          - exp_labels:
+              job: blackbox
+              instance: blackbox:9115
+              severity: critical
+            exp_annotations:
+              summary: Health monitoring cannot scrape its exporter
+              runbook: docs/OPERATIONS.md#monitoring-failure
+  - interval: 30s
+    input_series:
+      - series: 'probe_success{job="api-health",probe="ready"}'
+        values: "0 0 0 0 0 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ApiNotReady
+        exp_alerts:
+          - exp_labels:
+              job: api-health
+              probe: ready
+              severity: critical
+            exp_annotations:
+              summary: API dependency readiness has failed for two minutes
+              runbook: docs/OPERATIONS.md#api-or-dependency-outage
+      - eval_time: 3m
+        alertname: ApiNotReady
+        exp_alerts: []

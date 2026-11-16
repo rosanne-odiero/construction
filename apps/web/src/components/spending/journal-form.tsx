@@ -13,6 +13,7 @@ import {
   type CostMeasure,
 } from "@pm-buddy/types";
 import { journalResponseSchema } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useP2pProblem } from "@/components/procurement/p2p/use-p2p-problem";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -199,11 +200,10 @@ export function JournalForm({
               </Field>
               <Field>
                 <FieldLabel htmlFor={`${line.key}-date`}>{t("date")}</FieldLabel>
-                <Input
+                <DateInput
                   id={`${line.key}-date`}
-                  type="date"
                   value={line.occurredOn}
-                  onChange={(event) => update(line.key, { occurredOn: event.target.value })}
+                  onValueChange={(value) => update(line.key, { occurredOn: value })}
                 />
               </Field>
               <Field>

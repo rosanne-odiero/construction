@@ -11,6 +11,7 @@ import {
   type ApprovalDecision,
 } from "@pm-buddy/types";
 import { approvalResponseSchema, type ApprovalDetail } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { checkboxClass, ReasonDialog } from "@/components/safety/common";
 import { FormError, selectClass } from "@/components/schedule/use-schedule-mutation";
 import { Button } from "@/components/ui/button";
@@ -153,18 +154,11 @@ export function RaiseApprovalForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor="approval-sent">{t("approvals.form.sentOn")}</FieldLabel>
-          <Input
-            id="approval-sent"
-            name="sentOn"
-            type="date"
-            required
-            max={today}
-            defaultValue={today}
-          />
+          <DateInput id="approval-sent" name="sentOn" required max={today} defaultValue={today} />
         </Field>
         <Field>
           <FieldLabel htmlFor="approval-due">{t("approvals.form.dueOn")}</FieldLabel>
-          <Input id="approval-due" name="dueOn" type="date" required defaultValue={dueDefault} />
+          <DateInput id="approval-due" name="dueOn" required defaultValue={dueDefault} />
         </Field>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -331,10 +325,9 @@ export function ApprovalActions({
                 <FieldLabel htmlFor="approval-responded">
                   {t("approvals.detail.respondedOnLabel")}
                 </FieldLabel>
-                <Input
+                <DateInput
                   id="approval-responded"
                   name="respondedOn"
-                  type="date"
                   required
                   min={approval.sentOn}
                   max={today}

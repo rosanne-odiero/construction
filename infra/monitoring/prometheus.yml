@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: api-health
+    metrics_path: /probe
+    params:
+      module: [api_health]
+    static_configs:
+      # Operator must replace the host for the approved environment; never probe through a login redirect.
+      - targets: ["http://host.docker.internal:4000/api/v1/health/live"]
+        labels:
+          probe: live
+      - targets: ["http://host.docker.internal:4000/api/v1/health/ready"]
+        labels:
+          probe: ready
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+  - job_name: blackbox
+    static_configs:
+      - targets: ["blackbox:9115"]

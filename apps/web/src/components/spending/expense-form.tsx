@@ -18,6 +18,7 @@ import {
   smsParseResponseSchema,
   type SmsParseResponse,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useP2pProblem } from "@/components/procurement/p2p/use-p2p-problem";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -294,11 +295,10 @@ export function ExpenseForm({
         </Field>
         <Field>
           <FieldLabel htmlFor="expense-date">{t("spentOn")}</FieldLabel>
-          <Input
+          <DateInput
             id="expense-date"
-            type="date"
             value={form.spentOn}
-            onChange={(event) => set("spentOn", event.target.value)}
+            onValueChange={(value) => set("spentOn", value)}
           />
         </Field>
         <Field>

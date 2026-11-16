@@ -44,6 +44,8 @@ import {
   anomalyResponseSchema,
   approveDecisionRequestSchema,
   attendanceOverviewResponseSchema,
+  captureQueueResponseSchema,
+  captureReviewSchema,
   attendanceSettingsResponseSchema,
   correctionResponseSchema,
   correctionsResponseSchema,
@@ -64,12 +66,16 @@ import {
   returnDayRequestSchema,
   reviewAnomalyRequestSchema,
   saveMusterRequestSchema,
+  siteDevicesResponseSchema,
   timesheetLinesResponseSchema,
   timesheetRuleResponseSchema,
   updatePeriodSettingsRequestSchema,
+  workerCardResponseSchema,
+  workerCardsResponseSchema,
   type Adjustment,
   type AttendanceEntryValues,
   type Correction,
+  type CaptureQueue,
   type TimesheetLine,
   type TimesheetRule,
   type TimesheetTotalsWire,
@@ -205,6 +211,11 @@ type MockAdjustment = Omit<
 > & { requestedBy: string; decidedBy: string | null };
 
 export type AttendanceState = {
+  capture?: {
+    queue: CaptureQueue;
+    card: { id: string; labourerId: string; issuedAt: string; revokedAt: string | null } | null;
+    deviceRevoked: boolean;
+  };
   settings: {
     weekEndsOn: IsoWeekday;
     cutoffTime: string;
@@ -1206,6 +1217,111 @@ export function handleAttendance(
   if (!path.startsWith("/attendance/")) return null;
   const labour = ctx.labour;
   const visible = ctx.projects.filter((project) => can(ctx, project.id, "attendance.view"));
+
+  if (path.startsWith("/attendance/capture/")) {
+    const tenantId = "20000000-0000-4000-8000-000000000001";
+    const deviceId = "61000000-0000-4000-8000-000000000001";
+    const eventId = "62000000-0000-4000-8000-000000000001";
+    const token = `PMB1:${"a".repeat(64)}`;
+    const capture = (state.capture ??= {
+      queue: {
+        events: [
+          {
+            event: {
+              schemaVersion: 1,
+              id: eventId,
+              deviceId,
+              leaseId: id(),
+              tenantId,
+              projectId: RUIRU,
+              siteId: MAIN_PLOT,
+              bootId: id(),
+              monotonicMs: 2000,
+              capturedAt: MOCK_NOW.toISOString(),
+              direction: "in",
+              shiftId: id(),
+              cardToken: token,
+              method: "nfc_card",
+              position: null,
+              photoSha256: "b".repeat(64),
+              supervisorConfirmed: true,
+            },
+            receipt: {
+              eventId,
+              receiptId: id(),
+              receivedAt: MOCK_NOW.toISOString(),
+              status: "quarantined",
+              flags: ["clock_drift", "location_unknown"],
+              recordId: null,
+            },
+            recordId: null,
+            labourerName: "Amina Wekesa Njoroge",
+            review: null,
+          },
+        ],
+        nextCursor: null,
+      },
+      card: null,
+      deviceRevoked: false,
+    });
+    if (path === "/attendance/capture/events" && method === "GET") {
+      projectOf(ctx, query.get("projectId") ?? "", "attendance.view");
+      return { body: capture.queue, schema: captureQueueResponseSchema };
+    }
+    if (path === "/attendance/capture/cards" && method === "GET") {
+      projectOf(ctx, query.get("projectId") ?? "", "labour.manage");
+      return {
+        body: { cards: capture.card && !capture.card.revokedAt ? [capture.card] : [] },
+        schema: workerCardsResponseSchema,
+      };
+    }
+    if (path === "/attendance/capture/cards" && method === "POST") {
+      projectOf(ctx, RUIRU, "labour.manage");
+      const { labourerId } = workerCardResponseSchema.shape.card
+        .pick({ labourerId: true })
+        .parse(body);
+      capture.card = { id: id(), labourerId, issuedAt: MOCK_NOW.toISOString(), revokedAt: null };
+      return {
+        body: { card: { id: capture.card.id, labourerId, issuedAt: capture.card.issuedAt, token } },
+        schema: workerCardResponseSchema,
+      };
+    }
+    if (path === "/attendance/capture/devices" && method === "GET") {
+      return {
+        body: {
+          devices: [
+            {
+              id: deviceId,
+              tenantId,
+              userId: ctx.user.id,
+              name: "Synthetic gate phone",
+              publicKey: "c".repeat(64),
+              createdAt: MOCK_NOW.toISOString(),
+              revokedAt: capture.deviceRevoked ? MOCK_NOW.toISOString() : null,
+            },
+          ],
+        },
+        schema: siteDevicesResponseSchema,
+      };
+    }
+    if (path === `/attendance/capture/events/${eventId}/review` && method === "POST") {
+      projectOf(ctx, RUIRU, "attendance.review_anomalies");
+      const review = captureReviewSchema.parse(body);
+      if (!ctx.stepUpFresh()) return ctx.fail(403, "step-up-required");
+      capture.queue.events[0]!.review = { ...review, reviewedAt: MOCK_NOW.toISOString() };
+      return { body: { message: "Evidence reviewed" }, schema: messageResponseSchema };
+    }
+    if (path.endsWith("/revoke") && method === "POST") {
+      projectOf(ctx, RUIRU, "labour.manage");
+      if (path === `/attendance/capture/cards/${capture.card?.id}/revoke` && capture.card)
+        capture.card.revokedAt = MOCK_NOW.toISOString();
+      else if (path === `/attendance/capture/devices/${deviceId}/revoke`)
+        capture.deviceRevoked = true;
+      else return ctx.fail(404, "not-found");
+      return { body: { message: "Revoked" }, schema: messageResponseSchema };
+    }
+    return null;
+  }
 
   if (path === "/attendance/overview" && method === "GET") {
     return {

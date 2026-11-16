@@ -1,5 +1,5 @@
 import { randomBytes, randomInt } from "node:crypto";
-import { Logger, type INestApplication } from "@nestjs/common";
+import { Logger, ServiceUnavailableException, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types.js";
@@ -14,7 +14,14 @@ import {
   tenantCreatedResponseSchema,
   workerPortalResponseSchema,
   roleResponseSchema,
+  labourSetupResponseSchema,
+  labourerResponseSchema,
+  musterResponseSchema,
+  workerNotificationPreferencesSchema,
+  workerNotificationHistorySchema,
 } from "@pm-buddy/validation";
+import { addCalendarDays, nairobiDate } from "@pm-buddy/domain";
+import { CURRENT_CONSENT_NOTICE, DEMO_TIMESHEET_RULE } from "@pm-buddy/types";
 import { AppModule } from "../src/app.module.js";
 import { configureApp } from "../src/app.setup.js";
 import { PrismaService } from "../src/infra/prisma.service.js";
@@ -25,6 +32,9 @@ import {
   verifyPassword,
 } from "../src/modules/identity/auth-security.service.js";
 import { PIN_DAILY_FAILURES, PIN_GLOBAL_FAILURES } from "../src/modules/identity/pin.service.js";
+import { TenantDatabase } from "../src/modules/identity/tenant-database.service.js";
+import { NotificationProvider } from "../src/modules/notifications/notification.provider.js";
+import { WorkerNotificationDispatcher } from "../src/modules/portals/worker-notification-dispatcher.js";
 import { Browser, notifications, password } from "./support.js";
 
 const PIN = "274915";
@@ -99,10 +109,46 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
       pin: PIN,
     });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    return { labourer, number, auth: authResponseSchema.parse(res.body) };
+    labourer.auth = authResponseSchema.parse(res.body);
+    return { labourer, number, auth: labourer.auth };
   };
+  const registerWorker = async (number: string, idNumber: string) => {
+    const setup = labourSetupResponseSchema.parse(
+      (await owner.call("post", "labour/setup/defaults", {})).body,
+    );
+    const response = await owner.call("post", "labour/labourers", {
+      fullName: "Self-service worker",
+      dateOfBirth: "1991-03-09",
+      gender: "female",
+      tradeId: setup.trades.find((trade) => trade.key === "general_labourer")!.id,
+      skillLevelId: setup.skillLevels.find((level) => level.key === "unskilled")!.id,
+      engagementType: "casual",
+      rateBasis: "daily",
+      idType: "national_id",
+      idNumber,
+      phone: number,
+      projectId: p1,
+      engagementStartDate: addCalendarDays(nairobiDate(), -40),
+      consent: {
+        noticeVersion: CURRENT_CONSENT_NOTICE.version,
+        language: "en",
+        method: "signed",
+        granted: true,
+      },
+    });
+    expect(response.status, JSON.stringify(response.body)).toBe(201);
+    return labourerResponseSchema.parse(response.body).labourer.id;
+  };
+  const ussd = (sessionId: string, phoneNumber: string, text: string, token = "a".repeat(64)) =>
+    request(app.getHttpServer())
+      .post("/api/v1/ussd")
+      .set("X-USSD-Token", token)
+      .type("form")
+      .send({ sessionId, phoneNumber: `+${phoneNumber}`, serviceCode: "*384*123#", text });
 
   beforeAll(async () => {
+    vi.stubEnv("USSD_CALLBACK_TOKEN", "a".repeat(64));
+    vi.stubEnv("USSD_SERVICE_CODE", "*384*123#");
     app = (
       await Test.createTestingModule({ imports: [AppModule] }).compile()
     ).createNestApplication({
@@ -182,6 +228,352 @@ describe("Client, labourer and staff portals (real runtime role)", () => {
   afterAll(async () => {
     notificationSpy?.mockRestore();
     await app?.close();
+    vi.unstubAllEnvs();
+  });
+
+  describe("D7.3 self-service", () => {
+    afterAll(async () => {
+      await app.get(AuthSecurity).forget(`invitation:key:${pm.auth.user.id}`);
+    });
+
+    it("shows only the matched worker's own attendance on assigned projects and refuses shared phones", async () => {
+      const { labourer, number } = await joinAsLabourer();
+      const id = await registerWorker(number, "89001001");
+      const other = await registerWorker(phone(), "89001002");
+      expect(
+        (
+          await labourer.call("put", "portal/worker/notifications", {
+            sms: true,
+            whatsapp: true,
+            locale: "sw",
+          })
+        ).status,
+      ).toBe(200);
+      const { sourceReference, ...values } = DEMO_TIMESHEET_RULE;
+      expect(
+        (
+          await owner.call("post", "attendance/rules", {
+            ...values,
+            sourceReference,
+            effectiveFrom: addCalendarDays(nairobiDate(), -60),
+          })
+        ).status,
+      ).toBe(201);
+      const response = await owner.call("put", `attendance/projects/${p1}/muster`, {
+        siteId: site,
+        date: nairobiDate(),
+        dayVersion: 0,
+        entries: [
+          { labourerId: id, version: 0, status: "present", checkIn: "07:00", checkOut: "16:00" },
+          { labourerId: other, version: 0, status: "absent" },
+        ],
+      });
+      expect(response.status, JSON.stringify(response.body)).toBe(200);
+      const day = musterResponseSchema.parse(response.body).day!;
+      let portal = workerPortalResponseSchema.parse(
+        (await labourer.call("get", "portal/worker")).body,
+      );
+      expect(portal.attendance?.records).toHaveLength(1);
+      expect(portal.attendance?.records[0]).toMatchObject({ status: "present", confirmed: false });
+      expect(portal.attendance?.daysWorked).toBe(0);
+      expect(
+        (await owner.call("post", `attendance/days/${day.id}/submit`, { version: day.version }))
+          .status,
+      ).toBe(200);
+      const confirmed = await pm.call("post", `attendance/days/${day.id}/confirm`, {
+        version: day.version + 1,
+      });
+      expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(200);
+      const dispatcher = app.get(WorkerNotificationDispatcher);
+      const send = vi.spyOn(app.get(NotificationProvider), "send").mockResolvedValue();
+      try {
+        // A confirmed transaction creates the job. Two instances still attempt each channel once.
+        await Promise.all([dispatcher.runDue(tenantA), dispatcher.runDue(tenantA)]);
+        await dispatcher.runDue(tenantA);
+        expect(send).toHaveBeenCalledTimes(2);
+        expect(send.mock.calls.every(([message]) => message.recipient === number)).toBe(true);
+        expect(
+          send.mock.calls.every(([message]) => message.text.includes("Usishiriki PIN yako")),
+        ).toBe(true);
+        expect(JSON.stringify(send.mock.calls)).not.toContain("KES");
+        const history = workerNotificationHistorySchema.parse(
+          (await labourer.call("get", "portal/worker/notifications/history")).body,
+        );
+        expect(history.items).toHaveLength(2);
+        expect(
+          history.items.every(
+            (item) => item.topic === "attendance.day_confirmed" && item.status === "accepted",
+          ),
+        ).toBe(true);
+      } finally {
+        send.mockRestore();
+      }
+      portal = workerPortalResponseSchema.parse((await labourer.call("get", "portal/worker")).body);
+      expect(portal.attendance?.daysWorked).toBe(1);
+      expect(portal.pay).toMatchObject({
+        lines: [],
+        payments: null,
+        advancesOutstandingMinor: "0",
+      });
+      expect(JSON.stringify(portal)).not.toContain(id);
+      expect(JSON.stringify(portal)).not.toContain("89001001");
+
+      await registerWorker(number, "89001003");
+      portal = workerPortalResponseSchema.parse((await labourer.call("get", "portal/worker")).body);
+      expect(portal.attendance).toBeNull();
+      expect(portal.pay).toBeNull();
+    });
+
+    it("saves only own notification preferences under forced RLS, requires opt-in and sends wage-free reminders", async () => {
+      const { labourer } = await joinAsLabourer();
+      const { labourer: other } = await joinAsLabourer();
+      const get = () => labourer.call("get", "portal/worker/notifications");
+      expect(workerNotificationPreferencesSchema.parse((await get()).body)).toEqual({
+        sms: false,
+        whatsapp: false,
+        locale: "en",
+      });
+      expect(
+        (await labourer.call("post", "portal/worker/notifications/send", { channel: "whatsapp" }))
+          .status,
+      ).toBe(403);
+      const saved = await labourer.call("put", "portal/worker/notifications", {
+        sms: true,
+        whatsapp: true,
+        locale: "sw",
+      });
+      expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+      expect((await get()).body).toEqual({ sms: true, whatsapp: true, locale: "sw" });
+      expect((await other.call("get", "portal/worker/notifications")).body).toEqual({
+        sms: false,
+        whatsapp: false,
+        locale: "en",
+      });
+      const db = app.get(TenantDatabase);
+      const rows = await db.run(
+        { userId: other.auth.user.id, tenantId: tenantA, requestId: "test-preferences-isolation" },
+        (tx) => tx.notificationPreference.findMany({ where: { userId: labourer.auth.user.id } }),
+      );
+      expect(rows).toEqual([]);
+      await expect(
+        db.run(
+          { userId: other.auth.user.id, tenantId: tenantA, requestId: "test-preferences-write" },
+          (tx) =>
+            tx.notificationPreference.update({
+              where: { userId: labourer.auth.user.id },
+              data: { whatsapp: false },
+            }),
+        ),
+      ).rejects.toThrow();
+      const send = vi.spyOn(app.get(NotificationProvider), "send").mockResolvedValue();
+      try {
+        const sent = await labourer.call("post", "portal/worker/notifications/send", {
+          channel: "whatsapp",
+        });
+        expect(sent.status, JSON.stringify(sent.body)).toBe(200);
+        expect(send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            channel: "whatsapp",
+            text: expect.stringContaining("Usishiriki PIN yako"),
+          }),
+        );
+        expect(JSON.stringify(send.mock.calls)).not.toContain("KES");
+        send.mockRejectedValueOnce(new ServiceUnavailableException("provider unavailable"));
+        // The first refused request counts towards the shared three-request sending limit.
+        expect(
+          (await labourer.call("post", "portal/worker/notifications/send", { channel: "sms" }))
+            .status,
+        ).toBe(503);
+        expect(
+          (await labourer.call("post", "portal/worker/notifications/send", { channel: "sms" }))
+            .status,
+        ).toBe(429);
+        const history = workerNotificationHistorySchema.parse(
+          (await labourer.call("get", "portal/worker/notifications/history")).body,
+        );
+        expect(history.items.map((row) => row.status).sort()).toEqual(["accepted", "unconfirmed"]);
+        expect((await other.call("get", "portal/worker/notifications/history")).body).toEqual({
+          items: [],
+        });
+        const isolated = await db.run(
+          { userId: other.auth.user.id, tenantId: tenantA, requestId: "test-history-isolation" },
+          (tx) => tx.workerNotification.findMany({ where: { userId: labourer.auth.user.id } }),
+        );
+        expect(isolated).toEqual([]);
+        expect(
+          await db.run(
+            {
+              userId: labourer.auth.user.id,
+              tenantId: ownerB.auth.session.tenantId,
+              requestId: "test-history-company",
+            },
+            (tx) => tx.workerNotification.findMany({ where: { userId: labourer.auth.user.id } }),
+          ),
+        ).toEqual([]);
+        await expect(
+          db.run(
+            { userId: other.auth.user.id, tenantId: tenantA, requestId: "test-history-write" },
+            (tx) =>
+              tx.workerNotification.update({
+                where: { id: history.items[0]!.id },
+                data: { status: "accepted" },
+              }),
+          ),
+        ).rejects.toThrow();
+        await app.get(WorkerNotificationDispatcher).runDue(tenantA);
+        expect(send).toHaveBeenCalledTimes(2);
+      } finally {
+        send.mockRestore();
+      }
+    });
+
+    it("rechecks queued consent and access, expires alerts and never retries interrupted sends", async () => {
+      const { labourer } = await joinAsLabourer();
+      const userId = labourer.auth.user.id;
+      const db = app.get(TenantDatabase);
+      const ctx = { tenantId: tenantA, userId, requestId: "test-notification-queue" };
+      const queue = (data: {
+        status?: string;
+        createdAt?: Date;
+        updatedAt?: Date;
+        projectId?: string;
+      }) =>
+        db.run(ctx, (tx) =>
+          tx.workerNotification.create({
+            data: { tenantId: tenantA, userId, topic: "worker.reminder", channel: "sms", ...data },
+          }),
+        );
+      const send = vi.spyOn(app.get(NotificationProvider), "send").mockResolvedValue();
+      const dispatcher = app.get(WorkerNotificationDispatcher);
+      try {
+        const optedOut = await queue({});
+        await dispatcher.deliver(tenantA, userId, optedOut.id);
+        expect(
+          await db.run(ctx, (tx) =>
+            tx.workerNotification.findUniqueOrThrow({ where: { id: optedOut.id } }),
+          ),
+        ).toMatchObject({
+          status: "skipped",
+          reason: "opted-out",
+        });
+        await labourer.call("put", "portal/worker/notifications", {
+          sms: true,
+          whatsapp: false,
+          locale: "en",
+        });
+        const expired = await queue({ createdAt: new Date(Date.now() - 86_401_000) });
+        const interrupted = await queue({
+          status: "sending",
+          updatedAt: new Date(Date.now() - 121_000),
+        });
+        const unrelated = await queue({ projectId: p2 });
+        for (const row of [expired, interrupted, unrelated])
+          await dispatcher.deliver(tenantA, userId, row.id);
+        const history = workerNotificationHistorySchema.parse(
+          (await labourer.call("get", "portal/worker/notifications/history")).body,
+        );
+        expect(history.items).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: expired.id, status: "skipped", reason: "expired" }),
+            expect.objectContaining({
+              id: interrupted.id,
+              status: "unconfirmed",
+              reason: "interrupted",
+            }),
+          ]),
+        );
+        // A notification about a project without current access is not exposed by history.
+        expect(history.items.some((item) => item.id === unrelated.id)).toBe(false);
+        expect(
+          await db.run(ctx, (tx) =>
+            tx.workerNotification.findUniqueOrThrow({ where: { id: unrelated.id } }),
+          ),
+        ).toMatchObject({
+          status: "skipped",
+          reason: "access-lost",
+        });
+        expect(send).not.toHaveBeenCalled();
+        const budgeted = await Promise.all([queue({}), queue({}), queue({}), queue({})]);
+        for (const row of budgeted) await dispatcher.deliver(tenantA, userId, row.id);
+        expect(send).toHaveBeenCalledTimes(3);
+        expect(
+          await db.run(ctx, (tx) =>
+            tx.workerNotification.findUniqueOrThrow({ where: { id: budgeted[3]!.id } }),
+          ),
+        ).toMatchObject({
+          status: "skipped",
+          reason: "budget",
+        });
+        await dispatcher.runDue(tenantA);
+        expect(send).toHaveBeenCalledTimes(3);
+        const security = app.get(AuthSecurity);
+        const companyKey = `worker-notification-company:${tenantA}`;
+        let attempts = await security.increment(companyKey, 3600);
+        while (attempts < 100) attempts = await security.increment(companyKey, 3600);
+        expect(attempts).toBe(100);
+        const { labourer: nextWorker } = await joinAsLabourer();
+        await nextWorker.call("put", "portal/worker/notifications", {
+          sms: true,
+          whatsapp: false,
+          locale: "en",
+        });
+        const nextContext = { ...ctx, userId: nextWorker.auth.user.id };
+        const capped = await db.run(nextContext, (tx) =>
+          tx.workerNotification.create({
+            data: {
+              tenantId: tenantA,
+              userId: nextWorker.auth.user.id,
+              channel: "sms",
+              topic: "worker.reminder",
+            },
+          }),
+        );
+        await dispatcher.deliver(tenantA, nextWorker.auth.user.id, capped.id);
+        expect(
+          await db.run(nextContext, (tx) =>
+            tx.workerNotification.findUniqueOrThrow({ where: { id: capped.id } }),
+          ),
+        ).toMatchObject({
+          status: "skipped",
+          reason: "budget",
+        });
+        expect(send).toHaveBeenCalledTimes(3);
+      } finally {
+        send.mockRestore();
+      }
+    });
+
+    it("runs a phone-bound EN/SW USSD session with ID + PIN, ends on replay and never gives office access", async () => {
+      const { labourer, number } = await joinAsLabourer();
+      await registerWorker(number, "89002001");
+      const id = randomBytes(16).toString("hex");
+      expect((await ussd(id, number, "", "wrong")).status).toBe(403);
+      let response = await ussd(id, number, "");
+      expect(response.status).toBe(200);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.headers["content-type"]).toContain("text/plain");
+      expect(response.text).toContain("1. English");
+      expect((await ussd(id, number, "2")).text).toContain("kitambulisho");
+      expect((await ussd(id, number, "2*89002001")).text).toContain("PIN");
+      expect((await ussd(id, number, `2*89002001*${PIN}`)).text).toContain("Chagua kampuni");
+      expect((await ussd(id, number, `2*89002001*${PIN}*1`)).text).toContain("1. Siku");
+      expect((await ussd(id, number, `2*89002001*${PIN}*1*2`)).text).toContain("Hakuna mshahara");
+      expect((await ussd(id, number, `2*89002001*${PIN}*1*2`)).text).toContain("expired");
+      const sessions = await prisma.session.findMany({ where: { userId: labourer.auth.user.id } });
+      expect(
+        sessions
+          .filter((row) => row.id !== labourer.auth.session.id)
+          .every((row) => row.revokedAt !== null),
+      ).toBe(true);
+
+      const wrong = randomBytes(16).toString("hex");
+      for (const value of ["", "1", "1*89009999", `1*89009999*${PIN}`])
+        await ussd(wrong, number, value);
+      expect((await ussd(wrong, number, `1*89009999*${PIN}*1`)).text).toContain("Unable to verify");
+      const cross = randomBytes(16).toString("hex");
+      await ussd(cross, number, "");
+      expect((await ussd(cross, phone(), "1")).text).toContain("expired");
+    });
   });
 
   it("documents the portal and PIN operations", async () => {

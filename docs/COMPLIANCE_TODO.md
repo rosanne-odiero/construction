@@ -211,6 +211,7 @@ These are summarised here. The detail is in [DPIA_TEMPLATE.md](./DPIA_TEMPLATE.m
 | CR-DP-10 | Children | Registration blocked under 18 (brief); age taken from DOB and checked against ID where possible | That DOB checks are adequate; handling of under-18s who appear on site | Children Act, Employment Act | D3.1 | open |
 | CR-DP-11 | Kiswahili consent text | Draft notices in DPIA §7 | Legal review and professional Kiswahili review, including read-aloud suitability | Adviser plus translator | D3.1 | open |
 | CR-DP-12 | ODPC biometric guidance | Design follows brief §6 | Obtain the current ODPC guidance note on biometric data and map every requirement to a control | ODPC | D3.4 | open |
+| CR-DP-13 | Access log | Every signed-in request in a company is logged with the person, record IDs, outcome and, behind a trusted proxy, the client IP; kept 365 days; visible to `audit.view` holders after a recent MFA check (D-141, OPERATIONS "Access log") | Lawful basis and transparency for monitoring staff, client and supplier access (privacy notices, DPIA); whether storing the IP address and 365 days are proportionate; who may see and export it | DPA 2019 (principles, notice), General Regulations 2021 | Before production data | open |
 
 ## D3.1 implementation notes (labour registry)
 

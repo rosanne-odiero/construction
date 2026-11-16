@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { UserPlus } from "lucide-react";
+import { DateInput } from "@/components/date-input";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -88,11 +89,10 @@ export function RegisterWorkerDialog() {
               </Field>
               <Field data-invalid={underage || undefined}>
                 <FieldLabel htmlFor="w-dob">{t("dob")}</FieldLabel>
-                <Input
+                <DateInput
                   id="w-dob"
-                  type="date"
                   value={dob}
-                  onChange={(e) => setDob(e.target.value)}
+                  onValueChange={setDob}
                   aria-invalid={underage}
                   required
                 />

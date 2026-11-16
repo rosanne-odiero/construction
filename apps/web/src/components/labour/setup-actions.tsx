@@ -16,6 +16,7 @@ import {
   type SkillLevel,
   type Trade,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -372,7 +373,7 @@ export function AddRateButton({
         </Field>
         <Field>
           <FieldLabel htmlFor="rate-from">{t("effectiveFrom")}</FieldLabel>
-          <Input
+          <DateTextInput
             id="rate-from"
             value={from}
             onChange={(event) => setFrom(event.target.value)}

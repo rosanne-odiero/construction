@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { isProjectReadOnly } from "@pm-buddy/domain";
+import { canonicalJson, isProjectReadOnly } from "@pm-buddy/domain";
 import type { Permission, ProjectStatus } from "@pm-buddy/types";
 import type { Request } from "express";
 import {
@@ -37,6 +37,7 @@ export type AttendanceProblem =
   | "correction-not-needed"
   | "correction-outdated"
   | "pending-corrections"
+  | "pending-captures"
   | "period-not-due"
   | "unconfirmed-days"
   | "open-anomalies"
@@ -174,18 +175,7 @@ export class AttendanceAccess {
 }
 
 /** Stable JSON (sorted keys) for fingerprints and digests. */
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    return `{${Object.keys(record)
-      .filter((key) => record[key] !== undefined)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value ?? null);
-}
+export { canonicalJson };
 
 export const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
@@ -207,8 +197,9 @@ export class AttendanceCommands {
     operation: string,
     payload: unknown,
     command: (scope: Scope) => Promise<T>,
+    cacheResponse = true,
   ): Promise<T> {
-    const header = req.headers["idempotency-key"];
+    const header = cacheResponse ? req.headers["idempotency-key"] : undefined;
     const key = typeof header === "string" ? header : undefined;
     if (header !== undefined && (!key || !IDEMPOTENCY_KEY.test(key)))
       throw attendanceBadRequest(

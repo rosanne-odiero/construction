@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { ComplianceRecordKind } from "@pm-buddy/types";
 import { complianceHistoryResponseSchema, documentListResponseSchema } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { checkboxClass } from "@/components/safety/common";
 import { FormError, selectClass } from "@/components/schedule/use-schedule-mutation";
 import { Button } from "@/components/ui/button";
@@ -147,12 +148,12 @@ export function ComplianceRecordForm({
             </Field>
             <Field>
               <FieldLabel htmlFor="compliance-issued">{t("compliance.issuedOn")}</FieldLabel>
-              <Input id="compliance-issued" name="issuedOn" type="date" max={today} />
+              <DateInput id="compliance-issued" name="issuedOn" max={today} />
             </Field>
             {expires ? (
               <Field>
                 <FieldLabel htmlFor="compliance-expires">{t("compliance.expiresOn")}</FieldLabel>
-                <Input id="compliance-expires" name="expiresOn" type="date" required />
+                <DateInput id="compliance-expires" name="expiresOn" required />
               </Field>
             ) : null}
           </div>

@@ -13,35 +13,82 @@ datasource db {
 }
 
 model User {
-  id                  String               @id @default(uuid()) @db.Uuid
-  identifier          String               @unique @db.VarChar(254)
-  displayName         String               @map("display_name") @db.VarChar(100)
-  passwordHash        String               @map("password_hash")
+  id                     String                  @id @default(uuid()) @db.Uuid
+  identifier             String                  @unique @db.VarChar(254)
+  displayName            String                  @map("display_name") @db.VarChar(100)
+  passwordHash           String                  @map("password_hash")
   // A labourer's six-digit sign-in PIN (Argon2id); null for staff and client accounts.
-  pinHash             String?              @map("pin_hash")
-  pinPepperVersion    Int?                 @map("pin_pepper_version") @db.SmallInt
-  verifiedAt          DateTime?            @map("verified_at") @db.Timestamptz
-  failedLogins        Int                  @default(0) @map("failed_logins")
-  lockedUntil         DateTime?            @map("locked_until") @db.Timestamptz
-  mfaSecret           String?              @map("mfa_secret")
-  mfaPending          String?              @map("mfa_pending")
-  mfaPendingUntil     DateTime?            @map("mfa_pending_until") @db.Timestamptz
-  mfaPendingSessionId String?              @map("mfa_pending_session_id") @db.Uuid
+  pinHash                String?                 @map("pin_hash")
+  pinPepperVersion       Int?                    @map("pin_pepper_version") @db.SmallInt
+  verifiedAt             DateTime?               @map("verified_at") @db.Timestamptz
+  failedLogins           Int                     @default(0) @map("failed_logins")
+  lockedUntil            DateTime?               @map("locked_until") @db.Timestamptz
+  mfaSecret              String?                 @map("mfa_secret")
+  mfaPending             String?                 @map("mfa_pending")
+  mfaPendingUntil        DateTime?               @map("mfa_pending_until") @db.Timestamptz
+  mfaPendingSessionId    String?                 @map("mfa_pending_session_id") @db.Uuid
   // At least one MFA factor (TOTP secret or passkey). Maintained by app.maintain_user_mfa().
-  mfaEnabled          Boolean              @default(false) @map("mfa_enabled")
-  mfaCounter          BigInt               @default(-1) @map("mfa_counter")
-  mfaFailedAttempts   Int                  @default(0) @map("mfa_failed_attempts")
-  mfaLockedUntil      DateTime?            @map("mfa_locked_until") @db.Timestamptz
-  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
-  sessions            Session[]
-  challenges          AuthChallenge[]
-  recoveryCodes       RecoveryCode[]
-  memberships         Membership[]
-  reportSubscriptions ReportSubscription[]
-  passkeys            WebAuthnCredential[]
-  identities          UserIdentity[]
+  mfaEnabled             Boolean                 @default(false) @map("mfa_enabled")
+  mfaCounter             BigInt                  @default(-1) @map("mfa_counter")
+  mfaFailedAttempts      Int                     @default(0) @map("mfa_failed_attempts")
+  mfaLockedUntil         DateTime?               @map("mfa_locked_until") @db.Timestamptz
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  sessions               Session[]
+  challenges             AuthChallenge[]
+  recoveryCodes          RecoveryCode[]
+  memberships            Membership[]
+  reportSubscriptions    ReportSubscription[]
+  passkeys               WebAuthnCredential[]
+  identities             UserIdentity[]
+  notificationPreference NotificationPreference?
+  workerNotifications    WorkerNotification[]
 
   @@map("users")
+}
+
+// Account-level preferences, isolated by app.current_user_id(), not a company-wide contact list.
+model NotificationPreference {
+  userId    String   @id @map("user_id") @db.Uuid
+  sms       Boolean  @default(false)
+  whatsapp  Boolean  @default(false)
+  locale    String   @default("en") @db.VarChar(2)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model WorkerNotificationJob {
+  eventId     String      @id @map("event_id") @db.Uuid
+  tenantId    String      @map("tenant_id") @db.Uuid
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  processedAt DateTime?   @map("processed_at") @db.Timestamptz
+  event       OutboxEvent @relation(fields: [tenantId, eventId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, eventId])
+  @@index([processedAt, createdAt])
+  @@map("worker_notification_jobs")
+}
+
+model WorkerNotification {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  tenantId  String       @map("tenant_id") @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  eventId   String?      @map("event_id") @db.Uuid
+  projectId String?      @map("project_id") @db.Uuid
+  topic     String       @db.VarChar(80)
+  channel   String       @db.VarChar(10)
+  status    String       @default("pending") @db.VarChar(20)
+  reason    String?      @db.VarChar(20)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     OutboxEvent? @relation(fields: [tenantId, eventId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, eventId, userId, channel])
+  @@index([tenantId, userId, createdAt])
+  @@index([status, createdAt])
+  @@map("worker_notifications")
 }
 
 // An external sign-in identity linked to a user (Google today). `subject` is the provider's
@@ -152,6 +199,7 @@ model Tenant {
   projects            Project[]
   invites             Invitation[]
   audit               AuditEvent[]
+  accessEvents        AccessEvent[]
   reportSubscriptions ReportSubscription[]
   roles               TenantRole[]
   bqTemplates         BqMappingTemplate[]
@@ -218,6 +266,7 @@ model Membership {
   customRole   TenantRole?         @relation(fields: [tenantId, customRoleId], references: [tenantId, id], onDelete: Restrict)
   projects     ProjectMembership[]
   labourViews  LabourSavedView[]
+  siteDevices  AttendanceDevice[]
 
   @@id([tenantId, userId])
   @@index([userId])
@@ -324,16 +373,16 @@ model ProjectStatusChange {
 }
 
 model Site {
-  id                  String                @id @default(uuid(7)) @db.Uuid
-  tenantId            String                @map("tenant_id") @db.Uuid
-  projectId           String                @map("project_id") @db.Uuid
-  name                String                @db.VarChar(120)
-  address             String?               @db.VarChar(250)
-  version             Int                   @default(1)
-  createdBy           String                @map("created_by") @db.Uuid
-  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  project             Project               @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  id                  String                   @id @default(uuid(7)) @db.Uuid
+  tenantId            String                   @map("tenant_id") @db.Uuid
+  projectId           String                   @map("project_id") @db.Uuid
+  name                String                   @db.VarChar(120)
+  address             String?                  @db.VarChar(250)
+  version             Int                      @default(1)
+  createdBy           String                   @map("created_by") @db.Uuid
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  project             Project                  @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
   geofences           SiteGeofence[]
   gangs               Gang[]
   attendanceDays      AttendanceDay[]
@@ -363,12 +412,13 @@ model Site {
   firstAiders         FirstAider[]
   firstAidTreatments  FirstAidTreatment[]
   plantItems          PlantItem[]
-  plantMovesFrom      PlantMove[]           @relation("PlantMovesFrom")
-  plantMovesTo        PlantMove[]           @relation("PlantMovesTo")
+  plantMovesFrom      PlantMove[]              @relation("PlantMovesFrom")
+  plantMovesTo        PlantMove[]              @relation("PlantMovesTo")
   plantUsageLogs      PlantUsageLog[]
   plantFuelIssues     PlantFuelIssue[]
   plantBreakdowns     PlantBreakdown[]
   plantServices       PlantService[]
+  captureEvents       AttendanceCaptureEvent[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -554,6 +604,36 @@ model AuditEvent {
   @@unique([tenantId, sequence])
   @@index([tenantId, createdAt])
   @@map("audit_events")
+}
+
+// Who accessed what and when (D9.3): one row per signed-in API request in a company context,
+// reads included, written in batches after the response (modules/access-log). IDs, route
+// template and outcome only; the client IP only behind a trusted proxy. Append-only; rows older
+// than 365 days are deleted by app.purge_access_events() (migration 20261210090000_access_log).
+model AccessEvent {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  sessionId   String   @map("session_id") @db.Uuid
+  authMethod  String   @map("auth_method") @db.VarChar(10)
+  method      String   @db.VarChar(7)
+  // The route template, e.g. /api/v1/projects/:id (never the concrete path).
+  route       String   @db.VarChar(200)
+  // Path parameters and UUID query values, e.g. {"id": "…", "projectId": "…"}.
+  params      Json     @default("{}")
+  resourceIds String[] @default([]) @map("resource_ids") @db.Uuid
+  status      Int      @db.SmallInt
+  durationMs  Int      @map("duration_ms")
+  ipAddress   String?  @map("ip_address") @db.Inet
+  requestId   String   @map("request_id") @db.VarChar(64)
+  occurredAt  DateTime @map("occurred_at") @db.Timestamptz
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, occurredAt])
+  @@index([tenantId, userId, occurredAt])
+  @@index([resourceIds], type: Gin)
+  @@index([occurredAt], type: Brin)
+  @@map("access_events")
 }
 
 // A saved BQ column mapping (D2.2), matched to a sheet by its header signature. Columns are offsets
@@ -1420,6 +1500,7 @@ model Labourer {
   ledGangs              Gang[]
   gangMembers           GangMembership[]
   attendance            AttendanceRecord[]
+  attendanceCards       AttendanceWorkerCard[]
   corrections           AttendanceCorrection[]
   anomalies             AttendanceAnomaly[]
   timesheetLines        TimesheetLine[]
@@ -1784,49 +1865,136 @@ model AttendanceDay {
 // only `web_manual` is implemented; the evidence columns are reserved for the site app, kiosk and
 // terminals and must stay empty for web entries (CHECK). Never deleted by the runtime role.
 model AttendanceRecord {
-  id               String                 @id @default(uuid(7)) @db.Uuid
-  tenantId         String                 @map("tenant_id") @db.Uuid
-  dayId            String                 @map("day_id") @db.Uuid
-  projectId        String                 @map("project_id") @db.Uuid
-  siteId           String                 @map("site_id") @db.Uuid
-  workDate         DateTime               @map("work_date") @db.Date
-  labourerId       String                 @map("labourer_id") @db.Uuid
-  status           String                 @db.VarChar(20)
-  checkInMinutes   Int?                   @map("check_in_minutes") @db.SmallInt
-  checkOutMinutes  Int?                   @map("check_out_minutes") @db.SmallInt
-  overnight        Boolean                @default(false)
-  breakMinutes     Int?                   @map("break_minutes") @db.SmallInt
-  notes            String?                @db.VarChar(500)
-  captureMethod    String                 @default("web_manual") @map("capture_method") @db.VarChar(20)
-  deviceId         String?                @map("device_id") @db.Uuid
-  deviceTime       DateTime?              @map("device_time") @db.Timestamptz
-  serverReceivedAt DateTime               @default(now()) @map("server_received_at") @db.Timestamptz
-  latitude         Decimal?               @db.Decimal(9, 6)
-  longitude        Decimal?               @db.Decimal(9, 6)
-  accuracyM        Decimal?               @map("accuracy_m") @db.Decimal(7, 1)
-  geofenceResult   String?                @map("geofence_result") @db.VarChar(10)
-  geofenceVersion  Int?                   @map("geofence_version")
-  matchConfidence  Decimal?               @map("match_confidence") @db.Decimal(5, 4)
-  photoFileId      String?                @map("photo_file_id") @db.Uuid
-  clientEventId    String?                @map("client_event_id") @db.Uuid
-  corrected        Boolean                @default(false)
-  version          Int                    @default(1)
-  createdBy        String                 @map("created_by") @db.Uuid
-  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy        String                 @map("updated_by") @db.Uuid
-  updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  day              AttendanceDay          @relation(fields: [tenantId, dayId, siteId, workDate], references: [tenantId, id, siteId, workDate], onDelete: Cascade)
-  site             Site                   @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
-  labourer         Labourer               @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
+  id               String                   @id @default(uuid(7)) @db.Uuid
+  tenantId         String                   @map("tenant_id") @db.Uuid
+  dayId            String                   @map("day_id") @db.Uuid
+  projectId        String                   @map("project_id") @db.Uuid
+  siteId           String                   @map("site_id") @db.Uuid
+  workDate         DateTime                 @map("work_date") @db.Date
+  labourerId       String                   @map("labourer_id") @db.Uuid
+  status           String                   @db.VarChar(20)
+  checkInMinutes   Int?                     @map("check_in_minutes") @db.SmallInt
+  checkOutMinutes  Int?                     @map("check_out_minutes") @db.SmallInt
+  overnight        Boolean                  @default(false)
+  breakMinutes     Int?                     @map("break_minutes") @db.SmallInt
+  notes            String?                  @db.VarChar(500)
+  captureMethod    String                   @default("web_manual") @map("capture_method") @db.VarChar(20)
+  deviceId         String?                  @map("device_id") @db.Uuid
+  deviceTime       DateTime?                @map("device_time") @db.Timestamptz
+  serverReceivedAt DateTime                 @default(now()) @map("server_received_at") @db.Timestamptz
+  latitude         Decimal?                 @db.Decimal(9, 6)
+  longitude        Decimal?                 @db.Decimal(9, 6)
+  accuracyM        Decimal?                 @map("accuracy_m") @db.Decimal(7, 1)
+  geofenceResult   String?                  @map("geofence_result") @db.VarChar(10)
+  geofenceVersion  Int?                     @map("geofence_version")
+  matchConfidence  Decimal?                 @map("match_confidence") @db.Decimal(5, 4)
+  photoFileId      String?                  @map("photo_file_id") @db.Uuid
+  clientEventId    String?                  @map("client_event_id") @db.Uuid
+  corrected        Boolean                  @default(false)
+  version          Int                      @default(1)
+  createdBy        String                   @map("created_by") @db.Uuid
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy        String                   @map("updated_by") @db.Uuid
+  updatedAt        DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  day              AttendanceDay            @relation(fields: [tenantId, dayId, siteId, workDate], references: [tenantId, id, siteId, workDate], onDelete: Cascade)
+  site             Site                     @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: NoAction)
+  labourer         Labourer                 @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: NoAction)
   corrections      AttendanceCorrection[]
   anomalies        AttendanceAnomaly[]
   adjustments      TimesheetAdjustment[]
+  captureEvents    AttendanceCaptureEvent[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, siteId, labourerId, workDate])
   @@index([tenantId, labourerId, workDate])
   @@index([tenantId, projectId, workDate])
   @@map("attendance_records")
+}
+
+model AttendanceDevice {
+  id        String                  @id @db.Uuid
+  tenantId  String                  @map("tenant_id") @db.Uuid
+  userId    String                  @map("user_id") @db.Uuid
+  name      String                  @db.VarChar(100)
+  publicKey String                  @map("public_key") @db.Char(64)
+  createdAt DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  revokedAt DateTime?               @map("revoked_at") @db.Timestamptz
+  member    Membership              @relation(fields: [tenantId, userId], references: [tenantId, userId], onDelete: Restrict)
+  leases    AttendanceDeviceLease[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, publicKey])
+  @@map("attendance_devices")
+}
+
+model AttendanceDeviceLease {
+  id          String                   @id @default(uuid(7)) @db.Uuid
+  tenantId    String                   @map("tenant_id") @db.Uuid
+  deviceId    String                   @map("device_id") @db.Uuid
+  bootId      String                   @map("boot_id") @db.Uuid
+  deviceTime  DateTime                 @map("device_time") @db.Timestamptz
+  monotonicMs Float                    @map("monotonic_ms")
+  serverTime  DateTime                 @default(now()) @map("server_time") @db.Timestamptz
+  expiresAt   DateTime                 @map("expires_at") @db.Timestamptz
+  device      AttendanceDevice         @relation(fields: [tenantId, deviceId], references: [tenantId, id], onDelete: Restrict)
+  events      AttendanceCaptureEvent[]
+
+  @@unique([tenantId, deviceId, id])
+  @@map("attendance_device_leases")
+}
+
+model AttendanceWorkerCard {
+  id          String                   @id @default(uuid(7)) @db.Uuid
+  tenantId    String                   @map("tenant_id") @db.Uuid
+  labourerId  String                   @map("labourer_id") @db.Uuid
+  tokenDigest String                   @unique @map("token_digest") @db.Char(64)
+  issuedBy    String                   @map("issued_by") @db.Uuid
+  issuedAt    DateTime                 @default(now()) @map("issued_at") @db.Timestamptz
+  revokedAt   DateTime?                @map("revoked_at") @db.Timestamptz
+  labourer    Labourer                 @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+  events      AttendanceCaptureEvent[]
+
+  @@unique([tenantId, id])
+  @@map("attendance_worker_cards")
+}
+
+model AttendanceCaptureEvent {
+  id             String                @id @db.Uuid
+  tenantId       String                @map("tenant_id") @db.Uuid
+  deviceId       String                @map("device_id") @db.Uuid
+  leaseId        String                @map("lease_id") @db.Uuid
+  projectId      String                @map("project_id") @db.Uuid
+  siteId         String                @map("site_id") @db.Uuid
+  labourerId     String                @map("labourer_id") @db.Uuid
+  cardId         String                @map("card_id") @db.Uuid
+  shiftId        String                @map("shift_id") @db.Uuid
+  direction      String                @db.VarChar(3)
+  capturedAt     DateTime              @map("captured_at") @db.Timestamptz
+  userId         String                @map("user_id") @db.Uuid
+  fingerprint    String                @db.Char(64)
+  envelope       Json
+  signature      String                @db.Char(128)
+  photoEncrypted String                @map("photo_encrypted")
+  initialReceipt Json?                 @map("initial_receipt")
+  receiptId      String                @unique @default(uuid(7)) @map("receipt_id") @db.Uuid
+  receivedAt     DateTime              @default(now()) @map("received_at") @db.Timestamptz
+  status         String                @db.VarChar(20)
+  flags          String[]
+  recordId       String?               @map("record_id") @db.Uuid
+  decision       String?               @db.VarChar(10)
+  reviewReason   String?               @map("review_reason") @db.VarChar(500)
+  reviewedBy     String?               @map("reviewed_by") @db.Uuid
+  reviewedAt     DateTime?             @map("reviewed_at") @db.Timestamptz
+  lease          AttendanceDeviceLease @relation(fields: [tenantId, deviceId, leaseId], references: [tenantId, deviceId, id], onDelete: Restrict)
+  site           Site                  @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  card           AttendanceWorkerCard  @relation(fields: [tenantId, cardId], references: [tenantId, id], onDelete: Restrict)
+  record         AttendanceRecord?     @relation(fields: [tenantId, recordId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, deviceId, shiftId, direction])
+  @@index([tenantId, labourerId, capturedAt])
+  @@index([tenantId, projectId, receivedAt])
+  @@map("attendance_capture_events")
 }
 
 // A manual correction of a submitted or confirmed day: proposed values with a reason, applied only
@@ -1992,14 +2160,16 @@ model IdempotencyRecord {
 // Transactional outbox: domain events written in the same transaction as the change (relay to the
 // queue arrives with D4.2). Insert-only for the runtime role.
 model OutboxEvent {
-  id          String    @id @default(uuid(7)) @db.Uuid
-  tenantId    String    @map("tenant_id") @db.Uuid
-  topic       String    @db.VarChar(80)
-  aggregateId String    @map("aggregate_id") @db.Uuid
-  payload     Json      @default("{}")
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  publishedAt DateTime? @map("published_at") @db.Timestamptz
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                    String                 @id @default(uuid(7)) @db.Uuid
+  tenantId              String                 @map("tenant_id") @db.Uuid
+  topic                 String                 @db.VarChar(80)
+  aggregateId           String                 @map("aggregate_id") @db.Uuid
+  payload               Json                   @default("{}")
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  publishedAt           DateTime?              @map("published_at") @db.Timestamptz
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workerNotificationJob WorkerNotificationJob?
+  workerNotifications   WorkerNotification[]
 
   @@unique([tenantId, id])
   @@index([publishedAt, createdAt])

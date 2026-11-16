@@ -52,6 +52,8 @@ export const reportParamsSchema = z.strictObject({
     .regex(/^[a-z][a-z0-9_.]*$/, "invalid_action")
     .max(REPORT_LIMITS.actionFilterMaxLength)
     .optional(),
+  /** Any record's ID (access log): requests whose address carried it. */
+  recordId: uuid.optional(),
   from: calendarDate.optional(),
   to: calendarDate.optional(),
   asAt: calendarDate.optional(),

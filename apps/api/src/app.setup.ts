@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { Logger } from "nestjs-pino";
 import { ProblemDetailsFilter } from "./common/problem-details.filter.js";
 import { AppConfig, trustProxySetting } from "./config/app-config.js";
+import { AccessLog } from "./modules/access-log/access-log.service.js";
 
 export const API_PREFIX = "api";
 export const DOCS_PATH = "api/docs";
@@ -20,6 +21,8 @@ export function configureApp(app: INestApplication): void {
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
   app.useGlobalFilters(new ProblemDetailsFilter());
   app.enableShutdownHooks();
+  // Who accessed what and when: each signed-in request, recorded after its response (D9.3).
+  app.use(app.get(AccessLog).middleware);
 
   // req.ip comes from X-Forwarded-For only for proxies listed in TRUST_PROXY (see env.ts).
   const trustProxy = trustProxySetting(config.get("TRUST_PROXY"));

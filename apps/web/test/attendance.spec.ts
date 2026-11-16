@@ -33,6 +33,74 @@ async function openPeriod(page: Page, label: string) {
   await expect(page.getByRole("heading", { name: `Timesheet ${label}`, level: 1 })).toBeVisible();
 }
 
+test("provisions downloadable QR cards and revokes lost cards and devices", async ({
+  page,
+  context,
+}) => {
+  await signInAs(context, "owner");
+  await page.goto(`/attendance/capture?project=${RUIRU_ID}`);
+  await expect(page.getByRole("heading", { name: "Site attendance evidence" })).toBeVisible();
+  await page.getByRole("button", { name: "Issue / replace card" }).click();
+  const issue = page.getByRole("dialog", { name: "Issue a worker card" });
+  await issue.getByLabel("Worker", { exact: true }).selectOption(AMINA);
+  await issue.getByRole("button", { name: "Issue / replace card" }).click();
+  await expect(page.locator("code").filter({ hasText: /^PMB1:/ })).toHaveText(
+    `PMB1:${"a".repeat(64)}`,
+  );
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save QR card (SVG)" }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe("worker-card.svg");
+  const stream = await download.createReadStream();
+  expect(await stream.toArray().then((chunks) => Buffer.concat(chunks).toString())).toContain(
+    "<svg",
+  );
+  await page.getByRole("button", { name: "Revoke card", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Revoke worker card" })
+    .getByRole("button", { name: "Revoke card", exact: true })
+    .click();
+  await expect(page.getByRole("button", { name: "Revoke card", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Revoke device", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Permanently revoke device" })
+    .getByRole("button", { name: "Revoke device", exact: true })
+    .click();
+  await expect(page.getByText("Revoked", { exact: true })).toBeVisible();
+});
+
+test("reviews signed evidence through step-up and hides management from the site agent", async ({
+  page,
+  context,
+}) => {
+  await signInAs(context, "owner");
+  await page.goto(`/attendance/capture?project=${RUIRU_ID}`);
+  await expect(
+    page.getByText("Clock drift / untrusted device clock", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open private camera photo" })).toHaveAttribute(
+    "href",
+    /\/attendance\/capture\/events\/[^/]+\/photo$/,
+  );
+  expect(await axeViolations(page)).toEqual([]);
+  await page.getByRole("button", { name: "Review evidence" }).click();
+  const review = page.getByRole("dialog", { name: "Review Amina Wekesa Njoroge's capture" });
+  await review
+    .getByLabel("Reason", { exact: true })
+    .fill("Independently checked the signed gate book");
+  await review.getByRole("button", { name: "Evidence checked: resolve" }).click();
+  await stepUp(page);
+  await expect(
+    page.getByText("Reviewed: Evidence checked: resolve", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review evidence" })).toHaveCount(0);
+  await signInAs(context, "agent");
+  await page.goto(`/attendance/capture?project=${RUIRU_ID}`);
+  await expect(page.getByRole("heading", { name: "Site attendance evidence" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review evidence" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Issue / replace card" })).toHaveCount(0);
+});
+
 test("shows today's muster rolls, the current period and the review queues", async ({
   page,
   context,

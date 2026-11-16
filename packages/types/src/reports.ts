@@ -22,6 +22,7 @@ export const REPORT_IDS = [
   "mpesa-reconciliation",
   "safety-actions",
   "audit-log",
+  "access-log",
 ] as const;
 export type ReportId = (typeof REPORT_IDS)[number];
 export const isReportId = (value: string): value is ReportId =>
@@ -53,14 +54,18 @@ export type ReportDefinition = {
   store: boolean;
   /** A payroll batch of the project is required (payroll register). */
   batch: boolean;
-  /** Who and what (audit log filters). */
+  /** A person may narrow the report (audit and access logs). */
   actor: boolean;
+  /** An action prefix may narrow the report (audit log). */
+  action: boolean;
+  /** A record ID may narrow the report (access log). */
+  record: boolean;
   period: ReportPeriodKind;
   /** The longest period accepted (range reports). */
   maxPeriodDays: number;
   /** The default period when none is given: this many days ending today (range reports). */
   defaultPeriodDays: number;
-  /** The source screen asks for a recent MFA check, so the report does too (audit log). */
+  /** The source screen asks for a recent MFA check, so the report does too (audit and access logs). */
   stepUp: boolean;
 };
 
@@ -76,6 +81,8 @@ const base = {
   store: false,
   batch: false,
   actor: false,
+  action: false,
+  record: false,
   stepUp: false,
 };
 
@@ -188,8 +195,20 @@ export const REPORT_DEFINITIONS: Readonly<Record<ReportId, ReportDefinition>> = 
     group: "records",
     project: "none",
     actor: true,
+    action: true,
     stepUp: true,
     ...range(92, 7),
+  },
+  // Every signed-in request (reads included), so a day is the default and filters narrow it.
+  "access-log": {
+    ...base,
+    id: "access-log",
+    group: "records",
+    project: "none",
+    actor: true,
+    record: true,
+    stepUp: true,
+    ...range(92, 1),
   },
 };
 

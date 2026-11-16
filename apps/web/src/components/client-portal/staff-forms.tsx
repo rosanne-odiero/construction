@@ -20,6 +20,7 @@ import {
   variationClientResponseSchema,
   type PaymentInstructions,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { useStepUp } from "@/components/projects/step-up";
 import { Button } from "@/components/ui/button";
@@ -157,13 +158,12 @@ export function ReceiptForm({
       </Field>
       <Field>
         <FieldLabel htmlFor="receipt-date">{t("receivedOn")}</FieldLabel>
-        <Input
+        <DateInput
           id="receipt-date"
-          type="date"
           max={nairobiDate()}
           value={receivedOn}
-          onChange={(event) => {
-            setReceivedOn(event.target.value);
+          onValueChange={(value) => {
+            setReceivedOn(value);
             attempt.current = null;
           }}
         />
@@ -716,13 +716,7 @@ export function FxRateForm() {
       </Field>
       <Field>
         <FieldLabel htmlFor="fx-date">{t("date")}</FieldLabel>
-        <Input
-          id="fx-date"
-          type="date"
-          max={nairobiDate()}
-          value={rateDate}
-          onChange={(event) => setRateDate(event.target.value)}
-        />
+        <DateInput id="fx-date" max={nairobiDate()} value={rateDate} onValueChange={setRateDate} />
       </Field>
       <Field>
         <FieldLabel htmlFor="fx-source">{t("source")}</FieldLabel>

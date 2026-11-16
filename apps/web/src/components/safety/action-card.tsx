@@ -17,6 +17,7 @@ import {
   selectClass,
   useScheduleMutation,
 } from "@/components/schedule/use-schedule-mutation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +29,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCalendarDate, formatDateTime } from "@/lib/format";
 import { liveRequest } from "@/lib/live-api";
@@ -317,10 +317,9 @@ export function ActionFields({
         </Field>
         <Field>
           <FieldLabel htmlFor={`${idPrefix}-due`}>{t("dueOn")}</FieldLabel>
-          <Input
+          <DateTextInput
             id={`${idPrefix}-due`}
             name="dueOn"
-            placeholder="DD/MM/YYYY"
             inputMode="numeric"
             defaultValue={defaults?.dueOn}
           />

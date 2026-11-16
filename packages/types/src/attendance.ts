@@ -1,5 +1,5 @@
 /**
- * Attendance and timesheets (D3.3, web-only slice): capture methods, statuses, anomaly kinds, the
+ * Attendance and timesheets (D3.3): capture methods, statuses, anomaly kinds, the
  * timesheet rule and period vocabularies, the Q-C3/Q-C4 demonstration values and the Kenyan public
  * holiday calendar used to seed companies. Every legal value here is COMPLIANCE-REVIEW material
  * (CR-PAY-08, CR-PAY-14): companies can change it, and unverified values cannot be approved for
@@ -7,11 +7,9 @@
  */
 
 /**
- * How an attendance record was captured (brief §5.5: a pluggable capture method). Only
- * `web_manual` (a supervisor's entry on the web muster roll) is implemented in D3.3. The others
- * are reserved for the site app (QR/NFC card + photo, D3.3 site slice), kiosk face matching and
- * USB fingerprint scanners (D3.4) and standalone terminals; their evidence columns exist on
- * `attendance_records` but stay empty until those deliverables land.
+ * How an attendance record was captured (brief §5.5). `qr_card` covers signed QR/NFC
+ * site events; their envelopes retain the exact reader method. Face, fingerprint and
+ * standalone terminals remain reserved.
  */
 export const CAPTURE_METHODS = [
   "web_manual",
@@ -23,6 +21,7 @@ export const CAPTURE_METHODS = [
 export type CaptureMethod = (typeof CAPTURE_METHODS)[number];
 export const IMPLEMENTED_CAPTURE_METHODS = [
   "web_manual",
+  "qr_card",
 ] as const satisfies readonly CaptureMethod[];
 
 /** Evidence each capture method will carry (null for `web_manual`, see ARCHITECTURE §13). */

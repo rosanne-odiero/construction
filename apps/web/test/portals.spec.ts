@@ -75,10 +75,14 @@ test("labourers get the worker portal in Kiswahili on a small phone, never the o
   await page.setViewportSize({ width: 360, height: 760 });
   await page.goto("/worker");
   await expect(page.getByRole("heading", { name: "Habari, Otieno Ouma", level: 1 })).toBeVisible();
-  await expect(page.getByText("Main plot")).toBeVisible();
+  await expect(page.getByText("Main plot", { exact: true })).toBeVisible();
   await expect(page.getByText("Off Thika Road, Ruiru")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Malipo" })).toBeVisible();
   await expect(page.getByText(/USSD/)).toBeVisible();
+  await expect(page.getByText("KES 4,000.00")).toBeVisible();
+  await expect(page.getByText("KES 1,500.00")).toBeVisible();
+  await expect(page.getByText(/Siku 1.5 za kazi/)).toBeVisible();
+  await expect(page.getByText(/Hizi si uthibitisho wa malipo/)).toBeVisible();
   expect(await noHorizontalScroll(page)).toBe(true);
   expect(await axeViolations(page)).toEqual([]);
   for (const path of ["/projects", "/portal", "/diary"])
@@ -89,6 +93,37 @@ test("staff stay in the office app", async ({ page, context }) => {
   await signInAs(context, "owner");
   for (const path of ["/portal", "/worker"])
     await page.goto(path).then(() => expect(page).toHaveURL("/projects"));
+});
+
+test("workers opt in to notifications, keep preferences and see provider failures explicitly", async ({
+  page,
+  context,
+}) => {
+  await signInAs(context, "labourer");
+  await page.goto("/worker");
+  await expect(page.getByRole("button", { name: "Send SMS reminder" })).toBeDisabled();
+  await page.getByLabel("SMS reminders", { exact: true }).check();
+  await page.getByRole("button", { name: "Save preferences" }).click();
+  await expect(page.getByRole("status")).toContainText("Preferences saved.");
+  await page.reload();
+  await expect(page.getByLabel("SMS reminders", { exact: true })).toBeChecked();
+  await page.getByRole("button", { name: "Send SMS reminder" }).click();
+  await expect(page.getByRole("status")).toContainText("provider accepted");
+  await expect(page.getByRole("heading", { name: "Notification history" })).toBeVisible();
+  await expect(page.getByText("Requested reminder · SMS")).toBeVisible();
+  await expect(page.getByText("Provider accepted", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Requested reminder · SMS")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send WhatsApp reminder" })).toBeDisabled();
+  await page.getByLabel("WhatsApp reminders").check();
+  await page.getByRole("button", { name: "Save preferences" }).click();
+  await expect(page.getByRole("status")).toContainText("Preferences saved.");
+  await page.route("**/api/v1/portal/worker/notifications/send", (route) =>
+    json(route, { code: "service-unavailable" }, 503),
+  );
+  await page.getByRole("button", { name: "Send WhatsApp reminder" }).click();
+  await expect(formAlert(page)).toContainText("Could not save or send");
+  expect(await axeViolations(page)).toEqual([]);
 });
 
 test("a labourer joins from the SMS link with a PIN and lands in their portal", async ({

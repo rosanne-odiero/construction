@@ -15,6 +15,7 @@ import {
   type StoresBqItem,
   type UnitWire,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useP2pProblem } from "@/components/procurement/p2p/use-p2p-problem";
 import { Button } from "@/components/ui/button";
 import {
@@ -299,13 +300,12 @@ export function MeasurementDialog({ projectId, item }: { projectId: string; item
           ) : null}
           <Field>
             <FieldLabel htmlFor={`${id}-date`}>{t("date")}</FieldLabel>
-            <Input
+            <DateInput
               id={`${id}-date`}
-              type="date"
               className="h-11 text-base"
               max={nairobiDate()}
               value={measuredOn}
-              onChange={(event) => setMeasuredOn(event.target.value)}
+              onValueChange={setMeasuredOn}
             />
           </Field>
           <Field>

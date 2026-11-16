@@ -17,6 +17,7 @@ import {
   type Milestone,
   type WbsNode,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge, type Tone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -307,11 +308,10 @@ export function MilestonesPanel({
             </Field>
             <Field>
               <FieldLabel htmlFor="milestone-due">{t("dueDate")}</FieldLabel>
-              <Input
+              <DateTextInput
                 id="milestone-due"
                 value={draft.dueDate}
                 onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })}
-                placeholder="DD/MM/YYYY"
                 aria-describedby="milestone-due-hint"
                 required
               />
@@ -385,7 +385,7 @@ export function MilestonesPanel({
                 {change.transition.action === "achieve" ? (
                   <Field>
                     <FieldLabel htmlFor="milestone-actual">{t("actualDate")}</FieldLabel>
-                    <Input
+                    <DateTextInput
                       id="milestone-actual"
                       value={actualDate}
                       onChange={(event) => setActualDate(event.target.value)}

@@ -11,6 +11,7 @@ import {
   portalInvoiceDetailResponseSchema,
   type PortalLpoDetailResponse,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { selectClass } from "@/components/procurement/material-form";
 import { useP2pProblem } from "@/components/procurement/p2p/use-p2p-problem";
 import { Button } from "@/components/ui/button";
@@ -223,12 +224,11 @@ export function SupplierInvoiceForm({
           </Field>
           <Field>
             <FieldLabel htmlFor="portal-invoice-date">{t("invoiceDate")}</FieldLabel>
-            <Input
+            <DateInput
               id="portal-invoice-date"
-              type="date"
               max={today}
               value={invoiceDate}
-              onChange={(event) => setInvoiceDate(event.target.value)}
+              onValueChange={setInvoiceDate}
             />
           </Field>
           <Field>

@@ -28,6 +28,12 @@ describe("reports centre", () => {
     expect(parseReportParams("audit-log", { projectId: PROJECT, action: "plant." })).toEqual({
       action: "plant.",
     });
+    // The access log narrows by person and record ID, not by action; IDs must be UUIDs.
+    expect(
+      parseReportParams("access-log", { recordId: PROJECT, action: "plant.", actorId: SITE }),
+    ).toEqual({ recordId: PROJECT, actorId: SITE });
+    expect(parseReportParams("access-log", { recordId: "Jane Wanjiru" })).toEqual({});
+    expect(parseReportParams("audit-log", { recordId: PROJECT })).toEqual({});
     expect(parseReportParams("invoice-ageing", { asAt: "2026-11-14", from: "2026-11-01" })).toEqual(
       { asAt: "2026-11-14" },
     );

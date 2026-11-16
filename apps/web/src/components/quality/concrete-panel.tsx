@@ -27,6 +27,7 @@ import {
   selectClass,
   useScheduleMutation,
 } from "@/components/schedule/use-schedule-mutation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -521,10 +522,9 @@ export function ConcretePanel({
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="set-cast">{t("tests.castOn")}</FieldLabel>
-                    <Input
+                    <DateTextInput
                       id="set-cast"
                       name="castOn"
-                      placeholder="DD/MM/YYYY"
                       defaultValue={calendarInput(nairobiDate())}
                     />
                   </Field>
@@ -557,10 +557,9 @@ export function ConcretePanel({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="result-tested">{t("tests.testedOn")}</FieldLabel>
-                  <Input
+                  <DateTextInput
                     id="result-tested"
                     name="testedOn"
-                    placeholder="DD/MM/YYYY"
                     defaultValue={calendarInput(correcting?.testedOn ?? nairobiDate())}
                   />
                 </Field>
@@ -601,10 +600,9 @@ export function ConcretePanel({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field>
                     <FieldLabel htmlFor="slump-date">{t("tests.testedOn")}</FieldLabel>
-                    <Input
+                    <DateTextInput
                       id="slump-date"
                       name="testedOn"
-                      placeholder="DD/MM/YYYY"
                       defaultValue={calendarInput(slumpTest?.testedOn ?? nairobiDate())}
                     />
                   </Field>

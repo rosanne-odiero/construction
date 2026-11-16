@@ -16,7 +16,12 @@ import {
 } from "./builders/finance-reports.js";
 import { musterRoll, payrollRegister } from "./builders/labour-reports.js";
 import { invoiceAgeing, lpoRegister, stock } from "./builders/materials-reports.js";
-import { auditLog, safetyActions, valuationsRegister } from "./builders/records-reports.js";
+import {
+  accessLog,
+  auditLog,
+  safetyActions,
+  valuationsRegister,
+} from "./builders/records-reports.js";
 import type { ReportBuilder } from "./report-model.js";
 import type { ReportRule } from "./reports-access.js";
 
@@ -45,6 +50,8 @@ export const REPORT_RULES: Readonly<Record<ReportId, ReportRule>> = {
   "mpesa-reconciliation": { project: ["payments.view"] },
   "safety-actions": { project: SAFETY_READ_PERMISSIONS, alsoProject: ["projects.view"] },
   "audit-log": { company: "audit.view", stepUp: true },
+  // The same people and check as the audit log: the access log is its read-side counterpart.
+  "access-log": { company: "audit.view", stepUp: true },
 };
 
 /** The builder of each report; null while a report is not available. */
@@ -62,4 +69,5 @@ export const REPORT_BUILDERS: Readonly<Record<ReportId, ReportBuilder | null>> =
   "mpesa-reconciliation": null,
   "safety-actions": safetyActions,
   "audit-log": auditLog,
+  "access-log": accessLog,
 };

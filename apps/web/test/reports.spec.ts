@@ -52,7 +52,7 @@ test("the owner runs the cost ledger and downloads it as PDF and Excel", async (
   await expect(page.getByRole("heading", { name: "Cost ledger", level: 1 })).toBeVisible();
   const form = page.getByRole("form", { name: "Report choices" });
   await expect(form.getByLabel("Project")).toHaveValue("");
-  await expect(form.getByLabel("From")).toHaveValue(/^\d{4}-\d{2}-\d{2}$/);
+  await expect(form.getByLabel("From")).toHaveValue(/^\d{2}\/\d{2}\/\d{4}$/);
   await expect(async () => {
     await form.getByLabel("Project").selectOption(RUIRU_ID);
     await form.getByRole("button", { name: "Show report" }).click();
@@ -129,6 +129,46 @@ test("the audit log asks for a recent verification and is too long for a PDF", a
   await expect(page.getByText(/5,?120 rows is too many for a PDF; download Excel\./)).toBeVisible();
   await expect(page.getByRole("link", { name: "Download PDF" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Download Excel" })).toBeVisible();
+});
+
+test("the access log narrows by person and record ID, after a recent verification", async ({
+  page,
+  context,
+}) => {
+  await signInAs(context, "owner");
+  // The audit log filters by action; the access log by record ID instead.
+  await page.goto("/reports/audit-log");
+  const auditForm = page.getByRole("form", { name: "Report choices" });
+  await expect(auditForm.getByLabel("Action starts with")).toBeVisible();
+  await expect(auditForm.getByLabel("Record ID")).toHaveCount(0);
+
+  await page.goto("/reports/access-log");
+  await expect(page.getByRole("heading", { name: "Access log", level: 1 })).toBeVisible();
+  const form = page.getByRole("form", { name: "Report choices" });
+  await expect(form.getByLabel("Person")).toBeVisible();
+  await expect(form.getByLabel("Action starts with")).toHaveCount(0);
+  await expect(async () => {
+    await form.getByLabel("Record ID").fill(BATCH_ID);
+    await form.getByRole("button", { name: "Show report" }).click();
+    await expect(page).toHaveURL(new RegExp(`recordId=${BATCH_ID}`), { timeout: 2_000 });
+  }).toPass();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "This report needs a recent two-step verification.",
+  );
+  await expect(async () => {
+    await page.getByRole("button", { name: "Verify and show the report" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 2_000 });
+  }).toPass();
+  await page.getByRole("dialog").getByLabel("Authenticator code").fill(MOCK_STEP_UP_CODE);
+  await page.getByRole("dialog").getByRole("button", { name: "Verify and continue" }).click();
+  const log = page.getByRole("article", { name: "Access log" });
+  await expect(log).toContainText(BATCH_ID);
+  const requests = log.getByRole("region", { name: "Requests" });
+  await expect(
+    requests.getByRole("row").filter({ hasText: "GET payroll/batches/:id" }),
+  ).toContainText("403 refused");
+  await expect(requests.getByRole("columnheader", { name: "IP address" })).toBeVisible();
+  expect(await axeViolations(page)).toEqual([]);
 });
 
 test("a project manager reports on assigned projects only; a site agent has no reports", async ({

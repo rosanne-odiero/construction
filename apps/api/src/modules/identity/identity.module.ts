@@ -52,6 +52,7 @@ import { TenantScope } from "./tenant-scope.service.js";
     AuthService,
     AuthSecurity,
     BrowserGuard,
+    PinService,
     TenancyService,
     TenantDatabase,
     TenantScope,

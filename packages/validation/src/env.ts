@@ -4,7 +4,7 @@ import { z } from "zod";
  * API process environment. Validated once at startup so a misconfigured deployment fails fast.
  * Secrets come from the environment or a secrets manager, never from code (brief §7).
  */
-export const apiEnvSchema = z.object({
+const apiEnvironmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
@@ -29,8 +29,51 @@ export const apiEnvSchema = z.object({
     .string()
     .regex(/^[a-fA-F0-9]{64}$/)
     .optional(),
-  AUTH_NOTIFICATION_TRANSPORT: z.enum(["development", "disabled"]).default("disabled"),
+  AUTH_NOTIFICATION_TRANSPORT: z.enum(["development", "disabled", "real"]).default("disabled"),
   AUTH_MAILPIT_PORT: z.coerce.number().int().min(1).max(65535).default(8025),
+  NOTIFICATION_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(5000),
+  WORKER_NOTIFICATION_DISPATCHER: z.enum(["on", "off"]).default("off"),
+  AFRICAS_TALKING_USERNAME: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,100}$/)
+    .optional(),
+  AFRICAS_TALKING_API_KEY: z
+    .string()
+    .regex(/^[\x21-\x7e]{1,512}$/)
+    .optional(),
+  AFRICAS_TALKING_SENDER_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9+_-]{1,20}$/)
+    .optional(),
+  WHATSAPP_ACCESS_TOKEN: z
+    .string()
+    .regex(/^[\x21-\x7e]{1,2048}$/)
+    .optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z
+    .string()
+    .regex(/^[1-9]\d{0,29}$/)
+    .optional(),
+  // Explicitly pinned to a supported version by the operator; no moving "latest" endpoint.
+  WHATSAPP_GRAPH_API_VERSION: z
+    .string()
+    .regex(/^v[1-9]\d?\.\d+$/)
+    .optional(),
+  WHATSAPP_WORKER_TEMPLATE_EN: z
+    .string()
+    .regex(/^[a-z0-9_]{1,512}$/)
+    .optional(),
+  WHATSAPP_WORKER_TEMPLATE_SW: z
+    .string()
+    .regex(/^[a-z0-9_]{1,512}$/)
+    .optional(),
+  USSD_CALLBACK_TOKEN: z
+    .string()
+    .regex(/^[a-fA-F0-9]{64}$/)
+    .optional(),
+  USSD_SERVICE_CODE: z
+    .string()
+    .regex(/^\*[0-9*]+#$/)
+    .optional(),
   // Breached-password check on registration and reset: `hibp` asks the Have I Been Pwned range API
   // (k-anonymity: only the first five hex characters of the SHA-1 leave the server). It fails
   // open, with a warning, when the service is slow or unreachable.
@@ -104,6 +147,52 @@ export const apiEnvSchema = z.object({
 
   API_DOCS_ENABLED: z.stringbool().default(true),
   HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
+});
+
+export const apiEnvSchema = apiEnvironmentSchema.superRefine((env, ctx) => {
+  if (Boolean(env.USSD_CALLBACK_TOKEN) !== Boolean(env.USSD_SERVICE_CODE)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["USSD_CALLBACK_TOKEN"],
+      message: "USSD requires both USSD_CALLBACK_TOKEN and USSD_SERVICE_CODE",
+    });
+  }
+  const sms = [env.AFRICAS_TALKING_USERNAME, env.AFRICAS_TALKING_API_KEY];
+  const whatsapp = [
+    env.WHATSAPP_ACCESS_TOKEN,
+    env.WHATSAPP_PHONE_NUMBER_ID,
+    env.WHATSAPP_GRAPH_API_VERSION,
+  ];
+  const smsConfigured = sms.every(Boolean);
+  const whatsappConfigured = whatsapp.every(Boolean);
+  if ((sms.some(Boolean) || env.AFRICAS_TALKING_SENDER_ID) && !smsConfigured) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["AFRICAS_TALKING_USERNAME"],
+      message: "SMS requires both AFRICAS_TALKING_USERNAME and AFRICAS_TALKING_API_KEY",
+    });
+  }
+  if (whatsapp.some(Boolean) && !whatsappConfigured) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["WHATSAPP_ACCESS_TOKEN"],
+      message: "WhatsApp requires token, phone number ID and Graph API version",
+    });
+  }
+  if (env.AUTH_NOTIFICATION_TRANSPORT === "real" && !smsConfigured && !whatsappConfigured) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["AUTH_NOTIFICATION_TRANSPORT"],
+      message: "Real notifications require at least one fully configured phone channel",
+    });
+  }
+  if (env.AUTH_NOTIFICATION_TRANSPORT === "real" && env.AFRICAS_TALKING_USERNAME === "sandbox") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["AFRICAS_TALKING_USERNAME"],
+      message: "Real SMS requires a live Africa's Talking application, not sandbox",
+    });
+  }
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

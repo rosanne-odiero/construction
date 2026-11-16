@@ -92,6 +92,12 @@ export class PinService {
   ) {}
 
   async login(identifier: string, pin: string, req: Request, res: Response) {
+    const result = await this.authenticate(identifier, pin, req);
+    return this.auth.issue(result.id, res);
+  }
+
+  /** Shared with the trusted USSD gateway; all PIN guessing budgets remain common. */
+  async authenticate(identifier: string, pin: string, req: Request) {
     await this.auth.throttle(req, "pin-login", identifier);
     const globalBudget = this.config.get("PIN_GLOBAL_FAILURES_PER_HOUR");
     const underAttack = (await this.security.counted(PIN_GLOBAL_FAILURES)) >= globalBudget;
@@ -158,7 +164,7 @@ export class PinService {
       throw new UnauthorizedException("Invalid phone number or PIN, or account unavailable");
     }
     await this.releaseAll(reserved);
-    return this.auth.issue(result.id, res);
+    return result;
   }
 
   /** Adds a wrong PIN to the platform-wide hourly count; one request sees the budget reached. */

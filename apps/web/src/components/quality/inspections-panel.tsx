@@ -20,6 +20,7 @@ import {
   selectClass,
   useScheduleMutation,
 } from "@/components/schedule/use-schedule-mutation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -312,11 +313,10 @@ export function InspectionsPanel({
               </Field>
               <Field>
                 <FieldLabel htmlFor="new-inspection-date">{t("inspections.date")}</FieldLabel>
-                <Input
+                <DateTextInput
                   id="new-inspection-date"
                   name="inspectedOn"
                   defaultValue={calendarInput(nairobiDate())}
-                  placeholder="DD/MM/YYYY"
                   required
                 />
               </Field>

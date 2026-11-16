@@ -1,7 +1,56 @@
-# Phase 7 demo: client portal (D7.1) and supplier portal (D7.2)
+# Phase 7 demo: client, supplier and labourer self-service
 
-This walkthrough is **not** Phase 7 acceptance. It covers the client portal (D7.1) and the supplier
-portal (D7.2); labourer USSD (D7.3) is separate.
+This walkthrough is **not** full Phase 7 acceptance: client STK Push remains unavailable. It
+covers the client (D7.1), supplier (D7.2) and labourer (D7.3) flows. Real messaging and USSD require
+provider provisioning and operator approval; the checks below use local/fake transports.
+
+## Labourer self-service (D7.3)
+
+1. Apply migrations and regenerate/build packages. As a labour manager, register a worker with
+   their unique Kenyan phone, ID and project engagement. Invite that same phone to the project;
+   in development the invitation is in Mailpit, not on a handset. Follow the invitation link to
+   choose a six-digit PIN. Shared/duplicate registry phone numbers show no worker records.
+2. Record, submit and independently confirm attendance. In `/worker`, the worker sees only their
+   entries for the current Nairobi month and their assigned projects. Pending rows are labelled,
+   not counted; a date counts at most one day (two half-day entries make one). These status-based
+   totals do not replace payroll's rule-based payable time.
+3. Prepare and **submit** payroll. The worker sees only their latest 12 submitted entries, gross,
+   deductions and net; drafts/cancelled batches are absent. Disbursed advance balances subtract
+   submitted recoveries, not draft reservations. No row is labelled paid: payroll payment
+   confirmations are explicitly unavailable until D4.3.
+4. In **Notifications**, opt in to SMS or WhatsApp, choose EN/SW and save. Reload: preferences
+   persist. Request a reminder: development Mailpit receives a wage-free message. Opt-out
+   disables the button and API. A disabled/rejecting provider shows an explicit error, never a
+   sent confirmation; successful submission means provider acceptance, not handset delivery.
+   **Notification history** persists the latest 50 own attempts in the selected company; refresh
+   or reload to see accepted, unconfirmed and skipped attempts.
+   For automatic local alerts, use `AUTH_NOTIFICATION_TRANSPORT=development` and
+   `WORKER_NOTIFICATION_DISPATCHER=on`, restart the API, then confirm **new** attendance,
+   submit/cancel payroll or disburse an advance after opting in. Within a normal 30-second
+   cycle, each opted-in channel gets one wage-free Mailpit reminder and one history row.
+   Existing historical events are not replayed. A disabled/rejecting provider records
+   unconfirmed acceptance, not delivery; uncertain attempts are never retried automatically.
+5. To simulate USSD locally, configure paired `USSD_CALLBACK_TOKEN` and `USSD_SERVICE_CODE`
+   (see [configuration](../CONFIGURATION.md#8-process-environment-deployment-settings)), then
+   POST form data to `/api/v1/ussd` with `X-USSD-Token` in a trusted **server-side** tool. Send the
+   same `sessionId`, registered `phoneNumber` and configured `serviceCode` for each step, with
+   cumulative `text`: empty → `1` (English; `2` for Kiswahili) → `1*<ID>` →
+   `1*<ID>*<PIN>` → `1*<ID>*<PIN>*1` (company) → `1*<ID>*<PIN>*1*2` (latest submitted net).
+   The last response starts `END`, includes the submitted net shown in the portal and says it is
+   **not payment**. Dial again for confirmed days, payments-unavailable or outstanding advances.
+   Never paste real PINs/tokens into a shared shell history or enable request-body logging.
+6. Wrong gateway header: 403. Wrong phone/ID/PIN, skipped/replayed steps, a revoked session or
+   expiry: no wage data. An altered company membership or project assignment is rechecked on
+   data reads. Sessions end after a result and expire after three minutes.
+
+Automated evidence: `apps/api/test/portals.e2e-spec.ts` (runtime-role reads, RLS preferences and
+the EN/SW callback); `apps/api/test/payroll.e2e-spec.ts` (actual submitted payroll → worker portal
+→ USSD net); provider/unit tests use fake HTTP responses; `apps/web/test/portals.spec.ts` uses the
+mock API, including Kiswahili at 360 px, no horizontal scroll and axe checks.
+
+Not demonstrated: real handset delivery or USSD gateway latency/ingress setup, delivery receipts,
+monetary/SMS-segment spending budgets, staff/client/supplier notifications or payroll settlement.
+No live provider send or pilot activation is authorised by these local tests.
 
 ## Client portal (D7.1)
 

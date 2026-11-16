@@ -154,6 +154,7 @@ const RULES: Record<ReportId, Rule> = {
   "mpesa-reconciliation": { project: ["payments.view"] },
   "safety-actions": { project: SAFETY_READ_PERMISSIONS, alsoProject: ["projects.view"] },
   "audit-log": { company: "audit.view", stepUp: true },
+  "access-log": { company: "audit.view", stepUp: true },
 };
 
 const has = (held: readonly Permission[], wanted: readonly Permission[]) =>
@@ -1003,6 +1004,47 @@ function sections(id: ReportId, c: Context): ReportSection[] {
         ),
       ];
     }
+    case "access-log":
+      return [
+        section(
+          t,
+          "requests",
+          t.access.section,
+          [
+            ["time", t.access.time, "datetime"],
+            ["actor", t.access.actor, "text"],
+            ["signIn", t.access.signIn, "text"],
+            ["request", t.access.request, "text"],
+            ["records", t.access.records, "text"],
+            ["outcome", t.access.outcome, "text"],
+            ["ip", t.access.ip, "text"],
+            ["requestId", t.access.requestId, "text"],
+          ],
+          [
+            [
+              new Date(Date.now() - 60_000).toISOString(),
+              c.actor.displayName,
+              t.access.methods.password,
+              "GET labour/labourers/:id",
+              "id=50000000-0000-4000-8000-000000000001",
+              fill(t.access.outcomeValue, { status: 200, label: t.access.outcomes.allowed }),
+              null,
+              "mock-request-0001",
+            ],
+            [
+              new Date(Date.now() - 120_000).toISOString(),
+              c.actor.displayName,
+              t.access.methods.password,
+              "GET payroll/batches/:id",
+              "id=61000000-0000-4000-8000-000000000001",
+              fill(t.access.outcomeValue, { status: 403, label: t.access.outcomes.refused }),
+              null,
+              "mock-request-0002",
+            ],
+          ],
+          { notes: [t.access.note] },
+        ),
+      ];
     case "mpesa-reconciliation":
       throw new Error("not available");
   }
@@ -1074,10 +1116,9 @@ function resolve(
     if (params.batchId !== state.batchId) throw fail(422, "report-parameter-invalid");
     resolved.params.batchId = params.batchId;
   }
-  if (definition.actor) {
-    if (params.actorId) resolved.params.actorId = params.actorId;
-    if (params.action) resolved.params.action = params.action;
-  }
+  if (definition.actor && params.actorId) resolved.params.actorId = params.actorId;
+  if (definition.action && params.action) resolved.params.action = params.action;
+  if (definition.record && params.recordId) resolved.params.recordId = params.recordId;
   if (definition.period === "range") {
     const result = reportPeriod(definition, params, today);
     if (!result.ok) throw fail(422, result.problem);
@@ -1108,7 +1149,9 @@ function model(
     ...(definition.site ? ["siteId"] : []),
     ...(definition.store ? ["storeId"] : []),
     ...(definition.batch ? ["batchId"] : []),
-    ...(definition.actor ? ["actorId", "action"] : []),
+    ...(definition.actor ? ["actorId"] : []),
+    ...(definition.action ? ["action"] : []),
+    ...(definition.record ? ["recordId"] : []),
     ...(definition.period === "range" ? ["from", "to"] : []),
     ...(definition.period === "as-at" ? ["asAt"] : []),
   ]);
@@ -1143,21 +1186,25 @@ function model(
     });
   if (resolved.asAt) header.push({ key: "asAt", label: t.params.asAt, value: resolved.asAt });
   if (definition.actor)
-    header.push(
-      {
-        key: "actor",
-        label: t.params.actor,
-        value: resolved.params.actorId
-          ? (deps.people.find((person) => person.id === resolved.params.actorId)?.displayName ??
-            "—")
-          : t.params.anyone,
-      },
-      {
-        key: "action",
-        label: t.params.action,
-        value: resolved.params.action ?? t.params.anyAction,
-      },
-    );
+    header.push({
+      key: "actor",
+      label: t.params.actor,
+      value: resolved.params.actorId
+        ? (deps.people.find((person) => person.id === resolved.params.actorId)?.displayName ?? "—")
+        : t.params.anyone,
+    });
+  if (definition.action)
+    header.push({
+      key: "action",
+      label: t.params.action,
+      value: resolved.params.action ?? t.params.anyAction,
+    });
+  if (definition.record)
+    header.push({
+      key: "record",
+      label: t.params.record,
+      value: resolved.params.recordId ?? t.params.anyRecord,
+    });
   const built = sections(id, {
     t,
     projects: resolved.projects.length ? resolved.projects : deps.projects,

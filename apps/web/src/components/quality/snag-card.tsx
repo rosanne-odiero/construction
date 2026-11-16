@@ -16,6 +16,7 @@ import {
   selectClass,
   useScheduleMutation,
 } from "@/components/schedule/use-schedule-mutation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -304,10 +305,9 @@ export function SnagCard({
                   </Field>
                   <Field>
                     <FieldLabel htmlFor={`edit-due-${snag.id}`}>{t("fields.dueOn")}</FieldLabel>
-                    <Input
+                    <DateTextInput
                       id={`edit-due-${snag.id}`}
                       name="dueOn"
-                      placeholder="DD/MM/YYYY"
                       defaultValue={calendarInput(snag.dueOn)}
                     />
                   </Field>

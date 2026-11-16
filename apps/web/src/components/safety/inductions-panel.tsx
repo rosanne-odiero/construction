@@ -24,6 +24,7 @@ import {
   selectClass,
   useScheduleMutation,
 } from "@/components/schedule/use-schedule-mutation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -462,7 +463,7 @@ export function InductionsPanel({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="induction-date">{t("inductions.inductedOnLabel")}</FieldLabel>
-                <Input
+                <DateTextInput
                   id="induction-date"
                   name="inductedOn"
                   inputMode="numeric"

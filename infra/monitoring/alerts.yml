@@ -1,0 +1,43 @@
+groups:
+  - name: pm-buddy-health
+    rules:
+      - alert: ApiNotLive
+        expr: probe_success{job="api-health",probe="live"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: API liveness has failed for two minutes
+          runbook: docs/OPERATIONS.md#api-or-dependency-outage
+      - alert: ApiNotReady
+        expr: probe_success{job="api-health",probe="ready"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: API dependency readiness has failed for two minutes
+          runbook: docs/OPERATIONS.md#api-or-dependency-outage
+      - alert: HealthProbeSlow
+        expr: probe_duration_seconds{job="api-health"} > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Health probe has been slower than two seconds for five minutes
+          runbook: docs/OPERATIONS.md#api-or-dependency-outage
+      - alert: HealthScrapeUnavailable
+        expr: up{job=~"api-health|blackbox"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Health monitoring cannot scrape its exporter
+          runbook: docs/OPERATIONS.md#monitoring-failure
+      - alert: HealthProbeMissing
+        expr: absent(probe_success{job="api-health",probe="live"}) or absent(probe_success{job="api-health",probe="ready"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: A required health probe series is missing
+          runbook: docs/OPERATIONS.md#monitoring-failure

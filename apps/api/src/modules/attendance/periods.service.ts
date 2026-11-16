@@ -9,6 +9,7 @@ import {
   sumDays,
   timesheetDays,
   totalsOf,
+  zonedDateTime,
 } from "@pm-buddy/domain";
 import {
   labourerAttendanceResponseSchema,
@@ -511,7 +512,28 @@ export class PeriodsService {
    * anomalies of every record in the period, computes the lines and binds the submission to their
    * digest. The database trigger repeats the cut-off and all-days-confirmed rules.
    */
+  private async requireCapturesReviewed(tx: Tx, tenantId: string, period: PeriodRow) {
+    const pending = await tx.attendanceCaptureEvent.count({
+      where: {
+        tenantId,
+        projectId: period.projectId,
+        recordId: null,
+        decision: null,
+        capturedAt: {
+          gte: zonedDateTime(toCalendarDate(period.startDate), 0),
+          lt: zonedDateTime(addCalendarDays(toCalendarDate(period.endDate), 1), 0),
+        },
+      },
+    });
+    if (pending)
+      throw attendanceConflict(
+        "pending-captures",
+        "Review unallocated site evidence (including incomplete shifts) on Attendance > Site capture before submitting or approving this period.",
+      );
+  }
+
   async submitCore(tx: Tx, tenantId: string, userId: string, period: PeriodRow) {
+    await this.requireCapturesReviewed(tx, tenantId, period);
     const records = await tx.attendanceRecord.findMany({
       where: {
         tenantId,
@@ -555,6 +577,7 @@ export class PeriodsService {
    * transaction, with an outbox event for payroll.
    */
   async approveCore(tx: Tx, tenantId: string, userId: string, period: PeriodRow) {
+    await this.requireCapturesReviewed(tx, tenantId, period);
     const ctx = await this.calculator.context(tx, tenantId);
     const computed = await this.calculator.periodLines(tx, tenantId, period, ctx);
     const unverified = ctx.rules.some(

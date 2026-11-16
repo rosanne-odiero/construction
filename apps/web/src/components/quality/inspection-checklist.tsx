@@ -19,6 +19,7 @@ import {
   selectClass,
   useScheduleMutation,
 } from "@/components/schedule/use-schedule-mutation";
+import { DateTextInput } from "@/components/date-input";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -488,10 +489,9 @@ export function InspectionChecklist({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="raise-due">{t("fields.dueOn")}</FieldLabel>
-                  <Input
+                  <DateTextInput
                     id="raise-due"
                     name="dueOn"
-                    placeholder="DD/MM/YYYY"
                     defaultValue={calendarInput(nairobiDate())}
                   />
                 </Field>

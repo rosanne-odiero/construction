@@ -34,7 +34,40 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
+      - run: pnpm test:ops
       - run: pnpm turbo run lint typecheck test i18n:check build
+
+  operations:
+    name: Portable recovery, load harness and alert rules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Synthetic PostgreSQL PITR (isolated containers and volumes)
+        run: node infra/drills/postgres-pitr.mjs --synthetic-only
+      - name: Run actual k6 against a loopback contract stub (not an API capacity test)
+        run: |
+          container=$(docker create grafana/k6:1.0.0)
+          trap 'docker rm "$container"' EXIT
+          docker cp "$container:/usr/bin/k6" "$RUNNER_TEMP/k6"
+          chmod +x "$RUNNER_TEMP/k6"
+          K6_BIN="$RUNNER_TEMP/k6" node --test infra/performance/smoke.k6.mjs
+      - name: Validate monitoring configuration and alert behavior
+        run: |
+          docker run --rm --entrypoint promtool \
+            -v "$PWD/infra/monitoring:/etc/prometheus:ro" \
+            prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint promtool \
+            -v "$PWD/infra/monitoring:/work:ro" -w /work \
+            prom/prometheus:v3.5.0 test rules alerts.test.yml
+          docker run --rm \
+            -v "$PWD/infra/monitoring/blackbox.yml:/etc/blackbox/config.yml:ro" \
+            prom/blackbox-exporter:v0.27.0 --config.file=/etc/blackbox/config.yml --config.check
 
   e2e:
     name: API end-to-end tests

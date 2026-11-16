@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Pencil, Plus } from "lucide-react";
 import { INSTRUCTION_ISSUER_ROLES, type InstructionIssuerRole } from "@pm-buddy/types";
 import { instructionResponseSchema, type Instruction } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { Button } from "@/components/ui/button";
 import {
@@ -181,11 +182,10 @@ export function InstructionButton({
             </Field>
             <Field>
               <FieldLabel htmlFor={`${id}-date`}>{t("issuedOn")}</FieldLabel>
-              <Input
+              <DateInput
                 id={`${id}-date`}
-                type="date"
                 value={form.issuedOn}
-                onChange={(event) => setForm({ ...form, issuedOn: event.target.value })}
+                onValueChange={(value) => setForm({ ...form, issuedOn: value })}
                 required
               />
             </Field>

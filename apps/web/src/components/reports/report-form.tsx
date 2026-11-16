@@ -9,6 +9,7 @@ import {
   type ReportOptionsResponse,
   type ReportParams,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { spendingSelectClass } from "@/components/spending/spending-action";
 import { Button } from "@/components/ui/button";
@@ -193,46 +194,60 @@ export function ReportForm({
         </Field>
       ) : null}
       {definition.actor ? (
-        <>
-          <Field className={field}>
-            <FieldLabel htmlFor="report-actor">{t("actor")}</FieldLabel>
-            <select
-              id="report-actor"
-              className={spendingSelectClass}
-              value={values.actorId ?? ""}
-              onChange={(event) => set("actorId", event.target.value)}
-            >
-              <option value="">{t("anyone")}</option>
-              {options.actors.map((actor) => (
-                <option key={actor.id} value={actor.id}>
-                  {actor.displayName}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field className={field}>
-            <FieldLabel htmlFor="report-action">{t("action")}</FieldLabel>
-            <Input
-              id="report-action"
-              value={values.action ?? ""}
-              maxLength={100}
-              pattern="[a-z][a-z0-9_.]*"
-              onChange={(event) => set("action", event.target.value.trim().toLowerCase())}
-            />
-            <FieldDescription>{t("actionHint")}</FieldDescription>
-          </Field>
-        </>
+        <Field className={field}>
+          <FieldLabel htmlFor="report-actor">{t("actor")}</FieldLabel>
+          <select
+            id="report-actor"
+            className={spendingSelectClass}
+            value={values.actorId ?? ""}
+            onChange={(event) => set("actorId", event.target.value)}
+          >
+            <option value="">{t("anyone")}</option>
+            {options.actors.map((actor) => (
+              <option key={actor.id} value={actor.id}>
+                {actor.displayName}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      {definition.action ? (
+        <Field className={field}>
+          <FieldLabel htmlFor="report-action">{t("action")}</FieldLabel>
+          <Input
+            id="report-action"
+            value={values.action ?? ""}
+            maxLength={100}
+            pattern="[a-z][a-z0-9_.]*"
+            onChange={(event) => set("action", event.target.value.trim().toLowerCase())}
+          />
+          <FieldDescription>{t("actionHint")}</FieldDescription>
+        </Field>
+      ) : null}
+      {definition.record ? (
+        <Field className={field}>
+          <FieldLabel htmlFor="report-record">{t("record")}</FieldLabel>
+          <Input
+            id="report-record"
+            value={values.recordId ?? ""}
+            maxLength={36}
+            pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => set("recordId", event.target.value.trim().toLowerCase())}
+          />
+          <FieldDescription>{t("recordHint")}</FieldDescription>
+        </Field>
       ) : null}
       {definition.period === "range" ? (
         <>
           <Field className={field}>
             <FieldLabel htmlFor="report-from">{t("from")}</FieldLabel>
-            <Input
+            <DateInput
               id="report-from"
-              type="date"
               required
               value={values.from ?? ""}
-              onChange={(event) => set("from", event.target.value)}
+              onValueChange={(value) => set("from", value)}
             />
             <FieldDescription>
               {t("periodHint", { days: definition.maxPeriodDays })}
@@ -240,12 +255,11 @@ export function ReportForm({
           </Field>
           <Field className={field}>
             <FieldLabel htmlFor="report-to">{t("to")}</FieldLabel>
-            <Input
+            <DateInput
               id="report-to"
-              type="date"
               required
               value={values.to ?? ""}
-              onChange={(event) => set("to", event.target.value)}
+              onValueChange={(value) => set("to", value)}
             />
           </Field>
         </>
@@ -253,12 +267,11 @@ export function ReportForm({
       {definition.period === "as-at" ? (
         <Field className={field}>
           <FieldLabel htmlFor="report-as-at">{t("asAt")}</FieldLabel>
-          <Input
+          <DateInput
             id="report-as-at"
-            type="date"
             required
             value={values.asAt ?? ""}
-            onChange={(event) => set("asAt", event.target.value)}
+            onValueChange={(value) => set("asAt", value)}
           />
         </Field>
       ) : null}

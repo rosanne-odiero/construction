@@ -8,12 +8,48 @@
 - The one-site pilot **design and proposed delivery order** were approved earlier ([PILOT_PLAN.md](./PILOT_PLAN.md)); pilot activation is not.
 - Mandatory additions are integrated into [PROJECT_BRIEF.md](./PROJECT_BRIEF.md) §15, including corrections to conflicting original requirements.
 
+## D9.2/D9.3 portable performance and operations increment
+
+Cloud-specific Terraform is deferred by owner choice. Portable tooling now includes:
+
+- k6 signed attendance ingestion with an identical-byte retry and immutable receipt checks, plus submitted payroll snapshot integrity reads (not payout load). Synthetic-only acknowledgement, explicit staging-target approval, bounded concurrency, partitioned samples, per-fresh/retry latency budgets and complete/correct sample thresholds fail closed.
+- Four dependency-free load contract tests and five real-k6 loopback stub tests, including deliberate business-evidence failures and correct-but-over-budget responses. These passed locally; stub timings are not application capacity measurements.
+- Three additional SMS outage/recovery tests (429, 503, connection reset) prove explicit failure, no hidden transport retry and an explicit later successful send. The provider suite passed **29 tests**.
+- An actual physical PostgreSQL 18.6 base-backup + archived-WAL PITR rehearsal on UUID-named network-isolated disposable containers/volumes. Backup manifest, pre-/post-target markers and promotion passed; restore/promotion/assertion took **0.93 seconds for synthetic data**. Cleanup passed; no shared development database was used.
+- Portable blackbox/Prometheus configuration, five tested health alerts and a Grafana dashboard; configuration and rule checks passed locally. No delivered paging, business telemetry or production backup freshness is claimed.
+- Deployment/rollback, dependency/provider incident, backup/coherent restore and suspected-breach runbooks, plus a dedicated portable operations CI job (not yet run on GitHub).
+
+Commands, fixture contract, recorded evidence, proposed budgets and remaining acceptance gates are in [OPERATIONS](./OPERATIONS.md). D9.2/D9.3 remain **in progress**: representative API capacity/soak tests, measured tuning, absent D4.2/D4.3 payout/outage boundaries, chosen-cloud Terraform and a coherent DB/object/config/key recovery rehearsal are not completed by this increment. No deployment, real provider send, payout, pilot activation or production RPO/RTO sign-off occurred.
+
+## D9.3 access log: who accessed what and when (16 November 2026)
+
+Owner decisions (D-141): record every signed-in request (reads, changes and refusals), keep the client IP only, keep entries 365 days, and read them through an in-app report.
+
+- **Capture.** `AuthService.principal` notes the person, session, sign-in method, selected company, route template, path parameters and query of each request whose session it resolves. A middleware registered in `configureApp` records the entry when the response finishes (status, duration, `X-Request-Id`). Requests without a signed-in session are not recorded. Path values that are not simple IDs become `[redacted]`, only UUID query values are kept (never search text), and bodies are never read.
+- **Storage.** `access_events` (migration `20261210090000_access_log`) has forced RLS with `WITH CHECK`, no UPDATE, DELETE or TRUNCATE for `pmb_app`, a guard trigger for every role, and a GIN index on record IDs for the record filter. `AccessLogWriter` writes batches every second, one transaction per company. During an outage it holds up to 20,000 entries and backs off; beyond that it drops and counts them. `PrismaService.beforeDisconnect` lets it flush before the pool closes on shutdown.
+- **Retention.** `app.purge_access_events()` deletes only rows older than 365 days; `AccessLogRetention` runs it hourly.
+- **Request IDs.** Audit events now use the request ID that the request logger assigns and returns as `X-Request-Id`. Previously they used a new random ID whenever the client sent none, so an access entry could not be matched to the audit events of the same request. The request log's completion line now also carries `userId` and `tenantId`.
+- **Report.** `access-log` joins the reports centre (records group): company `audit.view` and a recent MFA check; period up to 92 days (default today); person and record ID filters; PDF and Excel in EN/SW. Report definitions now keep the person (`actor`), action (`action`, audit log only) and record (`record`, access log only) filters separate.
+
+Executed evidence:
+
+| Check | Actual result |
+|---|---|
+| API unit suite | **34 files, 204 tests passed**, including 9 new cases: entry sanitisation (6, among them redacting another company's ID when switching), writer retry and drop counting (2), request-log identity (1) |
+| API typecheck and type-aware lint | Passed |
+| Migration drift (`prisma migrate diff` from the migrated database to `schema.prisma`) | Empty |
+| API e2e on an isolated service stack (project `pmb-access`, own ports and volumes) | Access log **7** and identity **34** passed (forced RLS discovered on the new table; fails closed without context). Reports **14** passed, exporting every report, including the access log, to PDF and Excel in EN and SW. Then the **full API e2e suite: 29 files, 371 tests passed** (the middleware and request-ID change touch every route) |
+| Web | Typecheck passed; ESLint on changed files passed; report helper unit tests **5** passed; reports browser suite **7** passed on isolated ports, including a new access-log test with an axe scan |
+| Translations | i18n check passed: 9,508 keys in EN and SW, all ICU messages compile |
+
+Not done: a full pipeline or CI run, alert routing for dropped entries, and USSD sessions (the gateway resolves them outside `AuthService.principal`, so they are not recorded). Compliance review of IP processing and the 365-day period is CR-DP-13; the Kiswahili strings await native review like the rest.
+
 ## Delivered surfaces
 
 | Surface | Implementation / limitation |
 |---|---|
 | Brief and design safeguards | Workflow states/transition contracts, invariants, proposed financial model, offline protocol, operations, release plan, compliance evidence schema, pilot proposal and acceptance matrix |
-| Existing business routes | Preserved mock prototype; not working payroll, Daraja, procurement, offline sync or biometric integrations |
+| Existing business prototypes | Preserved under `/prototype`; live modules are listed below. No real Daraja payouts or production biometric integration is claimed |
 | `/status` | Existing live API/dependency readiness |
 | `/design-system` | Shared tokens/controls, KES/Nairobi formats, explicit pending/conflict/failure/loading/offline examples; EN/SW and light/dark |
 | Web manifest | Same-origin installation metadata and icon; no service worker or sensitive-data cache; no offline business-sync claim |
@@ -23,9 +59,70 @@
 | `/projects/[id]/bq` and `/bq/import` (D2.2) | Live BQ viewer (tree, search, summary, import status, overrides, Excel/PDF export) and the 5-step Excel import wizard; imports tested with **synthetic** workbooks only (a real anonymised Kenyan BQ is still needed); the D0 BQ screens moved to `/prototype/projects/…/bq`; no ClamAV yet |
 | BQ versions, variations and build-ups (D2.3) | Live baseline approval and contract sums on `/projects/[id]/bq` and the project overview, `…/bq/variations` (list, editor, submit/approve/reject/reopen/cancel/rebase with step-up), `…/bq/instructions`, `…/bq/versions` (history and compare), `/rate-buildups` (company library, versions, item links) and `/bq`; browser tests run against the mock API; no approval limits by amount, no attachment upload, no theoretical consumption yet |
 | `/labour` (D3.1) | Live labourer registry (saved views, worker side panel with masked identifiers and audited reveal, registration with consent, consent screen, gangs, trades & rates, NCA alerts); the D0 labour screens moved to `/prototype/labour` and stay labelled. Built and verified locally on branch `phase-3/d3.1-labour-registry`; not pushed, not reviewed, not approved |
-| `/attendance` (D3.3, web slice) | Live attendance and timesheets: overview, daily muster roll per project/site/day (keyboard entry, bulk "present", gang filter, inline flags), submit and confirm by a different person, corrections, anomaly review, weekly timesheet periods (submit, approve with an immutable snapshot, reject, reopen), adjustments to approved periods, rules & holidays, and an attendance summary in the worker panel; the D0 attendance screens moved to `/prototype/attendance`. Web-manual capture only (no site app, QR/NFC, photos, GPS/geofence, offline or biometrics). Built and verified locally on branch `phase-3/d3.3-web-timesheets`; not pushed, not reviewed, not approved |
+| `/attendance` (D3.3) | Live muster rolls, independent confirmation, corrections, timesheet snapshots and adjustments. `/attendance/capture` adds printable QR/NFC worker tokens, private camera evidence, device revocation and stepped-up independent capture review. The Expo site client adds signed capture, encrypted durable outbox and bounded offline leases; see the D3.2/D3.3 increment below. Native hardware acceptance remains pending; no biometrics or pilot activation |
+| `/payroll` (D4.1) | Live project/pay-period batch builder, recalculation, immutable submission, reasoned cancellation, register and payslip preview; rule versions and independent MFA verification, calendars, allowances, piece-rate output, advances and MFA-protected CSV templates. No payout approval or money movement; see the completion evidence below |
 | `/projects/[id]?tab=schedule` (D6.2) | Live schedule: SVG Gantt chart (critical path, baseline ghosts, actual dates, milestone diamonds, dependency arrows, today's line in Nairobi time, week/month zoom, keyboard item list, table alternative), activity editor with FS/SS/FF/SF links and lags, progress with a declared basis, per-project working calendar with the company's public holidays, CPM from `packages/domain`, append-only baselines with variance in working days, and the versioned delay log. Built and verified locally on `phase-6/d6.2-schedule`; not committed, not reviewed. No resource levelling, calendars per activity, MS Project/P6 import or client-portal schedule; measured progress and EVM are D6.3 |
 | CI | Existing lint/type/test/build/API/security workflows retained; browser/a11y job added |
+
+## D4.1 payroll: live engine completion (15 November 2026)
+
+The existing calculation engine and payroll API were already present. The missing
+delivery was the live web workflow: the sidebar still opened the D0 prototype.
+It now opens `/payroll`, with:
+
+- Project pay calendars, recent periods and historical batches; build a period
+  from the list or enter an older valid period start.
+- A batch register with API-calculated earnings, statutory deductions, advance
+  recovery, net pay, employer costs, warnings, excluded sources, unapproved
+  timesheets, pending output and rule versions. Draft recalculation and submission
+  use expected versions; submitted snapshots show their integrity result.
+- Payslip previews with earning quantities/rates/multipliers, withheld and
+  unwithheld deductions, advance recoveries, separate employer costs and
+  cumulative-month figures. Nothing is recomputed in the browser.
+- Effective-dated rule versions with parameter/source inspection, new superseding
+  versions, seed installation and independent verification with fresh MFA;
+  minimum-wage comparisons remain explicitly unverified.
+- Pay-calendar and advance-limit forms; taxable/non-taxable allowances scoped
+  to a project, trade or worker; individual/gang output and independent decisions;
+  advance requests, independent decisions, external-payment recording and recovery
+  history. Output-only recorders can use the inputs page without gaining
+  allowance access. Worker lookup is project-filtered, searchable and bounded,
+  and refuses identifier-like searches before sending them in a URL.
+- Monthly employer-wide export summaries and PAYE/NSSF/SHIF/NITA CSV downloads
+  with fresh MFA, explicit missing identifiers and unwithheld amounts. The
+  existing production block for unverified rules remains in place. CSVs remain
+  **COMPLIANCE-REVIEW templates**, not certified filing formats.
+- EN/SW, explicit forbidden/unavailable states, schema-checked successes and
+  translated payroll refusals. Commands retain one idempotency key across an
+  MFA retry or a retry after an uncertain response.
+
+Routes: `/payroll`, `/payroll/projects/[projectId]`,
+`/payroll/projects/[projectId]/inputs`, `/payroll/batches/[batchId]`,
+`/payroll/batches/[batchId]/lines/[lineId]`, `/payroll/rules`,
+`/payroll/advances`, `/payroll/exports`, `/payroll/settings`.
+The prototype remains at `/prototype/payroll`.
+
+Executed evidence:
+
+| Check | Actual result |
+|---|---|
+| Domain payroll unit suite | **68 passed**, including statutory boundaries and cumulative-month/recovery behaviour |
+| Payroll request/response contract suite | **4 passed** |
+| API payroll unit suite | **3 passed** |
+| Real PostgreSQL payroll integration suite | **13 passed** on the final run |
+| Live navigation regression suite | **2 passed** |
+| Payroll Playwright suite | **5 passed**: build → payslip → freeze/reload; stale/malformed responses; calendar/allowance/output/advance forms; rule verification/export MFA; reader/output-only permissions, EN/SW, 360px/dark and axe |
+| Focused web ESLint | Passed |
+| Shared i18n build and catalogue check | Passed; EN/SW key parity and ICU compilation |
+| Production build | Passed, including all nine live payroll routes |
+| Full web typecheck | Passed after `next typegen` refreshed stale generated route types and concurrent attendance source errors were resolved by their owning work |
+
+Browser tests used ports 3510/3599 and a session-only Playwright configuration
+with `.next-e2e/payroll`, without stopping the other session's test server.
+No payroll calculation, database schema or statutory seed value changed.
+No CI run, independent review, deployment, production legal verification or
+payment activation is claimed. D4.2 (Daraja) and D4.3 (approval/payout/reconciliation)
+remain separate work; recording an external advance payment does not send money.
 
 ## Executed evidence (this session)
 
@@ -780,6 +877,21 @@ The fixes needed no change to existing migrations other than this branch's own u
 **Rebase onto D2.2.** `git rebase origin/main` replayed the four branch commits on `42e93c9`. Conflicts were resolved by keeping both sides: `schema.prisma` (Tenant and Project back-relations for BQ and labour; BQ models before labour models), `app.module.ts` (`BqModule` and `LabourModule`), the `types`/`domain`/`validation` index exports and `packages/domain/package.json`, the EN/SW catalogues (BQ and labour API errors; `bqExport`…`bqIssues` before `labourConsentNotices` and `labourLive`), `test/support.ts` (BQ and labour response contracts), `use-problem-message.ts`, `nav-config.ts` (live BQ routes and live `/labour`), the tour links (BQ and labour prototypes under `/prototype`), `mock-api.mts` (BQ and labour state), the API README (BQ then labour sections), and the docs (ROADMAP branches, IMPLEMENTATION_STATUS surfaces and sections, ARCHITECTURE, where the labour module became §4.3 because D2.2 took §4.2). The Playwright port overrides and the warm-up were kept; the warm-up now also compiles the BQ routes. No conflict needed a choice between behaviours.
 
 **For the next deliverable (web attendance and timesheets → payroll).** Reference a worker by `labourers.id` (UUIDv7; `worker_no` such as `WRK-0001` is the human number). A worker is engaged on a project on a day when a `labour_engagements` row has `start_date <= day` and `end_date` null or on/after the day; only `status = 'active'` workers with active consent can be newly engaged. Gangs are `gangs` and `gang_memberships` (`joined_on`/`left_on`). The rate for a day comes from `labour_rates` via `resolveRate` in `packages/domain` (or `GET /api/v1/labour/labourers/:id/rate?projectId=&date=&basis=`); payroll lines should store the `labour_rates.id` they used. Sites are `sites` with versioned `site_geofences` (D2.1).
+
+## D3.2/D3.3 signed site attendance increment
+
+The site-capture implementation now exists alongside the office timesheet workflow. This supersedes the older web-only limitations below, not their historical verification claims. **D3.2/D3.3 remain in progress until native-device acceptance.**
+
+- **API and database:** registered user/company-bound Ed25519 public keys; irrevocable device/card revocation; opaque `PMB1` QR/NFC NDEF-text cards (only token digests kept in the card registry); immutable 72-hour server-clock anchors; signed, append-only check-in/out evidence with encrypted small JPEGs; stable event-ID/content fingerprints and immutable durable receipts. Tenant RLS, composite foreign keys, restricted column grants, maker-checker reviews, redacted audit and transactional outbox apply. New migrations are `20261201090000_site_attendance`, `20261201093000_attendance_capture_hold`, `20261201100000_attendance_durable_receipts` and the index-name alignment `20261201103000_attendance_capture_index`; older migrations are unchanged.
+- **Signals:** compare claimed wall time against server anchor + monotonic elapsed time (two-minute tolerance, not upload delay); different boot IDs, rollback, expired capture leases, missing/inaccurate GPS, historical geofence, duplicates, revoked cards and implausible travel are retained explicitly for review. Review signals are not proof of fraud or automatic wage deductions.
+- **Attendance integration:** eligible check-in/out pairs allocate one draft muster record in Nairobi time, preserving the original recorder. NFC uses the existing `qr_card` fallback family on the muster record; the signed events distinguish `qr_card` from `nfc_card`. A check-in receipt alone is not payable attendance. Quarantines require another stepped-up reviewer. Submitted/approved or existing entries are never overwritten: normal correction/adjustment workflows remain required. Unallocated, undecided site evidence blocks period submission/approval in both API and database, so incomplete/flagged evidence cannot silently disappear from payroll preparation.
+- **Office:** `/attendance/capture` has the project-scoped, paginated evidence queue, private photo links, translated flags, resolve/dismiss actions, printable SVG QR provisioning/replacement, card revocation and registered-device revocation.
+- **Site app:** [apps/site](../apps/site/README.md) contains the Expo client, secure-store credentials/keys, mandatory SQLCipher local storage, transactional full-roster/checkpoint replacement and signed outbox, lossless native cookie handling with existing CSRF/MFA, supervisor app-lock, QR/NFC reading, fresh camera JPEG, optional GPS with explicit missing evidence, named-worker confirmation, open-shift recovery and foreground/reconnect sync. Retry preserves signed bytes and only a matching durable receipt commits confirmation. A local Expo module ([modules/pmb-site](../apps/site/modules/pmb-site)) supplies Android's `elapsedRealtime()` and a `BOOT_COUNT` boot ID: the lease clock previously used `performance.now()`, which stops in Android deep sleep, so an honest clock was refused after the phone slept while a wound-back clock passed (T-37). Android app restarts within one boot now keep the lease; iOS restarts and Android reboots still need renewal. The same module requests Android screen pinning while kiosk-locked. On `403 device-revoked` the app erases that registration's roster, shifts, events/photos and signing key and shows how many unsynced captures were lost (D-140). The Android build no longer requests microphone, external-storage or overlay permissions.
+- **Verification:** attendance API integration suite **22/22**, re-runnable against the persistent test database (existing office behavior plus signatures/tampering, pairing/concurrent replay, immutable receipts, chronological pagination, RLS, encrypted photos, drift/geofence/travel/lease/card signals, overnight engagement boundaries, maker-checker, payroll hold and the `device-revoked`/`device-conflict` codes); shared capture tests **4/4** and attendance vocabulary tests **8/8**; native SQLite/session/outbox/NFC/clock/erase tests **23/23**; focused office browser tests **2/2** (QR SVG download, card/device revocation, stepped-up review, role gating and accessibility). API/native/office typechecks, office production build, Android/iOS JavaScript exports, API/office capture lint and EN/SW consistency passed. Frozen workspace installation has no peer conflicts; the migrated test database has zero Prisma schema drift.
+- **Native Android build and emulator evidence (not hardware):** a debug APK built with JDK 17, SDK 36 and NDK 27.1 (local module included) and ran on an Android 15 arm64 emulator against a scratch database. Confirmed: SQLCipher on disk (no plaintext header); sign-in, registration and a lease anchored on the `BOOT_COUNT` boot ID and `elapsedRealtime`; screen pinning and its release after re-authentication; kiosk and lease surviving an app restart; refusal after a reboot until renewal; QR decoding through the virtual-scene camera; a signed capture with fresh photo verified by the server and its quarantine receipt (`location_unknown`, `record_exists`) returned; an offline check-out kept pending, then erased after an office revocation with 1 unsynced and 1 synced capture reported. Defects found there and fixed: Hermes has no `AbortSignal.timeout`, so every API call failed; a permission dialog's pause discarded the in-progress scan and photo; the pinned state was read before the user answered. Not covered: NFC, real optics, GPS (no emulator fix), real deep sleep, iOS.
+- **Still required:** physical Android camera/NFC/GPS/sleep and offline field acceptance; iOS native build and device acceptance (no full Xcode here); signed APK/AAB/distribution; device-owner/MDM kiosk enforcement (screen pinning can be left with the system gesture); retention/deletion values and jobs for camera evidence (CR-DP-06, CR-PAY-13). Expo Go and a browser cannot provide the required native modules. Sync runs in the foreground/reconnect loop, not a guaranteed killed-app background task. A phone that never reconnects keeps its encrypted data. No biometric rollout, native hardware certification or production/pilot approval is claimed.
+
+API contracts: [site-attendance.ts](../packages/validation/src/site-attendance.ts). Setup and the real-device checklist: [site README](../apps/site/README.md). Protocol details: [OFFLINE_SYNC](./OFFLINE_SYNC.md#implemented-attendance-capture-slice-d32d33).
 
 ## D3.3 web attendance and timesheets (branch `phase-3/d3.3-web-timesheets`)
 
@@ -2016,3 +2128,122 @@ API unit (146), the photos, client-portal and documents e2e files (45) and the p
 - The reuse check only finds pictures already in PM-Buddy, scans the company's photos linearly (fine for tens of thousands; an index is needed at much larger volumes) and may flag a fixed-viewpoint progress photo on another day where nothing visibly changed.
 - HEVC is a patented codec: decoding HEIC in a commercial service needs a licence review before go-live. HEIC decoding runs in the API process's worker threads (memory up to about four times the pixel count of the declared images while decoding); an OS-level memory limit (a separate process or container) would bound it further.
 - The development database on this machine was **not** migrated (a running API there was built from `main`); run `pnpm --filter @pm-buddy/api db:migrate` and rebuild after merging. Kiswahili strings need a native speaker's review.
+
+## D3.2: Android/iOS site-app foundation (in progress)
+
+The existing uncommitted `apps/site` attendance implementation is the starting point,
+not replaced or claimed as new work in this increment. It contains device-key binding,
+SQLCipher storage, a supervisor application lock, a scoped durable attendance outbox,
+receipt-based push, full-roster snapshot pull, and queue status controls.
+
+**This increment**
+
+- Explicit Android and iOS targets, including iPad support and platform-appropriate
+  device names. The default build exports both platforms; `build:android` and
+  `build:ios` are available separately. No Expo Go or web offline claim.
+- NFC session handling separates Android enablement checks from iOS system-reader
+  sessions. Discovery and NDEF reading share a timeout; backgrounding cancels a scan.
+  Concurrent scans are refused until cleanup finishes, late results cannot identify
+  a worker in another session, and native failures remain visible.
+- Android/iOS setup and real-device acceptance instructions are in
+  [the site-app README](../apps/site/README.md). Kiosk scope is the agreed supervisor
+  app lock, not OS-enforced confinement. Android device-owner management and iOS
+  Guided Access/supervised-device MDM remain operationally separate.
+
+**Executed local evidence**
+
+- `node --test apps/site/tests/*.test.ts`: **19 passed**, including existing SQLite
+  transaction, restart, lease, lost-response, conflict and session-isolation cases,
+  plus seven NFC lifecycle cases using a fake native transport.
+- `apps/site/node_modules/.bin/tsc --noEmit -p apps/site/tsconfig.json`: passed.
+- Prettier check of the touched mobile TypeScript/configuration files: passed.
+- From `apps/site`, `CI=1 EXPO_NO_TELEMETRY=1 ./node_modules/.bin/expo export --platform all --max-workers 2`:
+  both Android and iOS Hermes bundles exported successfully.
+- Expo native configuration introspection succeeded. Assertions verified both
+  platform targets, tablet support, disabled Android backup, iOS camera/location/NFC
+  descriptions, the NDEF entitlement, SQLCipher configuration and both bundle metadata
+  entries. This is configuration evidence, not native runtime evidence.
+
+**Open release gates and dependent work**
+
+- No APK/AAB/IPA or real-device validation was performed. Full Xcode is not installed
+  on this machine; native iOS compilation, signing/provisioning and camera/NFC/Keychain/
+  SQLCipher/offline acceptance on iPhone/iPad and Android remain required.
+- `pnpm` was not on PATH and Corepack could not download it (network `ENOTCONN`);
+  validation used the already-installed workspace binaries. No dependency changes
+  or dependency installation were needed.
+- Foreground/reconnect sync only; roster pulls are full snapshots, not incremental
+  cursors. Process restart requires online lease renewal before further capture,
+  while retaining unsynced events and open shifts.
+- Offline GRNs and device-proven site-diary photos are **not implemented** by this
+  increment. Existing signed attendance photos attest device-key possession, not
+  hardware attestation or physical presence. General attachment upload/resumption,
+  managed-device kiosk integration and hardware attestation remain pending.
+- Existing API, attendance, payroll and web work in the dirty workspace was preserved;
+  no database migrations were run and no live services were changed.
+
+## D7.3 labourer self-service (local implementation; not activated)
+
+Implemented:
+
+- Shared own-worker reads power `/worker` and the USSD callback: a unique registry match to the
+  verified account phone, only assigned `portal.worker` projects under tenant RLS. Shared/duplicate
+  phones fail closed. USSD additionally verifies the ID blind index. Curated worker records
+  exclude registry ID/contact details, other workers' data, staff notes and payment references.
+- Current Nairobi month attendance, pending/confirmed labels and confirmed status-based day
+  equivalents (at most one per date; two half-days count as one). Latest 12 **submitted** payroll
+  entries with exact minor-unit strings; drafts/cancelled entries excluded. Outstanding disbursed
+  advances subtract submitted recoveries, not draft reservations. These are not payroll payable-time
+  calculations or settlement confirmations: payments received explicitly remain unavailable.
+- EN/SW Africa's Talking-compatible form callback at `/api/v1/ussd`, disabled by default; a
+  constant-time gateway header-token check, code matching, phone-bound encrypted Redis sessions
+  with an original three-minute deadline, sequential steps and a per-session lock. Reuses all
+  existing PIN budgets/lockout; no PIN stored in Redis. Short-lived database sessions are checked
+  on every read and revoked on terminal results. Company selection supports up to four companies.
+- Opt-in `real` notification transport: Africa's Talking SMS recipient-level acceptance and
+  WhatsApp Business Cloud API **approved templates only**, timeouts, redirects refused, safe
+  errors and no automatic retries. Real email is explicitly unavailable. Defaults remain disabled
+  in production; development sends every channel to local Mailpit.
+- Worker reminder preferences (both off by default, EN/SW), persisted account-wide with forced
+  user-scoped RLS in migration `20261204090000_worker_notifications`. The portal saves preferences
+  and explicitly requests a wage-free reminder, up to three attempts/hour/account. Existing
+  invitation/security SMS are not suppressed. Accepted does not mean delivered to a handset.
+- Durable automatic worker alerts and own notification history complete the local worker flow.
+  Migration `20261204100000_worker_notification_dispatch` adds an independent transactional
+  consumer for confirmed attendance, submitted/cancelled payroll and disbursed advances.
+  `WORKER_NOTIFICATION_DISPATCHER=on` polls every 30 seconds; it remains **off by default**.
+  Only new events and consent predating the event qualify; source status, worker access,
+  verified unique phone and consent are rechecked at send time. Each event/user/channel has
+  one attempt; three attempts/account/hour and 100/company/hour bound sends, including failures.
+  Alerts expire after 24 hours. A committed claim is never automatically retried: provider
+  errors and sending interrupted for more than two minutes become `unconfirmed`.
+  The portal shows the latest 50 own company/current-project attempts and explicit status/reason,
+  without storing or exposing recipients, message bodies or wages. All four automatic events
+  reuse the existing wage-free EN/SW/approved WhatsApp reminder template.
+- API/schema documentation, configuration examples, architecture, threat model and the Phase 7
+  walkthrough updated. Existing unrelated attendance/site-app/payroll UI work was preserved.
+
+Evidence:
+
+| Check | Actual result |
+|---|---|
+| Focused API unit tests (providers, configuration, PIN budgets, worker reads, USSD) | 56 passed; includes exact large money, draft/cancelled exclusions, two-site/half-day counting, ID mismatch, no payment inference, output length ≤160 and expiry/revocation |
+| Runtime-role API e2e: portals and payroll | 30 passed; actual submitted payroll → worker portal → USSD net → automatic notification/history, concurrent consumer deduplication, consent/access/expiry checks, interrupted sends, shared attempt limits, own preferences/history and cross-user RLS read/write refusal |
+| API TypeScript | Passed |
+| EN/SW catalogue parity and ICU compilation | Passed; catalogue count may change with concurrent deliverables |
+| Web TypeScript / targeted lint | Full web TypeScript and worker page, notification form, mock API and browser-test lint passed |
+| Portal Chromium regressions | 9 passed against mock API; includes history persistence/reload, Kiswahili at 360 px, attendance/pay, no horizontal scrolling, preference persistence, opt-out, provider failure, PIN join/reset, routing and axe |
+| Test-database migration | Both worker-notification migrations applied by API e2e global setup; development/production databases left untouched |
+
+Not claimed / remaining:
+
+- No live SMS/WhatsApp send or live USSD session, gateway provisioning, provider latency,
+  ingress ACL, handset delivery receipts, provider template approval or pilot activation.
+- No queued retries/fallback, per-event preferences, editable database templates, handset-delivery
+  receipts or monetary/SMS-segment spending budgets. Automatic dispatch covers the four worker
+  events above only, not staff approvals, safety/document/client/supplier notifications.
+- No settled payroll payment source until D4.3; net submitted wages must never be shown as paid.
+- Phone recycling/reassignment still requires reviewed invitations and registry contact changes;
+  ambiguous numbers are refused, not resolved by guessing. Kiswahili needs native-speaker review.
+- Only the isolated e2e database was migrated; development/production were not. Apply migrations, regenerate/build and
+  configure approved providers/gateway before enabling these integrations.

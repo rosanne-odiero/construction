@@ -1,0 +1,42 @@
+{
+  "name": "@pm-buddy/site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "build": "expo export --platform all",
+    "build:android": "expo export --platform android",
+    "build:ios": "expo export --platform ios",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.2.0",
+    "@pm-buddy/domain": "workspace:*",
+    "@pm-buddy/validation": "workspace:*",
+    "@react-native-community/netinfo": "11.5.2",
+    "expo": "~55.0.32",
+    "expo-camera": "~55.0.23",
+    "expo-crypto": "~55.0.19",
+    "expo-dev-client": "~55.0.41",
+    "expo-file-system": "~55.0.26",
+    "expo-image-manipulator": "~55.0.21",
+    "expo-location": "~55.1.15",
+    "expo-secure-store": "~55.0.18",
+    "expo-sqlite": "~55.0.20",
+    "react": "19.2.0",
+    "react-native": "0.83.10",
+    "react-native-nfc-manager": "4.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "19.3.0",
+    "typescript": "5.9.3"
+  }
+}

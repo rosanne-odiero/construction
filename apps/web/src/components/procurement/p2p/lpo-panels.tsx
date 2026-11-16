@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Pencil, Printer } from "lucide-react";
 import { lpoDetailResponseSchema } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { selectClass } from "@/components/procurement/material-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +16,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { liveRequest } from "@/lib/live-api";
 import type { SiteOption } from "@/lib/p2p-server";
@@ -96,12 +96,7 @@ export function LpoDeliveryDialog({
           </Field>
           <Field>
             <FieldLabel htmlFor="lpo-date">{t("deliveryDate")}</FieldLabel>
-            <Input
-              id="lpo-date"
-              type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-            />
+            <DateInput id="lpo-date" value={date} onValueChange={setDate} />
           </Field>
           <Field>
             <FieldLabel htmlFor="lpo-terms">{t("terms")}</FieldLabel>

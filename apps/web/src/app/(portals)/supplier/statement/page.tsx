@@ -6,13 +6,13 @@ import {
   supplierPortalOverviewResponseSchema,
   supplierStatementResponseSchema,
 } from "@pm-buddy/validation";
+import { DateInput } from "@/components/date-input";
 import { selectClass } from "@/components/procurement/material-form";
 import { SupplierPageState } from "@/components/supplier-portal/portal-state";
 import { PortalHeading, SupplierNav } from "@/components/supplier-portal/supplier-nav";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { formatCalendarDate, formatKES } from "@/lib/format";
 import { isUuid, pickParam } from "@/lib/p2p";
 import { statementPeriod, statementSearch, supplierInvoiceTone } from "@/lib/supplier-portal";
@@ -108,13 +108,13 @@ export default async function SupplierStatementPage({
           <label htmlFor="statement-from" className="block text-sm font-medium">
             {t("from")}
           </label>
-          <Input id="statement-from" type="date" name="from" defaultValue={statement.from} />
+          <DateInput id="statement-from" name="from" defaultValue={statement.from} />
         </div>
         <div className="space-y-1">
           <label htmlFor="statement-to" className="block text-sm font-medium">
             {t("to")}
           </label>
-          <Input id="statement-to" type="date" name="to" defaultValue={statement.to} />
+          <DateInput id="statement-to" name="to" defaultValue={statement.to} />
         </div>
         <div className="space-y-1">
           <label htmlFor="statement-project" className="block text-sm font-medium">

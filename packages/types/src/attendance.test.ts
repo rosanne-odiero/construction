@@ -21,9 +21,9 @@ const isoWeekday = (date: string) => {
 };
 
 describe("attendance vocabulary", () => {
-  it("implements only the web manual capture method and reserves the others", () => {
-    expect(IMPLEMENTED_CAPTURE_METHODS).toEqual(["web_manual"]);
-    for (const method of ["qr_card", "face", "fingerprint", "terminal"])
+  it("implements manual and signed card capture while reserving biometrics and terminals", () => {
+    expect(IMPLEMENTED_CAPTURE_METHODS).toEqual(["web_manual", "qr_card"]);
+    for (const method of ["face", "fingerprint", "terminal"])
       expect(CAPTURE_METHODS).toContain(method);
   });
 

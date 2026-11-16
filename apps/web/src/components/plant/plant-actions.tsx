@@ -26,6 +26,7 @@ import {
   type PlantServiceRecord,
   type ProjectPlantOptionsResponse,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { field, ReasonDialog } from "@/components/safety/common";
 import {
   FormError,
@@ -116,7 +117,7 @@ function MomentFields({ id, today, now }: { id: string; today: string; now: stri
     <div className="grid grid-cols-2 gap-3">
       <Field>
         <FieldLabel htmlFor={`${id}-date`}>{t("form.date")}</FieldLabel>
-        <Input id={`${id}-date`} name="date" inputMode="numeric" defaultValue={today} />
+        <DateTextInput id={`${id}-date`} name="date" inputMode="numeric" defaultValue={today} />
       </Field>
       <Field>
         <FieldLabel htmlFor={`${id}-time`}>{t("form.time")}</FieldLabel>
@@ -268,7 +269,7 @@ export function PlantActions({
         </Field>
         <Field>
           <FieldLabel htmlFor="move-date">{t("form.date")}</FieldLabel>
-          <Input id="move-date" name="movedOn" inputMode="numeric" defaultValue={today} />
+          <DateTextInput id="move-date" name="movedOn" inputMode="numeric" defaultValue={today} />
         </Field>
         <Field>
           <FieldLabel htmlFor="move-reason">{t("form.reasonOptional")}</FieldLabel>
@@ -297,7 +298,7 @@ export function PlantActions({
       >
         <Field>
           <FieldLabel htmlFor="close-date">{t("form.date")}</FieldLabel>
-          <Input id="close-date" name="closedOn" inputMode="numeric" defaultValue={today} />
+          <DateTextInput id="close-date" name="closedOn" inputMode="numeric" defaultValue={today} />
         </Field>
         <Field>
           <FieldLabel htmlFor="close-reason">{t("form.reason")}</FieldLabel>
@@ -390,11 +391,16 @@ export function PlantActions({
         <div className="grid grid-cols-2 gap-3">
           <Field>
             <FieldLabel htmlFor="operator-from">{t("operator.from")}</FieldLabel>
-            <Input id="operator-from" name="fromOn" inputMode="numeric" defaultValue={today} />
+            <DateTextInput
+              id="operator-from"
+              name="fromOn"
+              inputMode="numeric"
+              defaultValue={today}
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="operator-to">{t("operator.to")}</FieldLabel>
-            <Input id="operator-to" name="toOn" inputMode="numeric" />
+            <DateTextInput id="operator-to" name="toOn" inputMode="numeric" />
           </Field>
         </div>
         <Field>
@@ -403,7 +409,7 @@ export function PlantActions({
         </Field>
         <Field>
           <FieldLabel htmlFor="operator-expiry">{t("operator.expires")}</FieldLabel>
-          <Input id="operator-expiry" name="certificateExpiresOn" inputMode="numeric" />
+          <DateTextInput id="operator-expiry" name="certificateExpiresOn" inputMode="numeric" />
         </Field>
       </FormDialog>
 
@@ -637,7 +643,12 @@ export function BreakdownActions({
       >
         <Field>
           <FieldLabel htmlFor="resolve-date">{t("form.date")}</FieldLabel>
-          <Input id="resolve-date" name="resolvedOn" inputMode="numeric" defaultValue={today} />
+          <DateTextInput
+            id="resolve-date"
+            name="resolvedOn"
+            inputMode="numeric"
+            defaultValue={today}
+          />
         </Field>
         {resolution === "repaired" ? (
           <>
@@ -760,7 +771,12 @@ export function OperatorEnd({
       >
         <Field>
           <FieldLabel htmlFor="operator-end-date">{t("form.date")}</FieldLabel>
-          <Input id="operator-end-date" name="toOn" inputMode="numeric" defaultValue={today} />
+          <DateTextInput
+            id="operator-end-date"
+            name="toOn"
+            inputMode="numeric"
+            defaultValue={today}
+          />
         </Field>
       </FormDialog>
     </>

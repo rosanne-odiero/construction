@@ -17,6 +17,7 @@ import {
   topUpResponseSchema,
 } from "@pm-buddy/validation";
 import { useP2pProblem } from "@/components/procurement/p2p/use-p2p-problem";
+import { DateInput } from "@/components/date-input";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -240,6 +241,13 @@ export function SpendingAction({
                   </select>
                 </Field>
               );
+            if (field.kind === "date")
+              return (
+                <Field key={name}>
+                  <FieldLabel htmlFor={inputId}>{field.label}</FieldLabel>
+                  <DateInput id={inputId} value={value} onValueChange={set} />
+                </Field>
+              );
             return (
               <Field key={name}>
                 <FieldLabel htmlFor={inputId}>
@@ -249,7 +257,6 @@ export function SpendingAction({
                 </FieldLabel>
                 <Input
                   id={inputId}
-                  type={field.kind === "date" ? "date" : "text"}
                   inputMode={field.kind === "money" ? "decimal" : undefined}
                   autoComplete="off"
                   maxLength={field.kind === "text" ? (field.maxLength ?? 200) : undefined}

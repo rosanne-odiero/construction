@@ -19,6 +19,7 @@ import {
   selectClass,
   useScheduleMutation,
 } from "@/components/schedule/use-schedule-mutation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -406,7 +407,7 @@ export function PpePanel({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor="ppe-returned">{t("ppe.returnedOn")}</FieldLabel>
-                  <Input
+                  <DateTextInput
                     id="ppe-returned"
                     name="returnedOn"
                     inputMode="numeric"
@@ -493,7 +494,12 @@ export function PpePanel({
                 </div>
                 <Field>
                   <FieldLabel htmlFor="ppe-issued">{t("ppe.issuedOn")}</FieldLabel>
-                  <Input id="ppe-issued" name="issuedOn" inputMode="numeric" defaultValue={today} />
+                  <DateTextInput
+                    id="ppe-issued"
+                    name="issuedOn"
+                    inputMode="numeric"
+                    defaultValue={today}
+                  />
                 </Field>
               </>
             )}

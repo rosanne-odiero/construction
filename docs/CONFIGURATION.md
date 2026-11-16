@@ -271,7 +271,7 @@ No company settings: limits are code constants (`REPORT_LIMITS`, `REPORT_DEFINIT
 
 | Key | Scope | Seed / default | Source | Status | Used from |
 |---|---|---|---|---|---|
-| `reports.periods` | platform | Muster roll at most **31** days (default 7); audit log at most **92** (default 7); other range reports at most **366** (defaults: cost ledger, stock and petty cash 30; LPO register, supplier payments and safety 90); invoice ageing as at a date within the last year (default today) | Bounded queries (D-129) | PRODUCT | D8.1 |
+| `reports.periods` | platform | Muster roll at most **31** days (default 7); audit log at most **92** (default 7); access log at most **92** (default 1); other range reports at most **366** (defaults: cost ledger, stock and petty cash 30; LPO register, supplier payments and safety 90); invoice ageing as at a date within the last year (default today) | Bounded queries (D-129) | PRODUCT | D8.1 |
 | `reports.limits` | platform | Screen: 200 rows per section; PDF: **5,000** rows (above: 422 `use-excel`); any report: **20,000** rows (422 `report-too-large`); 60 previews per user per minute; 60 exports per user per 10 minutes; exports in a 30-second transaction; audit-log action filter ≤ 100 characters | D-122 | PRODUCT | D8.1 |
 | `reports.excel_money` | platform | Excel money as **numbers of shillings with two decimals** (`#,##0.00`); dates as Excel dates (`dd/mm/yyyy`), times as Nairobi wall-clock (`dd/mm/yyyy hh:mm`), percentages as fractions (`0.0%`); the screen and PDF show `KES 1,234.50` | D-122 | PRODUCT | D8.1 |
 | `reports.subscriptions` | platform | Weekly (ISO weekday) or monthly (day 1–31, clamped to the month's end), sent at **07:00 Africa/Nairobi**; at most **20** per person and **200** per company; the scheduler checks every **60 s** and takes at most **25** due subscriptions per cycle | D-126 | PRODUCT | D8.1 |
@@ -309,6 +309,9 @@ Compliance item types are company configuration: `compliance_types` rows, read w
 | `files.max_upload_mb` / `files.allowed_types` | platform | 20 / images, PDF, XLSX (BQ workbooks: 10 MB, `.xlsx`/`.xls` by content signature, see `bq.import.max_file_mb`) | Proposal | SECURITY | D2.2 (BQ only); general files later |
 | `backup.rpo_minutes` / `backup.rto_hours` | platform | 15 / 4 | Brief §8 | OPS | D9.3 |
 | `backup.retention_days` | platform | 35 | Proposal | OPS | D9.3 |
+| `access_log.retention_days` | platform | 365. Fixed in `app.purge_access_events()` (mirrored by `ACCESS_LOG_LIMITS.retentionDays`); changing it needs a migration, so the runtime role can never purge younger entries | Owner decision (D-141); breach investigation weighed against storage limitation | COMPLIANCE-REVIEW (CR-DP-13) | D9.3 |
+| `access_log.ip_address` | platform | The client IP is stored only when `TRUST_PROXY` names the edge proxy; otherwise none | Owner decision (D-141) | COMPLIANCE-REVIEW (CR-DP-13) | D9.3 |
+| `access_log.writer` | platform | Batches of 200 written every second, one transaction per company; up to 20,000 entries wait while the database is down (writes back off up to 30 s), more are dropped and counted; purge of 5,000 rows × 20 per hourly run. Code constant `ACCESS_LOG_LIMITS` | Implementation | OPS | D9.3 |
 
 ## 7. Localisation and display
 
@@ -349,13 +352,66 @@ These are not business rules: they tell each process where its dependencies are.
 | `FIELD_ENCRYPTION_ACTIVE_KEY_VERSION` | api | the highest listed version | Version used for new values; must be listed in `FIELD_ENCRYPTION_KEYS` | SECURITY |
 | `FIELD_BLIND_INDEX_KEY` | api | none (required; 64 hex characters) | HMAC key for blind indexes (duplicate ID, phone and KRA PIN matching, do-not-rehire checks). Separate from the encryption keys and **not rotatable without recomputing every index**. Same handling as above | SECURITY |
 | `AUTH_SIGNING_PRIVATE_KEY` | api | ephemeral in development | Base64 Ed25519 PKCS8 PEM that signs access tokens; required in production | SECURITY |
-| `AUTH_NOTIFICATION_TRANSPORT` / `AUTH_MAILPIT_PORT` | api | `disabled` (`development` in `.env.example`) / `8025` | Selects the `NotificationProvider`. `development` delivers every channel (email, SMS, WhatsApp) to loopback Mailpit only, phone channels to `phone-<number>@development.invalid` with a `[DEVELOPMENT ONLY][SMS]` / `[WHATSAPP]` subject prefix, and is refused in production; `disabled` makes every send fail explicitly. Delivery runs after the response, so it never reveals whether an account exists. Real SMS/WhatsApp (Africa's Talking) arrives in D7.3 | SECURITY |
+| `AUTH_NOTIFICATION_TRANSPORT` / `AUTH_MAILPIT_PORT` | api | `disabled` (`development` in `.env.example`) / `8025` | Selects the `NotificationProvider`. `development` delivers every channel to loopback Mailpit only, phone channels to `phone-<number>@development.invalid` with `[DEVELOPMENT ONLY][SMS]` / `[WHATSAPP]` prefixes; unavailable in production. `disabled` fails explicitly. Opt-in `real` uses Africa's Talking SMS and Meta WhatsApp Business Cloud API; email remains explicitly unavailable (including report emails). At least one complete phone-channel configuration is required. Auth delivery remains after the response to avoid account enumeration | SECURITY |
+| `NOTIFICATION_TIMEOUT_MS` | api | `5000` (100–30,000) | Live provider request/response deadline. Fixed HTTPS endpoints, redirects prohibited, no automatic retries or payload/credential logging | OPS |
+| `WORKER_NOTIFICATION_DISPATCHER` | api | `off` | `on` polls committed worker-event jobs every 30 seconds; 20 events and 50 attempts per cycle. Use `development` transport for local Mailpit verification; enabling this does not provision or approve real messaging. Keep off until operator approval | OPS; SECURITY |
+| `AFRICAS_TALKING_USERNAME` / `AFRICAS_TALKING_API_KEY` / `AFRICAS_TALKING_SENDER_ID` | api | unset | Live application username and API key from the Africa's Talking dashboard (both or neither); optional provisioned/approved sender ID. `sandbox` is refused for real transport. Sends URL-encoded POST to `https://api.africastalking.com/version1/messaging`. Requires HTTP success and exactly one matching recipient with `Success`, status code 100/101/102 and nonempty message ID; an HTTP 200 alone is insufficient | SECURITY |
+| `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_GRAPH_API_VERSION` | api | unset | All or none: secret system-user token with `whatsapp_business_messaging` permission, registered sending phone **ID**, and an explicitly pinned supported Graph API version (`v25.0` is an example, not an automatically selected version). Source: Meta Business/WhatsApp Manager. POSTs to `https://graph.facebook.com/<version>/<phone-id>/messages`. Each notification must supply `whatsappTemplate: { approved: true, name, languageCode, components? }`; callers must confirm Meta approval and exact parameter order/language. Supports text parameters in body/header and URL buttons (`sub_type: "url"`, string `index`); other component/media types are rejected. No arbitrary `text`/`subject` fallback, no automatic template selection or approval lookup. Existing callers without metadata cannot send WhatsApp | SECURITY |
+| `USSD_CALLBACK_TOKEN` / `USSD_SERVICE_CODE` | api | unset (disabled) | Both or neither: random 32-byte shared gateway header secret encoded as 64 hex characters, and service code matching `/^\*[0-9*]+#$/` (e.g. `*384*123#`). Callback `/api/v1/ussd` requires `X-USSD-Token` injected by a controlled gateway; use HTTPS gateway transport and an ingress/IP ACL. Keep the token in the environment/secrets manager and gateway only, never on a handset. These settings alone do not provision a provider service code or gateway | SECURITY |
+| `WHATSAPP_WORKER_TEMPLATE_EN` / `WHATSAPP_WORKER_TEMPLATE_SW` | api | unset | Meta-approved zero-parameter worker-reminder template names, in exactly `en` / `sw`; body must match `workerNotifications.body` in the matching i18n catalogue. The relevant name is required for a real WhatsApp reminder. Source: Meta approval + operator configuration; no invented default template names | OPS; COMPLIANCE-REVIEW: messaging consent and processor terms before activation |
+
+**D7.3 worker preferences and USSD limits.** Non-security worker reminders are opt-in per
+account (both channels off initially), not per company/event; language is EN/SW. These choices do
+not suppress invitations, account verification, recovery or security messages. An explicit
+portal reminder request is limited to three requests per account per hour, including refused
+requests. Manual and automatic sends also share ceilings of three attempts/account/hour and
+100 attempts/company/hour, including provider failures. These are attempt limits, not monetary
+or SMS-segment budgets.
+
+Automatic worker alerts consume only **new** committed `attendance.day_confirmed`,
+`payroll.batch_submitted`, `payroll.batch_cancelled` and `advance.disbursed` outbox events through
+their own durable jobs; the shared outbox's `published_at` is never changed. Both channels reuse
+the wage-free `workerNotifications` EN/SW template and existing approved WhatsApp template
+settings. Recipients need consent predating the event, a verified unique registry phone and
+current worker access to that project. Consent, source status, phone match and access are
+rechecked at send time. No historic backfill; alerts older than 24 hours are dropped/skipped.
+
+The database claim commits **before** the provider call. Multiple instances cannot attempt the
+same event/user/channel twice. A crash can lose an attempt: `sending` older than two minutes
+becomes `unconfirmed` (`interrupted`), never an automatic resend. Provider errors are also
+`unconfirmed`, because a timeout may follow acceptance. The worker's notification history
+shows the latest 50 own attempts in the selected company; project access is checked again on
+read. No handset receipts, retry/fallback, per-event preferences or monetary spending budgets
+are implemented. Provider acceptance is not handset delivery or payroll settlement.
+
+The USSD gateway must strip any untrusted `X-USSD-Token`, check the provider source and inject its
+own secret only on that trusted route. Do not log request bodies: cumulative `text` includes an
+ID and PIN. The API redacts the header, `text`, `phoneNumber` and PIN fields. Sessions last at most
+180 seconds in Redis, with encrypted ID/session references and no persisted PIN; normal PIN
+lockout/budgets apply. Menus are sequential, bound to phone + service code + provider session ID,
+and end after one result. At most four eligible companies are supported; use the web portal for
+more. Forty callbacks per phone per five minutes bound menu traffic. Ingress ACL, provider
+timeouts/latency and live-code provisioning require operator validation before activation.
 | `AUTH_BREACHED_PASSWORD_CHECK` | api | `off` (`off` in `.env.example`) | `hibp` checks new passwords (registration, reset) against the Have I Been Pwned range API: only the first five hex characters of the password's SHA-1 leave the server, with `Add-Padding: true` and a two-second timeout. On a timeout or error it **fails open**: the password is accepted and a warning is logged without the password or any part of its hash. Needs outbound HTTPS to `api.pwnedpasswords.com`. Strength checks (`auth.password.min_strength`) apply either way | SECURITY |
 | `AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` | api | unset (Google sign-in hidden) | Both or neither (startup fails otherwise). A Google Cloud OAuth client of type *Web application* whose authorised redirect URI is exactly `${WEB_ORIGIN}/api/v1/auth/google/callback`. Only verified Gmail or matching Google Workspace (`hd`) addresses are accepted; matching accounts are linked automatically and new ones created; PM-Buddy MFA still applies ([API README](../apps/api/README.md#continue-with-google)). The secret belongs in `apps/api/.env` or the secrets manager, never in the repository. Needs outbound HTTPS to `accounts.google.com`, `oauth2.googleapis.com` and `www.googleapis.com` | SECURITY |
 | `AUTH_GOOGLE_ISSUER` | api (tests) | unset (`https://accounts.google.com`) | Test-only override pointing at a local fake provider; plain HTTP only on loopback; refused in production | SECURITY |
 | `MALWARE_SCANNER` | api | `disabled` (`development` in `.env.example`) | Selects the `MalwareScanner` for uploads (ARCHITECTURE §17). `development` is a no-op that records `not_scanned` / `development-noop` on each import and is refused in production; `disabled` refuses BQ uploads with 503 `malware-scanner-unavailable`. ClamAV is a TODO before any pilot | SECURITY |
-| `REPORT_SCHEDULER` | api | unset (on, except under `NODE_ENV=test`); `off` in the e2e suite | `on`/`off`: the in-process scheduler for report emails (D-126). With several API instances every one may run it (an advisory lock lets one cycle run at a time). Emails go through `AUTH_NOTIFICATION_TRANSPORT`, which stays `disabled` in production until a provider is approved; while it is disabled every due run is recorded as `failed` (`delivery-failed`) and nothing is sent | OPS |
+| `REPORT_SCHEDULER` | api | unset (on, except under `NODE_ENV=test`); `off` in the e2e suite | `on`/`off`: the in-process scheduler for report emails (D-126). With several API instances an advisory lock lets one cycle run at a time. Emails go through `AUTH_NOTIFICATION_TRANSPORT`; both `disabled` and `real` leave email unavailable, so due runs are recorded as `failed` (`delivery-failed`) | OPS |
 | `BQ_VAT_RATE_PERCENT` | api | `16` | Interim source of `bq.vat.rate` (decimal string, 0–100, up to 4 decimals). Snapshot onto each BQ version at commit; changing it never changes committed versions. COMPLIANCE-REVIEW (CR-TAX-01) | COMPLIANCE-REVIEW |
 | `FIELD_ENCRYPTION_KEYS` / `FIELD_ENCRYPTION_ACTIVE_KEY_VERSION` / `FIELD_BLIND_INDEX_KEY` | api | none (required: the API does not start without them) / highest listed version / none | Field-level encryption (ARCHITECTURE §10): comma-separated `<version>:<64 hex>` AES-256-GCM master keys (per-company keys derived with HKDF), the active version for new values, and a separate 64-hex HMAC key for blind indexes. Used for supplier KRA PINs, contact phones and bank account numbers (D5.1) and labourer identifiers (D3.1). Generate local values as shown in `apps/api/.env.example`; the e2e suite generates throwaway keys. Losing a key makes values written with it unreadable; rotating means listing the new version and re-encrypting. Secrets manager / KMS outside local development | SECURITY |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_SERVICE_NAME` | api | unset / `pm-buddy-api` | Tracing starts only when the endpoint is set; needs `pnpm start`, which preloads `telemetry.js` | OPS |
 | `API_INTERNAL_URL` | web | `http://localhost:4000` | Where the web server reaches the API. Also the target of the same-origin `/api/*` rewrite, which is **fixed at build time** (D-16) | OPS |
+
+Notification configuration is process environment validated by
+`packages/validation/src/env.ts`, accessed through API `AppConfig`; it is not tenant/database
+configuration. Local `.env` overrides `.env.example`; production reads only the environment.
+Keep live secrets in the secrets manager, never in the example file.
+Provider contracts: [Africa's Talking SMS](https://developers.africastalking.com/docs/sms/overview)
+and [Meta WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api/).
+Successful sends mean synchronous **provider acceptance only**, not handset delivery. WhatsApp
+requires a nonempty message ID and rejects an explicit non-accepted `message_status`; delivery
+receipts/webhooks, retries and provider/template provisioning are not
+implemented here. A timeout can happen after acceptance; retrying externally may duplicate a
+message. Operators must provision approved senders/templates, recipient consent, balance and
+network access before enabling `real`. Validation used mocked responses only; no live delivery
+has been performed or verified.

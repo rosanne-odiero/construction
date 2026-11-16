@@ -17,6 +17,7 @@ import {
   type ToolboxTalk,
   type ToolboxTalksResponse,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { useProblemMessage } from "@/components/projects/use-problem-message";
 import { PhotoThumbs, PhotoUpload } from "@/components/quality/photos";
 import {
@@ -307,7 +308,7 @@ export function TalkForm({
       <div className="grid grid-cols-2 gap-4">
         <Field>
           <FieldLabel htmlFor="talk-date">{t("talks.heldOn")}</FieldLabel>
-          <Input
+          <DateTextInput
             id="talk-date"
             name="heldOn"
             inputMode="numeric"

@@ -1,3 +1,4 @@
+export * from "./site-attendance.js";
 export {
   pageInfoSchema,
   paginationQuerySchema,

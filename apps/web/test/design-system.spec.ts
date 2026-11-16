@@ -48,6 +48,42 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+test("dates are typed as DD/MM/YYYY or picked from an accessible calendar", async ({ page }) => {
+  await page.goto("/design-system");
+  const date = page.getByLabel("Date example");
+  await expect(date).toHaveValue("10/11/2026");
+
+  await page.getByRole("button", { name: "Open calendar" }).click();
+  const calendar = page.getByRole("dialog", { name: "Calendar" });
+  await expect(
+    calendar.getByRole("button", { name: /^Tuesday, 10 November 2026.*selected$/ }),
+  ).toBeFocused();
+  const scan = await new AxeBuilder({ page })
+    .include('[data-slot="popover-content"]')
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(scan.violations).toEqual([]);
+  await calendar.getByRole("button", { name: /^Friday, 20 November 2026/ }).click();
+  await expect(calendar).toBeHidden();
+  await expect(date).toHaveValue("20/11/2026");
+
+  await date.fill("31/02/2026");
+  expect(await date.evaluate((input: HTMLInputElement) => input.validationMessage)).toBe(
+    "Enter the date as DD/MM/YYYY.",
+  );
+  await date.fill("2026-12-03");
+  await date.blur();
+  await expect(date).toHaveValue("03/12/2026");
+  expect(await date.evaluate((input: HTMLInputElement) => input.checkValidity())).toBe(true);
+
+  await date.focus();
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(calendar.getByRole("button", { name: /^Thursday, 3 December 2026/ })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Enter");
+  await expect(date).toHaveValue("04/12/2026");
+});
+
 test("gallery fits a low-width Android viewport and exposes an install manifest", async ({
   page,
 }) => {

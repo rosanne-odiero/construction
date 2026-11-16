@@ -60,6 +60,11 @@ Then open http://localhost:3000/status: every service should show **Operational*
 
 Foundation review: `/foundation` (API-backed identity/company setup) and `/design-system` (EN/SW, light/dark controls and states). Since D2.1, `/sign-in` signs in against the real API and `/projects` (list, detail, sites and geofence editor, team, WBS and milestones) is live; sign in with an account printed by `pnpm db:seed` (see the [Phase 2 demo](docs/demos/phase-2.md)). Other business dashboards remain labelled prototype routes. The web manifest supplies installation metadata only; it does not imply offline payroll/attendance capability or cache sensitive records.
 
+Native site attendance: [Expo setup and real-device checklist](apps/site/README.md).
+The Android-first custom development build adds encrypted signed QR/NFC capture and an offline
+outbox; `/attendance/capture` provisions worker cards and reviews evidence. Expo Go/web and
+physical-device acceptance are not implied by the automated tests.
+
 | URL                                             | What                                       |
 | ----------------------------------------------- | ------------------------------------------ |
 | http://localhost:3000                           | Web app (prototype tour)                   |
@@ -81,7 +86,7 @@ pnpm test:e2e      # API and web browser tests; API needs `pnpm services:up`
 
 Before the first web browser run, install its browser: `pnpm --filter @pm-buddy/web exec playwright install --no-shell chromium`.
 
-To run the checks from a second checkout (for example a `git worktree`) while the first is running, point its `apps/api/.env` at a second compose stack on other ports. The API e2e tests read Mailpit from `AUTH_MAILPIT_PORT`, and the browser tests take `PLAYWRIGHT_WEB_PORT` (default 3100) and `PLAYWRIGHT_MOCK_API_PORT` (default 3199).
+To run the checks from a second checkout (for example a `git worktree`) while the first is running, point its `apps/api/.env` at a second compose stack on other ports. The API e2e tests read Mailpit from `AUTH_MAILPIT_PORT`, and the browser tests take `PLAYWRIGHT_WEB_PORT` (default 3100) and `PLAYWRIGHT_MOCK_API_PORT` (default 3199). Concurrent browser runs in the same checkout also need distinct `PLAYWRIGHT_DIST_DIR` values (for example `.next-e2e/payroll`); the default remains `.next-e2e`.
 
 `pnpm services:down` stops the containers and keeps the data. To start again from empty databases and storage, run `docker compose -f infra/docker/compose.yaml down -v`. All local credentials are throwaway development values ([configuration §8](docs/CONFIGURATION.md#8-process-environment-deployment-settings)).
 

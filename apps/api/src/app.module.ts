@@ -4,6 +4,7 @@ import { LoggerModule } from "nestjs-pino";
 import { AppConfig, envFilePaths, validateEnv } from "./config/app-config.js";
 import { loggerOptions } from "./common/logging.js";
 import { InfraModule } from "./infra/infra.module.js";
+import { AccessLogModule } from "./modules/access-log/access-log.module.js";
 import { AttendanceModule } from "./modules/attendance/attendance.module.js";
 import { BqModule } from "./modules/bq/bq.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
@@ -34,6 +35,7 @@ import { ReportsModule } from "./modules/reports/reports.module.js";
     LoggerModule.forRootAsync({ inject: [AppConfig], useFactory: loggerOptions }),
     HealthModule,
     IdentityModule,
+    AccessLogModule,
     ProjectsModule,
     BqModule,
     ProcurementModule,

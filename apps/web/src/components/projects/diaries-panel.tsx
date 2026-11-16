@@ -16,6 +16,7 @@ import {
   type SiteDiary,
   type WorkforceTradeWire,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { StatusBadge, type Tone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -355,11 +356,10 @@ export function DiariesPanel({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="diary-date">{t("date")}</FieldLabel>
-                  <Input
+                  <DateTextInput
                     id="diary-date"
                     name="date"
                     defaultValue={calendarInput(nairobiDate())}
-                    placeholder="DD/MM/YYYY"
                     required
                     disabled={busy}
                   />

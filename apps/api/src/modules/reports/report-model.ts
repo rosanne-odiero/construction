@@ -24,6 +24,7 @@ export type ResolvedParams = {
   batchId?: string;
   actorId?: string;
   action?: string;
+  recordId?: string;
   period?: ReportPeriod;
   asAt?: string;
 };

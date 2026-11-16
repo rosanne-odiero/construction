@@ -7,6 +7,7 @@ import { AccessPolicy, type Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import { toProject } from "../projects/project-mappers.js";
+import { WorkerSelfService } from "./worker-self-service.js";
 
 type ProjectRow = Prisma.ProjectGetPayload<object>;
 
@@ -32,9 +33,10 @@ export class PortalsService {
   constructor(
     private readonly scope: TenantScope,
     private readonly policy: AccessPolicy,
+    private readonly selfService: WorkerSelfService,
   ) {}
 
-  worker(principal: Principal, req: Request) {
+  worker(principal: Principal, req: Request, idNumber?: string) {
     return this.scope.run(principal, req, async (scope) => {
       this.requirePortal(scope, "portal.worker");
       const [company, rows] = await Promise.all([
@@ -47,12 +49,18 @@ export class PortalsService {
           orderBy: { name: "asc" },
         }),
       ]);
+      const selfService = await this.selfService.read(
+        scope.tx,
+        scope.access.tenantId,
+        principal.user.identifier,
+        rows.map((row) => row.id),
+        idNumber,
+      );
       return workerPortalResponseSchema.parse({
         displayName: principal.user.displayName,
         company,
         assignments: rows.map(({ sites, ...row }) => ({ project: portalProject(row), sites })),
-        attendance: null,
-        pay: null,
+        ...selfService,
       });
     });
   }

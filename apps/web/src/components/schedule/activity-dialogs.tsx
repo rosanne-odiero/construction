@@ -12,6 +12,7 @@ import {
   type ScheduleItem,
   type WbsNode,
 } from "@pm-buddy/validation";
+import { DateTextInput } from "@/components/date-input";
 import { BqItemPicker, type BqItemChoice } from "@/components/procurement/p2p/bq-item-picker";
 import { Button } from "@/components/ui/button";
 import {
@@ -162,11 +163,10 @@ export function ActivityDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor="activity-start">{t("startNoEarlierThan")}</FieldLabel>
-              <Input
+              <DateTextInput
                 id="activity-start"
                 name="startNoEarlierThan"
                 defaultValue={calendarInput(item?.startNoEarlierThan ?? null)}
-                placeholder="DD/MM/YYYY"
                 disabled={busy}
                 aria-describedby="activity-start-hint"
               />
@@ -315,22 +315,20 @@ export function ProgressDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="progress-start">{t("actualStart")}</FieldLabel>
-              <Input
+              <DateTextInput
                 id="progress-start"
                 name="actualStart"
                 defaultValue={calendarInput(item.actualStart)}
-                placeholder="DD/MM/YYYY"
                 disabled={busy}
                 autoFocus
               />
             </Field>
             <Field>
               <FieldLabel htmlFor="progress-finish">{t("actualFinish")}</FieldLabel>
-              <Input
+              <DateTextInput
                 id="progress-finish"
                 name="actualFinish"
                 defaultValue={calendarInput(item.actualFinish)}
-                placeholder="DD/MM/YYYY"
                 disabled={busy}
               />
             </Field>

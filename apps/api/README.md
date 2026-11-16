@@ -2,6 +2,38 @@
 
 Base: `/api/v1`, same-origin browser requests with `credentials: "include"`.
 
+### D7.3 worker self-service
+
+- `GET portal/worker`: assigned sites and only the unambiguous phone-matched worker's current
+  month attendance, latest 12 submitted payroll lines and advance balance. Money is exact minor-unit
+  strings; draft/cancelled payroll never appears. Submitted pay is **not** payment confirmation;
+  `pay.payments` remains `null`.
+- `GET/PUT portal/worker/notifications`: account-wide `{sms,whatsapp,locale}` non-security
+  reminder preferences, both channels off initially, forced user-scoped RLS. Browser CSRF required.
+- `POST portal/worker/notifications/send {channel:"sms"|"whatsapp"}`: explicit opted-in,
+  wage-free reminder, at most three attempts/account/hour; returns acceptance, not handset
+  delivery. Provider failures are explicit. Invitations/security messages ignore these preferences.
+- `GET portal/worker/notifications/history`: latest 50 own attempts in the selected company,
+  excluding projects without current worker access. Pending, sending, accepted, unconfirmed and
+  skipped are distinct; no phone numbers, message bodies, IDs or wages are returned.
+- `WORKER_NOTIFICATION_DISPATCHER=on` enables the 30-second worker outbox consumer (default
+  `off`). New confirmed-attendance, submitted/cancelled-payroll and disbursed-advance events
+  enqueue wage-free reminders for opted-in, uniquely phone-matched workers. Consent and access
+  are rechecked before sending. Attempts are capped at three/account/hour and 100/company/hour.
+  Alerts expire after 24 hours; accepted, uncertain and interrupted sends are never retried.
+- `POST ussd`: form-urlencoded `sessionId`, `phoneNumber`, `serviceCode`, cumulative `text`;
+  requires `X-USSD-Token` from a controlled gateway, not browser cookies/CSRF. Disabled by
+  default; gateway source verification, HTTPS and ingress ACL are deployment requirements.
+  Language → ID → six-digit PIN → company → one read-only result; three-minute sessions.
+- Real SMS/WhatsApp adapters require explicit `AUTH_NOTIFICATION_TRANSPORT=real`, separately
+  provisioned credentials and approved WhatsApp templates. Real email, receipts and retry/fallback
+  remain unavailable. Automatic dispatch is limited to the four worker events above, not staff,
+  client, supplier or compliance notifications.
+
+See [configuration](../../docs/CONFIGURATION.md#8-process-environment-deployment-settings),
+[Phase 7 walkthrough](../../docs/demos/phase-7.md#labourer-self-service-d73) and
+[implementation status](../../docs/IMPLEMENTATION_STATUS.md).
+
 Before starting the development API, put a random 32-byte key in `apps/api/.env`
 as `AUTH_MFA_ENCRYPTION_KEY=<64 hex characters>`; generate with
 `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
@@ -133,8 +165,8 @@ notifications go only to local Mailpit (`http://localhost:8025`). Delivery goes 
 channels: email identifiers use email, phone identifiers use SMS. The development provider
 puts every channel in Mailpit; SMS and WhatsApp messages go to a synthetic
 `phone-<number>@development.invalid` inbox with a `[DEVELOPMENT ONLY][SMS]` or
-`[DEVELOPMENT ONLY][WHATSAPP]` subject prefix. No real SMS, WhatsApp (Africa's Talking
-arrives in D7.3), identity-provider, mobile device-binding, or biometric integration is claimed.
+`[DEVELOPMENT ONLY][WHATSAPP]` subject prefix. D7.3 adds explicitly enabled Africa's Talking
+SMS and approved-template WhatsApp adapters; provisioning and live delivery have not been tested.
 The development provider uses Mailpit's documented HTTP send API over fixed
 loopback, with redirects forbidden and a three-second timeout. It does not release
 or relay messages. `AUTH_NOTIFICATION_TRANSPORT=development` is forbidden in
@@ -279,7 +311,7 @@ which also gives existing client assignments `portal.client`).
 
 | Method/path                             | Body                                    | Response / access                                                                                                               |
 | --------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| GET portal/worker                       | —                                       | `{displayName, company, assignments:[{project, sites}], attendance:null, pay:null}`; `portal.worker`                            |
+| GET portal/worker                       | —                                       | `{displayName, company, assignments:[{project, sites}], attendance, pay}`; own curated records or `null`; `portal.worker` |
 | POST projects/:id/labourers/invitations | `{identifier}` (Kenyan mobile)          | 201 `{invitation}`; `labour.manage` on the project; 409 `already-member`                                                        |
 | POST auth/pin/login                     | `{identifier, pin}`                     | authentication response (PIN session)                                                                                           |
 | POST auth/pin/join                      | `{identifier, token, displayName, pin}` | authentication response, company selected; 400 `pin-too-weak`, 401 invalid invitation, 409 `account-exists`                     |
@@ -301,8 +333,8 @@ companies or accept staff invitations. Sessions record `auth_method` (`password`
 
 Site-diary lists now need `site.diary`, `quality.manage`, `projects.manage` or `reports.view`
 in addition to `projects.view`, so clients (who hold `projects.view`) see diaries only through
-their portal, approved ones only. Production SMS delivery still waits for D7.3 (Africa's
-Talking); in development, invitation and PIN-reset SMS go to Mailpit. The client portal's
+their portal, approved ones only. Production SMS needs the explicitly enabled D7.3 Africa's
+Talking adapter and operator credentials; in development, invitation and PIN-reset SMS go to Mailpit. The client portal's
 endpoints (`/portal/client/*`) are listed under "Client portal (D7.1)" below.
 
 ## Client portal (D7.1)
@@ -694,6 +726,45 @@ rates, and gang/engagement triggers. A rule broken only at the database level is
 (`joined_on`/`left_on`). The rate for a day is `resolveRate` in `packages/domain` over
 `labour_rates`, or `GET labourers/:id/rate?projectId&date&basis`; a payroll line should store the
 `labour_rates.id` it used.
+
+## Signed site attendance (D3.2/D3.3)
+
+Office provisioning/review is at `/attendance/capture`; the native client is
+[apps/site](../site/README.md). All API paths below start `/api/v1/attendance/capture` and use
+the normal authenticated session/CSRF/MFA controls; native calls are not an authentication bypass.
+Shared strict schemas: [site-attendance.ts](../../packages/validation/src/site-attendance.ts).
+
+| Route | Contract / authority |
+|---|---|
+| POST devices | `{id, name, publicKey}` (Ed25519 raw key, 64 lower-case hex); binds to current user/company; `attendance.record` somewhere. The same revoked registration: 403 `device-revoked`; another user's or key's ID: 409 `device-conflict` |
+| GET devices | Own devices; company devices for `config.manage` |
+| POST devices/:id/lease | `{bootId, deviceTime, monotonicMs}`; 72-hour server anchor plus authorised minimal full roster; owned active device (revoked: 403 `device-revoked`) |
+| POST devices/:id/revoke | Own device, or `config.manage` + fresh step-up for another user's device; irreversible. The site app erases that registration's local data on its next 403 `device-revoked` (D-140) |
+| POST cards | `{labourerId}`; opaque `PMB1:<64 hex>` token once, automatically revoking older cards; `labour.manage`; only its digest is stored in the card registry |
+| GET cards | `?projectId`; active card identifiers without tokens; project `labour.manage` |
+| POST cards/:id/revoke | Irreversible card revocation; captured evidence is retained |
+| POST events | `{event, signature, photoBase64}`; schema-v1 canonical-JSON Ed25519 signature, fresh JPEG <=36 KiB / 1MP with signed SHA-256, position or explicit null, named-worker supervisor confirmation; current project `attendance.record` and owned active device |
+| GET events | `?projectId&before?`; project `attendance.view`, 100 events/page, opaque UUID `nextCursor`; immutable receipt plus current allocation and review |
+| GET events/:id/photo | Audited project-authorised private JPEG, `Cache-Control: no-store`; never a public object URL |
+| POST events/:id/review | `{decision: resolve\\|dismiss, reason}`; `attendance.review_anomalies`, fresh step-up and not the original recorder |
+
+Each shift has separate `in`/`out` event IDs and a shared `shiftId`; retry the exact signed
+request, never regenerate its ID. Event fingerprints/receipts provide deduplication independently
+of `Idempotency-Key`. Event pushes and device registration bypass the generic response cache so
+revocation/permissions are always checked before replay. Card-issue tokens also bypass that
+cache. Reissue if the one-time provisioning response is lost.
+
+`confirmed` means durable evidence, not proof of presence or payroll approval. Eligible pairs
+create a draft muster entry, retaining original recorder and the card-family `qr_card` method
+(signed events distinguish NFC). Flagged evidence is durably `quarantined` for independent
+review. Receipt content never changes after later allocation; `GET events` exposes the current
+`recordId` separately. Submitted/approved/existing entries are never overwritten. Unallocated,
+undecided evidence holds period submission/approval with `pending-captures`; late locked-period
+evidence requires normal correction/adjustment handling.
+
+Thresholds, native limitations, clock assumptions and recovery gates are documented in
+[OFFLINE_SYNC](../../docs/OFFLINE_SYNC.md#implemented-attendance-capture-slice-d32d33). Signatures
+attest key possession, not an honest clock, fresh physical scene or physical presence.
 
 ## Attendance and timesheets (D3.3, web slice)
 

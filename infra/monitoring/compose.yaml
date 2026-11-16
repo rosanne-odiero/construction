@@ -1,0 +1,21 @@
+name: pm-buddy-monitoring
+services:
+  blackbox:
+    image: prom/blackbox-exporter:v0.27.0
+    command: ["--config.file=/etc/blackbox/config.yml"]
+    volumes:
+      - ./blackbox.yml:/etc/blackbox/config.yml:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "127.0.0.1:${MONITORING_PORT:-19090}:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts.yml:/etc/prometheus/alerts.yml:ro
+    depends_on:
+      - blackbox

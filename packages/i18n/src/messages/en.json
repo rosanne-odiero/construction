@@ -633,7 +633,8 @@
         "manage": "Manage workers",
         "view_sensitive": "View sensitive worker details",
         "do_not_rehire": "Flag workers do not rehire",
-        "consent": "Record worker consent"
+        "consent": "Record worker consent",
+        "rate": "Rate workers"
       },
       "attendance": {
         "view": "View attendance",
@@ -1969,6 +1970,11 @@
     "viewLimit": "You can keep up to 20 saved views.",
     "mfaRequired": "Set up two-step verification on your account before doing this.",
     "labourRule": "This breaks a labour registry rule. Nothing was saved.",
+    "ratingExists": "This worker already has a rating for that day on this project.",
+    "ratingNotWorked": "Attendance does not record this worker as working on the project that day. Record attendance first.",
+    "ratingWindow": "Only today and the six days before can be rated.",
+    "ratingLocked": "Only the person who gave a rating can change it, on the day they gave it.",
+    "ratingSelf": "You cannot rate your own work.",
     "periodLocked": "That timesheet period is submitted or approved, so its attendance can no longer change here. Use an adjustment.",
     "periodOverlap": "Those dates overlap another timesheet period.",
     "dayNotDraft": "This muster day is already submitted. Ask for a correction instead.",
@@ -3215,7 +3221,12 @@
       "attendanceTitle": "Attendance",
       "attendanceSoon": "Your days on site will show here once attendance recording starts.",
       "payTitle": "Pay",
-      "paySoon": "Your pay and M-Pesa payments will show here once payroll starts. You will also be able to check your pay by USSD."
+      "paySoon": "Your pay and M-Pesa payments will show here once payroll starts. You will also be able to check your pay by USSD.",
+      "ratingsTitle": "My ratings",
+      "ratingsIntro": "Your supervisors rate your work from 1 (poor) to 5 (excellent).",
+      "ratingsNone": "You have no ratings yet.",
+      "ratingsUnlinked": "We could not match your phone number to one worker record. Ask the site office to check your registration.",
+      "ratingsSummary": "{average} out of 5 from {count, plural, one {# rating} other {# ratings}}"
     },
     "join": {
       "title": "Join as a labourer",
@@ -3866,6 +3877,7 @@
       "label": "Labour sections",
       "registry": "Registry",
       "gangs": "Gangs",
+      "ratings": "Ratings",
       "alerts": "NCA alerts",
       "setup": "Trades & rates"
     },
@@ -4087,6 +4099,14 @@
         "to": "New status",
         "leftHint": "Their records stay. Engaging them again later reactivates them.",
         "reason": "Reason (optional)"
+      },
+      "ratings": {
+        "title": "Ratings",
+        "summary": "{average} out of 5 from {count, plural, one {# rating} other {# ratings}}",
+        "none": "No ratings yet.",
+        "recent": "Recent ratings",
+        "rate": "Rate workers",
+        "scope": "Only ratings on projects where you can view workers are counted."
       }
     },
     "consent": {
@@ -4376,6 +4396,65 @@
       "daysAgo": "{days, plural, one {# day ago} other {# days ago}}",
       "daysLeft": "{days, plural, =0 {due today} one {in # day} other {in # days}}",
       "none": "No NCA alerts."
+    },
+    "ratings": {
+      "title": "Worker ratings",
+      "description": "Rate the workers that attendance records as working on a project day: 1 to 5 for punctuality, work quality, safety and teamwork.",
+      "filters": {
+        "label": "Choose the project and day",
+        "project": "Project",
+        "date": "Day",
+        "show": "Show",
+        "window": "You can rate today and the six days before ({from} to {to})."
+      },
+      "noProjects": "You are not assigned to an open project where you can rate workers.",
+      "table": {
+        "caption": "Workers who worked on {project} on {date}",
+        "worker": "Worker",
+        "attendance": "Attendance",
+        "rating": "Rating",
+        "ratedBy": "Rated by",
+        "actions": "Actions",
+        "empty": "Nobody is recorded as working on this project that day. Record attendance first."
+      },
+      "notRated": "Not rated",
+      "closed": "This day can no longer be rated: ratings are given on the day or within six days.",
+      "readOnly": "This project is closed or cancelled, so it is read-only.",
+      "actions": {
+        "rate": "Rate",
+        "change": "Change",
+        "rateWorker": "Rate {name}",
+        "changeWorker": "Change the rating for {name}"
+      },
+      "dialog": {
+        "rateTitle": "Rate {name}",
+        "changeTitle": "Change the rating for {name}",
+        "description": "{date} on {project}. Score each from 1 (poor) to 5 (excellent).",
+        "comment": "Comment (optional)",
+        "commentHint": "The worker can read these scores and your comment in their portal. They do not see your name.",
+        "save": "Save rating",
+        "saveChange": "Save changes",
+        "required": "Score all four before saving.",
+        "changeNote": "You can change a rating only on the day you give it."
+      },
+      "criteria": {
+        "punctuality": "Punctuality",
+        "quality": "Work quality",
+        "safety": "Safety",
+        "teamwork": "Teamwork"
+      },
+      "scale": {
+        "poor": "Poor",
+        "fair": "Fair",
+        "good": "Good",
+        "veryGood": "Very good",
+        "excellent": "Excellent",
+        "none": "Not scored"
+      },
+      "score": "{score} – {label}",
+      "average": "{average} out of 5",
+      "byOn": "{name}, {time}",
+      "changed": "changed {time}"
     }
   },
   "attendanceLive": {

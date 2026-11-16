@@ -59,6 +59,12 @@ function print(summary: SeedSummary) {
     `  ${attendance.records} attendance records; ${attendance.periods} timesheet periods (${attendance.approvedPeriods} approved)`,
     `  ${attendance.openAnomalies} open anomalies; ${attendance.adjustments} adjustment(s); ${attendance.holidays} public holidays`,
   );
+  const { ratings } = summary;
+  lines.push(
+    "",
+    `Worker ratings (synthetic; ${ratings.created ? "created" : "already present"}):`,
+    `  ${ratings.ratings} ratings over the five days before today; today is left to rate`,
+  );
   const { payroll } = summary;
   lines.push(
     "",

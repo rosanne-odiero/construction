@@ -115,6 +115,11 @@ import {
   revealResponseSchema,
   skillLevelResponseSchema,
   tradeResponseSchema,
+  labourerRatingsResponseSchema,
+  ratingProjectsResponseSchema,
+  ratingResponseSchema,
+  ratingSheetResponseSchema,
+  workerRatingsResponseSchema,
   adjustmentResponseSchema,
   adjustmentsResponseSchema,
   anomaliesResponseSchema,
@@ -359,6 +364,7 @@ export function responseContract(method: string, target: string) {
   const clientPortal = clientPortalContract(path);
   if (clientPortal) return clientPortal;
   if (path === "portal/worker") return workerPortalResponseSchema;
+  if (path === "portal/worker/ratings") return workerRatingsResponseSchema;
   const supplierPortal = supplierPortalContract(method, path);
   if (supplierPortal) return supplierPortal;
   if (/^projects\/[^/]+\/labourers\/invitations$/.test(path)) return invitationResponseSchema;
@@ -913,6 +919,12 @@ function labourContract(method: string, path: string) {
   if (path === "labour/labourers/lookup") return labourersResponseSchema;
   if (/^labour\/labourers\/[^/]+\/reveal$/.test(path)) return revealResponseSchema;
   if (/^labour\/labourers\/[^/]+\/rate$/.test(path)) return resolvedRateResponseSchema;
+  // D3.5 worker ratings.
+  if (/^labour\/labourers\/[^/]+\/ratings$/.test(path)) return labourerRatingsResponseSchema;
+  if (path === "labour/ratings/projects") return ratingProjectsResponseSchema;
+  if (/^labour\/projects\/[^/]+\/ratings$/.test(path))
+    return method === "get" ? ratingSheetResponseSchema : ratingResponseSchema;
+  if (/^labour\/ratings\/[^/]+$/.test(path)) return ratingResponseSchema;
   if (/^labour\/labourers\/[^/]+(\/.*)?$/.test(path)) return labourerResponseSchema;
   if (path === "labour/accreditation-alerts") return accreditationAlertsResponseSchema;
   if (path === "labour/views")

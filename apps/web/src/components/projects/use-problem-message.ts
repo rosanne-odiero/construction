@@ -149,6 +149,11 @@ const codes: Record<string, ProblemKey> = {
   "view-limit": "viewLimit",
   "mfa-required": "mfaRequired",
   "labour-rule": "labourRule",
+  "already-rated": "ratingExists",
+  "not-worked": "ratingNotWorked",
+  "rating-window": "ratingWindow",
+  "rating-locked": "ratingLocked",
+  "self-rating": "ratingSelf",
   // Attendance and timesheets (D3.3)
   "period-locked": "periodLocked",
   "period-overlap": "periodOverlap",

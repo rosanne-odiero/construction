@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   "labour.view_sensitive",
   "labour.do_not_rehire",
   "labour.consent",
+  "labour.rate",
   "attendance.view",
   "attendance.record",
   "attendance.override",
@@ -127,7 +128,8 @@ export const isProjectPermission = (permission: Permission): boolean =>
  * BQ, labour, attendance, timesheet, payroll view/preparation/review, advance request/approval,
  * procurement, stores, site, quality, safety, plant, documents, reports, finance-view and portal
  * permissions. D5.4 added `finance.petty_cash` (hold a site's petty-cash float: record its
- * expenses and counts, ask for top-ups). The company-level payroll rule and export permissions are
+ * expenses and counts, ask for top-ups) and D3.5 `labour.rate` (rate the workers of a project's
+ * days). The company-level payroll rule and export permissions are
  * never project-scoped. Approval and payment permissions (`payroll.approve`, `payments.*`, `finance.manage`,
  * `finance.view_sensitive`) and the supplier portal stay out until their modules define project
  * behaviour. The database CHECK
@@ -145,6 +147,7 @@ export const PROJECT_ASSIGNABLE_PERMISSIONS = [
   "labour.view_sensitive",
   "labour.do_not_rehire",
   "labour.consent",
+  "labour.rate",
   "attendance.view",
   "attendance.record",
   "attendance.override",

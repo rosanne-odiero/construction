@@ -41,6 +41,26 @@ mismatch, and the snapshot is frozen with the rest of the content while submitte
 approval, so later attendance corrections never change an approved diary. Switching between
 manual and attendance is an ordinary draft edit.
 
+## Worker ratings (D3.5)
+
+A supervisor scores one worker's worked day on one project from 1 to 5 for punctuality,
+quality, safety and teamwork, with an optional comment the worker can read (ARCHITECTURE §4.3,
+D-180–D-184). Ratings are informational: no other workflow reads them.
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| new → rated | `labour.rate` on the project; project not closed or cancelled; day is today or one of the six days before (Africa/Nairobi); attendance records the worker present or half day on one of the project's sites that day; no rating for that worker, project and day yet; the rater's sign-in phone is not the worker's | Version 1; `rated_at` from the database clock; `labourer.rated` (scores, day, whether a comment was given) |
+| rated → rated | The rater only, on the Nairobi day they gave the rating; `labour.rate` on the project; expected version; project not closed or cancelled; attendance still records the worker present or half day on the project that day | Scores and comment replaced; version + 1; `changed_at` from the database clock; `labourer.rating_changed` |
+
+There is no delete or later correction: a rating goes only with the worker's record (data
+erasure). The unique index makes a second rating of the same day conflict (409 `already-rated`),
+so concurrent raters cannot both succeed. The guard trigger repeats every precondition under the
+runtime role. Attendance is never blocked by a rating: if the day's muster is saved again or a
+correction is approved so that the worker no longer worked that day, the rating is **set aside**
+(kept, but left out of the sheet, the worker panel's averages and the portal, and refused for
+changes) and counts again if the day is restored. Workers read their own ratings in the labourer
+portal without rater identities, once their account's phone matches exactly one registered worker.
+
 ## Quality (D6.1)
 
 Implemented for the web app ([ARCHITECTURE §4.7](./ARCHITECTURE.md#47-quality-d61)). Every command runs in the tenant transaction with the project's permissions (role ∩ assignment), sends the version it read (409 `version-conflict`) and writes a `quality.*` audit event (IDs, codes, counts and outcomes only) in the same transaction. Closed and cancelled projects are read-only in the API and in every trigger. "Independent" means a different user from the one named; the database checks it again. "Reason" is 3–500 characters.

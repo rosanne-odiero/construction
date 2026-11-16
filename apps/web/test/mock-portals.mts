@@ -6,10 +6,12 @@
  * Synthetic data only; every response is checked against the shared schema by mock-api.mts.
  */
 import type { z } from "zod";
+import { ratingAverage, ratingTotals, summarizeRatings } from "@pm-buddy/domain";
 import {
   authResponseSchema,
   tenantsResponseSchema,
   workerPortalResponseSchema,
+  workerRatingsResponseSchema,
 } from "@pm-buddy/validation";
 import { handleClientPortal } from "./mock-client-portal.mts";
 
@@ -44,6 +46,24 @@ const ruiru = {
   county: "kiambu",
   town: "Ruiru",
 } as const;
+
+/** The labourer's own ratings (D3.5): scores and comments, never who gave them. */
+const workerRatings = [
+  {
+    id: "45000000-0000-4000-8000-000000000001",
+    project: { id: RUIRU, code: "RUI-HTS", name: "Ruiru Heights Apartments" },
+    workDate: "2026-11-09",
+    scores: { punctuality: 5, quality: 4, safety: 5, teamwork: 4 },
+    comment: "Ulifanya kazi nzuri kwenye ngazi.",
+  },
+  {
+    id: "45000000-0000-4000-8000-000000000002",
+    project: { id: RUIRU, code: "RUI-HTS", name: "Ruiru Heights Apartments" },
+    workDate: "2026-11-06",
+    scores: { punctuality: 4, quality: 4, safety: 3, teamwork: 4 },
+    comment: null,
+  },
+];
 
 export const isPortalPersona = (value: string | undefined): value is PortalPersona =>
   value === "client" || value === "labourer";
@@ -113,6 +133,18 @@ export function handlePortalPersona(
         pay: null,
       },
       schema: workerPortalResponseSchema,
+    };
+  if (persona === "labourer" && method === "GET" && path === "/portal/worker/ratings")
+    return {
+      body: {
+        linked: true,
+        summary: summarizeRatings(ratingTotals(workerRatings.map((rating) => rating.scores))),
+        ratings: workerRatings.map((rating) => ({
+          ...rating,
+          average: ratingAverage(rating.scores),
+        })),
+      },
+      schema: workerRatingsResponseSchema,
     };
   throw fail(403, "forbidden");
 }

@@ -88,8 +88,11 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 | D3.2 | **Site app foundation (Expo, Android-first)**: login with device binding; kiosk mode; encrypted SQLite; push/pull sync engine; sync status UI | Expo app on your Android phone (Expo Go) or an emulator, plus a web preview | The app works offline and syncs when back online | L | ⬜ |
 | D3.3 | **Attendance, fallback method first**:<br/>• QR/NFC worker card + photo + supervisor confirmation<br/>• Geofence checks; signed offline records; clock-drift detection<br/>• Anomaly rules: duplicates, two sites, impossible travel<br/>• Override workflow<br/>• Timesheet rules and public holidays<br/>• Muster roll in the web app | Kiosk check-in on the device, muster roll with flags, anomaly review | A foreman records attendance offline; it syncs correctly and anomalies are flagged | L | ⏳ |
 | D3.4 | **Attendance, first biometric method** (chosen in [QUESTIONS.md](./QUESTIONS.md)):<br/>• Uses the `CaptureMethod` interface<br/>• Gated per tenant behind a signed-off DPIA<br/>• Template-only encrypted storage<br/>• Retention and deletion jobs | Enrolment and identification on the kiosk, consent and DPIA gate, deletion log | **Phase 3 acceptance** | XL | ⬜ |
+| D3.5 | **Worker ratings** (product owner request, 16/11/2026):<br/>• Site agents, foremen, project managers and owners rate a worker's day 1–5 for punctuality, work quality, safety and teamwork, with an optional comment<br/>• Only days attendance records as worked, today or the six days before; one rating per worker, project and day; only the rater corrects it, the same day; a rating counts only while attendance still records its day as worked<br/>• Ratings and averages in the worker panel; workers see their own scores and comments (not who rated them) in the labourer portal | Rating sheet for a project day, rating dialog, worker panel ratings, "My ratings" in the labourer portal | A supervisor rates the day's workers; the rules hold in the API and the database; a worker sees their ratings | M | 🔎 |
 
 > **D3.3 is partly built (⏳).** The web-only slice is built and verified locally on `phase-3/d3.3-web-timesheets` (not pushed, not reviewed): pluggable capture method (`web_manual` implemented; `qr_card`, `face`, `fingerprint` and `terminal` reserved with nullable evidence columns), the daily muster roll in the web app with supervisor confirmation by a different person, corrections and anomaly review, effective-dated timesheet rules (company default and project overrides) with the 2026–2027 Kenyan public holidays, weekly periods with a Thursday 18:00 cut-off, approval that snapshots immutable timesheet lines for payroll, and adjustments to approved periods. Still to do for D3.3: the site-app check-in (QR/NFC card and photo), geofence checks, signed offline records, clock-drift detection, duplicate and impossible-travel rules, and the kiosk flow (they need D3.2). See [IMPLEMENTATION_STATUS](./IMPLEMENTATION_STATUS.md#d33-web-attendance-and-timesheets-branch-phase-3d33-web-timesheets).
+
+> **D3.5 is built, pending review (🔎)** on `phase-3/d3.5-worker-ratings`: the `/labour/ratings` sheet and rating dialog, the worker panel's ratings, "My ratings" in the labourer portal, the `labour.rate` permission and `labourer_ratings` with its guard trigger. Ratings are informational only: nothing changes pay, engagements or the do-not-rehire flag by itself (D-184; COMPLIANCE-REVIEW CR-DP-14). See the [demo](./demos/phase-3.md#d35-worker-ratings) and [status](./IMPLEMENTATION_STATUS.md#d35-worker-ratings-branch-phase-3d35-worker-ratings).
 
 ### Phase 4: Payroll and M-Pesa
 
@@ -98,6 +101,7 @@ Size is relative effort (S < M < L < XL). It's not a calendar estimate.
 | D4.1 | **Payroll engine**:<br/>• Daily, weekly, fortnightly or monthly pay periods<br/>• Gross pay from attendance, overtime, piece-rate output and allowances<br/>• Versioned statutory rules (PAYE, NSSF, SHIF, Housing Levy, NITA)<br/>• Advances with automatic recovery<br/>• Payslip preview; statutory export CSVs | Payroll batch builder, payslip preview, rule versions screen | Unit tests cover every rule boundary; seed rules are flagged `COMPLIANCE-REVIEW` | L | 🔎 |
 | D4.2 | **Daraja integration**:<br/>• `PaymentProvider` interface with `DarajaProvider`: OAuth, STK Push + query, C2B, B2C, B2B, transaction status, account balance, reversal<br/>• Per-tenant credentials<br/>• Outbox + BullMQ<br/>• Callback hardening<br/>• Local mock Daraja server for success, failure, timeout, duplicate and out-of-order callbacks | Payments console: requests, callbacks, state timeline, unknown-callback alerts | Mock and sandbox flows pass the integration suite; [review and external sandbox gate](./demos/phase-4.md) | XL | 🔎 |
 | D4.3 | **Approvals and payouts**:<br/>• Maker-checker with step-up MFA and approval limits<br/>• Float check, then bulk B2C payout with per-worker status<br/>• Recipient name check<br/>• SMS payslips<br/>• Daily reconciliation and statement upload<br/>• M-Pesa charges booked as cost<br/>• Cash and bank payments; unusual-payout alerts | Approval flow, live payout statuses, reconciliation screen | **Phase 4 acceptance:** a weekly payroll for 40 workers pays out in sandbox with every callback reconciled; failed and duplicate cases are handled | L | ⬜ |
+| D4.4 | **Worker pay history and "Pay today"** (product owner request, 16/11/2026; built on D4.3 once it merges):<br/>• How much each worker was paid over a period: a payments section on the worker record and a worker payments report (date range, project, PDF/Excel) with gross, deductions, net and confirmed payments by method<br/>• "Pay today": a site's day of pay prepared from approved attendance as a daily batch, approved by a different person with step-up MFA and paid by M-Pesa from the website (D-185: no single-person path) | Worker payment history and report; the Pay today flow with live payout statuses | A day's pay for a site goes from attendance to confirmed sandbox payouts in the web app with two people; each worker's paid totals match the payout ledger | M | ⬜ |
 
 > **D4.1 is built, pending review (🔎).** The live `/payroll`
 > screens now connect the existing engine/API to batch preparation and immutable
@@ -200,9 +204,9 @@ Some brief sections (§5.8, §5.14, §5.15) aren't assigned to a phase in the br
 | §5.1 Projects and sites | D1.4 (create project), D2.1 |
 | §5.2 Bill of Quantities | D2.2, D2.3, D6.3 |
 | §5.3 Materials, procurement and stores | D5.1–D5.3; supplier portal D7.2 |
-| §5.4 Labour management | D3.1 (productivity and ledger finished in D4.1/D6.3) |
+| §5.4 Labour management | D3.1 (productivity and ledger finished in D4.1/D6.3), D3.5 (worker ratings) |
 | §5.5 Attendance and biometrics | D3.2–D3.4 |
-| §5.6 Payroll | D4.1, D4.3 |
+| §5.6 Payroll | D4.1, D4.3, D4.4 (worker pay history, Pay today) |
 | §5.7 M-Pesa and payments | D4.2, D4.3, D7.1 (STK/C2B for clients), D5.2 (B2B for suppliers) |
 | §5.8 Spending, budget and cash flow | D5.4 |
 | §5.9 Progress and site diary | D6.1–D6.3 |
@@ -260,4 +264,5 @@ These have legal or commercial lead times, so they should start early:
 | D6.3 | `phase-6/d6.3-valuations` (part A), `phase-6/d6.3b-subcontracts` (part B) |
 | D3.1 | `phase-3/d3.1-labour-registry` |
 | D3.3 (web slice) | `phase-3/d3.3-web-timesheets` |
+| D3.5 | `phase-3/d3.5-worker-ratings` |
 | … | `phase-N/dN.x-<slug>` |

@@ -362,6 +362,7 @@ const pages = [
   `/labour/gangs/${GANG}`,
   "/labour/setup",
   "/labour/alerts",
+  "/labour/ratings",
 ];
 
 for (const locale of ["en", "sw"] as const) {

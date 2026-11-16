@@ -7,6 +7,7 @@ import {
   accreditationAlertsResponseSchema,
   gangsResponseSchema,
   labourerAttendanceResponseSchema,
+  labourerRatingsResponseSchema,
   labourerResponseSchema,
   labourersResponseSchema,
   labourSetupResponseSchema,
@@ -91,6 +92,10 @@ export default async function LabourPage({
   const attendance =
     worker && detail?.ok
       ? await serverApi(`/attendance/labourers/${worker}/summary`, labourerAttendanceResponseSchema)
+      : null;
+  const ratings =
+    worker && detail?.ok
+      ? await serverApi(`/labour/labourers/${worker}/ratings`, labourerRatingsResponseSchema)
       : null;
   const t = await getTranslations("labourLive");
   const locale = await getLocale();
@@ -375,6 +380,7 @@ export default async function LabourPage({
             closeHref={closeHref}
             setup={setup.ok ? setup.data : null}
             attendance={attendance?.ok ? attendance.data : null}
+            ratings={ratings?.ok ? ratings.data : null}
           />
         ) : (
           <p role="alert" className="text-sm text-destructive">

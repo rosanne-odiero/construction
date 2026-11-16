@@ -28,6 +28,7 @@ import { LabourCrypto } from "../modules/labour/labour-support.js";
 import { seedAttendance, type AttendanceSeedSummary } from "./attendance-seed.js";
 import { seedLabour, type LabourSeedSummary } from "./labour-seed.js";
 import { seedPayroll, type PayrollSeedSummary } from "./payroll-seed.js";
+import { seedRatings, type RatingsSeedSummary } from "./ratings-seed.js";
 import { seedProcureToPay, type ProcureToPaySeedSummary } from "./demo-procure-to-pay.js";
 import { seedStores, type StoresSeedSummary } from "./demo-stores.js";
 import { seedQuality, type QualitySeedSummary } from "./quality-seed.js";
@@ -56,6 +57,7 @@ import { seedSubcontracts, type SubcontractsSeedSummary } from "./subcontracts-s
  * Kenyan sites, geofences, WBS and milestones, (D3.1) the labour registry: trades, rates, 40
  * synthetic labourers with consent, gangs and NCA cards (labour-seed.ts), (D3.3) nine weeks of
  * synthetic attendance with timesheet periods, anomalies and an adjustment (attendance-seed.ts),
+ * (D3.5) worker ratings on the five days before today (ratings-seed.ts),
  * and (D5.1) the starter catalogue with synthetic suppliers, prices and payout details
  * (demo-procurement.ts), and (D6.2) the RUI-HTS schedule with a baseline, slipped actuals and
  * delays (schedule-seed.ts), and (D5.4) an approved RUI-HTS budget, cost codes, a petty-cash float
@@ -436,6 +438,7 @@ export type SeedSummary = {
   procurement: ProcurementSeedSummary;
   labour: LabourSeedSummary;
   attendance: AttendanceSeedSummary;
+  ratings: RatingsSeedSummary;
   payroll: PayrollSeedSummary;
   procureToPay: ProcureToPaySeedSummary;
   stores: StoresSeedSummary;
@@ -629,6 +632,11 @@ export async function seedDemo(
     },
     audit,
   );
+  // After attendance: only days attendance records as worked can be rated (D3.5).
+  const ratings = await seedRatings(app, tenantId, [
+    userOf("siteAgent").id,
+    userOf("projectManager").id,
+  ]);
   const payroll = await seedPayroll(app, tenantId, {
     ownerId: owner.id,
     pmId: userOf("projectManager").id,
@@ -744,6 +752,7 @@ export async function seedDemo(
     procurement,
     labour,
     attendance,
+    ratings,
     payroll,
     procureToPay,
     stores,

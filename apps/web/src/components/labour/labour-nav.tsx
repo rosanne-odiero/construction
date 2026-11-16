@@ -5,12 +5,13 @@ import { cn } from "@/lib/utils";
 const SECTIONS = [
   { key: "registry", href: "/labour" },
   { key: "gangs", href: "/labour/gangs" },
+  { key: "ratings", href: "/labour/ratings" },
   { key: "alerts", href: "/labour/alerts" },
   { key: "setup", href: "/labour/setup" },
 ] as const;
 export type LabourSection = (typeof SECTIONS)[number]["key"];
 
-/** Sub-navigation of the live labour registry (D3.1). */
+/** Sub-navigation of the live labour registry (D3.1) and worker ratings (D3.5). */
 export function LabourNav({ current, alerts }: { current: LabourSection; alerts?: number }) {
   const t = useTranslations("labourLive.nav");
   return (

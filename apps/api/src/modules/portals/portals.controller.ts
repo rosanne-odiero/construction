@@ -1,6 +1,10 @@
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { invitationResponseSchema, workerPortalResponseSchema } from "@pm-buddy/validation";
+import {
+  invitationResponseSchema,
+  workerPortalResponseSchema,
+  workerRatingsResponseSchema,
+} from "@pm-buddy/validation";
 import type { Request } from "express";
 import { openApi } from "../../common/openapi.js";
 import { AuthService } from "../identity/auth.service.js";
@@ -29,6 +33,18 @@ export class PortalsController {
   @ApiOkResponse({ schema: openApi(workerPortalResponseSchema) })
   async worker(@Req() req: Request) {
     return this.portals.worker(await this.auth.principal(req), req);
+  }
+
+  @Get("portal/worker/ratings")
+  @ApiOperation({
+    summary: "Labourer portal: my ratings on my projects (D3.5)",
+    description:
+      "Requires portal.worker. The account is linked to the worker register only when its phone number matches exactly one registered worker (`linked: false` otherwise, with nothing listed). Scores and comments only, never who gave them; the newest 20 with averages over all of them.",
+    operationId: "getWorkerRatings",
+  })
+  @ApiOkResponse({ schema: openApi(workerRatingsResponseSchema) })
+  async workerRatings(@Req() req: Request) {
+    return this.portals.workerRatings(await this.auth.principal(req), req);
   }
 
   @Post("projects/:id/labourers/invitations")

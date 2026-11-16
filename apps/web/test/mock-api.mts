@@ -84,6 +84,7 @@ import {
 } from "./mock-procurement.mts";
 import { attendanceFixture, handleAttendance, type AttendanceState } from "./mock-attendance.mts";
 import { handleLabour, labourFixture, type LabourState } from "./mock-labour.mts";
+import { handleRatings, ratingsFixture, type RatingsState } from "./mock-ratings.mts";
 import { handlePayroll, payrollFixture, type PayrollState } from "./mock-payroll.mts";
 import { handleDiaries, initialDiaries } from "./mock-diaries.mts";
 import { handlePortalPersona, isPortalPersona } from "./mock-portals.mts";
@@ -226,6 +227,8 @@ type State = {
   spending: SpendingState;
   labour: LabourState;
   attendance: AttendanceState;
+  /** D3.5 worker ratings (mock-ratings.mts). */
+  ratings: RatingsState;
   payroll: PayrollState;
   diaries: SiteDiary[];
   photos: SitePhoto[];
@@ -523,6 +526,7 @@ function fixture(persona: Persona): State {
     projects,
     labour,
     attendance: attendanceFixture(ruiru.sites[1]!.site.id, labour),
+    ratings: ratingsFixture(),
     payroll: payrollFixture(),
     team: new Map([
       [
@@ -970,6 +974,36 @@ async function handle(
     body,
   );
   if (payroll) return payroll;
+  // Before the labour mock, whose labourer routes would otherwise answer the ratings path.
+  const ratings = handleRatings(
+    {
+      user: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
+      permissions: rolePermissions(state),
+      projects: state.projects.map(({ project }) => ({
+        id: project.id,
+        code: project.code,
+        name: project.name,
+        status: project.status,
+      })),
+      sites: new Map(
+        state.projects.flatMap(({ sites }) =>
+          sites.map(({ site }) => [site.id, site.name] as const),
+        ),
+      ),
+      labour: state.labour,
+      attendance: state.attendance,
+      fail: (status, code) => {
+        throw new HttpError(status, code);
+      },
+      parse,
+    },
+    state.ratings,
+    method,
+    path,
+    query,
+    body,
+  );
+  if (ratings) return ratings;
   // The labour and attendance mocks know two personas; anyone but the owner acts as the agent.
   const labour = handleLabour(
     {

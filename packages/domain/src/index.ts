@@ -140,6 +140,7 @@ export * from "./quality/index.js";
 export * from "./valuations/index.js";
 export * from "./safety/index.js";
 export * from "./plant/index.js";
+export * from "./ratings.js";
 export * from "./reports/index.js";
 export * from "./documents/index.js";
 export * from "./subcontracts/index.js";

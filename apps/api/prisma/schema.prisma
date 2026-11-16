@@ -271,6 +271,7 @@ model Project {
   instructions     Instruction[]
   variations       VariationOrder[]
   engagements      LabourEngagement[]
+  labourerRatings  LabourerRating[]
   labourRates      LabourRate[]
   gangs            Gang[]
   dnrEvents        DoNotRehireEvent[]
@@ -1459,6 +1460,7 @@ model Labourer {
   ledGangs              Gang[]
   gangMembers           GangMembership[]
   attendance            AttendanceRecord[]
+  ratings               LabourerRating[]
   corrections           AttendanceCorrection[]
   anomalies             AttendanceAnomaly[]
   timesheetLines        TimesheetLine[]
@@ -1511,6 +1513,34 @@ model LabourEngagement {
   @@index([tenantId, labourerId])
   @@index([tenantId, projectId])
   @@map("labour_engagements")
+}
+
+// A supervisor's 1–5 scores for one worker's day on one project (D3.5): at most one per worker,
+// project and day, only for a day attendance records them as working, only within the rating
+// window, and changed only by the rater on the day they gave it (trigger). Never deleted except
+// with the worker's record. The worker sees the scores and comment, not the rater.
+model LabourerRating {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  labourerId  String    @map("labourer_id") @db.Uuid
+  workDate    DateTime  @map("work_date") @db.Date
+  punctuality Int       @db.SmallInt
+  quality     Int       @db.SmallInt
+  safety      Int       @db.SmallInt
+  teamwork    Int       @db.SmallInt
+  comment     String?   @db.VarChar(500)
+  ratedBy     String    @map("rated_by") @db.Uuid
+  ratedAt     DateTime  @default(now()) @map("rated_at") @db.Timestamptz
+  changedAt   DateTime? @map("changed_at") @db.Timestamptz
+  version     Int       @default(1)
+  project     Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: NoAction)
+  labourer    Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, projectId, labourerId, workDate])
+  @@index([tenantId, labourerId, workDate])
+  @@map("labourer_ratings")
 }
 
 // Consent to process registration data (Kenya Data Protection Act 2019): which notice version and

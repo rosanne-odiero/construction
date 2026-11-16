@@ -24,6 +24,7 @@
 | BQ versions, variations and build-ups (D2.3) | Live baseline approval and contract sums on `/projects/[id]/bq` and the project overview, `…/bq/variations` (list, editor, submit/approve/reject/reopen/cancel/rebase with step-up), `…/bq/instructions`, `…/bq/versions` (history and compare), `/rate-buildups` (company library, versions, item links) and `/bq`; browser tests run against the mock API; no approval limits by amount, no attachment upload, no theoretical consumption yet |
 | `/labour` (D3.1) | Live labourer registry (saved views, worker side panel with masked identifiers and audited reveal, registration with consent, consent screen, gangs, trades & rates, NCA alerts); the D0 labour screens moved to `/prototype/labour` and stay labelled. Built and verified locally on branch `phase-3/d3.1-labour-registry`; not pushed, not reviewed, not approved |
 | `/attendance` (D3.3, web slice) | Live attendance and timesheets: overview, daily muster roll per project/site/day (keyboard entry, bulk "present", gang filter, inline flags), submit and confirm by a different person, corrections, anomaly review, weekly timesheet periods (submit, approve with an immutable snapshot, reject, reopen), adjustments to approved periods, rules & holidays, and an attendance summary in the worker panel; the D0 attendance screens moved to `/prototype/attendance`. Web-manual capture only (no site app, QR/NFC, photos, GPS/geofence, offline or biometrics). Built and verified locally on branch `phase-3/d3.3-web-timesheets`; not pushed, not reviewed, not approved |
+| `/labour/ratings` (D3.5) | Live worker ratings: the day's sheet per project (everyone that attendance records as present or half day, today and the six days before), the rating dialog (punctuality, quality, safety, teamwork 1–5 and an optional comment; the rater corrects it the same day), the worker panel's ratings and averages, and **My ratings** in the labourer portal without rater names. Informational only (D-184). Built and verified locally on branch `phase-3/d3.5-worker-ratings`; not pushed. Worker pay history and "Pay today" are D4.4, after D4.3 |
 | `/payroll` (D4.1) | Live project/pay-period batch builder, recalculation, immutable submission, reasoned cancellation, register and payslip preview; rule versions and independent MFA verification, calendars, allowances, piece-rate output, advances and MFA-protected CSV templates. No payout approval or money movement; see the completion evidence below |
 | `/projects/[id]?tab=schedule` (D6.2) | Live schedule: SVG Gantt chart (critical path, baseline ghosts, actual dates, milestone diamonds, dependency arrows, today's line in Nairobi time, week/month zoom, keyboard item list, table alternative), activity editor with FS/SS/FF/SF links and lags, progress with a declared basis, per-project working calendar with the company's public holidays, CPM from `packages/domain`, append-only baselines with variance in working days, and the versioned delay log. Built and verified locally on `phase-6/d6.2-schedule`; not committed, not reviewed. No resource levelling, calendars per activity, MS Project/P6 import or client-portal schedule; measured progress and EVM are D6.3 |
 | CI | Existing lint/type/test/build/API/security workflows retained; browser/a11y job added |
@@ -2443,3 +2444,125 @@ repository's bootstrap grants, then migrations):
   Report email scheduling has not been moved to this payment-specific outbox.
 - Production is blocked. Credential-manager actions still need organisational controls and the
   release security review; unsigned callbacks and leaked callback paths retain residual risk.
+
+## D3.5 worker ratings (branch `phase-3/d3.5-worker-ratings`)
+
+Status: built and verified locally in a separate git worktree (`construction-rat`, from
+`origin/main` at `f9c0975`) with its own Docker stack (`pmb-rat`: PostgreSQL 56032, Valkey 56979,
+RustFS 9600/9601, Mailpit 1625/8625); independently reviewed (one finding, fixed below); committed
+on the branch, **not pushed**. Roadmap: 🔎. Design: [ARCHITECTURE §4.3](./ARCHITECTURE.md#43-labour-module-d31)
+and decisions D-180 to D-185; model in [ERD §6](./ERD.md#6-labour-attendance-and-biometrics);
+workflow in [WORKFLOWS](./WORKFLOWS.md#worker-ratings-d35); invariants in
+[INVARIANTS](./INVARIANTS.md); threats A-140 to A-143 and the D3.5 test row in
+[THREAT_MODEL](./THREAT_MODEL.md); acceptance rows in [ACCEPTANCE_MATRIX](./ACCEPTANCE_MATRIX.md);
+settings in [CONFIGURATION](./CONFIGURATION.md) (`labour.rating_*`); Q-P7 to Q-P9 in
+[QUESTIONS](./QUESTIONS.md); data protection as CR-DP-14 in [COMPLIANCE_TODO](./COMPLIANCE_TODO.md);
+walkthrough in the [Phase 3 demo](./demos/phase-3.md#d35-worker-ratings).
+
+The product owner asked on 16/11/2026 for three things: how much each worker was paid over a
+period, ratings by site supervisors, and paying a day's wages from the website. Payroll batches on
+`main` stop at "submitted" (no approval, payout or "paid" state), and D4.3 (approvals and payouts)
+is in progress on its own branch, so the owner chose to build ratings now (D3.5) and the other two
+as **D4.4** on top of D4.3 once it merges, keeping two-person approval for "Pay today" (D-185).
+The owner's answers (Q-P7): project managers, site agents, foremen and owners rate; punctuality,
+work quality, safety and teamwork, 1–5 each with an optional comment; at most once per worker,
+project and day; workers see their own ratings.
+
+**Done-when** (ROADMAP D3.5): a supervisor rates the day's workers; the rules hold in the API and
+the database; a worker sees their ratings. Evidence: `ratings.e2e-spec.ts` (API and SQL as
+`pmb_app`), the browser tests in `apps/web/test/ratings.spec.ts` and the real-API smoke below.
+
+**What was built**
+
+- Shared contracts: `packages/types/src/ratings.ts` (criteria, scores 1–5, the seven-day window,
+  comments up to 500 characters, history limits) and the project-scoped permission `labour.rate`
+  (default for project managers, site agents and foremen; owners have every permission);
+  `packages/domain/src/ratings.ts` (window, the rater's same-day change rule, means rounded half up
+  to one decimal in integer arithmetic); strict request/response schemas in
+  `packages/validation/src/ratings.ts`.
+- Database: migration `20261216090000_worker_ratings`: `labourer_ratings` (unique per worker,
+  project and day; forced RLS; no DELETE for `pmb_app`), the guard trigger
+  `app.guard_labourer_rating` (worked attendance on insert and change, the window, the signed-in
+  rater, the database clock, same-day versioned changes by the rater only, closed projects
+  read-only, deletes only with the worker's record), `labour.rate` in the role and assignment
+  permission CHECKs, and a backfill of `labour.rate` for existing project managers, site agents and
+  foremen assigned with `labour.view`.
+- API: `LabourRatingsController` (projects to rate, the day's sheet, rate, change, a worker's
+  history with averages) and `GET /api/v1/portal/worker/ratings`; audit `labourer.rated` and
+  `labourer.rating_changed` with the scores but never the comment; five new problem codes.
+- Web: **Labour → Ratings** (`/labour/ratings`: project and day, the rating window, everyone who
+  worked with their rating; a table on wide screens and one card per worker below 1024 px; it opens
+  on the first project where anyone is working today, from `workingToday` in the projects
+  response), the rating dialog (one radio group of stars per criterion, keyboard operable, the
+  number always in text), the worker panel's **Ratings** section and **My ratings** in the
+  labourer portal; EN/SW, light/dark, 360 px.
+- Demo seed: about 75 synthetic ratings (74 and 77 on two runs; it depends on the seeded attendance)
+  over the five days before today by the seeded project manager and site agent (idempotent; today
+  is left to rate).
+
+**Independent review of D3.5**
+
+A read-only code review of the whole diff traced the trigger's time-zone handling, the
+cascade-delete path, the permission backfill, tenant isolation and the API, schema and mock
+contracts, and raised one finding, fixed:
+
+| # | Severity | Finding | Fix and evidence |
+|---|---|---|---|
+| 1 | Medium | A rating could outlive the worked day it rests on. Attendance was checked only when the rating was inserted; a draft muster saved again, or an approved correction, could then make the day absent. The rating could not be deleted or changed, dropped off the day's sheet, but still counted in the office averages and in the worker's portal. One supervisor holding both `attendance.record` and `labour.rate` could do this alone | Attendance stays correctable (it drives pay), so the rating is **set aside** rather than the attendance change refused: history, averages and the portal count only ratings whose day attendance still records as worked; a change needs the worked day too (409 `not-worked`; the trigger now checks attendance on update as well as insert); the rating counts again if the day is restored (D-180 amended). e2e "counts a rating only while attendance still records its day as worked" and the portal test. Mutation checks, each reverted in turn: history without the filter, the portal without it, a change without the attendance check, and the trigger checking attendance on insert only: each made the named test fail |
+
+Also added during verification: a test of two workers registered with one (family) phone number; a
+portal account with that number is linked to neither (`linked: false`).
+
+**Found while preparing and running the real-API smoke, and fixed**
+
+- A supervisor on two projects (the seeded site agent is on Ruiru Heights and Juja Road Duplex)
+  landed on the alphabetically first project, where nobody was working: an empty sheet. The
+  projects response now carries `workingToday` and the sheet opens on the first project where
+  anyone is working today (`defaultRatingProject`, unit-tested; the e2e checks the count).
+- At 360 px the sheet was a table in a horizontal scroller with the **Rate** button off-screen.
+  Below 1024 px each worker is now a card with the button beside the name (browser test "on a phone
+  each worker is a card…": the button inside 360 px, no overflow, axe-clean, the dialog opens).
+- The English page description read "Rate the workers attendance records as working…"; it now reads
+  "Rate the workers that attendance records as working…" (with the OpenAPI text and comments).
+
+**Verification**
+
+| Check | Result |
+|---|---|
+| `turbo run lint typecheck test i18n:check build` | All 30 tasks passed, including the API and web production builds |
+| Unit tests | types 38, i18n 3, validation 142, domain 577, mock Daraja 5, API 169, web 115 |
+| Lint | API oxlint clean; web ESLint 0 errors (the 2 existing warnings in `mock-client-portal.mts`) |
+| EN/SW message parity and ICU compilation | 10,266 keys in each locale; passed |
+| Ratings e2e (`ratings.e2e-spec.ts`) | 10 passed |
+| Full API e2e, `--maxWorkers=2`, on a rebuilt `pmb_test` | **32 files, 408 passed**; the Daraja sandbox file (1 test) skipped without credentials |
+| Mutation checks (review finding) | 4 of 4 failed the named test, then restored |
+| Browser suite, `--workers=2`, after the last web change | **202 passed** (8.6 min), including the ratings spec (6 tests: rating and same-day correction, the phone cards in Kiswahili and dark mode, past days and the window, the worker panel and finance refused, the portal card in EN and SW) and the labour pages in EN/SW, light/dark and at 360 px |
+| Ratings and labour browser specs after the last web change | 19 passed |
+| Real-API smoke: isolated stack, `db:migrate`, `db:seed`, API (`pnpm start`, :4700) and `next start` on 127.0.0.1:3700; a temporary Playwright script signed in through the API (password, and TOTP for finance) | **19 of 19 checks passed**: Kevin rated a worker through the dialog (4.5 shown on the row, no console errors); the day's muster saved again with that worker absent left the rating out of the history and the sheet, and restoring the day brought it back; Brian's sheet and dialog in Kiswahili and dark mode fit 360 px; the worker panel showed the summary; finance was refused the sheet; Brian invited a rated worker by phone, the SMS link was read from Mailpit and the worker joined with a PIN: the portal was linked, showed the same number of ratings and no rater names, and fit 360 px in EN/light and SW/dark. Found the first two issues above. Screenshots kept outside the repository in the session folder `d35-screenshots/`; the script was deleted |
+| Formatting | Prettier |
+
+During verification the shared test database had to be rebuilt twice (drop, create, the
+repository's bootstrap grants, then migrations; only `pmb_test` in this worktree's own stack).
+Under heavy load from other sessions, `client-portal.e2e-spec.ts` "keeps each client to its
+assigned projects…" can time out after relaxing the portal policies, so its restore never runs:
+an early overloaded run left 3 restrictive `*_client_portal` policies at `USING (true)`, and a
+later one left 35 of the 51, which made later runs fail on them. After each rebuild the file passed
+alone, and the final full run above passed. Other load-related failures, each passing alone and in
+later full runs: the payments queue-outage test ("expected 0 to be greater than 0" on the waiting
+inbox count) and the demo-seed test in `projects.e2e-spec.ts`, whose `variationOrder.findMany` has
+no `orderBy` (the two statuses came back in the other order; pre-existing, not changed here).
+
+**Not accepted / still open**
+
+- **Worker pay history and "Pay today" are not built.** They are D4.4, on top of D4.3's approvals
+  and payouts once it merges, with two-person approval for "Pay today" (D-185, Q-P9).
+- **Data protection review (CR-DP-14):** no retention period, notice to workers or dispute route
+  for ratings yet; the DPIA needs a section on them before a pilot (Q-P8).
+- A portal account is linked to a worker only by an unambiguous phone match; workers on a shared
+  phone see nothing. Self-rating is detected only through the rater's sign-in phone number.
+- A rating set aside by an attendance change is shown nowhere; only the audit log keeps its scores.
+- Ratings are not used anywhere else yet (reports, dashboards, registry filters), and there is no
+  review of rating spread per rater (A-140 "not built").
+- The mock API's labour routes admit only the owner persona, so the worker-panel browser test runs
+  as the owner; finance and site-agent reads are covered by the API e2e and the real-API smoke.
+- No field review with real supervisors yet. The branch is not pushed: no pull request or CI run.

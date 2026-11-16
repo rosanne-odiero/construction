@@ -633,7 +633,8 @@
         "manage": "Kusimamia wafanyakazi",
         "view_sensitive": "Kuona taarifa nyeti za wafanyakazi",
         "do_not_rehire": "Kuweka alama ya kutoajiri tena",
-        "consent": "Kurekodi ridhaa ya mfanyakazi"
+        "consent": "Kurekodi ridhaa ya mfanyakazi",
+        "rate": "Kutathmini wafanyakazi"
       },
       "attendance": {
         "view": "Kuona mahudhurio",
@@ -1969,6 +1970,11 @@
     "viewLimit": "Unaweza kuhifadhi hadi mionekano 20.",
     "mfaRequired": "Weka uthibitishaji wa hatua mbili kwenye akaunti yako kabla ya kufanya hivi.",
     "labourRule": "Hii inavunja kanuni ya daftari la wafanyakazi. Hakuna kilichohifadhiwa.",
+    "ratingExists": "Mfanyakazi huyu tayari ana tathmini ya siku hiyo kwenye mradi huu.",
+    "ratingNotWorked": "Mahudhurio hayaonyeshi kuwa mfanyakazi huyu alifanya kazi kwenye mradi siku hiyo. Rekodi mahudhurio kwanza.",
+    "ratingWindow": "Unaweza kutathmini leo na siku sita zilizopita tu.",
+    "ratingLocked": "Ni aliyetoa tathmini tu anayeweza kuibadilisha, siku hiyo hiyo aliyoitoa.",
+    "ratingSelf": "Huwezi kutathmini kazi yako mwenyewe.",
     "periodLocked": "Kipindi hicho cha saa za kazi kimewasilishwa au kuidhinishwa, kwa hiyo mahudhurio yake hayawezi kubadilishwa hapa. Tumia marekebisho.",
     "periodOverlap": "Tarehe hizo zinaingiliana na kipindi kingine cha saa za kazi.",
     "dayNotDraft": "Siku hii ya mahudhurio imeshawasilishwa. Omba usahihishaji badala yake.",
@@ -3215,7 +3221,12 @@
       "attendanceTitle": "Mahudhurio",
       "attendanceSoon": "Siku zako eneoni zitaonekana hapa mara kurekodi mahudhurio kutakapoanza.",
       "payTitle": "Malipo",
-      "paySoon": "Malipo yako na malipo ya M-Pesa yataonekana hapa mara mishahara itakapoanza. Pia utaweza kuangalia malipo yako kwa USSD."
+      "paySoon": "Malipo yako na malipo ya M-Pesa yataonekana hapa mara mishahara itakapoanza. Pia utaweza kuangalia malipo yako kwa USSD.",
+      "ratingsTitle": "Tathmini zangu",
+      "ratingsIntro": "Wasimamizi wako hutathmini kazi yako kutoka 1 (duni) hadi 5 (bora kabisa).",
+      "ratingsNone": "Bado huna tathmini.",
+      "ratingsUnlinked": "Hatukuweza kulinganisha nambari yako ya simu na rekodi moja ya mfanyakazi. Omba ofisi ya eneo la kazi ikague usajili wako.",
+      "ratingsSummary": "{average} kati ya 5 kutoka {count, plural, one {tathmini #} other {tathmini #}}"
     },
     "join": {
       "title": "Jiunge kama kibarua",
@@ -3866,6 +3877,7 @@
       "label": "Sehemu za wafanyakazi",
       "registry": "Daftari",
       "gangs": "Vikundi",
+      "ratings": "Tathmini",
       "alerts": "Arifa za NCA",
       "setup": "Fani na viwango"
     },
@@ -4087,6 +4099,14 @@
         "to": "Hali mpya",
         "leftHint": "Kumbukumbu zao zinabaki. Kuwapangia mradi tena baadaye kunawarudisha kazini.",
         "reason": "Sababu (si lazima)"
+      },
+      "ratings": {
+        "title": "Tathmini",
+        "summary": "{average} kati ya 5 kutoka {count, plural, one {tathmini #} other {tathmini #}}",
+        "none": "Bado hakuna tathmini.",
+        "recent": "Tathmini za karibuni",
+        "rate": "Tathmini wafanyakazi",
+        "scope": "Zinahesabiwa tathmini za miradi ambayo unaweza kuona wafanyakazi wake tu."
       }
     },
     "consent": {
@@ -4376,6 +4396,65 @@
       "daysAgo": "{days, plural, one {siku # iliyopita} other {siku # zilizopita}}",
       "daysLeft": "{days, plural, =0 {inaisha leo} one {baada ya siku #} other {baada ya siku #}}",
       "none": "Hakuna arifa za NCA."
+    },
+    "ratings": {
+      "title": "Tathmini za wafanyakazi",
+      "description": "Tathmini wafanyakazi ambao mahudhurio yanaonyesha walifanya kazi kwenye mradi siku hiyo: alama 1 hadi 5 kwa kufika kwa wakati, ubora wa kazi, usalama na ushirikiano.",
+      "filters": {
+        "label": "Chagua mradi na siku",
+        "project": "Mradi",
+        "date": "Siku",
+        "show": "Onyesha",
+        "window": "Unaweza kutathmini leo na siku sita zilizopita ({from} hadi {to})."
+      },
+      "noProjects": "Hujapangiwa mradi ulio wazi ambapo unaweza kutathmini wafanyakazi.",
+      "table": {
+        "caption": "Wafanyakazi waliofanya kazi kwenye {project} tarehe {date}",
+        "worker": "Mfanyakazi",
+        "attendance": "Mahudhurio",
+        "rating": "Tathmini",
+        "ratedBy": "Imetolewa na",
+        "actions": "Vitendo",
+        "empty": "Hakuna aliyerekodiwa kufanya kazi kwenye mradi huu siku hiyo. Rekodi mahudhurio kwanza."
+      },
+      "notRated": "Hajatathminiwa",
+      "closed": "Siku hii haiwezi kutathminiwa tena: tathmini hutolewa siku hiyo au ndani ya siku sita.",
+      "readOnly": "Mradi huu umefungwa au umeghairiwa, kwa hiyo ni wa kusoma tu.",
+      "actions": {
+        "rate": "Tathmini",
+        "change": "Badilisha",
+        "rateWorker": "Tathmini {name}",
+        "changeWorker": "Badilisha tathmini ya {name}"
+      },
+      "dialog": {
+        "rateTitle": "Tathmini {name}",
+        "changeTitle": "Badilisha tathmini ya {name}",
+        "description": "{date} kwenye {project}. Toa alama kwa kila kipengele kutoka 1 (duni) hadi 5 (bora kabisa).",
+        "comment": "Maoni (si lazima)",
+        "commentHint": "Mfanyakazi anaweza kusoma alama hizi na maoni yako kwenye tovuti yake. Hataona jina lako.",
+        "save": "Hifadhi tathmini",
+        "saveChange": "Hifadhi mabadiliko",
+        "required": "Toa alama kwa vipengele vyote vinne kabla ya kuhifadhi.",
+        "changeNote": "Unaweza kubadilisha tathmini siku uliyoitoa tu."
+      },
+      "criteria": {
+        "punctuality": "Kufika kwa wakati",
+        "quality": "Ubora wa kazi",
+        "safety": "Usalama",
+        "teamwork": "Ushirikiano"
+      },
+      "scale": {
+        "poor": "Duni",
+        "fair": "Wastani",
+        "good": "Nzuri",
+        "veryGood": "Nzuri sana",
+        "excellent": "Bora kabisa",
+        "none": "Haijapewa alama"
+      },
+      "score": "{score} – {label}",
+      "average": "{average} kati ya 5",
+      "byOn": "{name}, {time}",
+      "changed": "imebadilishwa {time}"
     }
   },
   "attendanceLive": {

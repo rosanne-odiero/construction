@@ -92,6 +92,10 @@ Every rule the brief says must not be hard-coded is a **configuration key** (ARC
 | `labour.minimum_age_years` | platform | 18 | Brief §6 | COMPLIANCE-REVIEW (CR-DP-10) | D3.1 (implemented as the code constant `MINIMUM_LABOURER_AGE_YEARS` and repeated in the database CHECK and triggers; deliberately not editable at runtime, so changing it needs a migration) |
 | `labour.consent_notice_version` | platform | `registration-2026-11-v1` (EN/SW text pinned by SHA-256) | Brief §6, DPIA §7 | COMPLIANCE-REVIEW (CR-DP-03, CR-DP-11) | D3.1 (`CURRENT_CONSENT_NOTICE` in `packages/types`; a new wording is a new version) |
 | `labour.trades` / `labour.skill_levels` | tenant | 15 trades from brief §5.4 (EN/SW); skilled, semi-skilled, unskilled and site supervisor (NCA categories) | Brief §5.4 | PRODUCT; COMPLIANCE-REVIEW (CR-NCA-03) for which levels expect an NCA card | D3.1 (`trades`, `skill_levels`; "Add the standard list" installs them) |
+| `labour.rating_criteria` | platform | `punctuality`, `quality`, `safety`, `teamwork`, each scored 1–5 | Product owner, 16/11/2026 | PRODUCT | D3.5 (code constants `RATING_CRITERIA`, `RATING_SCORE_LIMITS` repeated in `labourer_ratings_check`; changing them needs a migration) |
+| `labour.rating_window_days` | platform | 7 (the day itself and the six days after) | Product owner, 16/11/2026 (at most one rating per worker, project and day) | PRODUCT | D3.5 (`RATING_WINDOW_DAYS`, repeated in `app.guard_labourer_rating`; not editable at runtime) |
+| `labour.rating_comment_max_length` | platform | 500 characters | D3.5 design | PRODUCT | D3.5 (`RATING_COMMENT_MAX_LENGTH`, column `varchar(500)` and CHECK) |
+| `labour.rating_retention_days` | platform | TBD (kept with the worker's record today) | DPIA §8 | COMPLIANCE-REVIEW (CR-DP-14, CR-DP-06) | Not built |
 
 ## 4. Payments and M-Pesa
 

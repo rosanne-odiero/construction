@@ -151,3 +151,63 @@ Accounts: the owner (`owner@jenga-bora.example.test`, TOTP), the project manager
 - Overtime multipliers are recorded, not applied: pay comes with D4.1. Weekly periods only (Q-C4); daily, fortnightly or monthly periods are reserved.
 - Notifications (for example "a day waits for your confirmation") and an outbox relay are not built; the queues are on the overview.
 - Casual-to-term conversion warnings (CR-PAY-10) are not computed yet.
+
+---
+
+## D3.5: Worker ratings
+
+This walkthrough takes about 15 minutes. **Labour → Ratings** lets the people who run a site rate the workers that attendance records as working on a day: 1 to 5 for punctuality, work quality, safety and teamwork, with an optional comment. The worker panel shows a worker's ratings and averages, and the labourer portal shows workers their own scores and comments, never who gave them. Ratings are informational: nothing changes pay, engagements or the do-not-rehire flag by itself (D-184; COMPLIANCE-REVIEW CR-DP-14).
+
+### 1. Run it
+
+As for [D3.1](#1-run-it) (the `FIELD_*` keys are still needed):
+
+```bash
+git checkout phase-3/d3.5-worker-ratings
+npx pnpm@12.17.0 install
+npx pnpm@12.17.0 services:up
+npx pnpm@12.17.0 db:migrate      # includes 20261216090000_worker_ratings
+npx pnpm@12.17.0 db:seed         # rates about half of the workers who worked on each of the five days before today
+npx pnpm@12.17.0 dev             # API on :4000, web on :3000
+```
+
+**What the seed adds.** After the attendance summary it prints something like:
+
+```text
+Worker ratings (synthetic; created):
+  77 ratings over the five days before today; today is left to rate
+```
+
+Ratings rest on attendance, so the number depends on the days the attendance seed covered: on a database seeded on an earlier day there may be fewer (record today's muster first, as in the [D3.3 walkthrough](#2-walkthrough-1), to rate today's workers). The migration gives `labour.rate` to every project manager, site agent and foreman already assigned to a project with `labour.view`. A second run prints "already present" and adds nothing.
+
+Accounts: the owner (`owner@jenga-bora.example.test`, TOTP), the project manager Brian (`pm@…`) and the site agent Kevin (`site.agent@…`, on Ruiru Heights and Juja Road Duplex).
+
+### 2. Walkthrough
+
+| #   | What | Where | Try this |
+| --- | --- | --- | --- |
+| 1 | The day's sheet | http://localhost:3000/labour/ratings (as Kevin) | The sheet opens on the first of Kevin's projects where anyone is working today (Ruiru Heights; Juja Road Duplex has nobody today): everyone that attendance records as present or half day, with the sites they worked on. Workers marked absent, on leave or sick are not listed. The note under the filters gives the days that can be rated (today and the six days before). On a phone (or any screen narrower than 1024 px) each worker is a card with the **Rate** button beside the name. |
+| 2 | Rate a worker | **Rate** on a worker's row | Choose 1–5 stars for each of the four criteria (click, or Tab into a row of stars and use the arrow keys); **Save rating** stays disabled until all four are scored. Add a comment: the dialog says the worker will read it, but not your name. The row shows the stars, the mean (one decimal), each score, the comment, Kevin's name and the time. |
+| 3 | Correct it | **Change** on the same row | Kevin can correct his rating today only; the row then shows "changed" with the time. Sign in as Brian (another browser): Brian sees Kevin's rating without a **Change** button, and Kevin sees none on Brian's. A worker already rated today has no **Rate** button for anyone else. |
+| 4 | Attendance changes | **Attendance** → today's muster roll for the worker's site (as Kevin) | Mark the worker Kevin just rated as absent and save. Back on **Ratings** the worker is no longer listed, and their panel and portal no longer count the rating. Mark them present again and the rating is back, unchanged. A rating never blocks an attendance correction, and a rating whose day no longer counts cannot be changed. |
+| 5 | Past days | **‹ previous day** links or type a date (DD/MM/YYYY) | Seeded ratings from Kevin or Brian on the last five days. Unrated workers on those days can still be rated, as long as the day is within the window. A day older than that shows "This day can no longer be rated" and no buttons; future days are not offered. |
+| 6 | Worker panel | **Registry** → a rated worker's name (as the owner) | The panel's **Ratings** section: the overall mean and number of ratings, the mean per criterion and the newest ratings with project, day, comment and rater. Only ratings on projects where you can view workers count. **Rate workers** links to the sheet when you may rate. |
+| 7 | Who may rate | As finance or a quantity surveyor | **Ratings** says "You do not have access": finance reads ratings in the worker panel but cannot rate. Project managers, site agents and foremen rate on their projects; owners everywhere; a custom role needs **Rate workers** (`labour.rate`) added to it and to the project assignment. |
+| 8 | The worker's view | Labourer portal | As the owner, open a rated worker's panel and **Reveal** their phone (purpose and authenticator code). On Ruiru Heights → **Team**, invite that number as a labourer; open the SMS in Mailpit (http://localhost:8025), follow the link and choose a PIN. The portal shows **My ratings**: the means, each day's scores and comments, and no names. An account whose number matches no single registered worker sees a note to ask the site office instead. |
+| 9 | Languages and themes | Language switch and theme toggle | The sheet, dialog, panel and portal card work in Kiswahili and dark mode and fit a 360 px phone; the stars always come with the number in text. |
+
+### 3. What changed under the hood
+
+- Migration `20261216090000_worker_ratings`: `labourer_ratings` (unique per worker, project and day; forced RLS; no DELETE for `pmb_app`) and the guard trigger `app.guard_labourer_rating` (worked attendance on insert and change, the seven-day window, the signed-in rater, the database clock, same-day changes by the rater only, versioned, closed projects read-only); `labour.rate` added to the role and project-assignment CHECKs and backfilled for existing project managers, site agents and foremen with `labour.view` ([ERD §6](../ERD.md#6-labour-attendance-and-biometrics)).
+- `packages/types/src/ratings.ts` (criteria, limits), `packages/domain/src/ratings.ts` (window, change rule, half-up means in integer arithmetic) and `packages/validation/src/ratings.ts` (strict request and response schemas).
+- API: `LabourRatingsController` (5 operations under `/api/v1/labour`) and `GET /api/v1/portal/worker/ratings` ([ARCHITECTURE §4.3](../ARCHITECTURE.md#43-labour-module-d31), D-180–D-184; [API README](../../apps/api/README.md#worker-ratings-d35)); audit `labourer.rated` and `labourer.rating_changed` without comment text.
+- Web: `/labour/ratings` (a table on wide screens, one card per worker on phones; it opens on the first project where anyone is working today), the **Ratings** tab, the rating dialog (a radio group of stars per criterion), the worker panel's **Ratings** section and the portal's **My ratings** card; EN/SW strings and five new problem messages.
+
+### 4. Known limitations
+
+- Ratings are not yet shown anywhere else (reports, dashboards, the registry table) and nothing filters or sorts workers by them.
+- A worker's portal account is linked to their register record only by an unambiguous phone match, as for D7.2's attendance and pay; shared phones show nothing.
+- Self-rating is detected only when the rater signs in with the worker's registered phone number; relatives are not detected.
+- A rating set aside by an attendance change is shown nowhere, not even to its rater; only the audit log (`labourer.rated`) keeps its scores.
+- No retention period, dispute route or rating notice to workers yet (CR-DP-14); no review of rating spread per rater.
+- Worker pay history and "Pay today" are D4.4, after D4.3 (approvals and payouts) merges; "Pay today" will keep two-person approval (D-185).

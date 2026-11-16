@@ -590,6 +590,8 @@ export {
 } from "./attendance.js";
 export * from "./payments.js";
 export * from "./payroll.js";
+export * from "./payouts.js";
+export * from "./reconciliation.js";
 export * from "./procure-to-pay.js";
 export * from "./stores.js";
 export * from "./schedule.js";

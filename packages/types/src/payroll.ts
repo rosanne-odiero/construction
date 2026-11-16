@@ -15,11 +15,96 @@ export type PayFrequency = (typeof PAY_FREQUENCIES)[number];
 export const PAYDAY_OFFSET_LIMITS = { min: 0, max: 14 } as const;
 
 /**
- * Batch states implemented in D4.1 (WORKFLOWS "Payroll"): draft → submitted (immutable snapshot)
- * and draft/submitted → cancelled. Review, rejection, approval and disbursement are D4.3.
+ * Batch states (WORKFLOWS "Payroll"). D4.1: draft → submitted (immutable snapshot) and
+ * draft/submitted → cancelled. D4.3: submitted → reviewed → approved, submitted/reviewed → rejected
+ * → draft (reopened as a new version), reviewed → cancelled; after approval the status is derived
+ * from the batch's obligations and payouts (`approved`, `disbursing`, `partially_settled`,
+ * `settled`; PAYROLL_SETTLEMENT_STATUSES) and never returns to a pre-approval state. The database
+ * CHECK `payroll_batches_check` lists the same keys.
  */
-export const PAYROLL_BATCH_STATUSES = ["draft", "submitted", "cancelled"] as const;
+export const PAYROLL_BATCH_STATUSES = [
+  "draft",
+  "submitted",
+  "reviewed",
+  "rejected",
+  "approved",
+  "disbursing",
+  "partially_settled",
+  "settled",
+  "cancelled",
+] as const;
 export type PayrollBatchStatus = (typeof PAYROLL_BATCH_STATUSES)[number];
+
+/** States before approval: the batch has no obligations yet (`cancelled` is terminal, not listed). */
+export const PRE_APPROVAL_BATCH_STATUSES = [
+  "draft",
+  "submitted",
+  "reviewed",
+  "rejected",
+] as const satisfies readonly PayrollBatchStatus[];
+
+/**
+ * Approved batches (D4.3, ARCHITECTURE §4.19): the stored status is recomputed from obligations
+ * and payouts in the same transaction as every change. `settled`: every obligation settled (a
+ * batch whose lines all net to zero has none and is settled at approval); `partially_settled`:
+ * some confirmed net allocation; `disbursing`: some payout exists (live or finished); else
+ * `approved`. A reversal can move a batch back down this list, never before `approved`.
+ */
+export const PAYROLL_SETTLEMENT_STATUSES = [
+  "approved",
+  "disbursing",
+  "partially_settled",
+  "settled",
+] as const satisfies readonly PayrollBatchStatus[];
+export type PayrollSettlementStatus = (typeof PAYROLL_SETTLEMENT_STATUSES)[number];
+
+/** Commanded batch actions; each is one row of the append-only batch decision log (T-12, A-17). */
+export const PAYROLL_BATCH_ACTIONS = [
+  "submit",
+  "review",
+  "reject",
+  "reopen",
+  "approve",
+  "cancel",
+] as const;
+export type PayrollBatchAction = (typeof PAYROLL_BATCH_ACTIONS)[number];
+
+/** Decision-log actions: the batch actions plus re-approving an obligation's changed destination. */
+export const PAYROLL_DECISION_ACTIONS = [...PAYROLL_BATCH_ACTIONS, "destination_approve"] as const;
+export type PayrollDecisionAction = (typeof PAYROLL_DECISION_ACTIONS)[number];
+
+/** Where each command may start and where it leads (the API, domain and guard trigger agree). */
+export const PAYROLL_BATCH_COMMANDS: Readonly<
+  Record<PayrollBatchAction, { from: readonly PayrollBatchStatus[]; to: PayrollBatchStatus }>
+> = {
+  submit: { from: ["draft"], to: "submitted" },
+  review: { from: ["submitted"], to: "reviewed" },
+  reject: { from: ["submitted", "reviewed"], to: "rejected" },
+  reopen: { from: ["rejected"], to: "draft" },
+  approve: { from: ["reviewed"], to: "approved" },
+  cancel: { from: ["draft", "submitted", "reviewed"], to: "cancelled" },
+};
+
+/**
+ * Every allowed status edge: the commands above plus the derived settlement moves (D4.3). Anything
+ * else is refused by the domain and by `app.guard_payroll_batch`.
+ */
+export const PAYROLL_BATCH_TRANSITIONS: Readonly<
+  Record<PayrollBatchStatus, readonly PayrollBatchStatus[]>
+> = {
+  draft: ["submitted", "cancelled"],
+  submitted: ["reviewed", "rejected", "cancelled"],
+  reviewed: ["approved", "rejected", "cancelled"],
+  rejected: ["draft"],
+  approved: ["disbursing", "partially_settled", "settled"],
+  disbursing: ["partially_settled", "settled"],
+  partially_settled: ["disbursing", "settled"],
+  settled: ["partially_settled", "disbursing"],
+  cancelled: [],
+};
+
+/** The rejection reason and the review note are bounded like other payroll reasons. */
+export const PAYROLL_DECISION_LIMITS = { noteMax: 500, reasonMin: 10, reasonMax: 500 } as const;
 
 /** Statutory rule kinds, each an effective-dated, versioned parameter set. */
 export const STATUTORY_RULE_KINDS = [
@@ -388,5 +473,8 @@ export const KENYA_MINIMUM_WAGES_2026: readonly MinimumWageSeed[] = [
   ...minimumWage2026("artisan_grade_i", 4_072_423, 3_832_371, 3_593_286),
 ];
 
-/** Exports and rule verification need MFA verified within five minutes (step-up). */
+/**
+ * Exports and rule verification need MFA verified within five minutes (step-up). D4.3's approval
+ * and payout commands are listed in PAYOUT_STEP_UP_ACTIONS (payouts.ts).
+ */
 export const PAYROLL_STEP_UP_ACTIONS = ["rule-verify", "export", "advance-disburse"] as const;

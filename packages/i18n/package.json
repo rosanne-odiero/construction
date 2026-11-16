@@ -23,11 +23,11 @@
     "i18n:check": "node scripts/check-i18n.mjs"
   },
   "dependencies": {
-    "@pm-buddy/types": "workspace:*"
+    "@pm-buddy/types": "workspace:*",
+    "intl-messageformat": "12.1.4"
   },
   "devDependencies": {
     "@pm-buddy/config": "workspace:*",
-    "intl-messageformat": "12.1.4",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",

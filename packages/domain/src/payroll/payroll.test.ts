@@ -9,6 +9,7 @@ import {
   allowanceEarnings,
   batchStatutory,
   computeBatch,
+  lineNetMinor,
   dayEarnings,
   defaultPayCalendar,
   emptyPriorMonth,
@@ -22,6 +23,7 @@ import {
   planRecoveries,
   selectRuleSet,
   splitEqually,
+  splitNetPay,
   statutoryMonthOf,
   statutoryParameterIssues,
   type AllowanceRef,
@@ -696,6 +698,55 @@ const input = (overrides: Partial<BatchInput> = {}): BatchInput => ({
 });
 
 describe("batch builder", () => {
+  it("splits net pay into whole shillings now and the cents carried forward (D-167)", () => {
+    expect(splitNetPay(408_312)).toEqual({ payableMinor: 408_300, carryForwardMinor: 12 });
+    expect(splitNetPay(400_000)).toEqual({ payableMinor: 400_000, carryForwardMinor: 0 });
+    expect(splitNetPay(60)).toEqual({ payableMinor: 0, carryForwardMinor: 60 });
+    expect(splitNetPay(0)).toEqual({ payableMinor: 0, carryForwardMinor: 0 });
+    expect(
+      lineNetMinor({
+        grossMinor: 440_000,
+        statutoryWithheldMinor: 31_250,
+        advanceRecoveryMinor: 10_000,
+        otherDeductionsMinor: 0,
+        broughtForwardMinor: 60,
+      }),
+    ).toBe(398_810);
+  });
+
+  it("brings carry-forwards forward after every deduction, leaving statutory figures alone", () => {
+    const without = computeBatch(input());
+    const withForward = computeBatch(
+      input({
+        carryForwards: new Map([
+          [
+            "w1",
+            [
+              { id: "cf-2", amountMinor: 40 },
+              { id: "cf-1", amountMinor: 35 },
+            ],
+          ],
+          ["w9", [{ id: "cf-9", amountMinor: 10 }]],
+        ]),
+      }),
+    );
+    const [before, after] = [without.lines[0]!, withForward.lines[0]!];
+    expect(after).toMatchObject({ broughtForwardMinor: 75, carryForwardIds: ["cf-1", "cf-2"] });
+    expect(after.netMinor).toBe(before.netMinor + 75);
+    expect(after.grossMinor).toBe(before.grossMinor);
+    expect(after.statutoryBaseMinor).toBe(before.statutoryBaseMinor);
+    expect(after.statutory).toEqual(before.statutory);
+    expect(after.recoveries).toEqual(before.recoveries);
+    expect(after.totalDeductionsMinor).toBe(before.totalDeductionsMinor);
+    expect(withForward.lines[1]).toMatchObject({ broughtForwardMinor: 0, carryForwardIds: [] });
+    expect(withForward.totals.broughtForwardMinor).toBe(75);
+    expect(withForward.totals.netMinor).toBe(without.totals.netMinor + 75);
+    // A worker without a line in this batch keeps their carry-forward open.
+    expect(withForward.lines.map((entry) => entry.labourer.id)).toEqual(["w1", "w2"]);
+    // Without carry-forwards the totals keep their D4.1 shape, so snapshot digests are unchanged.
+    expect("broughtForwardMinor" in without.totals).toBe(false);
+  });
+
   it("reconciles totals to the sum of rounded line amounts", () => {
     const result = computeBatch(input());
     expect(result.lines).toHaveLength(2);

@@ -12257,5 +12257,20 @@
         "decide": "Decide"
       }
     }
+  },
+  "payoutSms": {
+    "payslip": {
+      "subject": "Payslip {periodStart}-{periodEnd}",
+      "text": "{company}: payslip {periodStart}-{periodEnd}. Days worked {days}{rateBasis, select, daily {, daily rate KES {rate}} hourly {, hourly rate KES {rate}} other {}}. Gross KES {gross}, deductions KES {deductions}, net pay KES {net}{withBroughtForward, select, yes { (includes KES {broughtForward} brought forward)} other {}}. Paid KES {paid} {method, select, mpesa {by M-Pesa, receipt {reference}} cash {in cash} bank {by bank, ref. {reference}} other {}}{others, plural, =0 {} one { and # other payment} other { and # other payments}}{withCarryForward, select, yes {; KES {carryForward} carried to your next pay} other {}}. Queries: your site office."
+    },
+    "numberChange": {
+      "subject": "M-Pesa number changed",
+      "oldNumber": "{company}: the M-Pesa number for your wages was changed on {date}. If you did not ask for this change, tell your site office at once.",
+      "newNumber": "{company}: your wages will now be paid by M-Pesa to this number (changed on {date}). If this is not your number or you did not ask for the change, tell your site office at once."
+    },
+    "approvalNotice": {
+      "subject": "Payroll approved: {batchReference}",
+      "text": "{company}: payroll {batchReference} for {project}, {periodStart}-{periodEnd}, net KES {net}, was approved by {approver} on {approvedAt}{waiver, select, yes { under the segregation waiver} other {}}. If you did not expect this approval, check PM-Buddy now."
+    }
   }
 }

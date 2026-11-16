@@ -432,6 +432,39 @@ describe("cash-flow forecast", () => {
       expectedLpoPaymentDate({ deliveryDate: null, approvedOn: "2026-11-01", creditDays: 0 }),
     ).toBe("2026-11-01");
   });
+
+  it("forecasts only the unpaid obligations of approved payroll (D4.3)", () => {
+    const items = projectPayroll({
+      calendar: { frequency: "weekly", anchorDate: "2026-11-06", paydayOffsetDays: 1 },
+      today: "2026-11-14",
+      until: "2026-11-30",
+      batches: [
+        { periodStart: "2026-10-23", payDate: "2026-10-30", amountMinor: 90, status: "settled" },
+        {
+          periodStart: "2026-10-30",
+          payDate: "2026-11-06",
+          amountMinor: 99,
+          status: "partially_settled",
+          outstandingMinor: 30,
+        },
+        {
+          periodStart: "2026-11-06",
+          payDate: "2026-11-13",
+          amountMinor: 70,
+          status: "disbursing",
+          outstandingMinor: 0,
+        },
+        { periodStart: "2026-11-13", payDate: "2026-11-20", amountMinor: 80, status: "reviewed" },
+        { periodStart: "2026-11-20", payDate: "2026-11-27", amountMinor: 85, status: "rejected" },
+      ],
+      runRateMinor: 75,
+    });
+    expect(items.map((item) => [item.date, item.amountMinor, item.basis])).toEqual([
+      ["2026-11-06", 30, "recorded"],
+      ["2026-11-20", 80, "recorded"],
+      ["2026-11-27", 85, "estimated"],
+    ]);
+  });
 });
 
 describe("spend alert rules", () => {

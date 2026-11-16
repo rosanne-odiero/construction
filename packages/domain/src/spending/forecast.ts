@@ -1,4 +1,4 @@
-import type { ForecastBasis, ForecastLineKind } from "@pm-buddy/types";
+import type { ForecastBasis, ForecastLineKind, PayrollBatchStatus } from "@pm-buddy/types";
 import { isoWeekday } from "../attendance/time.js";
 import { addCalendarDays } from "../labour.js";
 import { payPeriodsBetween, type PayCalendar } from "../payroll/periods.js";
@@ -121,15 +121,24 @@ export type PayrollBatchFact = {
   payDate: string;
   /** Gross pay plus the employer's statutory cost: what the payroll needs in cash. */
   amountMinor: number;
-  status: "draft" | "submitted";
+  status: Exclude<PayrollBatchStatus, "cancelled">;
+  /**
+   * D4.3, approved batches only: the net still owed to workers (Σ amount − paid of its open
+   * obligations). Absent before approval.
+   */
+  outstandingMinor?: number;
 };
 
+const SETTLING: readonly PayrollBatchStatus[] = ["approved", "disbursing", "partially_settled"];
+
 /**
- * Payroll outflows from today to `until`: each live batch (draft or submitted) on its pay date
- * (submitted = recorded, draft = estimated), and every later pay period of the project's calendar
- * that has no batch yet at the run rate of the latest submitted batch (estimated). Batches whose pay
- * date has passed are left out: D4.3 records payouts, and until then a past pay date is assumed
- * paid outside PM-Buddy.
+ * Payroll outflows from today to `until`. A batch before approval is expected on its pay date at
+ * gross plus employer cost: `submitted` and `reviewed` are recorded, `draft` and `rejected`
+ * estimated, and a pay date already passed is left out (assumed paid outside PM-Buddy). From
+ * approval (D4.3) only the unpaid obligations remain, recorded on the pay date even when it has
+ * passed (overdue); a settled batch needs nothing, so paid wages are never counted twice. Statutory
+ * remittances are not forecast (out of scope for D4.3). Every later pay period of the project's
+ * calendar with no batch yet is estimated at `runRateMinor`.
  */
 export function projectPayroll(input: {
   calendar: PayCalendar;
@@ -140,15 +149,29 @@ export function projectPayroll(input: {
 }): ForecastItem[] {
   const items: ForecastItem[] = [];
   const covered = new Set(input.batches.map((batch) => batch.periodStart));
-  for (const batch of input.batches)
-    if (batch.payDate >= input.today && batch.payDate <= input.until)
+  for (const batch of input.batches) {
+    if (batch.payDate > input.until || batch.status === "settled") continue;
+    if (SETTLING.includes(batch.status)) {
+      if ((batch.outstandingMinor ?? 0) > 0)
+        items.push({
+          kind: "payroll",
+          direction: "out",
+          date: batch.payDate,
+          amountMinor: batch.outstandingMinor!,
+          basis: "recorded",
+        });
+      continue;
+    }
+    if (batch.payDate >= input.today)
       items.push({
         kind: "payroll",
         direction: "out",
         date: batch.payDate,
         amountMinor: batch.amountMinor,
-        basis: batch.status === "submitted" ? "recorded" : "estimated",
+        basis:
+          batch.status === "submitted" || batch.status === "reviewed" ? "recorded" : "estimated",
       });
+  }
   if (input.runRateMinor && input.runRateMinor > 0)
     for (const period of payPeriodsBetween(input.today, input.until, input.calendar, 200))
       if (

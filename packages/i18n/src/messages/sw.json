@@ -12257,5 +12257,20 @@
         "decide": "Amua"
       }
     }
+  },
+  "payoutSms": {
+    "payslip": {
+      "subject": "Hati ya mshahara {periodStart}-{periodEnd}",
+      "text": "{company}: hati ya mshahara {periodStart}-{periodEnd}. Siku za kazi {days}{rateBasis, select, daily {, kiwango cha siku KES {rate}} hourly {, kiwango cha saa KES {rate}} other {}}. Ghafi KES {gross}, makato KES {deductions}, mshahara halisi KES {net}{withBroughtForward, select, yes { (pamoja na KES {broughtForward} za awali)} other {}}. Umelipwa KES {paid} {method, select, mpesa {kwa M-Pesa, risiti {reference}} cash {kwa pesa taslimu} bank {kwa benki, kumb. {reference}} other {}}{others, plural, =0 {} one { na malipo mengine #} other { na malipo mengine #}}{withCarryForward, select, yes {; KES {carryForward} zitaongezwa kwa malipo yako yajayo} other {}}. Maswali: ofisi ya eneo la kazi."
+    },
+    "numberChange": {
+      "subject": "Namba ya M-Pesa imebadilishwa",
+      "oldNumber": "{company}: namba ya M-Pesa ya kupokea mshahara wako ilibadilishwa tarehe {date}. Kama hukuomba mabadiliko haya, ijulishe ofisi ya eneo la kazi mara moja.",
+      "newNumber": "{company}: mshahara wako sasa utalipwa kwa M-Pesa kwenye namba hii (ilibadilishwa tarehe {date}). Kama hii si namba yako au hukuomba mabadiliko haya, ijulishe ofisi ya eneo la kazi mara moja."
+    },
+    "approvalNotice": {
+      "subject": "Mishahara imeidhinishwa: {batchReference}",
+      "text": "{company}: mishahara {batchReference} ya {project}, {periodStart}-{periodEnd}, jumla halisi KES {net}, imeidhinishwa na {approver} tarehe {approvedAt}{waiver, select, yes { chini ya msamaha wa mgawanyo wa majukumu} other {}}. Kama hukutarajia idhini hii, angalia PM-Buddy sasa."
+    }
   }
 }

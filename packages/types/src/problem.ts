@@ -15,6 +15,13 @@ export interface ProblemDetails {
    * matched (`{ labourerId, workerNo, matchedOn }`). Identifiers only, never personal data.
    */
   match?: Record<string, string>;
+  /**
+   * Safe figures that explain a refusal (D4.3), e.g. `{ limitMinor, netMinor }` for
+   * `approval-limit-exceeded`, `{ labourerIds }` for `unverified-recipients` or the float figures
+   * of `insufficient-float`. Keys come from PROBLEM_FACT_KEYS; values are KES minor units, counts,
+   * timestamps or record IDs, never personal data.
+   */
+  facts?: Record<string, number | string | boolean | null | string[]>;
 }
 
 export const PROBLEM_TYPE_BASE = "https://pm-buddy.dev/problems/";

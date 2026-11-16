@@ -1,5 +1,11 @@
 export { planRecoveries, type AdvanceBalance, type Recovery } from "./advances.js";
 export {
+  broughtForward,
+  lineNetMinor,
+  splitNetPay,
+  type CarryForwardSource,
+} from "./carry-forward.js";
+export {
   computeBatch,
   type BatchInput,
   type BatchLabourer,

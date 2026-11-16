@@ -55,8 +55,8 @@ Defaults are design assumptions only, not owner approval. Under [brief §15](./P
 |---|---|---|---|
 | Q-M1 | Will each tenant use **its own Safaricom shortcodes and Daraja credentials** (brief §5.7), or should PM-Buddy hold shortcodes for tenants? The second option may need a payments licence or registration (CR-PMT-04). | Each tenant uses its own shortcodes | D4.2 |
 | Q-M2 | Can you share the **M-Pesa limits and tariffs** that apply to your accounts, to seed the configuration? | Placeholder values marked DEMO | D4.2 |
-| Q-M3 | Should **cash wage payments** be allowed at all, and with what cap? | Allowed with photo/signature, reason, approval and a configurable cap | D4.3 |
-| Q-M4 | Are **bank payouts** (for example PesaLink) needed at launch, or is recording bank transfers enough? | Record-only | D4.3 |
+| Q-M3 | Should **cash wage payments** be allowed at all, and with what cap? | **Answered (owner, 16 Nov 2026):** allowed with a reason, photo or signature evidence and a second person's confirmation; cap KES 20,000 per worker per pay period, configurable (0 disables cash) — D-162 | D4.3 |
+| Q-M4 | Are **bank payouts** (for example PesaLink) needed at launch, or is recording bank transfers enough? | **Answered (owner, 16 Nov 2026):** record-only, with the bank reference and a second person's confirmation; no bank API — D-162 | D4.3 |
 
 ## Payroll and compliance
 

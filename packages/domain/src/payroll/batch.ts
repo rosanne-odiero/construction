@@ -10,6 +10,7 @@ import {
 } from "@pm-buddy/types";
 import { resolveRate, type RateCandidate } from "../labour.js";
 import { planRecoveries, type AdvanceBalance, type Recovery } from "./advances.js";
+import { broughtForward, lineNetMinor, type CarryForwardSource } from "./carry-forward.js";
 import {
   allowanceEarnings,
   dayEarnings,
@@ -45,6 +46,11 @@ import {
  * A labourer whose gross would be negative (an adjustment that takes back more than the batch
  * pays) is left out with all their sources (`negative-gross`); the sources stay available and are
  * paid with later earnings. Excluded sources are never consumed.
+ *
+ * Carry-forwards (D4.3, decision D-167): a labourer's open carry-forwards (the cents of earlier
+ * approved payrolls) are added to their line's net after every deduction ("brought forward") and
+ * consumed by the line. They never create a line on their own, and never enter gross pay, a
+ * statutory base or the advance-recovery cap.
  */
 
 export type BatchLabourer = {
@@ -111,6 +117,12 @@ export type BatchInput = {
   allowUnverifiedTimesheetRules: boolean;
   minimumWageArea: MinimumWageArea | null;
   minimumWages: readonly MinimumWageRow[];
+  /**
+   * D4.3 (D-167): each labourer's open carry-forwards, plus those this batch already consumed (a
+   * recalculation keeps its own). Leave out carry-forwards consumed by another live batch, like the
+   * other one-time sources. Absent: nothing is brought forward.
+   */
+  carryForwards?: ReadonlyMap<string, readonly CarryForwardSource[]>;
 };
 
 export type LineWarning = { code: PayrollWarningCode; details: Record<string, unknown> };
@@ -143,7 +155,16 @@ export type PayrollLineResult = {
   recoveries: Recovery[];
   otherDeductionsMinor: number;
   totalDeductionsMinor: number;
+  /** gross − statutory withheld − recovery − other deductions + brought forward (D-167). */
   netMinor: number;
+  /**
+   * D4.3 (D-167): the carry-forwards added to net after deductions (0 when none) and the IDs this
+   * line consumes. Snapshot compatibility (API): the D4.1 snapshot carries `broughtForwardMinor`
+   * (and the consumed IDs) on a line only when it is > 0, so the digests of batches without
+   * carry-forwards, including every batch submitted before D4.3, stay valid.
+   */
+  broughtForwardMinor: number;
+  carryForwardIds: string[];
   employerCostMinor: number;
   claims: DayClaim[];
   warnings: LineWarning[];
@@ -158,6 +179,11 @@ export type BatchTotals = {
   otherDeductionsMinor: number;
   totalDeductionsMinor: number;
   netMinor: number;
+  /**
+   * D4.3 (D-167): Σ brought forward, present only when > 0 so the totals (part of the snapshot
+   * digest) of batches without carry-forwards are unchanged.
+   */
+  broughtForwardMinor?: number;
   employer: Record<(typeof EMPLOYER_COSTS)[number], number>;
   employerCostMinor: number;
   shortfallMinor: number;
@@ -439,7 +465,14 @@ export function computeBatch(input: BatchInput): BatchResult {
     );
     const recovered = sum(plan.recoveries.map((entry) => entry.amountMinor));
     const withheld = sum(EMPLOYEE_STATUTORY.map((item) => statutory.withheld[item]));
-    const netMinor = grossMinor - withheld - recovered;
+    const forward = broughtForward(input.carryForwards?.get(labourerId) ?? []);
+    const netMinor = lineNetMinor({
+      grossMinor,
+      statutoryWithheldMinor: withheld,
+      advanceRecoveryMinor: recovered,
+      otherDeductionsMinor: 0,
+      broughtForwardMinor: forward.broughtForwardMinor,
+    });
     if (plan.capped)
       warnings.push({ code: "advance-recovery-capped", details: { capMinor: plan.capMinor } });
     const shortfall = sum(EMPLOYEE_STATUTORY.map((item) => statutory.shortfall[item]));
@@ -481,6 +514,8 @@ export function computeBatch(input: BatchInput): BatchResult {
       otherDeductionsMinor: 0,
       totalDeductionsMinor: withheld + recovered,
       netMinor,
+      broughtForwardMinor: forward.broughtForwardMinor,
+      carryForwardIds: forward.carryForwardIds,
       employerCostMinor: sum(EMPLOYER_COSTS.map((item) => statutory.employer[item])),
       claims,
       warnings,
@@ -492,6 +527,7 @@ export function computeBatch(input: BatchInput): BatchResult {
       a.labourer.workerNo.localeCompare(b.labourer.workerNo) ||
       a.labourer.id.localeCompare(b.labourer.id),
   );
+  const forwardMinor = sum(lines.map((line) => line.broughtForwardMinor));
   const employee = { nssf: 0, shif: 0, ahl: 0, paye: 0 };
   const employer = { nssf_employer: 0, ahl_employer: 0, nita: 0 };
   for (const line of lines) {
@@ -509,6 +545,7 @@ export function computeBatch(input: BatchInput): BatchResult {
     otherDeductionsMinor: sum(lines.map((line) => line.otherDeductionsMinor)),
     totalDeductionsMinor: sum(lines.map((line) => line.totalDeductionsMinor)),
     netMinor: sum(lines.map((line) => line.netMinor)),
+    ...(forwardMinor > 0 ? { broughtForwardMinor: forwardMinor } : {}),
     employer,
     employerCostMinor: sum(lines.map((line) => line.employerCostMinor)),
     shortfallMinor: sum(

@@ -1,3 +1,5 @@
+import type { Locale } from "./common.js";
+
 /**
  * Labour registry vocabulary shared by web, API and database (D3.1, brief §5.4). The database
  * CHECK constraints list the same keys, so adding a value needs a migration as well as a change
@@ -130,6 +132,12 @@ export const REVEAL_PURPOSES = [
   "data_subject_request",
 ] as const;
 export type RevealPurpose = (typeof REVEAL_PURPOSES)[number];
+
+/**
+ * The language of a worker's SMS (payslips and number-change notices, D4.3): Kiswahili unless the
+ * worker asks for English (`labourers.preferred_language`, NOT NULL, default 'sw').
+ */
+export const DEFAULT_LABOURER_LANGUAGE: Locale = "sw";
 
 export const GANG_STATUSES = ["active", "archived"] as const;
 export type GangStatus = (typeof GANG_STATUSES)[number];

@@ -42,6 +42,11 @@ export const COST_SOURCES = [
   "subcontract_certificate",
   "subcontract_payment",
   "subcontract_advance",
+  // D4.3 (CR-SPD-05, proposed policy): an approved payroll line (gross and employer statutory cost
+  // accrued at approval) and a payroll payout (net paid as it settles, its reversal, and the M-Pesa
+  // charge estimated from the tariff when it confirms).
+  "payroll_line",
+  "payroll_payout",
 ] as const;
 export type CostSource = (typeof COST_SOURCES)[number];
 
@@ -49,7 +54,8 @@ export type CostSource = (typeof COST_SOURCES)[number];
  * What an entry records for its source: the cost of an expense or invoice (`accrual`), the cash
  * that paid it (`payment`), an M-Pesa transaction charge (`charge_accrual`, `charge_payment`), an
  * approved petty-cash count variance (`variance_accrual`, `variance_payment`), a journal line
- * (`journal`) or the reversal of an earlier entry (`reversal`).
+ * (`journal`), the reversal of an earlier entry (`reversal`) or, for a payroll line, the employer's
+ * statutory cost accrued beside its gross pay (`employer_accrual`, D4.3).
  */
 export const COST_PURPOSES = [
   "accrual",
@@ -60,6 +66,7 @@ export const COST_PURPOSES = [
   "variance_payment",
   "journal",
   "reversal",
+  "employer_accrual",
 ] as const;
 export type CostPurpose = (typeof COST_PURPOSES)[number];
 

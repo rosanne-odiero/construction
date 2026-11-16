@@ -14,6 +14,7 @@ import {
   CONSENT_METHODS,
   CONSENT_NOTICE_VERSIONS,
   CONSENT_STATUSES,
+  DEFAULT_LABOURER_LANGUAGE,
   ENGAGEMENT_TYPES,
   GANG_STATUSES,
   GENDERS,
@@ -421,6 +422,8 @@ export const registerLabourerRequestSchema = z
     accreditation: accreditationInputSchema.optional(),
     /** Only with labour.do_not_rehire, when a phone or KRA PIN matches a flagged person. */
     doNotRehireOverride: doNotRehireOverrideSchema.optional(),
+    /** The language of the worker's payslip and notice SMS (D4.3); Kiswahili unless chosen. */
+    preferredLanguage: localeSchema.default(DEFAULT_LABOURER_LANGUAGE),
   })
   .strict()
   .transform(withIdentity);
@@ -443,6 +446,8 @@ export const updateLabourerRequestSchema = z
     nssfNumber: personalFields.nssfNumber,
     shaNumber: personalFields.shaNumber,
     nextOfKin: personalFields.nextOfKin,
+    /** The language of the worker's payslip and notice SMS (D4.3, labour.manage). */
+    preferredLanguage: localeSchema.optional(),
     version,
   })
   .strict()
@@ -705,6 +710,11 @@ export const labourerDetailSchema = labourerSummarySchema
     accreditations: z.array(accreditationSchema),
     consents: z.array(consentRecordSchema),
     doNotRehireDetail: doNotRehireDetailSchema.nullable(),
+    /**
+     * The language of the worker's payslip and notice SMS (D4.3; stored NOT NULL, default `sw`).
+     * Optional on the wire for compatibility: treat an absent value as `sw`.
+     */
+    preferredLanguage: localeSchema.optional(),
     version,
     createdAt: timestamp,
     updatedAt: timestamp,

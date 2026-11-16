@@ -20,6 +20,14 @@ export const problemDetailsSchema = z.object({
   code: z.string().optional(),
   traceId: z.string().optional(),
   errors: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
+  match: z.record(z.string(), z.string()).optional(),
+  /** Safe figures explaining a refusal (D4.3; keys from PROBLEM_FACT_KEYS). */
+  facts: z
+    .record(
+      z.string(),
+      z.union([z.number(), z.string(), z.boolean(), z.null(), z.array(z.string())]),
+    )
+    .optional(),
 });
 
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;

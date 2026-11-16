@@ -542,13 +542,13 @@ importers:
       '@pm-buddy/types':
         specifier: workspace:*
         version: link:../types
+      intl-messageformat:
+        specifier: 12.1.4
+        version: 12.1.4
     devDependencies:
       '@pm-buddy/config':
         specifier: workspace:*
         version: link:../config
-      intl-messageformat:
-        specifier: 12.1.4
-        version: 12.1.4
       oxlint:
         specifier: 'catalog:'
         version: 1.91.0(oxlint-tsgolint@7.0.2005)

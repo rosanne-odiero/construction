@@ -668,6 +668,11 @@ export const payrollLineSummarySchema = z
     statutoryWithheldMinor: minor,
     advanceRecoveryMinor: minor,
     netMinor: minor,
+    /**
+     * D4.3 (D-167): open carry-forwards (cents of earlier payrolls) added to net after every
+     * deduction; never part of gross or a statutory base. Absent when none.
+     */
+    broughtForwardMinor: minor.optional(),
     employerCostMinor: minor,
     warnings: z.array(payrollWarningSchema),
   })
@@ -695,6 +700,8 @@ export const payrollTotalsSchema = z
     otherDeductionsMinor: minor,
     totalDeductionsMinor: minor,
     netMinor: minor,
+    /** D4.3 (D-167): Σ brought forward; absent when none. */
+    broughtForwardMinor: minor.optional(),
     employer: employerAmounts,
     employerCostMinor: minor,
     shortfallMinor: minor,
@@ -804,6 +811,11 @@ export const payslipResponseSchema = z
         })
         .strict(),
       advanceBalanceMinor: minor,
+      /**
+       * D4.3 (D-167): once the batch is approved, the cents of the net carried to the worker's next
+       * payroll (the rest is paid in whole shillings). Absent before approval.
+       */
+      carryForwardMinor: minor.optional(),
     }),
   })
   .strict();

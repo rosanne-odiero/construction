@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@pm-buddy/config": "workspace:*",
-    "intl-messageformat": "12.1.4",
+    "intl-messageformat": "12.1.5",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",

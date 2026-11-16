@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { IdentityModule } from "../identity/identity.module.js";
+import { LabourModule } from "../labour/labour.module.js";
 import { ProcurementModule } from "../procurement/procurement.module.js";
 import { ProgressModule } from "../progress/progress.module.js";
 import { ClientCompanyService } from "./client/client-company.service.js";
@@ -29,7 +30,7 @@ import { SupplierStatementExportService } from "./supplier/supplier-statement-ex
 
 /** Client, labourer and supplier portals (company staff use the office API). */
 @Module({
-  imports: [IdentityModule, ProcurementModule, ProgressModule],
+  imports: [IdentityModule, LabourModule, ProcurementModule, ProgressModule],
   controllers: [
     PortalsController,
     SupplierPortalController,

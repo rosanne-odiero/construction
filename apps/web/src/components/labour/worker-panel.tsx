@@ -22,6 +22,7 @@ import {
   revealResponseSchema,
   type LabourerAttendanceResponse,
   type LabourerDetail,
+  type LabourerRatingsResponse,
   type LabourSetupResponse,
   type RevealResponse,
 } from "@pm-buddy/validation";
@@ -51,6 +52,7 @@ import {
   LabourerStatusBadge,
   localName,
 } from "./labour-badges";
+import { LabourerRatings } from "./labourer-ratings";
 
 type Dialogs = "reveal" | "flag" | "status" | "engage" | "end" | "accreditation" | "edit" | null;
 
@@ -72,12 +74,15 @@ export function WorkerPanel({
   closeHref,
   setup,
   attendance = null,
+  ratings = null,
 }: {
   labourer: LabourerDetail;
   closeHref: string;
   setup: LabourSetupResponse | null;
   /** Attendance summary (D3.3); null when the caller cannot view attendance. */
   attendance?: LabourerAttendanceResponse | null;
+  /** Ratings (D3.5) on projects where the caller views workers; null when unavailable. */
+  ratings?: LabourerRatingsResponse | null;
 }) {
   const t = useTranslations("labourLive.panel");
   const tLabour = useTranslations("labourLive");
@@ -311,6 +316,13 @@ export function WorkerPanel({
             <>
               <Separator />
               <WorkerAttendance summary={attendance} />
+            </>
+          ) : null}
+
+          {ratings ? (
+            <>
+              <Separator />
+              <LabourerRatings ratings={ratings} />
             </>
           ) : null}
 

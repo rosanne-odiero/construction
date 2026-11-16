@@ -53,6 +53,7 @@ describe("labour permissions", () => {
     "labour.view_sensitive",
     "labour.do_not_rehire",
     "labour.consent",
+    "labour.rate",
   ];
 
   it("are project-scoped, assignable and do not force MFA enrolment", () => {
@@ -75,6 +76,10 @@ describe("labour permissions", () => {
     expect(has("foreman", "labour.consent")).toBe(true);
     expect(has("foreman", "labour.do_not_rehire")).toBe(false);
     expect(has("finance", "labour.view_sensitive")).toBe(true);
+    // D3.5: the people who run a site rate its workers; finance and the office do not.
+    for (const role of ["project_manager", "site_agent", "foreman"] as const)
+      expect(has(role, "labour.rate"), role).toBe(true);
+    expect(has("finance", "labour.rate")).toBe(false);
     for (const role of ["quantity_surveyor", "storekeeper", "client", "supplier"] as const)
       expect(
         labour.some((permission) => has(role, permission)),

@@ -748,6 +748,36 @@ rates, and gang/engagement triggers. A rule broken only at the database level is
 `labour_rates`, or `GET labourers/:id/rate?projectId&date&basis`; a payroll line should store the
 `labour_rates.id` it used.
 
+### Worker ratings (D3.5)
+
+Also under `/api/v1/labour` (`LabourRatingsController`; shared schemas in
+`packages/validation/src/ratings.ts`). A rating scores one worker's day on one project from 1 to 5
+for `punctuality`, `quality`, `safety` and `teamwork`, with an optional comment (trimmed, at most
+500 characters; blank means none) that the worker can read in their portal. Design notes:
+[ARCHITECTURE §4.3](../../docs/ARCHITECTURE.md#43-labour-module-d31) (D-180–D-184).
+
+| Method/path                      | Body / query                                   | Response                                                                                                                                                                                                                        | Permission and main errors                                                                                                                                                                                                                  |
+| -------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET ratings/projects             |                                                | `{today, window{from, to}, projects[{id, code, name, readOnly, workingToday}]}` (open projects only; `workingToday` counts the workers attendance records as working there today, and the web opens the first project with any) | `labour.rate` somewhere (403 otherwise)                                                                                                                                                                                                     |
+| GET projects/:projectId/ratings  | `?date` (default today)                        | `{project, date, today, window, canRate, workers[{labourer{id, workerNo, fullName, trade}, attendance: present\|half_day, sites[], rating}]}`                                                                                   | `labour.rate` on the project; lists everyone that attendance records as present or half day on the project's sites that day; 400 `date-in-future`                                                                                           |
+| POST projects/:projectId/ratings | `{labourerId, workDate, scores{…}, comment?}`  | `{rating{id, project, labourerId, workDate, scores, average, comment, ratedBy, ratedAt, changedAt, version, canChange}}` (201)                                                                                                  | `labour.rate` on the project; 400 `date-in-future`; 409 `rating-window` (today and the six days before only), `not-worked`, `already-rated` (one per worker, project and day), `self-rating`, `project-read-only`                           |
+| PATCH ratings/:id                | `{version, scores{…}, comment?}`               | `{rating}`                                                                                                                                                                                                                      | `labour.rate` on the rating's project; only the rater, on the Nairobi day they gave it (409 `rating-locked`); 409 `not-worked` (attendance no longer records the day as worked), `version-conflict`, `project-read-only`                    |
+| GET labourers/:id/ratings        | `?projectId&from&to&limit` (default 20, ≤ 100) | `{labourerId, summary{count, average, criteria{…}}, ratings[rating], canRate}`                                                                                                                                                  | `labour.view` on the labourer (404 otherwise); only ratings on projects where the caller holds `labour.view` whose day attendance still records as worked; averages are SQL sums over every matching rating, rounded half up to one decimal |
+
+The labourer portal's `GET /api/v1/portal/worker/ratings` (`portal.worker`) returns
+`{linked, summary, ratings[{id, project, workDate, scores, average, comment}]}`: the newest 20 on
+the worker's portal projects, never who rated them, and `linked: false` with nothing listed unless
+the account's phone number matches exactly one registered worker. A rating counts only while
+attendance still records its day as worked: after a muster is saved again or a correction is
+approved with the worker absent, the rating is kept but left out of the sheet, the history, the
+averages and the portal, and cannot be changed (409 `not-worked`); it counts again if the day is
+restored. The database repeats the rules in `app.guard_labourer_rating` (worked attendance on
+insert and change, the window, the signed-in rater, the database clock, same-day changes by the
+rater only, versioned; no deletes) and the unique index
+`(tenant_id, project_id, labourer_id, work_date)`; a rule broken only there is a 409 `labour-rule`
+(`already-rated` for the unique index). Audit: `labourer.rated` and `labourer.rating_changed` with
+the scores, the day and whether there is a comment, never its text.
+
 ## Attendance and timesheets (D3.3, web slice)
 
 All routes are under `/api/v1/attendance`, follow the conventions above and use the shared
@@ -1007,7 +1037,10 @@ holidays, the unverified demonstration timesheet rule and nine weeks of syntheti
 on Ruiru Heights and Kitengela (past weeks approved with their timesheet lines, the last
 complete week submitted, the current week open, open two-site and excessive-hours anomalies,
 one approved adjustment); this part is one transaction and is skipped when the company already
-has a timesheet period. Since D6.2 it also adds the Ruiru Heights schedule: 22 activities across
+has a timesheet period. Since D3.5 it also rates about half of the workers who worked on each of
+the five days before today (by the site agent or the project manager, deterministic scores and a
+few short comments; today is left to rate; skipped when the company has a rating; the database
+only accepts the last seven days, so it runs on the day it seeds). Since D6.2 it also adds the Ruiru Heights schedule: 22 activities across
 the WBS with 30 dependencies (including a lead and start-to-start links), the milestones linked
 into the network, the contract programme frozen as baseline 1 (as planned on 02/03/2026), actual
 dates and progress that slipped, and three delays (weather, late reinforcement, a client

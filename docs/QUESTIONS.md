@@ -24,6 +24,9 @@ Defaults are design assumptions only, not owner approval. Under [brief §15](./P
 | Q-P4 | Should PM-Buddy integrate with **accounting software** (QuickBooks, Xero, Sage, Odoo)? | CSV/Excel exports only; integration later | D5.4 |
 | Q-P5 | Should diaspora clients pay by **card or international transfer** (for example Pesapal, Flutterwave, Stripe) as well as M-Pesa and bank? | M-Pesa STK, C2B Paybill and recorded bank transfers only | D7.1 |
 | Q-P6 | Do **suppliers** need their own logins at launch, or are emailed/SMS links enough? | Logins in D7.2 | D7.2 |
+| Q-P7 | Worker ratings (D3.5): who rates, what, how often and whether workers see them? | Answered by the owner on 16/11/2026: project managers, site agents, foremen and owners; punctuality, work quality, safety and teamwork, 1–5 each with an optional comment; at most once per worker, project and day; workers see their own scores and comments (not raters) in the labourer portal (D-180–D-183) | D3.5 |
+| Q-P8 | May **ratings ever inform re-engagement** (for example listed when a worker is engaged again, or in the do-not-rehire review), and how long are they kept? | Never used automatically (D-184); kept with the worker's record; no retention period yet (CR-DP-14) | Before ratings are used with real workers |
+| Q-P9 | Worker pay history and **"Pay today"** (D4.4): can one person prepare and release a small daily payout? | Answered by the owner on 16/11/2026: no; one person prepares and a different person approves with MFA and releases it (D-185). Built on D4.3 once it merges | D4.4 |
 
 ## Sign-in and identity
 

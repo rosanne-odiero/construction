@@ -1,10 +1,11 @@
 import { getTranslations } from "next-intl/server";
 import { Banknote, CalendarCheck, MapPin } from "lucide-react";
 import { countyName } from "@pm-buddy/types";
-import { workerPortalResponseSchema } from "@pm-buddy/validation";
+import { workerPortalResponseSchema, workerRatingsResponseSchema } from "@pm-buddy/validation";
 import { LiveUnavailable } from "@/components/projects/live-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { loadLive, requirePortal } from "@/lib/server-api";
+import { WorkerRatingsCard } from "@/components/worker-ratings-card";
+import { loadLive, requirePortal, serverApi } from "@/lib/server-api";
 
 export async function generateMetadata() {
   const t = await getTranslations("portals");
@@ -17,6 +18,7 @@ export default async function WorkerPortalPage() {
   if (!session) return <LiveUnavailable retryHref="/worker" />;
   const result = await loadLive("/portal/worker", workerPortalResponseSchema, "/worker");
   if (!result.ok) return <LiveUnavailable retryHref="/worker" />;
+  const ratings = await serverApi("/portal/worker/ratings", workerRatingsResponseSchema);
   const t = await getTranslations("portals.worker");
   const { displayName, company, assignments } = result.data;
   return (
@@ -97,6 +99,7 @@ export default async function WorkerPortalPage() {
           </CardContent>
         </Card>
       </div>
+      {ratings.ok ? <WorkerRatingsCard ratings={ratings.data} /> : null}
     </div>
   );
 }

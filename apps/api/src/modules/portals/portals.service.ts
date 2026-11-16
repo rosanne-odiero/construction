@@ -6,6 +6,7 @@ import type { Prisma } from "../../generated/prisma/client.js";
 import { AccessPolicy, type Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
+import { LabourRatingsService } from "../labour/ratings.service.js";
 import { toProject } from "../projects/project-mappers.js";
 
 type ProjectRow = Prisma.ProjectGetPayload<object>;
@@ -32,6 +33,7 @@ export class PortalsService {
   constructor(
     private readonly scope: TenantScope,
     private readonly policy: AccessPolicy,
+    private readonly ratings: LabourRatingsService,
   ) {}
 
   worker(principal: Principal, req: Request) {
@@ -54,6 +56,23 @@ export class PortalsService {
         attendance: null,
         pay: null,
       });
+    });
+  }
+
+  /** The signed-in worker's ratings on the projects their portal shows (D3.5). */
+  workerRatings(principal: Principal, req: Request) {
+    return this.scope.run(principal, req, async (scope) => {
+      this.requirePortal(scope, "portal.worker");
+      const projects = await scope.tx.project.findMany({
+        where: this.policy.projectWhere(scope, "portal.worker"),
+        select: { id: true },
+      });
+      return this.ratings.forWorker(
+        scope.tx,
+        scope.access.tenantId,
+        principal.user.identifier,
+        projects.map((project) => project.id),
+      );
     });
   }
 

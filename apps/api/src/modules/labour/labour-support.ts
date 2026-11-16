@@ -64,6 +64,11 @@ export type LabourProblem =
   | "view-name-taken"
   | "view-limit"
   | "mfa-required"
+  | "already-rated"
+  | "not-worked"
+  | "rating-window"
+  | "rating-locked"
+  | "self-rating"
   | "labour-rule";
 
 export const labourConflict = (code: LabourProblem, message: string, match?: LabourerMatch) =>

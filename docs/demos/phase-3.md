@@ -191,12 +191,92 @@ Accounts: the owner (`owner@jenga-bora.example.test`, TOTP) holds both new permi
 
 - Migration `20261206090000_dpia_gate`: `dpia_records`, `dpia_record_sites`, `dpia_documents` and `biometric_switches` with forced RLS, composite tenant keys and narrowed `pmb_app` grants; guard triggers for every transition, `app.biometric_capture_allowed` and a trigger that refuses biometric attendance records where the gate is closed; permissions `biometrics.manage` and `biometrics.approve` (MFA).
 - `packages/domain/src/biometrics.ts`: lapse dates, approval gaps, the gate and the carry-forward rule (unit-tested); `packages/validation/src/biometrics.ts`: every request and response; `BIOMETRICS_CAPTURE` in the environment schema.
-- API module `biometrics` (10 operations, [ARCHITECTURE §4.19](../ARCHITECTURE.md#419-biometric-attendance-gate-d34-first-slice)) with step-up, audit and hashed documents.
+- API module `biometrics` (10 operations, [ARCHITECTURE §4.19](../ARCHITECTURE.md#419-biometric-attendance-d34)) with step-up, audit and hashed documents.
 - Web: `/attendance/biometrics` and `/attendance/biometrics/dpias/[dpiaId]`.
 
 ### 4. Known limitations
 
-- No biometric consent, enrolment, template storage, matching, kiosk or terminal yet, and no retention or deletion jobs (next D3.4 slices; the kiosk needs the D3.2 site app and the SDK choice, Q-B2).
+- No biometric consent, enrolment, template storage or deletion in this slice: they arrive in [the second slice](#d34-second-slice-biometric-consent-enrolment-and-deletion). Matching, the kiosk and terminals come later (the kiosk needs the D3.2 site app and the SDK choice, Q-B2).
 - Production keeps `BIOMETRICS_CAPTURE` off until the go-live gates pass (separately deployed biometrics worker with its own key, owner's go-ahead).
 - The review interval is fixed at 12 months for every company; there is no reminder before the review date (the DPIA simply lapses and biometrics stop).
 - The go-live conditions are the approver's attestations; the app does not verify them. The DPIA rules (no override of a DPO rejection, ODPC reference for a high residual risk, no grace period) await an adviser's review (CR-DP-02).
+
+## D3.4 (second slice): Biometric consent, enrolment and deletion
+
+This walkthrough takes about 20 minutes. Each worker answers separately for face and fingerprint, from the notice in their language. A capture device enrols them with templates that are sealed on arrival to a key the application cannot open. The templates are deleted on withdrawal, on request, on re-enrolment, when the DPIA stops covering the method, and a set time after the worker's last engagement ends. **The kiosk itself is not built yet**, so step 4 enrols from the browser console, as a capture device would.
+
+### 1. Run it
+
+As for [the first slice](#d34-first-slice-the-dpia-gate-for-biometric-attendance), then give the API a throwaway template key (only the public half goes in `apps/api/.env`, which is never committed):
+
+```bash
+npx pnpm@12.17.0 db:migrate      # adds 20261207090000_biometric_enrolment
+openssl genpkey -algorithm X25519 -out /tmp/pmb-biometric-dev.pem
+echo "BIOMETRIC_TEMPLATE_PUBLIC_KEYS=1:$(openssl pkey -in /tmp/pmb-biometric-dev.pem -pubout -outform DER | tail -c 32 | xxd -p -c 64)" >> apps/api/.env
+npx pnpm@12.17.0 dev
+```
+
+Without a key, **Biometrics** says "No template key is configured on this installation" and enrolment is refused. Keep the `.pem` only if you want to try a key rotation ([OPERATIONS "Biometric template keys"](../OPERATIONS.md#biometric-template-keys-biometric_template_public_keys-d34)). Templates are deleted 30 days after a worker's last engagement ends (`BIOMETRICS_RETENTION_DAYS_AFTER_ENGAGEMENT`, a placeholder under legal review). SMS confirmations arrive in Mailpit (<http://localhost:8025>) as "[DEVELOPMENT ONLY][SMS] Biometric consent".
+
+Start as the owner with the first slice's steps 1–6: a DPIA covering **Face kiosk** at **Main plot** (RUI-HTS), approved and switched on. A DPIA now also needs the **DPO's phone number**: the notice and the SMS tell workers to call it.
+
+### 2. Walkthrough
+
+| #   | What | Where | Try this |
+| --- | --- | --- | --- |
+| 1 | A worker's biometric page | **Labour** → a worker on Ruiru Heights (WRK-0009) → **Biometric consent** | One section per method. **Face** shows the notice filled with the company, 30 days and the DPO's name and phone; **Fingerprint** says the DPIA in force does not cover it. |
+| 2 | Consent | Face → choose **Kiswahili**, then **Read aloud, with a witness** | The notice switches language. **Record yes** stays disabled until the witness's name is filled. Record it: **Agreed**, "Decision recorded. The worker gets an SMS confirmation.", and the decision with notice version, language, witness and DPIA version. Mailpit shows the SMS in Kiswahili, one segment. |
+| 3 | Refusal | Another worker → **Record no** | Recorded with no reason asked; the worker uses the card, and nothing else changes. |
+| 4 | Enrol (no kiosk yet) | Back on WRK-0009's page, in the browser's developer console | Paste the snippet below: `201` and the enrolment's metadata, never the template. Reload: **In use** · "Face kiosk at RUI-HTS · Main plot · 1 template · Synthetic demo 1" · "Kept while the worker is engaged". Run it again with `bytes.set([0xff, 0xd8, 0xff])` after the `const bytes` line (a JPEG header): `422 raw-image-refused`. |
+| 5 | Withdrawal | **Record withdrawal** | "Withdrawal recorded and templates deleted.": **Withdrawn**, **Not enrolled**, and under **Deleted templates** "Consent withdrawn · Wanjiru Kamau". The SMS says the worker stopped. **Record yes** is offered again. |
+| 6 | Enrolments | Consent and enrol WRK-0027 the same way → **Enrolments** | Each enrolled worker, the method and site, **In use**, deleted "While engaged". |
+| 7 | Retention | **Labour** → WRK-0027 → **End engagement** with a date 40 days ago → **Enrolments** | **Due for deletion**, deleted from the end date + 31 days. **Run the retention deletions now**: "1 enrolments' templates deleted." |
+| 8 | Deletion on request | Consent and enrol WRK-0018 → **Delete templates** | "Templates deleted. The worker can enrol again later with consent." |
+| 9 | Deletion log | **Deletion log** | Who deleted which worker's templates, when and why ("Consent withdrawn", "Retention period after the last engagement" with its due date, "Worker's request"), never template content. Nobody can change it, not even the database's application role. |
+| 10 | Overview | **DPIA and sites** | **Templates and retention**: enrolments per method, held and due counts, the retention rule and whether the hourly job runs; **Consent decisions this month** per method (agreed, refused, withdrawn) for the DPO. |
+| 11 | Others | Sign in as the site agent or Brian, open a consented worker's page | They can record a withdrawal (never blocked) but cannot take consent or delete templates. |
+| 12 | Languages and themes | Language switch and theme toggle | Every page works in Kiswahili and dark mode and fits a 360 px phone. |
+
+The step 4 snippet does what a capture device will do: it posts a synthetic 512-byte template for the worker whose page is open, at the first site where the face kiosk is on.
+
+```js
+const { csrfToken } = await (await fetch("/api/v1/auth/csrf")).json();
+const { sites } = await (await fetch("/api/v1/biometrics")).json();
+const site = sites.find((s) => s.methods.some((m) => m.method === "face" && m.on));
+const bytes = crypto.getRandomValues(new Uint8Array(512));
+const res = await fetch("/api/v1/biometrics/enrolments", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+  body: JSON.stringify({
+    id: crypto.randomUUID(),
+    labourerId: location.pathname.split("/").pop(),
+    siteId: site.id,
+    method: "face",
+    modality: "face",
+    templates: [
+      {
+        data: btoa(String.fromCharCode(...bytes)),
+        qualityScore: 87.5,
+        algorithm: "Synthetic demo",
+        algorithmVersion: "1",
+      },
+    ],
+  }),
+});
+console.log(res.status, await res.json());
+```
+
+### 3. What changed under the hood
+
+- Migration `20261207090000_biometric_enrolment`: biometric consent kinds on `labourer_consents` (with the DPIA in force), `biometric_enrolments`, `biometric_templates` and `biometric_deletions` with forced RLS; guard triggers for every rule (consent under the DPIA, enrolment only where capture is on, templates stored and deleted only with their enrolment, retention deletions only when due, the log written by the database alone); `pmb_app` cannot select a template's bytes, change a template or touch the log; permission `biometrics.enrol`.
+- `TemplateSealer`: X25519, HKDF-SHA-256 and AES-256-GCM per template, sealed to `BIOMETRIC_TEMPLATE_PUBLIC_KEYS`; the API refuses to start with a private key. `keys:rotate rewrap --only biometric` re-seals with the operator's private keys.
+- API: 8 operations ([ARCHITECTURE §4.19](../ARCHITECTURE.md#419-biometric-attendance-d34)), SMS confirmations after commit, the hourly retention job, and the biometric journal (one log line per deletion or withdrawal, after commit, replayed after a backup restore).
+- Web: `/attendance/biometrics/workers/[labourerId]`, `/attendance/biometrics/enrolments`, `/attendance/biometrics/deletions` and the overview's templates and monitoring sections.
+
+### 4. Known limitations
+
+- **No kiosk or scanner capture yet.** It needs the site app (D3.2), the SDK choice (Q-B2) and the separately deployed biometrics worker that holds the private key and prepares site rosters (OR-01). Matching, device purges and terminals come with it.
+- The retention period is one installation-wide value; 30 days is a placeholder (COMPLIANCE-REVIEW CR-DP-06).
+- Withdrawal by USSD and the USSD code in the notice wait for D7.3; the signed form is not uploaded (the officer files the paper form); refusal and withdrawal rates per foreman, and data subject requests as records, are not built.
+- After a backup restore, the biometric journal is replayed by hand ([OPERATIONS](../OPERATIONS.md#backup-set-and-coherent-restore-order)); automating it is D9.3.
+- Production keeps `BIOMETRICS_CAPTURE` off and has no SMS provider yet. The notices and SMS texts are drafts awaiting legal and professional Kiswahili review.

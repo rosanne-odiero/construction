@@ -714,7 +714,8 @@
       },
       "biometrics": {
         "manage": "Prepare the biometrics DPIA",
-        "approve": "Approve the DPIA and switch biometrics on"
+        "approve": "Approve the DPIA and switch biometrics on",
+        "enrol": "Take biometric consent and enrol workers"
       }
     },
     "notices": {
@@ -2311,7 +2312,15 @@
     "dpiaRequired": "Approve the company's DPIA before switching biometric capture on.",
     "dpiaLapsed": "The DPIA has passed its review date. Approve a renewal first.",
     "dpiaScope": "The DPIA in force does not cover this site and method.",
-    "biometricsRule": "The change breaks a DPIA or biometrics rule. Reload and check."
+    "biometricsRule": "The change breaks a DPIA or biometrics rule. Reload and check.",
+    "consentRecorded": "The worker's decision is already recorded. To change a yes, record a withdrawal.",
+    "consentNotGranted": "There is no consent for this method to withdraw.",
+    "consentRequired": "Record the worker's consent to the current notice first.",
+    "labourerInactive": "Only an active worker can be enrolled.",
+    "templateKeyMissing": "No template key is configured on this installation, so nobody can be enrolled.",
+    "rawImageRefused": "Only templates are accepted: images are never stored.",
+    "enrolmentConflict": "This enrolment ID was already used for another enrolment.",
+    "enrolmentDeleted": "These templates were already deleted."
   },
   "projectStatus": {
     "planning": "Planning",
@@ -3871,6 +3880,50 @@
       "withdraw": "You can withdraw your agreement at any time by telling your supervisor or the site agent. Records the law requires us to keep are kept.",
       "biometrics": "This notice does not cover fingerprints or face recognition. Those need a separate agreement, and you can always use a worker card instead.",
       "question": "Do you agree that {company} records and uses this information as described?"
+    },
+    "biometricFaceV1": {
+      "title": "Using your face to record your attendance",
+      "whoTitle": "Who we are",
+      "who": "{company} keeps your work records. We use a system called PM-Buddy.",
+      "whatTitle": "What we ask",
+      "what": "We would like a machine to read your face. The machine makes a secret code from it. We keep only the code, not a picture of your face.",
+      "whyTitle": "Why",
+      "why": "So the records show exactly who came to work each day. You get paid for every day you work, and nobody can sign in for you.",
+      "noTitle": "You can say no",
+      "no": "It is your choice. If you say no, you will sign in with your worker card, a photo and your supervisor. You will not lose work, pay or anything else.",
+      "whereTitle": "Where the code is kept",
+      "where": "The code is locked and used only at {company} sites where you work. We do not sell it. We do not give it to other employers, lenders or anyone else, unless the law requires it.",
+      "howLongTitle": "How long",
+      "howLong": "We delete the code {retentionDays} days after your work with {company} ends, or sooner if you ask.",
+      "changeTitle": "Changing your mind",
+      "change": "You can stop at any time. Tell your supervisor or the site agent, or call or SMS {dpoPhone}. We will delete the code, and you will use your worker card instead.",
+      "rightsTitle": "Your rights",
+      "rights": "You can ask to see, correct or delete your information. If an attendance record is wrong, tell us. We will check it and correct your pay.",
+      "questionsTitle": "Questions or complaints",
+      "questions": "Contact {dpoName} on {dpoPhone}. You can also complain to the Office of the Data Protection Commissioner (ODPC).",
+      "question": "Do you agree to use your face to record your attendance?"
+    },
+    "biometricFingerprintV1": {
+      "title": "Using your fingerprint to record your attendance",
+      "whoTitle": "Who we are",
+      "who": "{company} keeps your work records. We use a system called PM-Buddy.",
+      "whatTitle": "What we ask",
+      "what": "We would like a machine to read your fingerprint. The machine makes a secret code from it. We keep only the code, not a picture of your finger.",
+      "whyTitle": "Why",
+      "why": "So the records show exactly who came to work each day. You get paid for every day you work, and nobody can sign in for you.",
+      "noTitle": "You can say no",
+      "no": "It is your choice. If you say no, you will sign in with your worker card, a photo and your supervisor. You will not lose work, pay or anything else.",
+      "whereTitle": "Where the code is kept",
+      "where": "The code is locked and used only at {company} sites where you work. We do not sell it. We do not give it to other employers, lenders or anyone else, unless the law requires it.",
+      "howLongTitle": "How long",
+      "howLong": "We delete the code {retentionDays} days after your work with {company} ends, or sooner if you ask.",
+      "changeTitle": "Changing your mind",
+      "change": "You can stop at any time. Tell your supervisor or the site agent, or call or SMS {dpoPhone}. We will delete the code, and you will use your worker card instead.",
+      "rightsTitle": "Your rights",
+      "rights": "You can ask to see, correct or delete your information. If an attendance record is wrong, tell us. We will check it and correct your pay.",
+      "questionsTitle": "Questions or complaints",
+      "questions": "Contact {dpoName} on {dpoPhone}. You can also complain to the Office of the Data Protection Commissioner (ODPC).",
+      "question": "Do you agree to use your fingerprint to record your attendance?"
     }
   },
   "labourLive": {
@@ -4085,7 +4138,8 @@
       "consent": {
         "title": "Data protection consent",
         "latest": "Latest record: {date} by {name} ({language}).",
-        "open": "Consent records"
+        "open": "Consent records",
+        "biometrics": "Biometric consent"
       },
       "dnr": {
         "title": "Do not rehire",
@@ -4900,6 +4954,7 @@
       "dpo": "Data Protection Officer",
       "controller": "Controller's decision",
       "name": "Name",
+      "phone": "Phone",
       "role": "Role",
       "opinion": "Opinion",
       "decision": "Decision",
@@ -4908,6 +4963,7 @@
       "residualRisk": "Residual risk",
       "odpcReference": "ODPC prior consultation reference",
       "notRecorded": "Not recorded",
+      "noPhone": "No phone recorded",
       "document": "Signed DPIA",
       "noDocument": "No signed document uploaded yet.",
       "download": "Download",
@@ -4947,6 +5003,7 @@
       "methods": "Choose at least one capture method.",
       "sites": "Choose at least one site.",
       "dpo": "Record the DPO's name, opinion and date.",
+      "dpo_phone": "Record the DPO's phone number: the consent notice tells workers to call or SMS it.",
       "dpo_rejected": "The DPO advised against it, so it cannot be approved.",
       "dpo_conditions": "Write down the DPO's conditions.",
       "controller": "Record the controller's name, decision and date.",
@@ -4962,6 +5019,7 @@
       "save": "Save draft",
       "saved": "Draft saved.",
       "dateHint": "DD/MM/YYYY",
+      "phoneHint": "+254 7XX XXX XXX",
       "invalidDate": "Enter dates as DD/MM/YYYY."
     },
     "upload": {
@@ -5004,6 +5062,180 @@
       "description": "Biometric capture stops on every site at once. A new version must be approved and sites switched on again.",
       "reason": "Reason",
       "submit": "Withdraw DPIA"
+    },
+    "sms": {
+      "modalities": {
+        "face": "face",
+        "fingerprint": "fingerprint"
+      },
+      "granted": "{company}: On {date} you said YES to using your {modality} for attendance. To change this, tell your supervisor or call {dpoPhone}.",
+      "refused": "{company}: On {date} you said NO to using your {modality} for attendance. Use your worker card. To change this, call {dpoPhone}.",
+      "withdrawn": "{company}: On {date} you stopped using your {modality} for attendance. We will delete the code. Use your worker card. Help: {dpoPhone}."
+    },
+    "nav": {
+      "label": "Biometric attendance",
+      "gate": "DPIA and sites",
+      "enrolments": "Enrolments",
+      "deletions": "Deletion log"
+    },
+    "modalities": {
+      "face": "Face",
+      "fingerprint": "Fingerprint"
+    },
+    "consentStatuses": {
+      "none": "No decision",
+      "granted": "Agreed",
+      "refused": "Refused",
+      "withdrawn": "Withdrawn"
+    },
+    "enrolmentStates": {
+      "active": "In use",
+      "held": "Held: DPIA lapsed",
+      "deletion_due": "Due for deletion",
+      "deleted": "Deleted"
+    },
+    "deletionReasons": {
+      "consent_withdrawn": "Consent withdrawn",
+      "re_enrolled": "Enrolled again",
+      "engagement_ended": "Retention period after the last engagement",
+      "dpia_withdrawn": "DPIA withdrawn",
+      "out_of_scope": "No longer covered by the DPIA",
+      "request": "Worker's request"
+    },
+    "blocked": {
+      "platform_off": "Biometric attendance is not available on this PM-Buddy installation.",
+      "no_dpia": "Approve the company's DPIA before asking for consent.",
+      "dpia_lapsed": "The DPIA has passed its review date: renew it before asking for consent.",
+      "not_in_scope": "The DPIA in force does not cover this method."
+    },
+    "templates": {
+      "title": "Templates and retention",
+      "description": "Templates are stored sealed to a key the application cannot open. They are never shown, exported or used outside the worker's sites.",
+      "face": "Face enrolments",
+      "fingerprint": "Fingerprint enrolments",
+      "held": "Held while the DPIA has lapsed",
+      "deletionDue": "Due for deletion",
+      "retention": "Templates are deleted {days} days after a worker's last engagement ends (installation setting, under legal review).",
+      "jobOn": "The deletion job checks every hour.",
+      "jobOff": "The deletion job does not run on this installation: run it from Enrolments.",
+      "keyMissing": "No template key is configured on this installation, so nobody can be enrolled. Ask the operator to set it.",
+      "open": "Open enrolments",
+      "log": "Open the deletion log",
+      "monitoringTitle": "Consent decisions this month ({month})",
+      "monitoringHint": "Review a spike in refusals or withdrawals, or no refusals at all on a large site: either can signal pressure on workers.",
+      "columns": {
+        "method": "Method",
+        "granted": "Agreed",
+        "refused": "Refused",
+        "withdrawn": "Withdrawn"
+      }
+    },
+    "worker": {
+      "title": "Biometric consent",
+      "heading": "Biometrics: {name}",
+      "description": "Consent is separate for face and fingerprint. A worker who says no or stops uses the worker card, photo and supervisor instead, with no penalty.",
+      "back": "Back to {workerNo}",
+      "dpiaLine": "DPIA version {version}: DPO {dpo}",
+      "dpiaNone": "No DPIA is approved: biometric consent cannot be recorded.",
+      "notice": "Notice {version}",
+      "draftNotice": "Draft wording: legal and professional Kiswahili review are still pending.",
+      "language": "Language the worker chose",
+      "languages": {
+        "en": "English",
+        "sw": "Kiswahili"
+      },
+      "method": "How the worker answered",
+      "methods": {
+        "signed": "Signed the form",
+        "witnessed_verbal": "Read aloud, with a witness"
+      },
+      "witness": "Witness's name",
+      "witnessHint": "Someone other than the worker's own foreman, where possible.",
+      "yes": "Record yes",
+      "no": "Record no",
+      "yesConfirm": "The worker agrees to use their {modality}.",
+      "noConfirm": "The worker refuses. No reason is asked; their work and pay do not change.",
+      "recorded": "Decision recorded. The worker gets an SMS confirmation.",
+      "current": "Agreed to the current notice.",
+      "outdated": "Agreed to an older notice: ask again before enrolling.",
+      "canRecord": "Read the notice to the worker in their language, then record their answer.",
+      "readOnly": "You can see these records. Taking consent needs the biometric enrolment permission.",
+      "withdraw": {
+        "button": "Record withdrawal",
+        "title": "The worker stops using their {modality}",
+        "description": "Their {modality} templates are deleted now, and they use the worker card from today.",
+        "submit": "Record withdrawal and delete templates",
+        "done": "Withdrawal recorded and templates deleted."
+      },
+      "enrolment": {
+        "title": "Enrolment",
+        "none": "Not enrolled.",
+        "noneHint": "Enrolment happens at a site kiosk or scanner after consent.",
+        "summary": "{method} at {site} · {count, plural, one {# template} other {# templates}} · {algorithm} {version}",
+        "enrolled": "Enrolled {at} by {name}.",
+        "engaged": "Kept while the worker is engaged.",
+        "dueOn": "Deleted from {date} unless the worker is engaged again."
+      },
+      "delete": {
+        "button": "Delete templates",
+        "title": "Delete {modality} templates on the worker's request",
+        "description": "The templates are deleted now and cannot be restored. The worker can enrol again later with consent.",
+        "submit": "Delete templates",
+        "done": "Templates deleted. The worker can enrol again later with consent."
+      },
+      "decisions": {
+        "title": "Decisions",
+        "none": "No decision recorded.",
+        "columns": {
+          "answer": "Answer",
+          "notice": "Notice",
+          "language": "Language",
+          "method": "Method",
+          "recorded": "Recorded",
+          "withdrawn": "Withdrawn"
+        },
+        "yes": "Yes",
+        "no": "No",
+        "dpia": "DPIA version {version}",
+        "witness": "Witness: {name}"
+      },
+      "deletions": {
+        "title": "Deleted templates",
+        "none": "Nothing deleted."
+      }
+    },
+    "enrolmentList": {
+      "title": "Biometric enrolments",
+      "description": "Every worker whose templates are held, with when the retention job deletes them. Enrolment happens at a site kiosk or scanner.",
+      "none": "Nobody is enrolled.",
+      "columns": {
+        "worker": "Worker",
+        "method": "Method",
+        "site": "Site",
+        "state": "State",
+        "enrolled": "Enrolled",
+        "dueOn": "Deleted from"
+      },
+      "engaged": "While engaged",
+      "run": {
+        "button": "Run the retention deletions now",
+        "done": "{count} enrolments' templates deleted."
+      }
+    },
+    "deletionLog": {
+      "title": "Template deletion log",
+      "description": "Who deleted which worker's templates, when and why. It never holds template content and cannot be changed.",
+      "none": "No templates have been deleted.",
+      "columns": {
+        "when": "Deleted",
+        "worker": "Worker",
+        "method": "Method",
+        "reason": "Reason",
+        "templates": "Templates",
+        "by": "By",
+        "dueOn": "Due on"
+      },
+      "job": "Retention job"
     }
   },
   "bqNav": {

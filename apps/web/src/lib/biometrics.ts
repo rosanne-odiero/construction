@@ -1,4 +1,4 @@
-import type { DpiaState } from "@pm-buddy/types";
+import type { BiometricConsentStatus, BiometricEnrolmentState, DpiaState } from "@pm-buddy/types";
 import type { CreateDpiaRequest, DpiaDetail } from "@pm-buddy/validation";
 import type { Tone } from "@/components/status-badge";
 import { calendarInput, parseCalendarInput } from "./project-input";
@@ -17,6 +17,32 @@ export const dpiaStateTone: Record<DpiaState, Tone> = {
   withdrawn: "danger",
 };
 
+export const enrolmentStateTone: Record<BiometricEnrolmentState, Tone> = {
+  active: "success",
+  held: "warning",
+  deletion_due: "warning",
+  deleted: "neutral",
+};
+
+export const consentStatusTone: Record<BiometricConsentStatus, Tone> = {
+  none: "neutral",
+  granted: "success",
+  refused: "neutral",
+  withdrawn: "warning",
+};
+
+/** Fills a biometric notice's placeholders with the company, retention period and DPO. */
+export function fillNotice(
+  text: string,
+  values: { company: string; retentionDays: number; dpoName: string; dpoPhone: string },
+): string {
+  return text
+    .replaceAll("{company}", values.company)
+    .replaceAll("{retentionDays}", String(values.retentionDays))
+    .replaceAll("{dpoName}", values.dpoName)
+    .replaceAll("{dpoPhone}", values.dpoPhone);
+}
+
 /** The first characters of a SHA-256, for display next to the full value. */
 export const shortHash = (sha256: string) => sha256.slice(0, 12);
 
@@ -25,6 +51,7 @@ export type DpiaFormState = {
   methods: string[];
   siteIds: string[];
   dpoName: string;
+  dpoPhone: string;
   dpoOpinion: string;
   dpoOpinionOn: string;
   dpoNote: string;
@@ -42,6 +69,7 @@ export function dpiaFormState(dpia: DpiaDetail): DpiaFormState {
     methods: [...dpia.methods],
     siteIds: dpia.sites.map((site) => site.id),
     dpoName: dpia.dpo.name ?? "",
+    dpoPhone: dpia.dpo.phone ?? "",
     dpoOpinion: dpia.dpo.opinion ?? "",
     dpoOpinionOn: calendarInput(dpia.dpo.opinionOn),
     dpoNote: dpia.dpo.note ?? "",
@@ -64,6 +92,7 @@ export function dpiaRequest(form: DpiaFormState): Record<string, unknown> | null
     methods: form.methods,
     siteIds: form.siteIds,
     dpoName: form.dpoName,
+    dpoPhone: form.dpoPhone,
     dpoOpinion: form.dpoOpinion || null,
     dpoOpinionOn,
     dpoNote: form.dpoNote,
@@ -78,7 +107,8 @@ export function dpiaRequest(form: DpiaFormState): Record<string, unknown> | null
 }
 
 /**
- * A renewal starts from the DPIA in force: the same methods, sites, names and residual risk. The
+ * A renewal starts from the DPIA in force: the same methods, sites, names, DPO phone and residual
+ * risk. The
  * opinion, the decision and their dates and notes are left empty: they must be signed again.
  */
 export function renewalRequest(current: DpiaDetail | null): CreateDpiaRequest {
@@ -86,6 +116,7 @@ export function renewalRequest(current: DpiaDetail | null): CreateDpiaRequest {
     methods: current ? [...current.methods] : [],
     siteIds: current ? current.sites.map((site) => site.id) : [],
     dpoName: current?.dpo.name ?? null,
+    dpoPhone: current?.dpo.phone ?? null,
     dpoOpinion: null,
     dpoOpinionOn: null,
     dpoNote: null,

@@ -239,10 +239,12 @@ carry a more specific `code`: `password-too-weak`, `password-breached` and `pass
 phone numbers and callback bodies) and sealed TOTP seeds (`AUTH_MFA_ENCRYPTION_KEY`) to the
 active key version. It runs as the schema owner (`DATABASE_MIGRATION_URL`), company by company, in
 batches with compare-and-swap updates, so it is idempotent and resumable; `rewrap` needs
-`--operator "<name>"` and records each run in `key_rotation_runs`. Options: `--only field|mfa`,
+`--operator "<name>"` and records each run in `key_rotation_runs`. Options: `--only field|mfa|biometric`,
 `--tenant <company ID>`, `--batch <rows>`, `--dry-run`. `pmb_app` cannot rewrite a ciphertext:
 the append-only and immutable-row guards allow only the owner's re-encryption of the same
-value. The runbook (order of steps, PIN pepper and signing keys, what cannot rotate) is
+value. Biometric templates (D3.4) are re-sealed only with `--only biometric`, given the old
+private keys in `BIOMETRIC_TEMPLATE_PRIVATE_KEYS` for that command alone (the API refuses to start
+with them). The runbook (order of steps, PIN pepper, signing and biometric keys, what cannot rotate) is
 [OPERATIONS "Key rotation"](../../docs/OPERATIONS.md#key-rotation); design in
 [ARCHITECTURE §4.17](../../docs/ARCHITECTURE.md#417-security-hardening-d91).
 
@@ -860,7 +862,7 @@ production; production keeps it off) gates the whole installation. Reading needs
 `biometrics.manage` or `biometrics.approve` (company-level); preparing needs `biometrics.manage`;
 deciding and switching on need `biometrics.approve` with MFA verified within five minutes
 (403 `step-up-required`). Design notes:
-[ARCHITECTURE §4.19](../../docs/ARCHITECTURE.md#419-biometric-attendance-gate-d34-first-slice).
+[ARCHITECTURE §4.19](../../docs/ARCHITECTURE.md#419-biometric-attendance-d34).
 
 | Method/path                          | Body / query                                                                                                                                                                            | Notes                                                                                                                                                                                                                                                      |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -875,6 +877,35 @@ deciding and switching on need `biometrics.approve` with MFA verified within fiv
 The database repeats the gate: `app.biometric_capture_allowed(tenant, site, method, date)` and a
 trigger refusing any `face`, `fingerprint` or `terminal` row in `attendance_records` that is not
 dated today (Nairobi) or where the gate is closed for that day. Audit metadata carries IDs, codes, counts and hashes only.
+
+## Biometric consent, enrolment and deletion (D3.4, second slice)
+
+Same conventions and schemas; design notes in
+[ARCHITECTURE §4.19](../../docs/ARCHITECTURE.md#419-biometric-attendance-d34). Consent is separate
+per modality (`face`, `fingerprint`) and recorded under the approved DPIA in force covering it.
+Templates arrive from a capture device (the kiosk is not built yet: site app D3.2 and the SDK
+choice, QUESTIONS Q-B2) and are sealed on arrival to an X25519 public key the API holds without
+its private half. No endpoint returns a template in any form.
+
+| Method/path                            | Body                                                                 | Notes                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET `labourers/:id`                    | —                                                                    | `labour.view` on one of the worker's projects, or `biometrics.manage`. Per modality: consent status and history, the notice to show, why consent cannot be recorded now, the enrolment and its deletions                                                                                                                                                               |
+| POST `labourers/:id/consents`          | `{modality, noticeVersion, language, method, witnessName?, granted}` | `biometrics.enrol` on the worker's projects. 409 `consent-recorded` (one decision at a time), gate codes as above; 400 `notice-not-current`. SMS confirmation after commit                                                                                                                                                                                             |
+| POST `labourers/:id/consents/withdraw` | `{modality, method, witnessName?}`                                   | `biometrics.enrol` or `labour.consent` on the worker, or `biometrics.manage`; never blocked by the gate. Deletes the modality's templates in the same transaction. 409 `consent-not-granted`                                                                                                                                                                           |
+| POST `enrolments`                      | `{id, labourerId, siteId, method, modality, templates[]}`            | 201. `biometrics.enrol` on the site's project; 1–10 templates `{data (base64, 16 B–16 KiB), qualityScore (0–100), algorithm, algorithmVersion}`. Client-chosen ID (retry-safe; 409 `enrolment-conflict`); 409 `template-key-missing`, `labourer-inactive`, `not-engaged`, `consent-required`; 422 `raw-image-refused`. Bodies up to 256 KB; 60 per user per 10 minutes |
+| GET `enrolments` · `deletions`         | —                                                                    | `biometrics.manage` or `biometrics.approve`: enrolments with state and deletion date, the retention settings · the deletion log (latest 200)                                                                                                                                                                                                                           |
+| POST `enrolments/:id/delete`           | `{reason: "request"}`                                                | `biometrics.manage` (the worker's request). 409 `enrolment-deleted`                                                                                                                                                                                                                                                                                                    |
+| POST `retention/run`                   | `{}`                                                                 | `biometrics.manage`: deletes the company's templates that are due now                                                                                                                                                                                                                                                                                                  |
+
+Environment (see [CONFIGURATION §8](../../docs/CONFIGURATION.md#8-process-environment-deployment-settings)):
+`BIOMETRIC_TEMPLATE_PUBLIC_KEYS=<version>:<64 hex>[,…]` and
+`BIOMETRIC_TEMPLATE_ACTIVE_KEY_VERSION` (unset: no enrolment, 409 `template-key-missing`);
+`BIOMETRICS_RETENTION_DAYS_AFTER_ENGAGEMENT` (default 30, COMPLIANCE-REVIEW);
+`BIOMETRICS_RETENTION_JOB` (`on`/`off`; unset: on except in tests). Generate a key pair with
+OpenSSL as in [OPERATIONS "Biometric template keys"](../../docs/OPERATIONS.md#biometric-template-keys-biometric_template_public_keys-d34);
+keep the private key out of the API's environment. The database writes the deletion log; the
+application journals each deletion and withdrawal after commit (`BiometricJournal`, IDs only) for
+replay after a restore.
 
 ## Health and safety (D8.2)
 

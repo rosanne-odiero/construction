@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { ShieldAlert } from "lucide-react";
-import type { BiometricCaptureMethod } from "@pm-buddy/types";
+import { BIOMETRIC_MODALITIES, type BiometricCaptureMethod } from "@pm-buddy/types";
 import { biometricsOverviewResponseSchema } from "@pm-buddy/validation";
 import { AttendanceNav } from "@/components/attendance/attendance-nav";
 import { SiteSwitchButton, StartDpiaButton } from "@/components/attendance/biometrics-actions";
+import { BiometricsNav } from "@/components/attendance/biometrics-nav";
 import { PageHeader } from "@/components/page-header";
 import { LiveForbidden, LiveUnavailable } from "@/components/projects/live-state";
 import { StatusBadge } from "@/components/status-badge";
@@ -27,9 +28,10 @@ export async function generateMetadata() {
 }
 
 /**
- * Biometric attendance (D3.4 first slice): the company's DPIA and, per site and method, whether
- * biometric capture may run. Capture stays off until a DPIA is approved here and then runs only
- * where it is switched on under it; the card, photo and supervisor method is never affected.
+ * Biometric attendance (D3.4): the company's DPIA and, per site and method, whether biometric
+ * capture may run, then the templates held, the retention period and this month's consent
+ * decisions. Capture stays off until a DPIA is approved here and then runs only where it is
+ * switched on under it; the card, photo and supervisor method is never affected.
  */
 export default async function BiometricsPage() {
   const path = "/attendance/biometrics";
@@ -53,6 +55,7 @@ export default async function BiometricsPage() {
         description={t("description")}
       />
       <AttendanceNav current="biometrics" />
+      <BiometricsNav current="gate" />
 
       {!view.platformAvailable ? (
         <p
@@ -183,6 +186,96 @@ export default async function BiometricsPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section aria-labelledby="templates-title" className="space-y-3">
+        <div className="space-y-1">
+          <h2 id="templates-title" className="text-lg font-semibold">
+            {t("templates.title")}
+          </h2>
+          <p className="text-sm text-muted-foreground">{t("templates.description")}</p>
+        </div>
+        {!view.templateKeyConfigured ? (
+          <p
+            role="status"
+            className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm"
+          >
+            <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            {t("templates.keyMissing")}
+          </p>
+        ) : null}
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="template-counts">
+          {(
+            [
+              ["face", view.enrolments.face],
+              ["fingerprint", view.enrolments.fingerprint],
+              ["held", view.enrolments.held],
+              ["deletionDue", view.enrolments.deletionDue],
+            ] as const
+          ).map(([key, value]) => (
+            <div key={key} className="rounded-xl border p-4">
+              <dt className="text-sm text-muted-foreground">{t(`templates.${key}`)}</dt>
+              <dd className="text-2xl font-semibold tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-sm">
+          {t("templates.retention", { days: view.retention.daysAfterEngagement })}{" "}
+          {view.retention.jobEnabled ? t("templates.jobOn") : t("templates.jobOff")}
+        </p>
+        <p className="flex flex-wrap gap-4 text-sm">
+          <Link
+            href="/attendance/biometrics/enrolments"
+            className="font-medium underline underline-offset-4"
+          >
+            {t("templates.open")}
+          </Link>
+          <Link
+            href="/attendance/biometrics/deletions"
+            className="font-medium underline underline-offset-4"
+          >
+            {t("templates.log")}
+          </Link>
+        </p>
+        <div className="space-y-2">
+          <h3 className="font-medium">
+            {t("templates.monitoringTitle", { month: view.consentsThisMonth.month })}
+          </h3>
+          <div
+            role="region"
+            tabIndex={0}
+            aria-label={t("templates.monitoringTitle", { month: view.consentsThisMonth.month })}
+            className="overflow-x-auto rounded-lg border outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <table className="w-full caption-bottom text-sm">
+              <TableCaption className="sr-only">
+                {t("templates.monitoringTitle", { month: view.consentsThisMonth.month })}
+              </TableCaption>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead>{t("templates.columns.method")}</TableHead>
+                  <TableHead>{t("templates.columns.granted")}</TableHead>
+                  <TableHead>{t("templates.columns.refused")}</TableHead>
+                  <TableHead>{t("templates.columns.withdrawn")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {BIOMETRIC_MODALITIES.map((modality) => {
+                  const counts = view.consentsThisMonth[modality];
+                  return (
+                    <TableRow key={modality}>
+                      <TableCell className="font-medium">{t(`modalities.${modality}`)}</TableCell>
+                      <TableCell className="tabular-nums">{counts.granted}</TableCell>
+                      <TableCell className="tabular-nums">{counts.refused}</TableCell>
+                      <TableCell className="tabular-nums">{counts.withdrawn}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </table>
+          </div>
+          <p className="text-sm text-muted-foreground">{t("templates.monitoringHint")}</p>
+        </div>
       </section>
 
       <section aria-labelledby="history-title" className="space-y-3">

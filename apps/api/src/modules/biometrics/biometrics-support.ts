@@ -13,6 +13,7 @@ import {
 import type { BiometricGateReason } from "@pm-buddy/types";
 import { catchError, throwError, type Observable } from "rxjs";
 import { AppConfig } from "../../config/app-config.js";
+import { parseTemplateKeyList, TemplateSealer } from "./template-sealer.js";
 import {
   hasDatabaseCode,
   isCheckViolation,
@@ -26,13 +27,38 @@ import {
  * pass (a separately deployed biometrics worker holding its own KMS key, THREAT_MODEL OR-01, and
  * the owner's go-ahead), so an `on` there is logged and ignored. The database cannot read the
  * environment: the API enforces this switch, the database every other part of the gate.
+ *
+ * It also holds the installation's biometric settings: the template sealer (public keys only,
+ * BIOMETRIC_TEMPLATE_PUBLIC_KEYS; decision D-167), the retention period after the last engagement
+ * (BIOMETRICS_RETENTION_DAYS_AFTER_ENGAGEMENT; D-169) and whether the retention job runs here.
+ * The API refuses to start when given the private keys: they never belong in this process.
  */
 @Injectable()
 export class BiometricsPlatform {
   private readonly logger = new Logger(BiometricsPlatform.name);
   private readonly available: boolean;
+  /** Null when no public key is configured: nothing can be enrolled. */
+  readonly sealer: TemplateSealer | null;
+  readonly retentionDays: number;
+  readonly retentionJobEnabled: boolean;
 
   constructor(config: AppConfig) {
+    if (process.env["BIOMETRIC_TEMPLATE_PRIVATE_KEYS"])
+      throw new Error(
+        "BIOMETRIC_TEMPLATE_PRIVATE_KEYS must never be given to the API: it seals templates with the public keys only",
+      );
+    const keys = config.get("BIOMETRIC_TEMPLATE_PUBLIC_KEYS");
+    if (keys) {
+      const parsed = parseTemplateKeyList(
+        "BIOMETRIC_TEMPLATE_PUBLIC_KEYS",
+        keys,
+        config.get("BIOMETRIC_TEMPLATE_ACTIVE_KEY_VERSION"),
+      );
+      this.sealer = new TemplateSealer(parsed.keys, parsed.activeVersion);
+    } else this.sealer = null;
+    this.retentionDays = config.get("BIOMETRICS_RETENTION_DAYS_AFTER_ENGAGEMENT");
+    const job = config.get("BIOMETRICS_RETENTION_JOB");
+    this.retentionJobEnabled = job ? job === "on" : config.get("NODE_ENV") !== "test";
     const setting = config.get("BIOMETRICS_CAPTURE");
     if (config.isProduction) {
       if (setting === "on")
@@ -74,7 +100,17 @@ export type BiometricsProblem =
   | "dpia-required"
   | "dpia-lapsed"
   | "dpia-scope"
-  | "biometrics-rule";
+  | "biometrics-rule"
+  | "notice-not-current"
+  | "consent-recorded"
+  | "consent-not-granted"
+  | "consent-required"
+  | "not-engaged"
+  | "labourer-inactive"
+  | "template-key-missing"
+  | "raw-image-refused"
+  | "enrolment-conflict"
+  | "enrolment-deleted";
 
 export function biometricsProblem(
   status: 400 | 403 | 404 | 409 | 413 | 415 | 422,

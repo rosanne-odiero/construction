@@ -15,9 +15,13 @@ describe("key rotation catalogue", () => {
       }
     }
     expect(found.length).toBeGreaterThanOrEqual(10);
-    expect(FIELD_COLUMNS.map(({ table, column }) => `${table}.${column}`).sort()).toEqual(
-      found.sort(),
-    );
+    // Biometric templates are sealed to a separate key pair and re-sealed by rewrapBiometric.
+    expect(
+      [
+        ...FIELD_COLUMNS.map(({ table, column }) => `${table}.${column}`),
+        "biometric_templates.template_enc",
+      ].sort(),
+    ).toEqual(found.sort());
   });
 });
 
@@ -26,6 +30,9 @@ describe("keys:rotate arguments", () => {
     expect(() => parseArgs(["rewrap"])).toThrow(/--operator/);
     expect(parseArgs(["rewrap", "--operator", "Jane Ops", "--only", "field", "--dry-run"])).toEqual(
       { command: "rewrap", operator: "Jane Ops", only: "field", dryRun: true },
+    );
+    expect(parseArgs(["rewrap", "--operator", "Jane Ops", "--only", "biometric"]).only).toBe(
+      "biometric",
     );
     expect(() => parseArgs(["rewrap", "--operator", "Jane", "--only", "blind-index"])).toThrow();
     expect(() => parseArgs(["status", "--tenant", "not-a-uuid"])).toThrow();

@@ -326,7 +326,7 @@ The claim flag (`not_assessed`, `non_excusable`, `excusable`, `compensable`) rec
 
 ## Biometric attendance DPIA gate (D3.4 first slice)
 
-Implemented for the web app ([ARCHITECTURE §4.19](./ARCHITECTURE.md#419-biometric-attendance-gate-d34-first-slice)). Company-level: preparing needs `biometrics.manage`; deciding needs `biometrics.approve` (MFA) with MFA verified within five minutes. One person may do both. Every timestamp is the database clock; the database repeats every rule below.
+Implemented for the web app ([ARCHITECTURE §4.19](./ARCHITECTURE.md#419-biometric-attendance-d34)). Company-level: preparing needs `biometrics.manage`; deciding needs `biometrics.approve` (MFA) with MFA verified within five minutes. One person may do both. Every timestamp is the database clock; the database repeats every rule below.
 
 **DPIA versions.** `draft → approved → superseded | withdrawn`, or `draft → rejected`; `rejected`, `superseded` and `withdrawn` are final. One draft and one approved version per company. An approved version is *in force* through its review date (Africa/Nairobi) and *lapsed* after it (computed on read).
 
@@ -347,6 +347,22 @@ Implemented for the web app ([ARCHITECTURE §4.19](./ARCHITECTURE.md#419-biometr
 | switch off | `biometrics.manage` or `biometrics.approve`; never refused, no step-up | Off; `biometrics.switched_off` (site, project, method). Already off: nothing recorded |
 
 Biometric capture for a site and method runs only while the platform switch is on, the project is open, the approved DPIA is in force and covers it, and its switch is on under that DPIA (`biometricGate`). The card, photo and supervisor method is never gated.
+
+## Biometric consent, enrolment and deletion (D3.4 second slice)
+
+Implemented in the API and the web app ([ARCHITECTURE §4.19](./ARCHITECTURE.md#419-biometric-attendance-d34)); enrolment arrives from a capture device (the kiosk is not built). Per worker and modality (face, fingerprint):
+
+| Transition | Actor / preconditions | Effect / audit |
+|---|---|---|
+| record yes | `biometrics.enrol` on one of the worker's projects; platform on; approved DPIA in force covering the modality (409 `biometrics-unavailable`, `dpia-required`, `dpia-lapsed`, `dpia-scope`); the current notice (400 `notice-not-current`); no yes to it already (409 `consent-recorded`) | Granted consent naming the DPIA; SMS confirmation; `biometrics.consent_recorded` (consent, modality, granted, notice, language, method) |
+| record no | as above; no yes standing (409 `consent-recorded`: record a withdrawal) | Refusal (`granted = false`, no reason asked); SMS confirmation; same audit event |
+| withdraw | `biometrics.enrol` or `labour.consent` on one of the worker's projects, or `biometrics.manage`; a yes standing (409 `consent-not-granted`); never blocked by the platform or the DPIA | Every yes of the modality withdrawn; its enrolment's templates deleted (`consent_withdrawn`); SMS confirmation; `biometrics.consent_withdrawn` (counts) |
+| enrol | capture device as a `biometrics.enrol` holder on the site's project; gate open for the site and method today; template key configured (409 `template-key-missing`); active worker (409 `labourer-inactive`) engaged on the project today (409 `not-engaged`); yes to the current notice (409 `consent-required`); templates, not images (422 `raw-image-refused`); the same ID returns the same enrolment (409 `enrolment-conflict` otherwise) | Active enrolment with sealed templates; the previous one of the modality deleted (`re_enrolled`); `biometrics.enrolled` |
+| delete on request | `biometrics.manage`; enrolment active (409 `enrolment-deleted`) | Templates deleted (`request`); `biometrics.enrolment_deleted` |
+| retention | the hourly job (system actor) or `biometrics.manage` (**run now**); retention days after the last engagement passed, no engagement open | Templates deleted (`engagement_ended`, due date); `biometrics.enrolment_deleted` |
+| DPIA withdrawn / renewal drops the modality | the DPIA decisions above | Every affected enrolment deleted in the same transaction (`dpia_withdrawn`, `out_of_scope`); counted in `dpia.withdrawn` / `dpia.approved` |
+
+Every deletion writes a deletion log row (database trigger). While the DPIA has lapsed, enrolments are **held**: kept, unusable, and consent cannot be recorded; withdrawal still works.
 
 ## Payroll
 

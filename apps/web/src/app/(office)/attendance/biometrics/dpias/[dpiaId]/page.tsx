@@ -236,6 +236,14 @@ export default async function DpiaPage({ params }: { params: Promise<{ dpiaId: s
               <dd>
                 {recorded(dpia.dpo.name)}
                 {" · "}
+                {dpia.dpo.phone ? (
+                  <a href={`tel:${dpia.dpo.phone.replace(/[^+\d]/g, "")}`} className="underline">
+                    {dpia.dpo.phone}
+                  </a>
+                ) : (
+                  t("detail.noPhone")
+                )}
+                {" · "}
                 {dpia.dpo.opinion ? t(`opinions.${dpia.dpo.opinion}`) : t("detail.notRecorded")}
                 {" · "}
                 {dated(dpia.dpo.opinionOn)}

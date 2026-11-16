@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { Logger } from "nestjs-pino";
 import { ProblemDetailsFilter } from "./common/problem-details.filter.js";
 import { AppConfig, trustProxySetting } from "./config/app-config.js";
+import { enrolmentBodyReader } from "./modules/biometrics/enrolment-body.js";
 import { callbackBodyReader } from "./modules/payments/callback-body.js";
 
 export const API_PREFIX = "api";
@@ -51,6 +52,8 @@ export function configureApp(app: INestApplication): void {
   );
   // Payment provider callbacks are read raw (and size-limited) before the JSON parser runs (D4.2).
   app.use(callbackBodyReader(config.get("PAYMENTS_CALLBACK_MAX_BYTES")));
+  // Biometric enrolments carry up to ten base64 templates: a larger JSON limit on that route only.
+  app.use(enrolmentBodyReader());
 
   if (config.apiDocsEnabled) {
     const document = SwaggerModule.createDocument(

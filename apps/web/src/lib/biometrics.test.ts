@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DpiaDetail } from "@pm-buddy/validation";
-import { dpiaRequest, renewalRequest, type DpiaFormState } from "./biometrics";
+import { dpiaRequest, fillNotice, renewalRequest, type DpiaFormState } from "./biometrics";
 
 const form: DpiaFormState = {
   methods: ["face"],
   siteIds: ["31000000-0000-4000-8000-000000000001"],
   dpoName: "Achieng Otieno",
+  dpoPhone: "+254 712 345 678",
   dpoOpinion: "approve",
   dpoOpinionOn: "12/11/2026",
   dpoNote: "",
@@ -35,7 +36,13 @@ describe("DPIA form", () => {
     const current = {
       methods: ["face", "fingerprint"],
       sites: [{ id: "31000000-0000-4000-8000-000000000001" }],
-      dpo: { name: "Achieng Otieno", opinion: "approve", opinionOn: "2026-01-05", note: "x" },
+      dpo: {
+        name: "Achieng Otieno",
+        phone: "+254 712 345 678",
+        opinion: "approve",
+        opinionOn: "2026-01-05",
+        note: "x",
+      },
       controller: {
         name: "Wanjiru Kamau",
         role: "Director",
@@ -50,6 +57,7 @@ describe("DPIA form", () => {
       methods: ["face", "fingerprint"],
       siteIds: ["31000000-0000-4000-8000-000000000001"],
       dpoName: "Achieng Otieno",
+      dpoPhone: "+254 712 345 678",
       dpoOpinion: null,
       dpoOpinionOn: null,
       dpoNote: null,
@@ -62,5 +70,18 @@ describe("DPIA form", () => {
       odpcReference: null,
     });
     expect(renewalRequest(null).methods).toEqual([]);
+  });
+});
+
+describe("biometric notice", () => {
+  it("fills every placeholder, wherever it appears", () => {
+    expect(
+      fillNotice("{company}: {retentionDays} days. Call {dpoName} on {dpoPhone} ({dpoPhone}).", {
+        company: "Ruiru Builders",
+        retentionDays: 30,
+        dpoName: "Achieng",
+        dpoPhone: "0712 345 678",
+      }),
+    ).toBe("Ruiru Builders: 30 days. Call Achieng on 0712 345 678 (0712 345 678).");
   });
 });

@@ -79,6 +79,7 @@ test("biometric capture stays off until the signed DPIA is approved, then runs o
   await form.getByRole("checkbox", { name: "Face kiosk" }).check();
   await form.getByRole("checkbox", { name: "Main plot" }).check();
   await form.locator("#dpia-dpo-name").fill("Achieng Otieno (synthetic DPO)");
+  await form.locator("#dpia-dpo-phone").fill("+254 700 000 333");
   await form.locator("#dpia-dpo-opinion").selectOption("approve");
   await form.locator("#dpia-dpo-date").fill(typed(-3));
   await form.locator("#dpia-controller-name").fill("Wanjiru Kamau");
@@ -168,6 +169,7 @@ test("withdrawing the DPIA stops every site at once (Kiswahili, dark, 360 px)", 
     methods: ["face"],
     siteIds: [MAIN_PLOT_ID],
     dpoName: "Achieng Otieno (synthetic DPO)",
+    dpoPhone: "+254 700 000 333",
     dpoOpinion: "approve",
     dpoOpinionOn: isoDay(-3),
     dpoNote: null,

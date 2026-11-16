@@ -388,9 +388,16 @@ export function WorkerPanel({
                 })}
               </p>
             ) : null}
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/labour/${labourer.id}/consent`}>{t("consent.open")}</Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/labour/${labourer.id}/consent`}>{t("consent.open")}</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/attendance/biometrics/workers/${labourer.id}`}>
+                  {t("consent.biometrics")}
+                </Link>
+              </Button>
+            </div>
           </section>
 
           {labourer.doNotRehireDetail ? (

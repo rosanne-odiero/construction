@@ -122,6 +122,25 @@ export const apiEnvSchema = z.object({
   // own KMS-held key (THREAT_MODEL OR-01) and the owner's go-ahead. Each company also needs an
   // approved DPIA and must switch capture on per site and method.
   BIOMETRICS_CAPTURE: z.enum(["on", "off"]).optional(),
+  // Biometric templates are sealed to these X25519 public keys (D3.4, decision D-167):
+  // comma-separated `<version>:<64 hex>` raw public keys; new templates use the active version
+  // (default: the highest). Only the future biometrics worker and the operator's rotation tool hold
+  // the private keys (BIOMETRIC_TEMPLATE_PRIVATE_KEYS); the API refuses to start with them. Without
+  // a public key the API cannot enrol (biometric capture is reported off).
+  BIOMETRIC_TEMPLATE_PUBLIC_KEYS: z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}:[0-9a-fA-F]{64}(,\s*\d{1,3}:[0-9a-fA-F]{64})*$/, "version:hexkey list")
+    .optional(),
+  BIOMETRIC_TEMPLATE_ACTIVE_KEY_VERSION: z.coerce.number().int().min(1).max(255).optional(),
+  // `biometrics.retention_days_after_engagement` for every company on this installation (owner's
+  // choice, 16 November 2026): templates are deleted this many days after the end of the worker's
+  // last engagement. COMPLIANCE-REVIEW CR-DP-06: 30 is a placeholder until an adviser sets it.
+  BIOMETRICS_RETENTION_DAYS_AFTER_ENGAGEMENT: z.coerce.number().int().min(0).max(365).default(30),
+  // The in-process retention job (D3.4): `on` looks for due template deletions every hour (one
+  // instance at a time, under a Postgres advisory lock); `off` leaves them to an administrator's
+  // "run now". Unset: on, except under NODE_ENV=test.
+  BIOMETRICS_RETENTION_JOB: z.enum(["on", "off"]).optional(),
 
   // Swagger UI and the OpenAPI document at /api/docs. Unset: on, except in production, where the
   // internal API description is published only when explicitly enabled (ASVS V13.4.5).

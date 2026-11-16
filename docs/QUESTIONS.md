@@ -38,7 +38,7 @@ Defaults are design assumptions only, not owner approval. Under [brief §15](./P
 | ID | Question | Default if no answer | Needed by |
 |---|---|---|---|
 | Q-B1 | Which **biometric method first** in D3.4: face recognition on a kiosk tablet, a USB fingerprint scanner, or ZKTeco-style terminals? Do you already own hardware? Is on-device matching against the site's roster (D-17) acceptable? | Face on an Android kiosk tablet with on-device matching | D3.4 |
-| Q-B2 | What is the **budget for a commercial face/liveness SDK** (per-device licence) vs an open-source model? | Short spike in D3.4 comparing 2 vendors and 1 open-source option | D3.4 |
+| Q-B2 | What is the **budget for a commercial face/liveness SDK** (per-device licence) vs an open-source model? | Short spike in D3.4 comparing 2 vendors and 1 open-source option. Still open, and it now blocks the kiosk (D3.4 second slice, 16/11/2026): consent, sealed template storage and deletion are built, and the server accepts up to 10 templates of 16 bytes to 16 KiB each per enrolment, tagged with the SDK's algorithm name and version. Confirm these limits against the chosen SDK, and that it extracts templates on the device without uploading images | D3.4 kiosk |
 | Q-B3 | Will tenants appoint a **DPO** (or adviser) to sign off DPIAs? | Each tenant names one before enabling biometrics. Partly answered (owner's choice, 15/11/2026): in the app one person may prepare and approve the DPIA (`biometrics.approve` with step-up); the DPO's name, opinion and signature date are recorded from the signed document, and a DPO rejection blocks approval. A lapsed or withdrawn DPIA fails closed (no grace period), and a renewal keeps covered sites on | D3.4 |
 
 ## Site devices

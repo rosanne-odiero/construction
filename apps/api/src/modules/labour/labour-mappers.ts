@@ -280,20 +280,23 @@ export function toDetail(row: LabourerRow, ctx: MapContext, extras: DetailExtras
       version: card.version,
     };
   });
-  const consents: ConsentRecord[] = row.consents.map((consent) => ({
-    id: consent.id,
-    kind: consent.kind as ConsentRecord["kind"],
-    noticeVersion: consent.noticeVersion as ConsentRecord["noticeVersion"],
-    language: consent.language as ConsentRecord["language"],
-    method: consent.method as ConsentRecord["method"],
-    witnessName: consent.witnessName,
-    granted: consent.granted,
-    capturedAt: consent.capturedAt.toISOString(),
-    capturedBy: actor(consent.capturedBy)!,
-    withdrawnAt: consent.withdrawnAt?.toISOString() ?? null,
-    withdrawnBy: actor(consent.withdrawnBy),
-    withdrawalMethod: (consent.withdrawalMethod ?? null) as ConsentRecord["withdrawalMethod"],
-  }));
+  // The labour screens show registration-data consent; biometric consent has its own page (D3.4).
+  const consents: ConsentRecord[] = row.consents
+    .filter((consent) => consent.kind === "registration_data")
+    .map((consent) => ({
+      id: consent.id,
+      kind: consent.kind as ConsentRecord["kind"],
+      noticeVersion: consent.noticeVersion as ConsentRecord["noticeVersion"],
+      language: consent.language as ConsentRecord["language"],
+      method: consent.method as ConsentRecord["method"],
+      witnessName: consent.witnessName,
+      granted: consent.granted,
+      capturedAt: consent.capturedAt.toISOString(),
+      capturedBy: actor(consent.capturedBy)!,
+      withdrawnAt: consent.withdrawnAt?.toISOString() ?? null,
+      withdrawnBy: actor(consent.withdrawnBy),
+      withdrawalMethod: (consent.withdrawalMethod ?? null) as ConsentRecord["withdrawalMethod"],
+    }));
   const canFlag = extras.effective.has("labour.do_not_rehire");
   return {
     ...summary,

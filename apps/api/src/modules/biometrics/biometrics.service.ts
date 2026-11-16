@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { biometricGate, nairobiDate } from "@pm-buddy/domain";
 import {
+  BIOMETRIC_CONSENT_KINDS,
   DPIA_REVIEW_INTERVAL_MONTHS,
   type BiometricCaptureMethod,
+  type BiometricModality,
   type Permission,
 } from "@pm-buddy/types";
 import type {
@@ -11,7 +13,7 @@ import type {
   BiometricsOverviewResponse,
 } from "@pm-buddy/validation";
 import type { Request } from "express";
-import { AccessPolicy } from "../identity/access-policy.js";
+import { AccessPolicy, type Scope } from "../identity/access-policy.js";
 import type { Principal } from "../identity/auth.service.js";
 import { TenantScope } from "../identity/tenant-scope.service.js";
 import {
@@ -74,6 +76,7 @@ export class BiometricsService {
         summaryOf(record, record._count.sites, people, today),
       );
       const platformAvailable = this.platform.isAvailable();
+      const { enrolments, consentsThisMonth } = await this.monitoring(scope, today, approved);
       return {
         today,
         platformAvailable,
@@ -84,14 +87,83 @@ export class BiometricsService {
         sites: sites.map((site) =>
           siteState(site, { platformAvailable, approved, latest, today, people }),
         ),
+        enrolments,
+        consentsThisMonth,
+        retention: {
+          daysAfterEngagement: this.platform.retentionDays,
+          jobEnabled: this.platform.retentionJobEnabled,
+        },
+        templateKeyConfigured: this.platform.sealer !== null,
         permissions: {
           canPrepare: access.permissions.has("biometrics.manage"),
           canApprove: access.permissions.has("biometrics.approve"),
           canSwitchOn: access.permissions.has("biometrics.approve"),
           canSwitchOff: READERS.some((permission) => access.permissions.has(permission)),
+          canManageTemplates: access.permissions.has("biometrics.manage"),
         },
       };
     });
+  }
+
+  /**
+   * Active enrolments per modality (held while the DPIA has lapsed; due once their retention date
+   * has come) and this month's consent decisions per modality, for the DPO's monitoring of refusal
+   * and withdrawal rates (DPIA §7.1). Counts only.
+   */
+  private async monitoring(
+    scope: Scope,
+    today: string,
+    approved: Awaited<ReturnType<typeof approvedDpia>>,
+  ) {
+    const { tx, access } = scope;
+    const active = await tx.$queryRaw<{ modality: string; total: bigint; due: bigint }[]>`
+      SELECT e.modality, count(*) AS total,
+             count(*) FILTER (WHERE app.biometric_retention_due_on(e.tenant_id, e.labourer_id,
+               ${this.platform.retentionDays}::integer) <= ${today}::date) AS due
+        FROM biometric_enrolments e
+       WHERE e.tenant_id = ${access.tenantId}::uuid AND e.status = 'active'
+       GROUP BY e.modality`;
+    const decisions = await tx.$queryRaw<
+      { kind: string; granted: bigint; refused: bigint; withdrawn: bigint }[]
+    >`
+      WITH month AS (
+        SELECT (date_trunc('month', now() AT TIME ZONE 'Africa/Nairobi')
+                AT TIME ZONE 'Africa/Nairobi') AS starts)
+      SELECT c.kind,
+             count(*) FILTER (WHERE c.granted AND c.captured_at >= month.starts) AS granted,
+             count(*) FILTER (WHERE NOT c.granted AND c.captured_at >= month.starts) AS refused,
+             count(*) FILTER (WHERE c.withdrawn_at >= month.starts) AS withdrawn
+        FROM labourer_consents c, month
+       WHERE c.tenant_id = ${access.tenantId}::uuid
+         AND c.kind IN ('biometric_face', 'biometric_fingerprint')
+         AND (c.captured_at >= month.starts OR c.withdrawn_at >= month.starts)
+       GROUP BY c.kind`;
+    const count = (modality: BiometricModality, field: "total" | "due") =>
+      Number(active.find((row) => row.modality === modality)?.[field] ?? 0n);
+    const total = count("face", "total") + count("fingerprint", "total");
+    const due = count("face", "due") + count("fingerprint", "due");
+    const decided = (modality: BiometricModality) => {
+      const row = decisions.find((entry) => entry.kind === BIOMETRIC_CONSENT_KINDS[modality]);
+      return {
+        granted: Number(row?.granted ?? 0n),
+        refused: Number(row?.refused ?? 0n),
+        withdrawn: Number(row?.withdrawn ?? 0n),
+      };
+    };
+    const inForce = approved !== null && approved.reviewDue >= today;
+    return {
+      enrolments: {
+        face: count("face", "total"),
+        fingerprint: count("fingerprint", "total"),
+        held: inForce ? 0 : total - due,
+        deletionDue: due,
+      },
+      consentsThisMonth: {
+        month: today.slice(0, 7),
+        face: decided("face"),
+        fingerprint: decided("fingerprint"),
+      },
+    };
   }
 
   async setSwitch(

@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  biometricConsentStatus,
   biometricGate,
   carriedForwardSwitches,
+  coversModality,
   dpiaApprovalContent,
   dpiaApprovalGaps,
   dpiaReviewDueRange,
   dpiaState,
+  enrolmentState,
   isDpiaReviewDueValid,
+  looksLikeImage,
+  methodReads,
+  retentionDueOn,
+  smsCompanyName,
   type BiometricGateInput,
   type DpiaDraftFacts,
 } from "./biometrics.js";
@@ -16,6 +23,7 @@ const complete: DpiaDraftFacts = {
   methods: ["face"],
   siteCount: 1,
   dpoName: "Achieng Otieno",
+  dpoPhone: "+254 712 345 678",
   dpoOpinion: "approve",
   dpoOpinionOn: "2026-11-10",
   dpoNote: null,
@@ -67,9 +75,10 @@ describe("dpiaApprovalGaps", () => {
         methods: [],
         siteCount: 0,
         dpoName: null,
+        dpoPhone: null,
         controllerDecision: null,
       }),
-    ).toEqual(["document", "methods", "sites", "dpo", "controller"]);
+    ).toEqual(["document", "methods", "sites", "dpo", "dpo_phone", "controller"]);
   });
 
   it("never approves a DPO rejection or a decision not to proceed", () => {
@@ -188,5 +197,111 @@ describe("dpiaApprovalContent", () => {
         conditions: ["fallback_ready", "staff_trained"],
       }),
     );
+  });
+});
+
+describe("modalities", () => {
+  it("are covered by their own method or a terminal, and read by the same methods", () => {
+    expect(coversModality(["face"], "face")).toBe(true);
+    expect(coversModality(["face"], "fingerprint")).toBe(false);
+    expect(coversModality(["terminal"], "fingerprint")).toBe(true);
+    expect(methodReads("terminal", "face")).toBe(true);
+    expect(methodReads("fingerprint", "face")).toBe(false);
+  });
+});
+
+describe("biometricConsentStatus", () => {
+  const at = (day: number) => `2026-11-${String(day).padStart(2, "0")}T08:00:00.000Z`;
+  const current = "biometric-face-2026-11-v1";
+
+  it("is granted while a grant is not withdrawn, current when it is to the current notice", () => {
+    expect(biometricConsentStatus([], current)).toEqual({ status: "none", current: false });
+    const grant = { granted: true, noticeVersion: current, capturedAt: at(2), withdrawnAt: null };
+    expect(biometricConsentStatus([grant], current)).toEqual({ status: "granted", current: true });
+    expect(biometricConsentStatus([{ ...grant, noticeVersion: "old" }], current).current).toBe(
+      false,
+    );
+  });
+
+  it("otherwise follows the latest decision: a refusal or a withdrawal", () => {
+    const withdrawn = {
+      granted: true,
+      noticeVersion: current,
+      capturedAt: at(2),
+      withdrawnAt: at(5),
+    };
+    const refusal = {
+      granted: false,
+      noticeVersion: current,
+      capturedAt: at(9),
+      withdrawnAt: null,
+    };
+    expect(biometricConsentStatus([withdrawn], current).status).toBe("withdrawn");
+    expect(biometricConsentStatus([withdrawn, refusal], current).status).toBe("refused");
+    expect(
+      biometricConsentStatus([{ ...refusal, capturedAt: at(1) }, withdrawn], current).status,
+    ).toBe("withdrawn");
+  });
+});
+
+describe("retentionDueOn", () => {
+  const today = "2026-11-16";
+
+  it("keeps templates while any engagement is open or ends today or later", () => {
+    expect(retentionDueOn([{ startDate: "2026-10-01", endDate: null }], 30, today)).toBeNull();
+    expect(retentionDueOn([{ startDate: "2026-10-01", endDate: today }], 30, today)).toBeNull();
+  });
+
+  it("is due the day after the retention days that follow the last engagement's last day", () => {
+    const ended = [
+      { startDate: "2026-09-01", endDate: "2026-09-30" },
+      { startDate: "2026-10-01", endDate: "2026-10-16" },
+    ];
+    expect(retentionDueOn(ended, 30, today)).toBe("2026-11-16");
+    expect(retentionDueOn(ended, 0, today)).toBe("2026-10-17");
+    expect(retentionDueOn([], 30, today)).toBe(today);
+  });
+});
+
+describe("enrolmentState", () => {
+  const base = { status: "active" as const, dueOn: null, today: "2026-11-16" };
+
+  it("holds templates while the DPIA has lapsed and marks them due once retention passes", () => {
+    expect(enrolmentState({ ...base, approved: { covers: true, inForce: true } })).toBe("active");
+    expect(enrolmentState({ ...base, approved: { covers: true, inForce: false } })).toBe("held");
+    expect(
+      enrolmentState({ ...base, dueOn: "2026-11-16", approved: { covers: true, inForce: true } }),
+    ).toBe("deletion_due");
+    expect(enrolmentState({ ...base, approved: { covers: false, inForce: true } })).toBe(
+      "deletion_due",
+    );
+    expect(enrolmentState({ ...base, approved: null })).toBe("deletion_due");
+    expect(enrolmentState({ ...base, status: "deleted", approved: null })).toBe("deleted");
+  });
+});
+
+describe("looksLikeImage", () => {
+  const bytes = (...values: number[]) =>
+    Uint8Array.from([...values, ...Array.from({ length: 32 }, () => 7)]);
+  const text = (value: string) =>
+    Array.from({ length: value.length }, (_, i) => value.charCodeAt(i));
+
+  it("refuses images and image records but accepts templates", () => {
+    expect(looksLikeImage(bytes(0xff, 0xd8, 0xff, 0xe0))).toBe(true);
+    expect(looksLikeImage(bytes(0x89, ...text("PNG"), 0x0d, 0x0a, 0x1a, 0x0a))).toBe(true);
+    expect(looksLikeImage(bytes(0, 0, 0, 0x18, ...text("ftypheic")))).toBe(true);
+    expect(looksLikeImage(bytes(0xff, 0xa0, 0xff, 0xa8))).toBe(true);
+    expect(looksLikeImage(bytes(...text("FIR"), 0))).toBe(true);
+    expect(looksLikeImage(bytes(...text("FMR"), 0, ...text(" 20")))).toBe(false);
+    expect(looksLikeImage(bytes(...text("BM"), 1, 2))).toBe(false);
+    expect(looksLikeImage(bytes(0x42, 0x4d, 9, 9, 9, 9, 0, 0, 0, 0))).toBe(true);
+  });
+});
+
+describe("smsCompanyName", () => {
+  it("cuts long company names so the confirmation fits one SMS", () => {
+    expect(smsCompanyName("Ruiru Builders")).toBe("Ruiru Builders");
+    expect(smsCompanyName("Mombasa Road Construction Limited")).toBe("Mombasa Road Constru");
+    expect(smsCompanyName("Twenty characters x Ltd")).toBe("Twenty characters x");
   });
 });

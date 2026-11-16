@@ -33,6 +33,9 @@ export const REDACT_PATHS = [
   "*.nextOfKin",
   "*.dateOfBirth",
   "*.witnessName",
+  // Biometric templates (D3.4): never logged, even though request bodies are not logged today.
+  "*.templates",
+  "*.templateEnc",
 ];
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9-]{8,64}$/;

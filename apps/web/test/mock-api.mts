@@ -718,7 +718,10 @@ function documentsDeps(state: State): DocumentsDeps {
   };
 }
 
-/** Every site with its project, the company's permissions and the actor, for the DPIA gate. */
+/**
+ * Every site with its project, the labourers with their engagements, the company's permissions and
+ * the actor, for biometric attendance.
+ */
 function biometricsDeps(state: State): BiometricsDeps {
   return {
     sites: state.projects.flatMap(({ project, sites }) =>
@@ -731,6 +734,18 @@ function biometricsDeps(state: State): BiometricsDeps {
         projectStatus: project.status,
       })),
     ),
+    labourers: state.labour.labourers.map(({ id, workerNo, fullName, status, engagements }) => ({
+      id,
+      workerNo,
+      fullName,
+      status,
+      engagements: engagements.map(({ projectId, startDate, endDate }) => ({
+        projectId,
+        startDate,
+        endDate,
+      })),
+    })),
+    company: "Jenga Bora Builders Ltd",
     companyPermissions: rolePermissions(state),
     actor: { id: PERSONAS[state.persona].id, displayName: PERSONAS[state.persona].displayName },
     stepUpFresh: () => Date.now() - (state.stepUpAt.get(state.persona) ?? 0) <= 5 * 60_000,

@@ -32,6 +32,7 @@ Back up PostgreSQL with PITR, private objects with versioning/retention, configu
 4. Validate schema, RLS/runtime role, memberships, financial balances and audit continuity. Inventory inbox/outbox states; do not replay automatically.
 5. Query/upload provider outcomes since the restored point, including calls whose local intent/results were lost. Quarantine uncertain and mismatched items; rebuild allocations/journal only through reviewed reconciliation.
 6. Reconcile queues/inbox/outbox and unsynced devices against restored state. Release only individually safe work.
+   **Biometric journal (D3.4, DPIA §8):** before the system goes live, replay what the `BiometricJournal` log lines record after the restore point, so a withdrawal is never undone and deleted templates never come back. Keep `BIOMETRICS_RETENTION_JOB=off` until done. In order: (a) `Biometric DPIA withdrawn: company …, DPIA …`: the controller withdraws that DPIA again in the app (this deletes the company's templates); (b) `Biometric consent withdrawn: company …, labourer …, <modality>`: record the withdrawal again in the app (method and witness from the worker's SMS confirmation or the officer's form; this deletes that modality's templates); (c) `Biometric templates deleted: company …, enrolment …, <reason>`: for each enrolment still active, its templates are deleted with reason `request` by a `biometrics.manage` holder (`POST /api/v1/biometrics/enrolments/:id/delete`), noting the original reason in the incident record (the database refuses `consent_withdrawn` or `engagement_ended` when the withdrawal or engagement end was itself lost). Enrolments made after the restore point are gone with their templates. Then switch the retention job back on.
 7. Obtain incident commander and Finance sign-off before resuming payouts; observe and record actual RPO/RTO and unresolved exposure.
 
 Test a coherent restore, not just backup job success. Never copy production personal data into unapproved development systems.
@@ -92,7 +93,7 @@ Application keys, what each protects and its cryptoperiod are in [SECURITY_CHECK
 
 ```sh
 pnpm --filter @pm-buddy/api keys:rotate status [--tenant <company ID>]
-pnpm --filter @pm-buddy/api keys:rotate rewrap --operator "<your name>" [--only field|mfa] [--tenant <company ID>] [--batch 200] [--dry-run]
+pnpm --filter @pm-buddy/api keys:rotate rewrap --operator "<your name>" [--only field|mfa|biometric] [--tenant <company ID>] [--batch 200] [--dry-run]
 ```
 
 `rewrap` re-encrypts, company by company, every field value (and with `--only mfa` or by default every sealed TOTP seed) that is not on the active key version. It is safe to stop and run again: each batch is a transaction, each update compares the old value first (a value the application changed meanwhile is left alone) and only values on another version are selected. It exits with status 1 if any value could not be read (wrong or missing key, tampered row); those rows are listed by table and ID.
@@ -109,6 +110,24 @@ pnpm --filter @pm-buddy/api keys:rotate rewrap --operator "<your name>" [--only 
 Short-lived values sealed with the old MFA key (CSRF tokens, the Google sign-in cookie) simply expire; the web app fetches a new CSRF token before each change.
 
 Payments (D4.2) are field-encrypted too, and `rewrap` covers them: the five Daraja credentials of each company, callback path tokens (active and retired routes), recipients' phone numbers on payment requests and raw callback bodies (migration `20261204093000_payments_key_rotation` lets the owner re-encrypt them and nothing else). Daraja OAuth tokens cached in Valkey are also sealed with the field key; after step 5 one sealed under the removed version no longer opens and is fetched again (a cache miss), so they need no rewrap. A rotation does not change callback URLs.
+
+### Biometric template keys (`BIOMETRIC_TEMPLATE_PUBLIC_KEYS`, D3.4)
+
+Templates are sealed to an X25519 **public** key (D-167). The API holds only public keys and refuses to start if `BIOMETRIC_TEMPLATE_PRIVATE_KEYS` is in its environment. Generate a pair on the operator's machine:
+
+```sh
+openssl genpkey -algorithm X25519 -out biometric-v<n>.pem
+openssl pkey -in biometric-v<n>.pem -pubout -outform DER | tail -c 32 | xxd -p -c 64   # public: BIOMETRIC_TEMPLATE_PUBLIC_KEYS=<n>:<this>
+openssl pkey -in biometric-v<n>.pem -outform DER | tail -c 32 | xxd -p -c 64           # private: secrets manager only
+```
+
+Store the private key only in the secrets manager, readable by the operators who run rotations (and, once it exists, the biometrics worker's identity, OR-01); never in the API's configuration, tickets or this file. To rotate (or after any suspicion about the private key):
+
+1. Generate pair `<n+1>`. Deploy the API with `BIOMETRIC_TEMPLATE_PUBLIC_KEYS=<n>:…,<n+1>:…` and `BIOMETRIC_TEMPLATE_ACTIVE_KEY_VERSION=<n+1>` (one deploy is enough: the API only seals, it never opens).
+2. `keys:rotate status` shows templates per key version (`biometric`). Then, with `BIOMETRIC_TEMPLATE_PRIVATE_KEYS=<n>:…` (the old private key, for this command only) and the API's public keys: `keys:rotate rewrap --only biometric --operator "<name>" --dry-run`, then without `--dry-run`. Each template is opened, sealed again to `<n+1>` on its own row, and the plaintext wiped at once; the run is recorded in `key_rotation_runs` (kind `biometric`).
+3. When `status` shows only `<n+1>`, remove `<n>` from the public keys and destroy private key `<n>` after the backup retention period (backups still hold templates sealed to it).
+
+Without any public key the API refuses enrolments (409 `template-key-missing`) and the biometrics page says so.
 
 ### Token signing key (`AUTH_SIGNING_PRIVATE_KEY`)
 

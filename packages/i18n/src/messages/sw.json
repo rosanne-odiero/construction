@@ -714,7 +714,8 @@
       },
       "biometrics": {
         "manage": "Kuandaa DPIA ya bayometriki",
-        "approve": "Kuidhinisha DPIA na kuwasha bayometriki"
+        "approve": "Kuidhinisha DPIA na kuwasha bayometriki",
+        "enrol": "Kuchukua ridhaa ya kibayometriki na kusajili wafanyakazi"
       }
     },
     "notices": {
@@ -2311,7 +2312,15 @@
     "dpiaRequired": "Idhinisha DPIA ya kampuni kabla ya kuwasha ukusanyaji wa kibayometriki.",
     "dpiaLapsed": "Tarehe ya kukagua DPIA imepita. Idhinisha toleo jipya kwanza.",
     "dpiaScope": "DPIA inayotumika haijumuishi eneo hili na njia hii.",
-    "biometricsRule": "Badiliko hili linavunja kanuni ya DPIA au ya bayometriki. Pakia upya na uangalie."
+    "biometricsRule": "Badiliko hili linavunja kanuni ya DPIA au ya bayometriki. Pakia upya na uangalie.",
+    "consentRecorded": "Uamuzi wa mfanyakazi tayari umerekodiwa. Kubadilisha ndiyo, rekodi kuondoa ridhaa.",
+    "consentNotGranted": "Hakuna ridhaa ya njia hii ya kuondoa.",
+    "consentRequired": "Rekodi kwanza ridhaa ya mfanyakazi kwa ilani ya sasa.",
+    "labourerInactive": "Ni mfanyakazi aliye hai tu anayeweza kusajiliwa.",
+    "templateKeyMissing": "Hakuna ufunguo wa violezo kwenye mfumo huu, kwa hivyo hakuna anayeweza kusajiliwa.",
+    "rawImageRefused": "Violezo pekee vinakubaliwa: picha hazihifadhiwi kamwe.",
+    "enrolmentConflict": "Kitambulisho hiki cha usajili tayari kimetumika kwa usajili mwingine.",
+    "enrolmentDeleted": "Violezo hivi tayari vimefutwa."
   },
   "projectStatus": {
     "planning": "Mipango",
@@ -3871,6 +3880,50 @@
       "withdraw": "Unaweza kuondoa ridhaa yako wakati wowote kwa kumwambia msimamizi wako au meneja wa eneo la kazi. Kumbukumbu ambazo sheria inatutaka tuhifadhi zitaendelea kuhifadhiwa.",
       "biometrics": "Ilani hii haihusu alama za vidole wala utambuzi wa uso. Hizo zinahitaji ridhaa tofauti, na unaweza kutumia kadi ya mfanyakazi badala yake wakati wowote.",
       "question": "Je, unakubali kwamba {company} irekodi na kutumia taarifa hizi kama ilivyoelezwa?"
+    },
+    "biometricFaceV1": {
+      "title": "Kutumia uso wako kurekodi mahudhurio yako",
+      "whoTitle": "Sisi ni nani",
+      "who": "{company} inahifadhi kumbukumbu za kazi yako. Tunatumia mfumo unaoitwa PM-Buddy.",
+      "whatTitle": "Tunachoomba",
+      "what": "Tungependa mashine maalum isome uso wako. Mashine hiyo hutengeneza msimbo wa siri kutokana na usomaji huo. Tunahifadhi msimbo huo tu, si picha ya uso wako.",
+      "whyTitle": "Kwa nini",
+      "why": "Ili kumbukumbu zionyeshe kwa usahihi nani alifika kazini kila siku. Utalipwa kwa kila siku uliyofanya kazi, na hakuna mtu atakayeweza kujiandikisha kwa niaba yako.",
+      "noTitle": "Unaweza kukataa",
+      "no": "Ni uamuzi wako. Ukikataa, utajiandikisha kwa kadi yako ya mfanyakazi, picha na uthibitisho wa msimamizi wako. Hutapoteza kazi, malipo wala kitu kingine chochote.",
+      "whereTitle": "Msimbo unahifadhiwa wapi",
+      "where": "Msimbo umefungwa kwa usalama na unatumika tu kwenye maeneo ya kazi ya {company} unakofanya kazi. Hatuuzi msimbo huo. Hatuutoi kwa waajiri wengine, wakopeshaji wala mtu mwingine yeyote, isipokuwa pale sheria inapotutaka kufanya hivyo.",
+      "howLongTitle": "Kwa muda gani",
+      "howLong": "Tutafuta msimbo huo siku {retentionDays} baada ya kazi yako na {company} kuisha, au mapema zaidi ukiomba.",
+      "changeTitle": "Ukibadilisha nia",
+      "change": "Unaweza kusitisha wakati wowote. Mwambie msimamizi wako au meneja wa eneo la kazi, au piga simu au tuma SMS kwa {dpoPhone}. Tutafuta msimbo huo, na utatumia kadi yako ya mfanyakazi badala yake.",
+      "rightsTitle": "Haki zako",
+      "rights": "Unaweza kuomba kuona, kurekebisha au kufuta taarifa zako. Kama kumbukumbu ya mahudhurio si sahihi, tuambie. Tutaikagua na kurekebisha malipo yako.",
+      "questionsTitle": "Maswali au malalamiko",
+      "questions": "Wasiliana na {dpoName} kupitia {dpoPhone}. Unaweza pia kuwasilisha malalamiko kwa Ofisi ya Kamishna wa Ulinzi wa Data (ODPC).",
+      "question": "Je, unakubali kutumia uso wako kurekodi mahudhurio yako?"
+    },
+    "biometricFingerprintV1": {
+      "title": "Kutumia alama ya kidole chako kurekodi mahudhurio yako",
+      "whoTitle": "Sisi ni nani",
+      "who": "{company} inahifadhi kumbukumbu za kazi yako. Tunatumia mfumo unaoitwa PM-Buddy.",
+      "whatTitle": "Tunachoomba",
+      "what": "Tungependa mashine maalum isome alama ya kidole chako. Mashine hiyo hutengeneza msimbo wa siri kutokana na usomaji huo. Tunahifadhi msimbo huo tu, si picha ya kidole chako.",
+      "whyTitle": "Kwa nini",
+      "why": "Ili kumbukumbu zionyeshe kwa usahihi nani alifika kazini kila siku. Utalipwa kwa kila siku uliyofanya kazi, na hakuna mtu atakayeweza kujiandikisha kwa niaba yako.",
+      "noTitle": "Unaweza kukataa",
+      "no": "Ni uamuzi wako. Ukikataa, utajiandikisha kwa kadi yako ya mfanyakazi, picha na uthibitisho wa msimamizi wako. Hutapoteza kazi, malipo wala kitu kingine chochote.",
+      "whereTitle": "Msimbo unahifadhiwa wapi",
+      "where": "Msimbo umefungwa kwa usalama na unatumika tu kwenye maeneo ya kazi ya {company} unakofanya kazi. Hatuuzi msimbo huo. Hatuutoi kwa waajiri wengine, wakopeshaji wala mtu mwingine yeyote, isipokuwa pale sheria inapotutaka kufanya hivyo.",
+      "howLongTitle": "Kwa muda gani",
+      "howLong": "Tutafuta msimbo huo siku {retentionDays} baada ya kazi yako na {company} kuisha, au mapema zaidi ukiomba.",
+      "changeTitle": "Ukibadilisha nia",
+      "change": "Unaweza kusitisha wakati wowote. Mwambie msimamizi wako au meneja wa eneo la kazi, au piga simu au tuma SMS kwa {dpoPhone}. Tutafuta msimbo huo, na utatumia kadi yako ya mfanyakazi badala yake.",
+      "rightsTitle": "Haki zako",
+      "rights": "Unaweza kuomba kuona, kurekebisha au kufuta taarifa zako. Kama kumbukumbu ya mahudhurio si sahihi, tuambie. Tutaikagua na kurekebisha malipo yako.",
+      "questionsTitle": "Maswali au malalamiko",
+      "questions": "Wasiliana na {dpoName} kupitia {dpoPhone}. Unaweza pia kuwasilisha malalamiko kwa Ofisi ya Kamishna wa Ulinzi wa Data (ODPC).",
+      "question": "Je, unakubali kutumia alama ya kidole chako kurekodi mahudhurio yako?"
     }
   },
   "labourLive": {
@@ -4085,7 +4138,8 @@
       "consent": {
         "title": "Ridhaa ya ulinzi wa data",
         "latest": "Rekodi ya mwisho: {date} na {name} ({language}).",
-        "open": "Kumbukumbu za ridhaa"
+        "open": "Kumbukumbu za ridhaa",
+        "biometrics": "Ridhaa ya kibayometriki"
       },
       "dnr": {
         "title": "Asiajiriwe tena",
@@ -4900,6 +4954,7 @@
       "dpo": "Afisa wa Ulinzi wa Data",
       "controller": "Uamuzi wa mdhibiti wa data",
       "name": "Jina",
+      "phone": "Simu",
       "role": "Wadhifa",
       "opinion": "Maoni",
       "decision": "Uamuzi",
@@ -4908,6 +4963,7 @@
       "residualRisk": "Hatari iliyobaki",
       "odpcReference": "Kumbukumbu ya mashauriano ya awali na ODPC",
       "notRecorded": "Haijarekodiwa",
+      "noPhone": "Hakuna simu iliyorekodiwa",
       "document": "DPIA iliyotiwa saini",
       "noDocument": "Bado hakuna hati iliyotiwa saini iliyopakiwa.",
       "download": "Pakua",
@@ -4947,6 +5003,7 @@
       "methods": "Chagua angalau njia moja ya kukusanya.",
       "sites": "Chagua angalau eneo moja.",
       "dpo": "Rekodi jina, maoni na tarehe ya Afisa wa Ulinzi wa Data.",
+      "dpo_phone": "Rekodi nambari ya simu ya Afisa wa Ulinzi wa Data: ilani ya ridhaa inawaambia wafanyakazi wapige simu au watume SMS kwake.",
       "dpo_rejected": "Afisa wa Ulinzi wa Data alishauri isiendelee, kwa hivyo haiwezi kuidhinishwa.",
       "dpo_conditions": "Andika masharti ya Afisa wa Ulinzi wa Data.",
       "controller": "Rekodi jina, uamuzi na tarehe ya mdhibiti wa data.",
@@ -4962,6 +5019,7 @@
       "save": "Hifadhi rasimu",
       "saved": "Rasimu imehifadhiwa.",
       "dateHint": "DD/MM/YYYY",
+      "phoneHint": "+254 7XX XXX XXX",
       "invalidDate": "Andika tarehe kama DD/MM/YYYY."
     },
     "upload": {
@@ -5004,6 +5062,180 @@
       "description": "Ukusanyaji wa kibayometriki unasimama kwenye maeneo yote mara moja. Toleo jipya lazima liidhinishwe na maeneo yawashwe tena.",
       "reason": "Sababu",
       "submit": "Ondoa DPIA"
+    },
+    "sms": {
+      "modalities": {
+        "face": "uso",
+        "fingerprint": "alama ya kidole"
+      },
+      "granted": "{company}: Tarehe {date} ulisema NDIYO kutumia {modality} kwa mahudhurio. Kubadilisha, mwambie msimamizi au piga {dpoPhone}.",
+      "refused": "{company}: Tarehe {date} ulisema HAPANA kutumia {modality} kwa mahudhurio. Tumia kadi ya mfanyakazi. Kubadilisha, piga {dpoPhone}.",
+      "withdrawn": "{company}: Tarehe {date} ulisitisha kutumia {modality} kwa mahudhurio. Tutafuta msimbo. Tumia kadi ya mfanyakazi. Msaada: {dpoPhone}."
+    },
+    "nav": {
+      "label": "Mahudhurio ya kibayometriki",
+      "gate": "DPIA na maeneo",
+      "enrolments": "Usajili",
+      "deletions": "Kumbukumbu ya ufutaji"
+    },
+    "modalities": {
+      "face": "Uso",
+      "fingerprint": "Alama ya kidole"
+    },
+    "consentStatuses": {
+      "none": "Hakuna uamuzi",
+      "granted": "Amekubali",
+      "refused": "Amekataa",
+      "withdrawn": "Ameondoa ridhaa"
+    },
+    "enrolmentStates": {
+      "active": "Inatumika",
+      "held": "Imehifadhiwa: DPIA imepita muda",
+      "deletion_due": "Inasubiri kufutwa",
+      "deleted": "Imefutwa"
+    },
+    "deletionReasons": {
+      "consent_withdrawn": "Idhini imeondolewa",
+      "re_enrolled": "Amesajiliwa upya",
+      "engagement_ended": "Muda wa kuhifadhi baada ya kazi ya mwisho",
+      "dpia_withdrawn": "DPIA imeondolewa",
+      "out_of_scope": "Haijajumuishwa tena kwenye DPIA",
+      "request": "Ombi la mfanyakazi"
+    },
+    "blocked": {
+      "platform_off": "Mahudhurio ya kibayometriki hayapatikani kwenye mfumo huu wa PM-Buddy.",
+      "no_dpia": "Idhinisha DPIA ya kampuni kabla ya kuomba ridhaa.",
+      "dpia_lapsed": "Tarehe ya kukagua DPIA imepita: ihuishe kabla ya kuomba ridhaa.",
+      "not_in_scope": "DPIA inayotumika haijumuishi njia hii."
+    },
+    "templates": {
+      "title": "Violezo na muda wa kuhifadhi",
+      "description": "Violezo vinahifadhiwa vikiwa vimefungwa kwa ufunguo ambao programu haiwezi kufungua. Havionyeshwi, havitolewi nje wala kutumika nje ya maeneo ya kazi ya mfanyakazi.",
+      "face": "Usajili wa uso",
+      "fingerprint": "Usajili wa alama za vidole",
+      "held": "Vimehifadhiwa DPIA ikiwa imepita muda",
+      "deletionDue": "Vinasubiri kufutwa",
+      "retention": "Violezo vinafutwa siku {days} baada ya kazi ya mwisho ya mfanyakazi kuisha (mpangilio wa mfumo, unakaguliwa kisheria).",
+      "jobOn": "Kazi ya ufutaji hukagua kila saa.",
+      "jobOff": "Kazi ya ufutaji haiendeshwi kwenye mfumo huu: iendeshe kutoka kwenye Usajili.",
+      "keyMissing": "Hakuna ufunguo wa violezo kwenye mfumo huu, kwa hivyo hakuna anayeweza kusajiliwa. Mwombe msimamizi wa mfumo auweke.",
+      "open": "Fungua usajili",
+      "log": "Fungua kumbukumbu ya ufutaji",
+      "monitoringTitle": "Maamuzi ya ridhaa mwezi huu ({month})",
+      "monitoringHint": "Kagua ongezeko la kukataa au kuondoa ridhaa, au kutokuwepo kabisa kwa kukataa kwenye eneo kubwa: vyote vinaweza kuashiria shinikizo kwa wafanyakazi.",
+      "columns": {
+        "method": "Njia",
+        "granted": "Wamekubali",
+        "refused": "Wamekataa",
+        "withdrawn": "Wameondoa"
+      }
+    },
+    "worker": {
+      "title": "Ridhaa ya kibayometriki",
+      "heading": "Bayometriki: {name}",
+      "description": "Ridhaa ni tofauti kwa uso na kwa alama ya kidole. Mfanyakazi anayekataa au anayesitisha hutumia kadi ya mfanyakazi, picha na msimamizi badala yake, bila adhabu yoyote.",
+      "back": "Rudi kwa {workerNo}",
+      "dpiaLine": "DPIA toleo {version}: Afisa wa Ulinzi wa Data {dpo}",
+      "dpiaNone": "Hakuna DPIA iliyoidhinishwa: ridhaa ya kibayometriki haiwezi kurekodiwa.",
+      "notice": "Ilani {version}",
+      "draftNotice": "Maneno ya rasimu: ukaguzi wa kisheria na wa kitaalamu wa Kiswahili bado unasubiriwa.",
+      "language": "Lugha aliyochagua mfanyakazi",
+      "languages": {
+        "en": "Kiingereza",
+        "sw": "Kiswahili"
+      },
+      "method": "Jinsi mfanyakazi alivyojibu",
+      "methods": {
+        "signed": "Alitia saini fomu",
+        "witnessed_verbal": "Alisomewa kwa sauti, mbele ya shahidi"
+      },
+      "witness": "Jina la shahidi",
+      "witnessHint": "Mtu mwingine asiye msimamizi wa mfanyakazi mwenyewe, inapowezekana.",
+      "yes": "Rekodi ndiyo",
+      "no": "Rekodi hapana",
+      "yesConfirm": "Mfanyakazi anakubali kutumia {modality}.",
+      "noConfirm": "Mfanyakazi anakataa. Hakuna sababu inayoulizwa; kazi na malipo yake hayabadiliki.",
+      "recorded": "Uamuzi umerekodiwa. Mfanyakazi atapata uthibitisho kwa SMS.",
+      "current": "Amekubali ilani ya sasa.",
+      "outdated": "Alikubali ilani ya zamani: muulize tena kabla ya kumsajili.",
+      "canRecord": "Msomee mfanyakazi ilani kwa lugha yake, kisha rekodi jibu lake.",
+      "readOnly": "Unaweza kuona kumbukumbu hizi. Kuchukua ridhaa kunahitaji ruhusa ya usajili wa kibayometriki.",
+      "withdraw": {
+        "button": "Rekodi kuondoa ridhaa",
+        "title": "Mfanyakazi anasitisha kutumia {modality}",
+        "description": "Violezo vyake vya {modality} vinafutwa sasa, na anatumia kadi ya mfanyakazi kuanzia leo.",
+        "submit": "Rekodi kuondoa ridhaa na ufute violezo",
+        "done": "Kuondoa ridhaa kumerekodiwa na violezo vimefutwa."
+      },
+      "enrolment": {
+        "title": "Usajili",
+        "none": "Hajasajiliwa.",
+        "noneHint": "Usajili hufanyika kwenye kioski au kisomaji cha eneo la kazi baada ya ridhaa.",
+        "summary": "{method} katika {site} · violezo {count} · {algorithm} {version}",
+        "enrolled": "Alisajiliwa {at} na {name}.",
+        "engaged": "Vinahifadhiwa mfanyakazi akiwa kazini.",
+        "dueOn": "Vitafutwa kuanzia {date} isipokuwa mfanyakazi aajiriwe tena."
+      },
+      "delete": {
+        "button": "Futa violezo",
+        "title": "Futa violezo vya {modality} kwa ombi la mfanyakazi",
+        "description": "Violezo vinafutwa sasa na haviwezi kurejeshwa. Mfanyakazi anaweza kusajiliwa tena baadaye kwa ridhaa.",
+        "submit": "Futa violezo",
+        "done": "Violezo vimefutwa. Mfanyakazi anaweza kusajiliwa tena baadaye kwa ridhaa yake."
+      },
+      "decisions": {
+        "title": "Maamuzi",
+        "none": "Hakuna uamuzi uliorekodiwa.",
+        "columns": {
+          "answer": "Jibu",
+          "notice": "Ilani",
+          "language": "Lugha",
+          "method": "Njia",
+          "recorded": "Imerekodiwa",
+          "withdrawn": "Imeondolewa"
+        },
+        "yes": "Ndiyo",
+        "no": "Hapana",
+        "dpia": "DPIA toleo {version}",
+        "witness": "Shahidi: {name}"
+      },
+      "deletions": {
+        "title": "Violezo vilivyofutwa",
+        "none": "Hakuna kilichofutwa."
+      }
+    },
+    "enrolmentList": {
+      "title": "Usajili wa kibayometriki",
+      "description": "Kila mfanyakazi ambaye violezo vyake vimehifadhiwa, na lini kazi ya kuhifadhi itavifuta. Usajili hufanyika kwenye kioski au kisomaji cha eneo la kazi.",
+      "none": "Hakuna aliyesajiliwa.",
+      "columns": {
+        "worker": "Mfanyakazi",
+        "method": "Njia",
+        "site": "Eneo",
+        "state": "Hali",
+        "enrolled": "Alisajiliwa",
+        "dueOn": "Vitafutwa kuanzia"
+      },
+      "engaged": "Akiwa kazini",
+      "run": {
+        "button": "Endesha ufutaji wa muda wa kuhifadhi sasa",
+        "done": "Violezo vya usajili {count} vimefutwa."
+      }
+    },
+    "deletionLog": {
+      "title": "Kumbukumbu ya ufutaji wa violezo",
+      "description": "Nani alifuta violezo vya mfanyakazi gani, lini na kwa nini. Haina maudhui ya violezo na haiwezi kubadilishwa.",
+      "none": "Hakuna violezo vilivyofutwa.",
+      "columns": {
+        "when": "Vilifutwa",
+        "worker": "Mfanyakazi",
+        "method": "Njia",
+        "reason": "Sababu",
+        "templates": "Violezo",
+        "by": "Na",
+        "dueOn": "Tarehe ya kufutwa"
+      },
+      "job": "Kazi ya kuhifadhi"
     }
   },
   "bqNav": {

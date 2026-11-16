@@ -103,20 +103,29 @@ export {
 } from "./labour.js";
 export * from "./attendance/index.js";
 export {
+  biometricConsentStatus,
   biometricGate,
   carriedForwardSwitches,
+  coversModality,
   dpiaApprovalContent,
   dpiaApprovalGaps,
   dpiaCovers,
   dpiaReviewDueRange,
   dpiaState,
+  enrolmentState,
   isDpiaReviewDueValid,
+  looksLikeImage,
+  methodReads,
+  retentionDueOn,
+  smsCompanyName,
   switchedOnUnder,
   type ApprovedDpia,
+  type BiometricConsentFact,
   type BiometricGate,
   type BiometricGateInput,
   type BiometricSwitchFact,
   type DpiaDraftFacts,
+  type EngagementFact,
   type SwitchCandidate,
 } from "./biometrics.js";
 export * from "./payments/index.js";

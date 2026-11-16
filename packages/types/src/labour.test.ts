@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONSENT_KINDS,
   CONSENT_NOTICE_VERSIONS,
   CURRENT_CONSENT_NOTICE,
+  currentConsentNotice,
   DEFAULT_SKILL_LEVELS,
   DEFAULT_TRADES,
   LABOUR_CONSENT_NOTICES,
@@ -34,11 +36,14 @@ describe("labour vocabulary", () => {
     ]);
   });
 
-  it("keeps every consent notice version registered and the latest current", () => {
+  it("keeps every consent notice version registered and the latest of each kind current", () => {
     expect(LABOUR_CONSENT_NOTICES.map((notice) => notice.version)).toEqual([
       ...CONSENT_NOTICE_VERSIONS,
     ]);
-    expect(CURRENT_CONSENT_NOTICE).toBe(LABOUR_CONSENT_NOTICES.at(-1));
+    expect(CURRENT_CONSENT_NOTICE).toBe(
+      LABOUR_CONSENT_NOTICES.filter((notice) => notice.kind === "registration_data").at(-1),
+    );
+    for (const kind of CONSENT_KINDS) expect(currentConsentNotice(kind).kind).toBe(kind);
     for (const notice of LABOUR_CONSENT_NOTICES) {
       expect(notice.digests.en).toMatch(/^[0-9a-f]{64}$/);
       expect(notice.digests.sw).toMatch(/^[0-9a-f]{64}$/);

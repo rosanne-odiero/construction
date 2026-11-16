@@ -56,11 +56,15 @@ export const DEFAULT_ACCREDITATION_ALERT_DAYS = 30;
 export const ACCREDITATION_ALERT_DAYS_LIMITS = { min: 1, max: 365 } as const;
 
 /**
- * Consent kinds. D3.1 records consent to process registration data. Biometric consent
- * (`biometric_face`, `biometric_fingerprint`) is the D3.4 extension point: it needs its own
- * notice, a DPIA gate and a migration widening `labourer_consents_kind_check`.
+ * Consent kinds. D3.1 records consent to process registration data. D3.4 added biometric consent,
+ * one kind per modality (DPIA §7.1: separate and specific), each with its own notice; it can be
+ * recorded only while an approved DPIA covering the modality is in force.
  */
-export const CONSENT_KINDS = ["registration_data"] as const;
+export const CONSENT_KINDS = [
+  "registration_data",
+  "biometric_face",
+  "biometric_fingerprint",
+] as const;
 export type ConsentKind = (typeof CONSENT_KINDS)[number];
 
 /** How consent was captured: a signed paper form, or read aloud with a named witness. */
@@ -77,7 +81,11 @@ export type ConsentStatus = (typeof CONSENT_STATUSES)[number];
  * The consent record stores the version, language and digest that were shown.
  * COMPLIANCE-REVIEW: CR-DP-03, CR-DP-11 (draft legal wording; professional Kiswahili review).
  */
-export const CONSENT_NOTICE_VERSIONS = ["registration-2026-11-v1"] as const;
+export const CONSENT_NOTICE_VERSIONS = [
+  "registration-2026-11-v1",
+  "biometric-face-2026-11-v1",
+  "biometric-fingerprint-2026-11-v1",
+] as const;
 export type ConsentNoticeVersion = (typeof CONSENT_NOTICE_VERSIONS)[number];
 
 export type ConsentNotice = {
@@ -101,11 +109,36 @@ export const LABOUR_CONSENT_NOTICES: readonly ConsentNotice[] = [
       sw: "6112d76bb466b5590716d81a8f2957d95cfe45963932fb9475a913bc61f83bcc",
     },
   },
+  // D3.4 biometric consent, one notice per modality (DPIA §7.2/§7.3 drafts, without the USSD code
+  // until D7.3). The app fills {company}, {retentionDays}, {dpoName} and {dpoPhone}.
+  {
+    version: "biometric-face-2026-11-v1",
+    kind: "biometric_face",
+    messageKey: "biometricFaceV1",
+    effectiveFrom: "2026-11-16",
+    digests: {
+      en: "73a42584289109070b9248418ebee551656b573f64e63a78b904bdeb366b6776",
+      sw: "23c14baacd67194ca1de86beb37e4f15f959141fb8506651fb6456a7a61698a8",
+    },
+  },
+  {
+    version: "biometric-fingerprint-2026-11-v1",
+    kind: "biometric_fingerprint",
+    messageKey: "biometricFingerprintV1",
+    effectiveFrom: "2026-11-16",
+    digests: {
+      en: "828865c12342b58deadfaa99f6f52e6a4e62c8c098b072bc3d9f5efee060f777",
+      sw: "6a271dcc0bee76a63f7ba941410172af07cc2ad51e2df6f1f5a9bbdddc54ea91",
+    },
+  },
 ];
 
-/** The notice new registrations show (the latest version). */
-export const CURRENT_CONSENT_NOTICE: ConsentNotice =
-  LABOUR_CONSENT_NOTICES[LABOUR_CONSENT_NOTICES.length - 1]!;
+/** The notice of `kind` that consent is recorded against now (its latest version). */
+export const currentConsentNotice = (kind: ConsentKind): ConsentNotice =>
+  LABOUR_CONSENT_NOTICES.filter((notice) => notice.kind === kind).at(-1)!;
+
+/** The notice new registrations show (the latest registration-data version). */
+export const CURRENT_CONSENT_NOTICE: ConsentNotice = currentConsentNotice("registration_data");
 
 export const consentNotice = (version: string): ConsentNotice | undefined =>
   LABOUR_CONSENT_NOTICES.find((notice) => notice.version === version);

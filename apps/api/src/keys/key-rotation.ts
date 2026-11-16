@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
+import type { TemplateOpener, TemplateSealer } from "../modules/biometrics/template-sealer.js";
 import type { FieldCipher } from "../modules/labour/field-cipher.js";
 import type { SealedSecrets } from "../modules/identity/sealed-secrets.js";
 
@@ -8,7 +9,10 @@ import type { SealedSecrets } from "../modules/identity/sealed-secrets.js";
  * values written under an older key version to the active one:
  * - field ciphertexts (FIELD_ENCRYPTION_KEYS): decrypted and re-encrypted with the same associated
  *   data (company, table, column, row), company by company in that company's RLS context;
- * - sealed TOTP seeds (AUTH_MFA_ENCRYPTION_KEY): users.mfa_secret and users.mfa_pending.
+ * - sealed TOTP seeds (AUTH_MFA_ENCRYPTION_KEY): users.mfa_secret and users.mfa_pending;
+ * - biometric templates (D3.4): opened with the operator's BIOMETRIC_TEMPLATE_PRIVATE_KEYS (never
+ *   the API's) and sealed again to the active BIOMETRIC_TEMPLATE_PUBLIC_KEYS key, bound to the
+ *   same company and row; the plaintext is wiped at once (migration 20261207090000).
  * Safe to stop and run again: only values on another key version are selected, every batch is one
  * transaction, and each update is compare-and-swap on the old value, so a value the application
  * changed meanwhile is left alone. Runs as the schema owner; the database lets the owner rewrite
@@ -80,9 +84,11 @@ export type ColumnResult = {
   failed: number;
 };
 
+export type RotationKind = "field" | "mfa" | "biometric";
+
 export type RunSummary = {
   runId: string;
-  kind: "field" | "mfa";
+  kind: RotationKind;
   targetVersion: number;
   dryRun: boolean;
   status: "completed" | "completed_with_errors" | "failed";
@@ -104,7 +110,11 @@ type SealedRow = { id: string; mfa_secret: string | null; mfa_pending: string | 
 export class KeyRotation {
   constructor(
     private readonly db: PrismaClient,
-    private readonly keys: { field?: FieldCipher; sealed?: SealedSecrets },
+    private readonly keys: {
+      field?: FieldCipher;
+      sealed?: SealedSecrets;
+      biometric?: { opener: TemplateOpener; sealer: TemplateSealer };
+    },
     private readonly log: (line: string) => void = () => {},
   ) {}
 
@@ -179,6 +189,76 @@ export class KeyRotation {
         }
     });
     return counts;
+  }
+
+  /** Sealed biometric templates per key version (a stored column: no key is needed to count). */
+  async biometricStatus(only?: string): Promise<VersionCounts> {
+    const counts: VersionCounts = {};
+    for (const tenantId of await this.tenants(only))
+      await this.inTenant(tenantId, async (tx) => {
+        const rows = await tx.$queryRaw<{ version: number; count: bigint }[]>`
+          SELECT key_version AS version, count(*) AS count FROM biometric_templates
+           WHERE tenant_id = ${tenantId}::uuid GROUP BY 1`;
+        const entry = (counts["biometric_templates.template_enc"] ??= {});
+        for (const row of rows)
+          entry[`v${row.version}`] = (entry[`v${row.version}`] ?? 0) + Number(row.count);
+      });
+    return counts;
+  }
+
+  /** Re-seals biometric templates that are not on the active public key version. */
+  async rewrapBiometric(options: RewrapOptions): Promise<RunSummary> {
+    const keys = this.keys.biometric;
+    if (!keys)
+      throw new Error(
+        "BIOMETRIC_TEMPLATE_PUBLIC_KEYS and BIOMETRIC_TEMPLATE_PRIVATE_KEYS are both required",
+      );
+    const target = keys.sealer.activeVersion;
+    const batch = options.batchSize ?? 200;
+    return this.recorded("biometric", target, options, async (summary) => {
+      for (const tenantId of await this.tenants(options.tenantId)) {
+        const result = columnResult(summary, "biometric_templates", "template_enc");
+        const before = { ...result };
+        let after = FIRST_ID;
+        for (;;) {
+          const rows = await this.inTenant(tenantId, async (tx) => {
+            const found = await tx.$queryRaw<Row[]>`
+              SELECT id::text AS id, template_enc AS value FROM biometric_templates
+               WHERE tenant_id = ${tenantId}::uuid AND key_version <> ${target}
+                 AND id > ${after}::uuid
+               ORDER BY id LIMIT ${batch}`;
+            for (const row of found) {
+              result.checked += 1;
+              const context = { tenantId, templateId: row.id };
+              let plaintext: Buffer | undefined;
+              let next: Uint8Array;
+              try {
+                plaintext = keys.opener.open(context, row.value);
+                next = keys.sealer.seal(context, plaintext);
+              } catch {
+                fail(summary, result, `biometric_templates.template_enc ${tenantId}/${row.id}`);
+                continue;
+              } finally {
+                plaintext?.fill(0);
+              }
+              if (options.dryRun) continue;
+              result.rewrapped += await tx.$executeRaw`
+                UPDATE biometric_templates SET template_enc = ${next}, key_version = ${target}
+                 WHERE tenant_id = ${tenantId}::uuid AND id = ${row.id}::uuid
+                   AND template_enc = ${row.value}`;
+            }
+            return found;
+          });
+          if (rows.length) after = rows[rows.length - 1]!.id;
+          if (rows.length < batch) break;
+        }
+        if (result.checked > before.checked)
+          this.log(
+            `${tenantId} biometric_templates.template_enc: ${result.checked - before.checked} on an older key, ` +
+              `${result.rewrapped - before.rewrapped} re-sealed, ${result.failed - before.failed} unreadable`,
+          );
+      }
+    });
   }
 
   /** Labourer PINs per pepper version (`none` = stored before the pepper). Re-hashed at sign-in. */
@@ -321,7 +401,7 @@ export class KeyRotation {
 
   /** Records the run in key_rotation_runs before and after the work. */
   private async recorded(
-    kind: "field" | "mfa",
+    kind: RotationKind,
     targetVersion: number,
     options: RewrapOptions,
     work: (summary: RunSummary) => Promise<void>,

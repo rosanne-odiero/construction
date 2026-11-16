@@ -193,6 +193,7 @@ model Tenant {
   clientPreferences   ClientPreference[]
   dpiaRecords         DpiaRecord[]
   biometricSwitches   BiometricSwitch[]
+  biometricEnrolments BiometricEnrolment[]
 
   @@map("tenants")
 }
@@ -385,6 +386,7 @@ model Site {
   plantServices       PlantService[]
   dpiaScopes          DpiaRecordSite[]
   biometricSwitches   BiometricSwitch[]
+  biometricEnrolments BiometricEnrolment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, projectId, id])
@@ -1456,6 +1458,7 @@ model Labourer {
   skillLevel            SkillLevel              @relation(fields: [tenantId, skillLevelId], references: [tenantId, id], onDelete: NoAction)
   engagements           LabourEngagement[]
   consents              LabourerConsent[]
+  biometricEnrolments   BiometricEnrolment[]
   accreditations        LabourerAccreditation[]
   dnrEvents             DoNotRehireEvent[]      @relation("DnrSubject")
   relatedDnr            DoNotRehireEvent[]      @relation("DnrRelated")
@@ -1521,23 +1524,27 @@ model LabourEngagement {
 // digest was shown, in which language, how it was captured and by whom. Append-only apart from a
 // single withdrawal. Biometric consent kinds join in D3.4.
 model LabourerConsent {
-  id                String    @id @default(uuid(7)) @db.Uuid
-  tenantId          String    @map("tenant_id") @db.Uuid
-  labourerId        String    @map("labourer_id") @db.Uuid
-  kind              String    @db.VarChar(30)
-  noticeVersion     String    @map("notice_version") @db.VarChar(60)
-  noticeDigest      String    @map("notice_digest") @db.Char(64)
-  language          String    @db.VarChar(5)
-  method            String    @db.VarChar(20)
-  witnessName       String?   @map("witness_name") @db.VarChar(120)
+  id                String               @id @default(uuid(7)) @db.Uuid
+  tenantId          String               @map("tenant_id") @db.Uuid
+  labourerId        String               @map("labourer_id") @db.Uuid
+  kind              String               @db.VarChar(30)
+  noticeVersion     String               @map("notice_version") @db.VarChar(60)
+  noticeDigest      String               @map("notice_digest") @db.Char(64)
+  language          String               @db.VarChar(5)
+  method            String               @db.VarChar(20)
+  witnessName       String?              @map("witness_name") @db.VarChar(120)
   granted           Boolean
-  capturedBy        String    @map("captured_by") @db.Uuid
-  capturedAt        DateTime  @default(now()) @map("captured_at") @db.Timestamptz
-  withdrawnAt       DateTime? @map("withdrawn_at") @db.Timestamptz
-  withdrawnBy       String?   @map("withdrawn_by") @db.Uuid
-  withdrawalMethod  String?   @map("withdrawal_method") @db.VarChar(20)
-  withdrawalWitness String?   @map("withdrawal_witness") @db.VarChar(120)
-  labourer          Labourer  @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+  capturedBy        String               @map("captured_by") @db.Uuid
+  capturedAt        DateTime             @default(now()) @map("captured_at") @db.Timestamptz
+  withdrawnAt       DateTime?            @map("withdrawn_at") @db.Timestamptz
+  withdrawnBy       String?              @map("withdrawn_by") @db.Uuid
+  withdrawalMethod  String?              @map("withdrawal_method") @db.VarChar(20)
+  withdrawalWitness String?              @map("withdrawal_witness") @db.VarChar(120)
+  // Biometric kinds only (D3.4): the DPIA in force when the notice was shown (its DPO and phone).
+  dpiaRecordId      String?              @map("dpia_record_id") @db.Uuid
+  labourer          Labourer             @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Cascade)
+  dpiaRecord        DpiaRecord?          @relation(fields: [tenantId, dpiaRecordId], references: [tenantId, id], onDelete: Restrict)
+  enrolments        BiometricEnrolment[]
 
   @@unique([tenantId, id])
   @@index([tenantId, labourerId, capturedAt])
@@ -2408,48 +2415,51 @@ model PaymentOutbox {
 // renewal, or withdrawn) or draft → rejected. One draft and one approved version at a time; the
 // approval is bound to the signed document and the approved content (approved_digest).
 model DpiaRecord {
-  id                   String            @id @default(uuid(7)) @db.Uuid
-  tenantId             String            @map("tenant_id") @db.Uuid
-  versionNo            Int               @map("version_no")
-  status               String            @default("draft") @db.VarChar(12)
-  captureMethods       String[]          @default([]) @map("capture_methods") @db.VarChar(12)
-  dpoName              String?           @map("dpo_name") @db.VarChar(120)
-  dpoOpinion           String?           @map("dpo_opinion") @db.VarChar(30)
-  dpoOpinionOn         DateTime?         @map("dpo_opinion_on") @db.Date
-  dpoNote              String?           @map("dpo_note") @db.VarChar(2000)
-  controllerName       String?           @map("controller_name") @db.VarChar(120)
-  controllerRole       String?           @map("controller_role") @db.VarChar(120)
-  controllerDecision   String?           @map("controller_decision") @db.VarChar(30)
-  controllerDecisionOn DateTime?         @map("controller_decision_on") @db.Date
-  controllerNote       String?           @map("controller_note") @db.VarChar(2000)
-  residualRisk         String?           @map("residual_risk") @db.VarChar(10)
-  odpcReference        String?           @map("odpc_reference") @db.VarChar(80)
-  documentId           String?           @map("document_id") @db.Uuid
-  reviewDue            DateTime?         @map("review_due") @db.Date
-  conditionsConfirmed  String[]          @default([]) @map("conditions_confirmed") @db.VarChar(30)
-  approvedDigest       String?           @map("approved_digest") @db.Char(64)
-  approvedBy           String?           @map("approved_by") @db.Uuid
-  approvedAt           DateTime?         @map("approved_at") @db.Timestamptz
-  rejectedBy           String?           @map("rejected_by") @db.Uuid
-  rejectedAt           DateTime?         @map("rejected_at") @db.Timestamptz
-  rejectReason         String?           @map("reject_reason") @db.VarChar(500)
-  withdrawnBy          String?           @map("withdrawn_by") @db.Uuid
-  withdrawnAt          DateTime?         @map("withdrawn_at") @db.Timestamptz
-  withdrawReason       String?           @map("withdraw_reason") @db.VarChar(500)
-  supersededById       String?           @map("superseded_by_id") @db.Uuid
-  supersededAt         DateTime?         @map("superseded_at") @db.Timestamptz
-  version              Int               @default(1)
-  createdBy            String            @map("created_by") @db.Uuid
-  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  updatedBy            String            @map("updated_by") @db.Uuid
-  updatedAt            DateTime          @default(now()) @map("updated_at") @db.Timestamptz
-  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  document             DpiaDocument?     @relation("DpiaCurrentDocument", fields: [tenantId, id, documentId], references: [tenantId, dpiaRecordId, id], onDelete: Restrict)
-  supersededBy         DpiaRecord?       @relation("DpiaSupersession", fields: [tenantId, supersededById], references: [tenantId, id], onDelete: Restrict)
-  supersedes           DpiaRecord[]      @relation("DpiaSupersession")
-  documents            DpiaDocument[]    @relation("DpiaDocuments")
+  id                   String               @id @default(uuid(7)) @db.Uuid
+  tenantId             String               @map("tenant_id") @db.Uuid
+  versionNo            Int                  @map("version_no")
+  status               String               @default("draft") @db.VarChar(12)
+  captureMethods       String[]             @default([]) @map("capture_methods") @db.VarChar(12)
+  dpoName              String?              @map("dpo_name") @db.VarChar(120)
+  dpoPhone             String?              @map("dpo_phone") @db.VarChar(30)
+  dpoOpinion           String?              @map("dpo_opinion") @db.VarChar(30)
+  dpoOpinionOn         DateTime?            @map("dpo_opinion_on") @db.Date
+  dpoNote              String?              @map("dpo_note") @db.VarChar(2000)
+  controllerName       String?              @map("controller_name") @db.VarChar(120)
+  controllerRole       String?              @map("controller_role") @db.VarChar(120)
+  controllerDecision   String?              @map("controller_decision") @db.VarChar(30)
+  controllerDecisionOn DateTime?            @map("controller_decision_on") @db.Date
+  controllerNote       String?              @map("controller_note") @db.VarChar(2000)
+  residualRisk         String?              @map("residual_risk") @db.VarChar(10)
+  odpcReference        String?              @map("odpc_reference") @db.VarChar(80)
+  documentId           String?              @map("document_id") @db.Uuid
+  reviewDue            DateTime?            @map("review_due") @db.Date
+  conditionsConfirmed  String[]             @default([]) @map("conditions_confirmed") @db.VarChar(30)
+  approvedDigest       String?              @map("approved_digest") @db.Char(64)
+  approvedBy           String?              @map("approved_by") @db.Uuid
+  approvedAt           DateTime?            @map("approved_at") @db.Timestamptz
+  rejectedBy           String?              @map("rejected_by") @db.Uuid
+  rejectedAt           DateTime?            @map("rejected_at") @db.Timestamptz
+  rejectReason         String?              @map("reject_reason") @db.VarChar(500)
+  withdrawnBy          String?              @map("withdrawn_by") @db.Uuid
+  withdrawnAt          DateTime?            @map("withdrawn_at") @db.Timestamptz
+  withdrawReason       String?              @map("withdraw_reason") @db.VarChar(500)
+  supersededById       String?              @map("superseded_by_id") @db.Uuid
+  supersededAt         DateTime?            @map("superseded_at") @db.Timestamptz
+  version              Int                  @default(1)
+  createdBy            String               @map("created_by") @db.Uuid
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedBy            String               @map("updated_by") @db.Uuid
+  updatedAt            DateTime             @default(now()) @map("updated_at") @db.Timestamptz
+  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  document             DpiaDocument?        @relation("DpiaCurrentDocument", fields: [tenantId, id, documentId], references: [tenantId, dpiaRecordId, id], onDelete: Restrict)
+  supersededBy         DpiaRecord?          @relation("DpiaSupersession", fields: [tenantId, supersededById], references: [tenantId, id], onDelete: Restrict)
+  supersedes           DpiaRecord[]         @relation("DpiaSupersession")
+  documents            DpiaDocument[]       @relation("DpiaDocuments")
   sites                DpiaRecordSite[]
   switches             BiometricSwitch[]
+  consents             LabourerConsent[]
+  enrolments           BiometricEnrolment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, versionNo])
@@ -2516,6 +2526,86 @@ model BiometricSwitch {
   @@unique([tenantId, id])
   @@index([tenantId, siteId, method, seq])
   @@map("biometric_switches")
+}
+
+// D3.4 second slice (migration 20261207090000_biometric_enrolment). A worker's enrolment for one
+// modality: made at a site where the gate is open, under the DPIA in force, with the worker's
+// consent for that modality and an engagement on the site's project that day. The client chooses
+// the ID (a retry returns the same enrolment). One active enrolment per worker and modality; a
+// deleted one keeps its metadata (never its templates) as evidence.
+model BiometricEnrolment {
+  id               String              @id @db.Uuid
+  tenantId         String              @map("tenant_id") @db.Uuid
+  labourerId       String              @map("labourer_id") @db.Uuid
+  modality         String              @db.VarChar(12)
+  captureMethod    String              @map("capture_method") @db.VarChar(12)
+  consentId        String              @map("consent_id") @db.Uuid
+  dpiaRecordId     String              @map("dpia_record_id") @db.Uuid
+  projectId        String              @map("project_id") @db.Uuid
+  siteId           String              @map("site_id") @db.Uuid
+  status           String              @default("active") @db.VarChar(10)
+  templateCount    Int                 @map("template_count") @db.SmallInt
+  // The SDK algorithm and version of every template (kept after the templates are deleted).
+  algorithm        String              @db.VarChar(60)
+  algorithmVersion String              @map("algorithm_version") @db.VarChar(40)
+  enrolledBy       String              @map("enrolled_by") @db.Uuid
+  enrolledAt       DateTime            @default(now()) @map("enrolled_at") @db.Timestamptz
+  deletedAt        DateTime?           @map("deleted_at") @db.Timestamptz
+  deletedBy        String?             @map("deleted_by") @db.Uuid
+  deletionReason   String?             @map("deletion_reason") @db.VarChar(20)
+  deletionDueOn    DateTime?           @map("deletion_due_on") @db.Date
+  version          Int                 @default(1)
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  labourer         Labourer            @relation(fields: [tenantId, labourerId], references: [tenantId, id], onDelete: Restrict)
+  consent          LabourerConsent     @relation(fields: [tenantId, consentId], references: [tenantId, id], onDelete: Restrict)
+  dpiaRecord       DpiaRecord          @relation(fields: [tenantId, dpiaRecordId], references: [tenantId, id], onDelete: Restrict)
+  site             Site                @relation(fields: [tenantId, projectId, siteId], references: [tenantId, projectId, id], onDelete: Restrict)
+  templates        BiometricTemplate[]
+  deletion         BiometricDeletion?
+
+  @@unique([tenantId, id])
+  @@index([tenantId, labourerId, modality])
+  @@index([tenantId, status])
+  @@map("biometric_enrolments")
+}
+
+// One template of an enrolment: the capture device's template sealed to the biometrics-only
+// public key (template_enc; decision D-167). The runtime role can insert and delete templates but
+// never read template_enc; templates never change except a key rotation by the schema owner.
+model BiometricTemplate {
+  id           String             @id @db.Uuid
+  tenantId     String             @map("tenant_id") @db.Uuid
+  enrolmentId  String             @map("enrolment_id") @db.Uuid
+  ordinal      Int                @db.SmallInt
+  templateEnc  Bytes              @map("template_enc")
+  qualityScore Decimal            @map("quality_score") @db.Decimal(5, 2)
+  keyVersion   Int                @map("key_version") @db.SmallInt
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  enrolment    BiometricEnrolment @relation(fields: [tenantId, enrolmentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, enrolmentId, ordinal])
+  @@map("biometric_templates")
+}
+
+// The deletion log (DPIA §8): one row per enrolment whose templates were deleted — who (null-free:
+// the user, or the retention job's system actor), what, when and why; never template content.
+// Written only by the database, when an enrolment is marked deleted.
+model BiometricDeletion {
+  id            String             @id @db.Uuid
+  tenantId      String             @map("tenant_id") @db.Uuid
+  enrolmentId   String             @map("enrolment_id") @db.Uuid
+  labourerId    String             @map("labourer_id") @db.Uuid
+  modality      String             @db.VarChar(12)
+  reason        String             @db.VarChar(20)
+  templateCount Int                @map("template_count") @db.SmallInt
+  dueOn         DateTime?          @map("due_on") @db.Date
+  deletedBy     String             @map("deleted_by") @db.Uuid
+  deletedAt     DateTime           @map("deleted_at") @db.Timestamptz
+  enrolment     BiometricEnrolment @relation(fields: [tenantId, enrolmentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, enrolmentId])
+  @@index([tenantId, deletedAt])
+  @@map("biometric_deletions")
 }
 
 // ---------------------------------------------------------------------------------------------

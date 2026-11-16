@@ -18,7 +18,9 @@ export async function generateMetadata() {
 
 const noticeText = (messageKey: string): ConsentNotices => {
   const pick = (locale: "en" | "sw") =>
-    (catalogues[locale].labourConsentNotices as Record<string, ConsentNotices["en"]>)[messageKey]!;
+    (catalogues[locale].labourConsentNotices as Record<string, unknown>)[
+      messageKey
+    ] as ConsentNotices["en"];
   return { en: pick("en"), sw: pick("sw") };
 };
 

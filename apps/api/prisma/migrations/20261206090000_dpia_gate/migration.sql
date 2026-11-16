@@ -34,6 +34,7 @@ CREATE TABLE "dpia_records" (
     "status" VARCHAR(12) NOT NULL DEFAULT 'draft',
     "capture_methods" VARCHAR(12)[] DEFAULT ARRAY[]::VARCHAR(12)[],
     "dpo_name" VARCHAR(120),
+    "dpo_phone" VARCHAR(30),
     "dpo_opinion" VARCHAR(30),
     "dpo_opinion_on" DATE,
     "dpo_note" VARCHAR(2000),
@@ -188,6 +189,9 @@ ALTER TABLE "dpia_records" ADD CONSTRAINT "dpia_records_vocabulary_check" CHECK 
     OR controller_decision IN ('proceed', 'proceed_with_conditions', 'do_not_proceed'))
   AND (residual_risk IS NULL OR residual_risk IN ('low', 'medium', 'high'))
   AND (dpo_name IS NULL OR char_length(btrim(dpo_name)) >= 1)
+  -- The DPO's phone as written (the consent notice tells workers to call or SMS it): 9–15 digits.
+  AND (dpo_phone IS NULL OR (dpo_phone ~ '^\+?[0-9][0-9 -]{7,18}[0-9]$'
+    AND char_length(regexp_replace(dpo_phone, '[^0-9]', '', 'g')) BETWEEN 9 AND 15))
   AND (dpo_note IS NULL OR char_length(btrim(dpo_note)) >= 1)
   AND (controller_name IS NULL OR char_length(btrim(controller_name)) >= 1)
   AND (controller_role IS NULL OR char_length(btrim(controller_role)) >= 1)
@@ -260,13 +264,13 @@ BEGIN
   END IF;
 
   -- Approval, rejection, supersession and withdrawal never edit the content.
-  IF (NEW.capture_methods, NEW.dpo_name, NEW.dpo_opinion, NEW.dpo_opinion_on, NEW.dpo_note,
-      NEW.controller_name, NEW.controller_role, NEW.controller_decision,
+  IF (NEW.capture_methods, NEW.dpo_name, NEW.dpo_phone, NEW.dpo_opinion, NEW.dpo_opinion_on,
+      NEW.dpo_note, NEW.controller_name, NEW.controller_role, NEW.controller_decision,
       NEW.controller_decision_on, NEW.controller_note, NEW.residual_risk, NEW.odpc_reference,
       NEW.document_id)
      IS DISTINCT FROM
-     (OLD.capture_methods, OLD.dpo_name, OLD.dpo_opinion, OLD.dpo_opinion_on, OLD.dpo_note,
-      OLD.controller_name, OLD.controller_role, OLD.controller_decision,
+     (OLD.capture_methods, OLD.dpo_name, OLD.dpo_phone, OLD.dpo_opinion, OLD.dpo_opinion_on,
+      OLD.dpo_note, OLD.controller_name, OLD.controller_role, OLD.controller_decision,
       OLD.controller_decision_on, OLD.controller_note, OLD.residual_risk, OLD.odpc_reference,
       OLD.document_id) THEN
     RAISE EXCEPTION 'Only a draft''s content can change' USING ERRCODE = '23514';
@@ -280,7 +284,8 @@ BEGIN
        OR cardinality(NEW.capture_methods) = 0
        OR NOT EXISTS (SELECT 1 FROM dpia_record_sites s
                        WHERE s.tenant_id = NEW.tenant_id AND s.dpia_record_id = NEW.id)
-       OR NEW.dpo_name IS NULL OR NEW.dpo_opinion_on IS NULL OR NEW.dpo_opinion_on > today
+       OR NEW.dpo_name IS NULL OR NEW.dpo_phone IS NULL
+       OR NEW.dpo_opinion_on IS NULL OR NEW.dpo_opinion_on > today
        OR NEW.dpo_opinion IS NULL OR NEW.dpo_opinion NOT IN ('approve', 'approve_with_conditions')
        OR (NEW.dpo_opinion = 'approve_with_conditions' AND NEW.dpo_note IS NULL)
        OR NEW.controller_name IS NULL OR NEW.controller_decision_on IS NULL

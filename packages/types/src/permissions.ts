@@ -33,6 +33,7 @@ export const PERMISSIONS = [
   "timesheets.manage_rules",
   "biometrics.manage",
   "biometrics.approve",
+  "biometrics.enrol",
   "payroll.view",
   "payroll.prepare",
   "payroll.review",
@@ -98,9 +99,11 @@ export const TENANT_PERMISSIONS: readonly Permission[] = PERMISSIONS.filter(
 /**
  * Company-level permissions. They are never project-scoped: a project assignment cannot carry
  * them. Every other tenant permission is project-scoped (ARCHITECTURE §8). The DPIA for biometric
- * attendance belongs to the company as data controller (D3.4): `biometrics.manage` prepares it and
- * can switch biometric capture off; `biometrics.approve` approves, rejects or withdraws it and
- * switches capture on per site and method.
+ * attendance belongs to the company as data controller (D3.4): `biometrics.manage` prepares it,
+ * can switch biometric capture off and deletes templates on a worker's request;
+ * `biometrics.approve` approves, rejects or withdraws it and switches capture on per site and
+ * method. Taking biometric consent and enrolling (`biometrics.enrol`) is project-scoped instead:
+ * a trained enrolment officer works on the projects they are assigned to.
  */
 export const TENANT_LEVEL_PERMISSIONS = [
   "tenancy.manage",
@@ -134,7 +137,8 @@ export const isProjectPermission = (permission: Permission): boolean =>
  * BQ, labour, attendance, timesheet, payroll view/preparation/review, advance request/approval,
  * procurement, stores, site, quality, safety, plant, documents, reports, finance-view and portal
  * permissions. D5.4 added `finance.petty_cash` (hold a site's petty-cash float: record its
- * expenses and counts, ask for top-ups). The company-level payroll rule and export permissions are
+ * expenses and counts, ask for top-ups); D3.4 added `biometrics.enrol` (take a worker's biometric
+ * consent and enrol them; held by the owner by default, given to others through a custom role). The company-level payroll rule and export permissions are
  * never project-scoped. Approval and payment permissions (`payroll.approve`, `payments.*`, `finance.manage`,
  * `finance.view_sensitive`) and the supplier portal stay out until their modules define project
  * behaviour. The database CHECK
@@ -160,6 +164,7 @@ export const PROJECT_ASSIGNABLE_PERMISSIONS = [
   "timesheets.submit",
   "timesheets.approve",
   "timesheets.manage_rules",
+  "biometrics.enrol",
   "payroll.view",
   "payroll.prepare",
   "payroll.review",

@@ -159,15 +159,17 @@ export function DpiaForm({ dpia, sites }: { dpia: DpiaDetail; sites: readonly Bi
     id: string,
     key: keyof DpiaFormState,
     label: string,
-    options: { hint?: string; max?: number } = {},
+    options: { hint?: string; max?: number; type?: "text" | "tel" } = {},
   ) => (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Input
         id={id}
+        type={options.type ?? "text"}
         value={form[key] as string}
         maxLength={options.max ?? 120}
         onChange={(event) => set({ [key]: event.target.value })}
+        {...(options.type === "tel" ? { inputMode: "tel" as const, autoComplete: "off" } : {})}
         {...(options.hint ? { placeholder: options.hint } : {})}
       />
     </Field>
@@ -285,6 +287,11 @@ export function DpiaForm({ dpia, sites }: { dpia: DpiaDetail; sites: readonly Bi
       <fieldset className="grid gap-3 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-medium">{t("detail.dpo")}</legend>
         {text("dpia-dpo-name", "dpoName", t("detail.name"))}
+        {text("dpia-dpo-phone", "dpoPhone", t("detail.phone"), {
+          hint: t("form.phoneHint"),
+          max: 30,
+          type: "tel",
+        })}
         {select(
           "dpia-dpo-opinion",
           "dpoOpinion",

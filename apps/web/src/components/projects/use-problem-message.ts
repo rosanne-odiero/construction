@@ -489,6 +489,14 @@ const codes: Record<string, ProblemKey> = {
   "dpia-lapsed": "dpiaLapsed",
   "dpia-scope": "dpiaScope",
   "biometrics-rule": "biometricsRule",
+  "consent-recorded": "consentRecorded",
+  "consent-not-granted": "consentNotGranted",
+  "consent-required": "consentRequired",
+  "labourer-inactive": "labourerInactive",
+  "template-key-missing": "templateKeyMissing",
+  "raw-image-refused": "rawImageRefused",
+  "enrolment-conflict": "enrolmentConflict",
+  "enrolment-deleted": "enrolmentDeleted",
 };
 
 /** EN/SW text for an API problem code; anything unknown is "unexpected" (never a success). */

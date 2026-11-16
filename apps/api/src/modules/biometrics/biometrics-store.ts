@@ -51,6 +51,7 @@ export const recordColumns = {
   status: true,
   captureMethods: true,
   dpoName: true,
+  dpoPhone: true,
   dpoOpinion: true,
   dpoOpinionOn: true,
   dpoNote: true,
@@ -303,6 +304,7 @@ export const draftFacts = (row: RecordRow, siteCount: number) => ({
   methods: row.captureMethods as BiometricCaptureMethod[],
   siteCount,
   dpoName: row.dpoName,
+  dpoPhone: row.dpoPhone,
   dpoOpinion: row.dpoOpinion as DpoOpinion | null,
   dpoOpinionOn: optionalDate(row.dpoOpinionOn),
   dpoNote: row.dpoNote,
@@ -342,6 +344,7 @@ export function detailOf(input: {
     sites: [...input.sites],
     dpo: {
       name: row.dpoName,
+      phone: row.dpoPhone,
       opinion: row.dpoOpinion as DpoOpinion | null,
       opinionOn: optionalDate(row.dpoOpinionOn),
       note: row.dpoNote,

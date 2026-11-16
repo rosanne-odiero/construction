@@ -1,40 +1,67 @@
 /**
- * D3.4 DPIA gate for the browser tests: DPIA versions, the signed PDF, approval with every go-live
- * condition, and per-site switches. Uses the shared domain rules (packages/domain biometrics) and
- * returns the shared response schemas, like the API. In memory, per test session; nothing is
- * seeded, so each test walks the flow from "no DPIA".
+ * D3.4 biometric attendance for the browser tests: DPIA versions, the signed PDF, approval with
+ * every go-live condition, per-site switches, consent per modality, enrolments (POSTed by a test
+ * playing the kiosk), deletions and the retention run. Uses the shared domain rules (packages/domain
+ * biometrics) and returns the shared response schemas, like the API. In memory, per test session;
+ * nothing is seeded, so each test walks the flow from "no DPIA".
  */
 import { createHash, randomUUID } from "node:crypto";
 import type { z } from "zod";
 import {
+  biometricConsentStatus,
   biometricGate,
   carriedForwardSwitches,
+  coversModality,
   dpiaApprovalGaps,
   dpiaCovers,
   dpiaReviewDueRange,
   dpiaState,
+  enrolmentState,
   isDpiaReviewDueValid,
+  looksLikeImage,
   nairobiDate,
+  retentionDueOn,
   switchedOnUnder,
   type ApprovedDpia,
 } from "@pm-buddy/domain";
 import {
   BIOMETRIC_CAPTURE_METHODS,
+  BIOMETRIC_CONSENT_KINDS,
+  BIOMETRIC_MODALITIES,
+  currentConsentNotice,
   DPIA_GO_LIVE_CONDITIONS,
   DPIA_REVIEW_INTERVAL_MONTHS,
   type BiometricCaptureMethod,
+  type BiometricDeletionReason,
+  type BiometricModality,
+  type ConsentMethod,
+  type ConsentNoticeVersion,
+  type LabourerStatus,
+  type Locale,
   type ProjectStatus,
 } from "@pm-buddy/types";
 import {
   approveDpiaRequestSchema,
+  biometricDeletionsResponseSchema,
+  biometricEnrolmentResponseSchema,
+  biometricEnrolmentsResponseSchema,
+  biometricRetentionRunResponseSchema,
   biometricSwitchRequestSchema,
   biometricSwitchResponseSchema,
   biometricsOverviewResponseSchema,
   createDpiaRequestSchema,
+  deleteBiometricEnrolmentRequestSchema,
   dpiaResponseSchema,
+  enrolBiometricRequestSchema,
+  recordBiometricConsentRequestSchema,
   rejectDpiaRequestSchema,
   updateDpiaRequestSchema,
+  withdrawBiometricConsentRequestSchema,
   withdrawDpiaRequestSchema,
+  workerBiometricsResponseSchema,
+  type BiometricConsentBlock,
+  type BiometricDeletion,
+  type BiometricEnrolment,
   type BiometricSite,
   type CreateDpiaRequest,
   type DpiaDetail,
@@ -52,8 +79,19 @@ type Site = {
   projectStatus: ProjectStatus;
 };
 
+type Labourer = {
+  id: string;
+  workerNo: string;
+  fullName: string;
+  status: LabourerStatus;
+  engagements: { projectId: string; startDate: string; endDate: string | null }[];
+};
+
 export type BiometricsDeps = {
   sites: Site[];
+  /** The company's labourers with their engagements (all projects). */
+  labourers: Labourer[];
+  company: string;
   companyPermissions: readonly string[];
   actor: Person;
   stepUpFresh: () => boolean;
@@ -94,10 +132,61 @@ type Switch = {
   at: string;
 };
 
-export type BiometricsState = { records: Record[]; switches: Switch[] };
-export const initialBiometrics = (): BiometricsState => ({ records: [], switches: [] });
+type Consent = {
+  id: string;
+  labourerId: string;
+  modality: BiometricModality;
+  granted: boolean;
+  noticeVersion: ConsentNoticeVersion;
+  language: Locale;
+  method: ConsentMethod;
+  witnessName: string | null;
+  capturedAt: string;
+  capturedBy: Person;
+  dpiaVersionNo: number;
+  withdrawnAt: string | null;
+  withdrawnBy: Person | null;
+  withdrawalMethod: ConsentMethod | null;
+};
+type Enrolment = {
+  id: string;
+  labourerId: string;
+  modality: BiometricModality;
+  method: BiometricCaptureMethod;
+  siteId: string;
+  templates: number;
+  algorithm: string;
+  algorithmVersion: string;
+  enrolledAt: string;
+  enrolledBy: Person;
+  deletion: { at: string; reason: BiometricDeletionReason; by: Person | null } | null;
+};
+
+export type BiometricsState = {
+  records: Record[];
+  switches: Switch[];
+  consents: Consent[];
+  enrolments: Enrolment[];
+  deletions: { id: string; enrolmentId: string; dueOn: string | null }[];
+};
+export const initialBiometrics = (): BiometricsState => ({
+  records: [],
+  switches: [],
+  consents: [],
+  enrolments: [],
+  deletions: [],
+});
 
 const READERS = ["biometrics.manage", "biometrics.approve"];
+const GATE_CODES = {
+  platform_off: "biometrics-unavailable",
+  project_closed: "project-read-only",
+  no_dpia: "dpia-required",
+  dpia_lapsed: "dpia-lapsed",
+  not_in_scope: "dpia-scope",
+} as const;
+/** As in the API (BIOMETRICS_RETENTION_DAYS_AFTER_ENGAGEMENT default; the job is off in tests). */
+const RETENTION = { daysAfterEngagement: 30, jobEnabled: false };
 const closureOf = ({ by, at, reason }: NonNullable<Record["closure"]>) => ({ by, at, reason });
 
 /** The uploaded file of a multipart body: its name and bytes. */
@@ -128,7 +217,9 @@ export function handleBiometrics(
     if (!holds(permission)) throw fail(403, "forbidden");
     if (stepUp && !deps.stepUpFresh()) throw fail(403, "step-up-required");
   };
-  if (!READERS.some(holds)) throw fail(403, "forbidden");
+  const reader = () => {
+    if (!READERS.some(holds)) throw fail(403, "forbidden");
+  };
 
   const approved = (): ApprovedDpia | null => {
     const record = state.records.find((entry) => entry.status === "approved");
@@ -168,6 +259,7 @@ export function handleBiometrics(
       sites: deps.sites.filter((site) => record.siteIds.includes(site.id)),
       dpo: {
         name: record.dpoName,
+        phone: record.dpoPhone,
         opinion: record.dpoOpinion,
         opinionOn: record.dpoOpinionOn,
         note: record.dpoNote,
@@ -250,6 +342,357 @@ export function handleBiometrics(
     schema: dpiaResponseSchema,
   });
 
+  const labourer = (id: string) => deps.labourers.find((entry) => entry.id === id) ?? null;
+  const labourerRef = (id: string) => {
+    const found = labourer(id);
+    return { id, workerNo: found?.workerNo ?? "—", fullName: found?.fullName ?? "—" };
+  };
+  const deleteEnrolment = (
+    enrolment: Enrolment,
+    reason: BiometricDeletionReason,
+    by: Person | null,
+    dueOn: string | null = null,
+  ) => {
+    if (enrolment.deletion) return false;
+    enrolment.deletion = { at: now, reason, by };
+    state.deletions.push({ id: randomUUID(), enrolmentId: enrolment.id, dueOn });
+    return true;
+  };
+  const dueOn = (enrolment: Enrolment) =>
+    enrolment.deletion
+      ? null
+      : retentionDueOn(
+          labourer(enrolment.labourerId)?.engagements ?? [],
+          RETENTION.daysAfterEngagement,
+          today,
+        );
+  const enrolmentView = (enrolment: Enrolment): BiometricEnrolment => {
+    const inForce = approved();
+    const site = deps.sites.find((entry) => entry.id === enrolment.siteId);
+    const due = dueOn(enrolment);
+    const status = enrolment.deletion ? "deleted" : "active";
+    return {
+      id: enrolment.id,
+      labourer: labourerRef(enrolment.labourerId),
+      modality: enrolment.modality,
+      method: enrolment.method,
+      site: {
+        id: enrolment.siteId,
+        name: site?.name ?? "—",
+        projectCode: site?.projectCode ?? "—",
+      },
+      status,
+      state: enrolmentState({
+        status,
+        approved: inForce
+          ? {
+              covers: coversModality(inForce.methods, enrolment.modality),
+              inForce: inForce.reviewDue >= today,
+            }
+          : null,
+        dueOn: due,
+        today,
+      }),
+      templates: enrolment.templates,
+      algorithm: enrolment.algorithm,
+      algorithmVersion: enrolment.algorithmVersion,
+      enrolledAt: enrolment.enrolledAt,
+      enrolledBy: enrolment.enrolledBy,
+      deletionDueOn: due,
+      deletion: enrolment.deletion,
+    };
+  };
+  const deletionView = (entry: BiometricsState["deletions"][number]): BiometricDeletion => {
+    const enrolment = state.enrolments.find((candidate) => candidate.id === entry.enrolmentId)!;
+    return {
+      id: entry.id,
+      enrolmentId: enrolment.id,
+      labourer: labourerRef(enrolment.labourerId),
+      modality: enrolment.modality,
+      reason: enrolment.deletion!.reason,
+      templates: enrolment.templates,
+      deletedAt: enrolment.deletion!.at,
+      deletedBy: enrolment.deletion!.by,
+      dueOn: entry.dueOn,
+    };
+  };
+  const blocked = (modality: BiometricModality): BiometricConsentBlock | null => {
+    const inForce = approved();
+    if (!inForce) return "no_dpia";
+    if (inForce.reviewDue < today) return "dpia_lapsed";
+    if (!coversModality(inForce.methods, modality)) return "not_in_scope";
+    return null;
+  };
+  const activeGrants = (labourerId: string, modality: BiometricModality) =>
+    state.consents.filter(
+      (consent) =>
+        consent.labourerId === labourerId &&
+        consent.modality === modality &&
+        consent.granted &&
+        !consent.withdrawnAt,
+    );
+  const workerView = (labourerId: string) => {
+    const found = labourer(labourerId)!;
+    const record = state.records.find((entry) => entry.status === "approved");
+    const inForce = approved();
+    return {
+      today,
+      platformAvailable: true,
+      retention: RETENTION,
+      labourer: {
+        id: found.id,
+        workerNo: found.workerNo,
+        fullName: found.fullName,
+        status: found.status,
+      },
+      company: { name: deps.company },
+      dpia:
+        record && inForce
+          ? {
+              id: record.id,
+              versionNo: record.versionNo,
+              state: inForce.reviewDue >= today ? ("in_force" as const) : ("lapsed" as const),
+              methods: record.methods,
+              dpoName: record.dpoName,
+              dpoPhone: record.dpoPhone,
+            }
+          : null,
+      modalities: BIOMETRIC_MODALITIES.map((modality) => {
+        const notice = currentConsentNotice(BIOMETRIC_CONSENT_KINDS[modality]);
+        const decisions = state.consents
+          .filter((consent) => consent.labourerId === labourerId && consent.modality === modality)
+          .reverse();
+        const enrolment = state.enrolments.find(
+          (entry) =>
+            entry.labourerId === labourerId && entry.modality === modality && !entry.deletion,
+        );
+        return {
+          modality,
+          blocked: blocked(modality),
+          noticeVersion: notice.version,
+          consent: biometricConsentStatus(decisions, notice.version),
+          enrolment: enrolment ? enrolmentView(enrolment) : null,
+          decisions: decisions.map((decision) => ({
+            id: decision.id,
+            granted: decision.granted,
+            noticeVersion: decision.noticeVersion,
+            language: decision.language,
+            method: decision.method,
+            witnessName: decision.witnessName,
+            capturedAt: decision.capturedAt,
+            capturedBy: decision.capturedBy,
+            dpiaVersionNo: decision.dpiaVersionNo,
+            withdrawnAt: decision.withdrawnAt,
+            withdrawnBy: decision.withdrawnBy,
+            withdrawalMethod: decision.withdrawalMethod,
+          })),
+          deletions: state.deletions
+            .filter((entry) => {
+              const deleted = state.enrolments.find((item) => item.id === entry.enrolmentId)!;
+              return deleted.labourerId === labourerId && deleted.modality === modality;
+            })
+            .reverse()
+            .map(deletionView),
+        };
+      }),
+      permissions: {
+        canConsent: holds("biometrics.enrol"),
+        canWithdraw:
+          holds("biometrics.enrol") || holds("labour.consent") || holds("biometrics.manage"),
+        canDelete: holds("biometrics.manage"),
+      },
+    };
+  };
+  const decisionCounts = (modality: BiometricModality) => {
+    const month = today.slice(0, 7);
+    const mine = state.consents.filter((consent) => consent.modality === modality);
+    return {
+      granted: mine.filter((c) => c.granted && c.capturedAt.startsWith(month)).length,
+      refused: mine.filter((c) => !c.granted && c.capturedAt.startsWith(month)).length,
+      withdrawn: mine.filter((c) => c.withdrawnAt?.startsWith(month)).length,
+    };
+  };
+
+  const workerRoute = /^\/biometrics\/labourers\/([^/]+)(\/consents(\/withdraw)?)?$/.exec(path);
+  if (workerRoute) {
+    const found = labourer(workerRoute[1]!);
+    if (!found || !(holds("labour.view") || holds("biometrics.manage")))
+      throw fail(404, "not-found");
+    const view = () => ({ body: workerView(found.id), schema: workerBiometricsResponseSchema });
+    if (!workerRoute[2] && method === "GET") return view();
+    if (workerRoute[2] && !workerRoute[3] && method === "POST") {
+      const input = parse(recordBiometricConsentRequestSchema, body);
+      if (!holds("biometrics.enrol")) throw fail(403, "forbidden");
+      const block = blocked(input.modality);
+      if (block) throw fail(409, GATE_CODES[block]);
+      const notice = currentConsentNotice(BIOMETRIC_CONSENT_KINDS[input.modality]);
+      if (input.noticeVersion !== notice.version) throw fail(400, "notice-not-current");
+      const active = activeGrants(found.id, input.modality);
+      if (
+        input.granted
+          ? active.some((consent) => consent.noticeVersion === notice.version)
+          : active.length
+      )
+        throw fail(409, "consent-recorded");
+      state.consents.push({
+        id: randomUUID(),
+        labourerId: found.id,
+        modality: input.modality,
+        granted: input.granted,
+        noticeVersion: notice.version,
+        language: input.language,
+        method: input.method,
+        witnessName: input.witnessName ?? null,
+        capturedAt: now,
+        capturedBy: actor,
+        dpiaVersionNo: state.records.find((entry) => entry.status === "approved")!.versionNo,
+        withdrawnAt: null,
+        withdrawnBy: null,
+        withdrawalMethod: null,
+      });
+      return view();
+    }
+    if (workerRoute[3] && method === "POST") {
+      const input = parse(withdrawBiometricConsentRequestSchema, body);
+      if (!(holds("biometrics.enrol") || holds("labour.consent") || holds("biometrics.manage")))
+        throw fail(403, "forbidden");
+      const active = activeGrants(found.id, input.modality);
+      if (!active.length) throw fail(409, "consent-not-granted");
+      for (const consent of active)
+        Object.assign(consent, {
+          withdrawnAt: now,
+          withdrawnBy: actor,
+          withdrawalMethod: input.method,
+        });
+      for (const enrolment of state.enrolments.filter(
+        (entry) =>
+          entry.labourerId === found.id && entry.modality === input.modality && !entry.deletion,
+      ))
+        deleteEnrolment(enrolment, "consent_withdrawn", actor);
+      return view();
+    }
+    return null;
+  }
+
+  if (path === "/biometrics/enrolments" && method === "POST") {
+    const input = parse(enrolBiometricRequestSchema, body);
+    if (!holds("biometrics.enrol")) throw fail(403, "forbidden");
+    const enrolled = (enrolment: Enrolment, replaced: string | null) => ({
+      status: 201,
+      body: { enrolment: enrolmentView(enrolment), replaced },
+      schema: biometricEnrolmentResponseSchema,
+    });
+    const existing = state.enrolments.find((entry) => entry.id === input.id);
+    if (existing) {
+      if (
+        existing.labourerId !== input.labourerId ||
+        existing.modality !== input.modality ||
+        existing.siteId !== input.siteId ||
+        existing.method !== input.method
+      )
+        throw fail(409, "enrolment-conflict");
+      return enrolled(existing, null);
+    }
+    const site = deps.sites.find((entry) => entry.id === input.siteId);
+    if (!site) throw fail(404, "not-found");
+    const gate = biometricGate({
+      platformAvailable: true,
+      projectStatus: site.projectStatus,
+      approved: approved(),
+      latestSwitch: latest(site.id, input.method),
+      siteId: site.id,
+      method: input.method,
+      today,
+    });
+    if (!gate.on)
+      throw fail(
+        409,
+        gate.reason === "switched_off" ? "biometrics-unavailable" : GATE_CODES[gate.reason],
+      );
+    const found = labourer(input.labourerId);
+    if (!found) throw fail(404, "not-found");
+    if (found.status !== "active") throw fail(409, "labourer-inactive");
+    if (
+      !found.engagements.some(
+        (entry) =>
+          entry.projectId === site.projectId &&
+          entry.startDate <= today &&
+          (entry.endDate === null || entry.endDate >= today),
+      )
+    )
+      throw fail(409, "not-engaged");
+    const notice = currentConsentNotice(BIOMETRIC_CONSENT_KINDS[input.modality]);
+    if (!activeGrants(found.id, input.modality).some((c) => c.noticeVersion === notice.version))
+      throw fail(409, "consent-required");
+    if (input.templates.some((template) => looksLikeImage(Buffer.from(template.data, "base64"))))
+      throw fail(422, "raw-image-refused");
+    const previous = state.enrolments.find(
+      (entry) =>
+        entry.labourerId === found.id && entry.modality === input.modality && !entry.deletion,
+    );
+    if (previous) deleteEnrolment(previous, "re_enrolled", actor);
+    const enrolment: Enrolment = {
+      id: input.id,
+      labourerId: found.id,
+      modality: input.modality,
+      method: input.method,
+      siteId: site.id,
+      templates: input.templates.length,
+      algorithm: input.templates[0]!.algorithm,
+      algorithmVersion: input.templates[0]!.algorithmVersion,
+      enrolledAt: now,
+      enrolledBy: actor,
+      deletion: null,
+    };
+    state.enrolments.push(enrolment);
+    return enrolled(enrolment, previous?.id ?? null);
+  }
+  if (path === "/biometrics/enrolments" && method === "GET") {
+    reader();
+    return {
+      body: {
+        today,
+        retention: RETENTION,
+        enrolments: state.enrolments
+          .filter((entry) => !entry.deletion)
+          .reverse()
+          .map(enrolmentView),
+        permissions: { canManageTemplates: holds("biometrics.manage") },
+      },
+      schema: biometricEnrolmentsResponseSchema,
+    };
+  }
+  const deleteRoute = /^\/biometrics\/enrolments\/([^/]+)\/delete$/.exec(path);
+  if (deleteRoute && method === "POST") {
+    parse(deleteBiometricEnrolmentRequestSchema, body);
+    require("biometrics.manage");
+    const enrolment = state.enrolments.find((entry) => entry.id === deleteRoute[1]);
+    if (!enrolment) throw fail(404, "not-found");
+    if (!deleteEnrolment(enrolment, "request", actor)) throw fail(409, "enrolment-deleted");
+    return {
+      body: { enrolment: enrolmentView(enrolment), replaced: null },
+      schema: biometricEnrolmentResponseSchema,
+    };
+  }
+  if (path === "/biometrics/deletions" && method === "GET") {
+    reader();
+    return {
+      body: { deletions: [...state.deletions].reverse().map(deletionView) },
+      schema: biometricDeletionsResponseSchema,
+    };
+  }
+  if (path === "/biometrics/retention/run" && method === "POST") {
+    require("biometrics.manage");
+    let deleted = 0;
+    for (const enrolment of state.enrolments.filter((entry) => !entry.deletion)) {
+      const due = dueOn(enrolment);
+      if (due !== null && due <= today && deleteEnrolment(enrolment, "engagement_ended", null, due))
+        deleted += 1;
+    }
+    return { body: { deleted }, schema: biometricRetentionRunResponseSchema };
+  }
+  reader();
+
   if (path === "/biometrics" && method === "GET") {
     const records = [...state.records].sort((a, b) => b.versionNo - a.versionNo).map(summary);
     return {
@@ -261,11 +704,28 @@ export function handleBiometrics(
         draft: records.find((record) => record.status === "draft") ?? null,
         history: records,
         sites: deps.sites.map(siteState),
+        enrolments: (() => {
+          const views = state.enrolments.filter((entry) => !entry.deletion).map(enrolmentView);
+          return {
+            face: views.filter((view) => view.modality === "face").length,
+            fingerprint: views.filter((view) => view.modality === "fingerprint").length,
+            held: views.filter((view) => view.state === "held").length,
+            deletionDue: views.filter((view) => view.state === "deletion_due").length,
+          };
+        })(),
+        consentsThisMonth: {
+          month: today.slice(0, 7),
+          face: decisionCounts("face"),
+          fingerprint: decisionCounts("fingerprint"),
+        },
+        retention: RETENTION,
+        templateKeyConfigured: true,
         permissions: {
           canPrepare: holds("biometrics.manage"),
           canApprove: holds("biometrics.approve"),
           canSwitchOn: holds("biometrics.approve"),
           canSwitchOff: true,
+          canManageTemplates: holds("biometrics.manage"),
         },
       },
       schema: biometricsOverviewResponseSchema,
@@ -318,14 +778,7 @@ export function handleBiometrics(
         method: capture,
         today,
       });
-      const codes = {
-        platform_off: "biometrics-unavailable",
-        project_closed: "project-read-only",
-        no_dpia: "dpia-required",
-        dpia_lapsed: "dpia-lapsed",
-        not_in_scope: "dpia-scope",
-      } as const;
-      if (!gate.on && gate.reason !== "switched_off") throw fail(409, codes[gate.reason]);
+      if (!gate.on && gate.reason !== "switched_off") throw fail(409, GATE_CODES[gate.reason]);
       if (!gate.on)
         state.switches.push({
           siteId: site.id,
@@ -357,11 +810,10 @@ export function handleBiometrics(
   if (!action && method === "GET") return reply(record);
   if (!action && method === "PUT") {
     require("biometrics.manage");
-    const input = parse(updateDpiaRequestSchema, body);
-    draftOnly(input.version);
-    checkSites(input.siteIds);
-    const { version: _version, ...fields } = input;
-    Object.assign(record, fields, { siteIds: [...input.siteIds] });
+    const { version, ...fields } = parse(updateDpiaRequestSchema, body);
+    draftOnly(version);
+    checkSites(fields.siteIds);
+    Object.assign(record, fields, { siteIds: [...fields.siteIds] });
     touch(record);
     return reply(record);
   }
@@ -413,6 +865,11 @@ export function handleBiometrics(
       previous.supersession = { by: { id: record.id, versionNo: record.versionNo }, at: now };
       touch(previous);
     }
+    // A renewal deletes the templates of a modality it no longer covers (D-170).
+    for (const enrolment of state.enrolments.filter(
+      (entry) => !entry.deletion && !coversModality(record.methods, entry.modality),
+    ))
+      deleteEnrolment(enrolment, "out_of_scope", actor);
     record.status = "approved";
     record.approval = {
       by: actor,
@@ -434,6 +891,9 @@ export function handleBiometrics(
       if (record.status !== "approved") throw fail(409, "dpia-not-approved");
       if (input.version !== record.version) throw fail(409, "version-conflict");
     }
+    if (action === "withdraw")
+      for (const enrolment of state.enrolments.filter((entry) => !entry.deletion))
+        deleteEnrolment(enrolment, "dpia_withdrawn", actor);
     record.status = action === "reject" ? "rejected" : "withdrawn";
     record.closure = {
       kind: action === "reject" ? "rejected" : "withdrawn",

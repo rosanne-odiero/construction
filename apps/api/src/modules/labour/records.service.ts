@@ -145,7 +145,7 @@ export class LabourRecordsService {
       const { tx, access } = scope;
       const { effective } = await this.access.labourer(scope, labourerId);
       const consents = await tx.labourerConsent.findMany({
-        where: { tenantId: access.tenantId, labourerId },
+        where: { tenantId: access.tenantId, labourerId, kind: "registration_data" },
       });
       this.access.demand(scope, effective, "labour.consent");
       if (input.noticeVersion !== CURRENT_CONSENT_NOTICE.version)
@@ -190,13 +190,14 @@ export class LabourRecordsService {
    * Withdraws every active registration-data consent. The records stay as evidence; new
    * engagements and reactivation are refused until consent is recorded again. Retention and
    * erasure of the worker's data follow the reviewed policy (COMPLIANCE-REVIEW: CR-DP-03, CR-DP-06).
+   * Biometric consent is separate (DPIA §7.1) and withdrawn on the biometrics page.
    */
   withdrawConsent(principal: Principal, labourerId: string, input: WithdrawConsent, req: Request) {
     return this.mutate(principal, req, async (scope) => {
       const { tx, access } = scope;
       const { effective } = await this.access.labourer(scope, labourerId);
       const consents = await tx.labourerConsent.findMany({
-        where: { tenantId: access.tenantId, labourerId },
+        where: { tenantId: access.tenantId, labourerId, kind: "registration_data" },
       });
       this.access.demand(scope, effective, "labour.consent");
       const active = consents.filter((consent) => consent.granted && !consent.withdrawnAt);

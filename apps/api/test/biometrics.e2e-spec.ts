@@ -45,6 +45,7 @@ const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 
 const centre = { lat: -1.1489, lng: 36.9612 };
 const today = nairobiDate();
 const DPO_NAME = "Achieng Otieno (synthetic DPO)";
+const DPO_PHONE = "+254 700 000 111";
 const DPO_NOTE = "Quarterly accuracy review by demographic group";
 const WITHDRAW_REASON = "Vendor SDK found sending telemetry (synthetic)";
 
@@ -141,6 +142,7 @@ describe("Biometric attendance DPIA gate (real runtime role)", () => {
     methods,
     siteIds,
     dpoName: DPO_NAME,
+    dpoPhone: DPO_PHONE,
     dpoOpinion: "approve_with_conditions",
     dpoOpinionOn: addCalendarDays(today, -3),
     dpoNote: DPO_NOTE,
@@ -313,6 +315,7 @@ describe("Biometric attendance DPIA gate (real runtime role)", () => {
       canApprove: true,
       canSwitchOn: true,
       canSwitchOff: true,
+      canManageTemplates: true,
     });
     for (const site of [sites.main, sites.second])
       for (const method of ["face", "fingerprint", "terminal"])
@@ -343,6 +346,7 @@ describe("Biometric attendance DPIA gate (real runtime role)", () => {
         ...draftBody([]),
         methods: [],
         dpoName: null,
+        dpoPhone: null,
         controllerName: null,
         controllerDecision: null,
         residualRisk: null,
@@ -355,6 +359,7 @@ describe("Biometric attendance DPIA gate (real runtime role)", () => {
       "methods",
       "sites",
       "dpo",
+      "dpo_phone",
       "controller",
       "residual_risk",
     ]);

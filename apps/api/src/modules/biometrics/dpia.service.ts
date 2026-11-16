@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   carriedForwardSwitches,
+  coversModality,
   documentFileName,
   dpiaApprovalContent,
   dpiaApprovalGaps,
@@ -9,6 +10,7 @@ import {
   nairobiDate,
 } from "@pm-buddy/domain";
 import {
+  BIOMETRIC_MODALITIES,
   DOCUMENT_LIMITS,
   DPIA_GO_LIVE_CONDITIONS,
   type BiometricCaptureMethod,
@@ -50,6 +52,8 @@ import {
   type RecordRow,
 } from "./biometrics-store.js";
 import { biometricsProblem, versionConflict } from "./biometrics-support.js";
+import { journal } from "./biometric-journal.js";
+import { deleteEnrolments } from "./enrolment-deletion.js";
 
 const READERS: readonly Permission[] = ["biometrics.manage", "biometrics.approve"];
 
@@ -68,6 +72,7 @@ function draftData(input: CreateDpiaRequest) {
   return {
     captureMethods: [...input.methods],
     dpoName: input.dpoName,
+    dpoPhone: input.dpoPhone,
     dpoOpinion: input.dpoOpinion,
     dpoOpinionOn: input.dpoOpinionOn ? fromCalendarDate(input.dpoOpinionOn) : null,
     dpoNote: input.dpoNote,
@@ -87,7 +92,9 @@ function draftData(input: CreateDpiaRequest) {
  * The company's DPIA for biometric attendance (D3.4, DPIA_TEMPLATE §12.4): drafts, the signed
  * document, and approval, rejection or withdrawal by a `biometrics.approve` holder with a fresh
  * step-up. One person may prepare and approve (owner decision, 15 November 2026). Approving a
- * renewal supersedes the approved version and carries its switches forward where still covered.
+ * renewal supersedes the approved version and carries its switches forward where still covered;
+ * templates of a modality it no longer covers are deleted, and withdrawing deletes them all
+ * (owner decision, 16 November 2026). A lapse deletes nothing: the templates are held, unused.
  * Audit metadata carries IDs, codes, counts and hashes only: never names, notes or reasons.
  */
 @Injectable()
@@ -397,6 +404,19 @@ export class DpiaService {
           },
         });
         if (changed.count !== 1) throw versionConflict();
+        // Templates of a modality the new version no longer covers are deleted now (D-170).
+        const uncovered = BIOMETRIC_MODALITIES.filter(
+          (modality) => !coversModality(row.captureMethods as BiometricCaptureMethod[], modality),
+        );
+        const outOfScope = uncovered.length
+          ? await deleteEnrolments(
+              tx,
+              this.scope,
+              access.tenantId,
+              { modalities: uncovered },
+              "out_of_scope",
+            )
+          : { enrolments: 0, templates: 0 };
         for (const entry of carried)
           await tx.biometricSwitch.create({
             data: {
@@ -419,6 +439,8 @@ export class DpiaService {
           digest,
           supersededVersionNo: previous?.versionNo ?? null,
           carriedForward: carried.length,
+          enrolmentsDeleted: outOfScope.enrolments,
+          templatesDeleted: outOfScope.templates,
         });
         return { dpia: await this.detail(scope, dpiaId) };
       },
@@ -458,7 +480,10 @@ export class DpiaService {
     );
   }
 
-  /** Withdraws the approved DPIA: biometric capture stops on every site at once (fail closed). */
+  /**
+   * Withdraws the approved DPIA: biometric capture stops on every site at once (fail closed) and
+   * every enrolment's templates are deleted in the same transaction.
+   */
   async withdraw(
     principal: Principal,
     dpiaId: string,
@@ -494,9 +519,20 @@ export class DpiaService {
           },
         });
         if (changed.count !== 1) throw versionConflict();
+        // Withdrawing ends the processing: every template is deleted now (D-170).
+        journal(this.scope, `Biometric DPIA withdrawn: company ${access.tenantId}, DPIA ${dpiaId}`);
+        const deleted = await deleteEnrolments(
+          tx,
+          this.scope,
+          access.tenantId,
+          {},
+          "dpia_withdrawn",
+        );
         await this.scope.audit(tx, "dpia.withdrawn", dpiaId, {
           versionNo: row.versionNo,
           switchesStopped: stopped,
+          enrolmentsDeleted: deleted.enrolments,
+          templatesDeleted: deleted.templates,
         });
         return { dpia: await this.detail(scope, dpiaId) };
       },

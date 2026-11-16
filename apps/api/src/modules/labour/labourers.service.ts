@@ -134,13 +134,17 @@ export class LabourersService {
         if (flags !== "all")
           filters.push({ engagements: { some: { projectId: { in: [...flags] } } } });
       }
+      // Registration-data consent only: biometric consents (D3.4) never stand in for it.
       if (query.consent === "withdrawn")
-        filters.push({ consents: { none: { granted: true, withdrawnAt: null } } });
+        filters.push({
+          consents: { none: { kind: "registration_data", granted: true, withdrawnAt: null } },
+        });
       if (query.consent === "outdated")
         filters.push({
           consents: {
-            some: { granted: true, withdrawnAt: null },
+            some: { kind: "registration_data", granted: true, withdrawnAt: null },
             none: {
+              kind: "registration_data",
               granted: true,
               withdrawnAt: null,
               noticeVersion: CURRENT_CONSENT_NOTICE.version,
@@ -553,7 +557,9 @@ export class LabourersService {
           const openEngagements = await tx.labourEngagement.findMany({
             where: { tenantId, labourerId, endDate: null },
           });
-          const consents = await tx.labourerConsent.findMany({ where: { tenantId, labourerId } });
+          const consents = await tx.labourerConsent.findMany({
+            where: { tenantId, labourerId, kind: "registration_data" },
+          });
           this.access.demand(scope, effective, "labour.manage");
           if (row.version !== input.version) throw versionConflict();
           if (row.status === input.to)
@@ -722,7 +728,9 @@ export class LabourersService {
             where: { tenantId_id: { tenantId, id: labourerId } },
           });
           if (!row) throw new NotFoundException("Labourer not found");
-          const consents = await tx.labourerConsent.findMany({ where: { tenantId, labourerId } });
+          const consents = await tx.labourerConsent.findMany({
+            where: { tenantId, labourerId, kind: "registration_data" },
+          });
           const openEngagements = await tx.labourEngagement.findMany({
             where: { tenantId, labourerId, endDate: null },
           });

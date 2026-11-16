@@ -69,6 +69,11 @@ export class TenantScope {
     );
   }
 
+  /** Runs `callback` once the current transaction has committed (TenantDatabase.afterCommit). */
+  afterCommit(callback: () => void): void {
+    this.db.afterCommit(callback);
+  }
+
   /** Appends an audit event. Metadata must hold safe summaries only, never secrets. */
   async audit(
     tx: Prisma.TransactionClient,

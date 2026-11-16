@@ -182,6 +182,11 @@ import {
   dpiaResponseSchema,
   biometricSwitchResponseSchema,
   biometricsOverviewResponseSchema,
+  biometricDeletionsResponseSchema,
+  biometricEnrolmentResponseSchema,
+  biometricEnrolmentsResponseSchema,
+  biometricRetentionRunResponseSchema,
+  workerBiometricsResponseSchema,
   documentsOverviewResponseSchema,
   drawingRegisterResponseSchema,
   instructionLogListResponseSchema,
@@ -462,14 +467,21 @@ export function responseContract(method: string, target: string) {
   if (reports) return reports;
   const documents = documentsContract(method, path);
   if (documents) return documents;
-  const biometrics = biometricsContract(path);
+  const biometrics = biometricsContract(method, path);
   if (biometrics) return biometrics;
   return messageResponseSchema;
 }
 
-/** The D3.4 DPIA gate endpoints' success contracts. */
-function biometricsContract(path: string) {
+/** The D3.4 biometrics endpoints' success contracts (DPIA gate, consent, enrolment, deletion). */
+function biometricsContract(method: string, path: string) {
   if (path === "biometrics") return biometricsOverviewResponseSchema;
+  if (/^biometrics\/labourers\/[^/]+(\/consents(\/withdraw)?)?$/.test(path))
+    return workerBiometricsResponseSchema;
+  if (path === "biometrics/enrolments")
+    return method === "get" ? biometricEnrolmentsResponseSchema : biometricEnrolmentResponseSchema;
+  if (/^biometrics\/enrolments\/[^/]+\/delete$/.test(path)) return biometricEnrolmentResponseSchema;
+  if (path === "biometrics/deletions") return biometricDeletionsResponseSchema;
+  if (path === "biometrics/retention/run") return biometricRetentionRunResponseSchema;
   if (/^biometrics\/sites\/[^/]+\/methods\/[^/]+$/.test(path)) return biometricSwitchResponseSchema;
   if (/^biometrics\/dpias(\/[^/]+(\/(document|approve|reject|withdraw))?)?$/.test(path))
     return dpiaResponseSchema;

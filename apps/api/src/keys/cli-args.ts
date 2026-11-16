@@ -2,12 +2,13 @@ import { z } from "zod";
 
 export const USAGE = `Usage:
   keys:rotate status [--tenant <company ID>]
-  keys:rotate rewrap --operator "<name>" [--only field|mfa] [--tenant <company ID>] [--batch <rows>] [--dry-run]`;
+  keys:rotate rewrap --operator "<name>" [--only field|mfa|biometric] [--tenant <company ID>] [--batch <rows>] [--dry-run]
+  (biometric templates are re-sealed only with --only biometric and BIOMETRIC_TEMPLATE_PRIVATE_KEYS set)`;
 
 const argsSchema = z.object({
   command: z.enum(["status", "rewrap"]),
   operator: z.string().trim().min(2).max(100).optional(),
-  only: z.enum(["field", "mfa"]).optional(),
+  only: z.enum(["field", "mfa", "biometric"]).optional(),
   tenant: z.uuid().optional(),
   batch: z.coerce.number().int().min(1).max(5000).optional(),
   dryRun: z.boolean().default(false),

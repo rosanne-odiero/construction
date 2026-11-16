@@ -28,6 +28,6 @@ import { LabourViewsService } from "./views.service.js";
     LabourSetupService,
     LabourViewsService,
   ],
-  exports: [LabourCrypto, LabourersService],
+  exports: [LabourAccess, LabourCrypto, LabourersService],
 })
 export class LabourModule {}

@@ -7,10 +7,10 @@ catalog:
   "@types/node": 24.19.2
   "@vitest/coverage-v8": 5.1.0
   decimal.js: 10.6.0
-  oxlint: 1.91.0
-  oxlint-tsgolint: 7.0.2005
+  oxlint: 1.93.0
+  oxlint-tsgolint: 7.0.2007
   typescript: 6.0.3
-  vite: 8.3.5
+  vite: 8.3.8
   vitest: 5.1.0
   zod: 4.6.7
 
